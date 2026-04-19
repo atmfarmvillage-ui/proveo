@@ -154,7 +154,7 @@ async function saveEquipe(){
   const email=document.getElementById('eq_email').value.trim();
   const tel=document.getElementById('eq_tel')?.value.trim()||'';
   const role=document.getElementById('eq_role').value;
-  const pv=document.getElementById('eq_pv')?.value.trim()||null;
+  const pv=document.getElementById('eq_pv_hidden')?.value.trim()||null;
   const err=document.getElementById('eq_err');
   const ok=document.getElementById('eq_ok');
   if(!nom||!email){err.textContent='Nom et email requis.';return;}
@@ -363,61 +363,170 @@ async function testerCallMeBot(){
 }
 
 // ══════════════════════════════════════════════════
-// POINTS DE VENTE
+// POINTS DE VENTE & ÉQUIPE
 // ══════════════════════════════════════════════════
-async function renderPDV(){
-  const{data}=await SB.from('gp_points_vente').select('*')
-    .eq('admin_id',GP_ADMIN_ID).order('nom');
-  const P=data||[];
 
-  // Remplir select dans formulaire équipe
+
+// ── BADGE COULEUR PAR POINT DE VENTE ──────────────
+const PDV_PALETTES = [
+  {bg:'#1e3a5f', border:'#3b82f6', text:'#93c5fd', emoji:'🔵'},
+  {bg:'#3b1f5e', border:'#a855f7', text:'#d8b4fe', emoji:'🟣'},
+  {bg:'#7c2d12', border:'#f97316', text:'#fdba74', emoji:'🟠'},
+  {bg:'#164e2e', border:'#22c55e', text:'#86efac', emoji:'🟢'},
+  {bg:'#7f1d1d', border:'#ef4444', text:'#fca5a5', emoji:'🔴'},
+  {bg:'#1e3a5f', border:'#06b6d4', text:'#67e8f9', emoji:'🩵'},
+  {bg:'#4a1942', border:'#ec4899', text:'#f9a8d4', emoji:'🩷'},
+  {bg:'#78350f', border:'#f59e0b', text:'#fde68a', emoji:'🟡'},
+  {bg:'#1a3a3a', border:'#14b8a6', text:'#5eead4', emoji:'🩵'},
+  {bg:'#1f2937', border:'#6366f1', text:'#a5b4fc', emoji:'🔷'},
+];
+
+function pvPalette(nom){
+  let hash=0;
+  for(let i=0;i<nom.length;i++) hash=(hash*31+nom.charCodeAt(i))>>>0;
+  return PDV_PALETTES[hash % PDV_PALETTES.length];
+}
+
+function pvBadgeHtml(nom, size='sm'){
+  const p=pvPalette(nom);
+  const fs=size==='lg'?'13px':'11px';
+  const pad=size==='lg'?'5px 14px':'3px 10px';
+  return `<span style="background:${p.bg};color:${p.text};border:1px solid ${p.border};padding:${pad};border-radius:20px;font-size:${fs};font-weight:700;white-space:nowrap">${p.emoji} ${nom}</span>`;
+}
+
+function ouvrirModalEq(pvNom){
+  document.getElementById('modal-eq').style.display='flex';
+  document.getElementById('eq_pv_hidden').value=pvNom||'';
+  document.getElementById('modal-eq-pv-label').innerHTML=pvNom?pvBadgeHtml(pvNom,'lg'):'<span style="font-size:13px;color:var(--textm)">🏭 Siège principal</span>';
+  document.getElementById('eq_nom').value='';
+  document.getElementById('eq_email').value='';
+  document.getElementById('eq_tel').value='';
+  document.getElementById('eq_role').value='secretaire';
+  document.getElementById('eq_err').textContent='';
+  document.getElementById('eq_ok').innerHTML='';
+  setTimeout(()=>document.getElementById('eq_nom').focus(),100);
+}
+function fermerModalEq(){
+  document.getElementById('modal-eq').style.display='none';
+}
+
+async function renderPDV(){
+  const{data:P}=await SB.from('gp_points_vente').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
+  const{data:M}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
+  const membres=M||[];
+  const points=P||[];
+
+  // Remplir select (gardé pour compatibilité)
   const sel=document.getElementById('eq_pv');
   if(sel){
     sel.innerHTML='<option value="">— Aucun (siège principal) —</option>'+
-      P.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
+      points.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
   }
 
-  const container=document.getElementById('pdv-liste');
+  // Afficher liste complète PDV avec membres dedans
+  const container=document.getElementById('pdv-liste-complet');
   if(!container)return;
 
-  if(!P.length){
-    container.innerHTML='<div style="color:var(--textm);font-size:12px">Aucun point de vente créé.</div>';
-    return;
+  if(!points.length){
+    container.innerHTML='<div style="color:var(--textm);font-size:12px;padding:12px 0">Aucun point de vente créé. Créez-en un ci-dessus.</div>';
+  } else {
+    container.innerHTML=points.map(p=>{
+      const membresP=membres.filter(m=>m.point_vente===p.nom);
+      const pal=pvPalette(p.nom);
+      return `<div class="card" style="margin-bottom:10px;border-left:4px solid ${pal.border}">
+        <div class="card-title">
+          <div class="ct-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${pvBadgeHtml(p.nom,'lg')}
+            ${p.telephone?`<span style="font-size:10px;color:var(--textm)">📞 ${p.telephone}</span>`:''}
+            ${p.adresse?`<span style="font-size:10px;color:var(--textm)">📍 ${p.adresse}</span>`:''}
+            ${p.latitude&&p.longitude?`<a href="https://www.google.com/maps?q=${p.latitude},${p.longitude}" target="_blank" style="font-size:10px;color:var(--g6);text-decoration:none">🗺️ Voir sur carte</a>`:''}
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-g btn-sm" onclick="ouvrirModalEq('${p.nom}')">➕ Ajouter secrétaire</button>
+            <button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button>
+          </div>
+        </div>
+        ${membresP.length
+          ? membresP.map(m=>membreCard(m)).join('')
+          : '<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucun membre dans ce point de vente.</div>'
+        }
+      </div>`;
+    }).join('');
   }
 
-  container.innerHTML=`
-    <table class="tbl" style="font-size:11px">
-      <thead><tr><th>Point de vente</th><th class="num">Ventes</th><th class="num">CA (F)</th><th></th></tr></thead>
-      <tbody>
-      ${await Promise.all(P.map(async p=>{
-        const{data:v}=await SB.from('gp_ventes').select('montant_total')
-          .eq('admin_id',GP_ADMIN_ID).eq('point_vente',p.nom);
-        const ca=(v||[]).reduce((s,x)=>s+Number(x.montant_total||0),0);
-        return `<tr>
-          <td style="font-weight:700">📍 ${p.nom}</td>
-          <td class="num">${(v||[]).length}</td>
-          <td class="num" style="color:var(--gold)">${fmt(ca)}</td>
-          <td><button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button></td>
-        </tr>`;
-      })).then(rows=>rows.join(''))}
-      </tbody>
-    </table>`;
+  // Siège principal — membres sans point de vente
+  const siege=membres.filter(m=>!m.point_vente);
+  const siegeEl=document.getElementById('equipe-siege');
+  if(siegeEl){
+    siegeEl.innerHTML=siege.length
+      ? siege.map(m=>membreCard(m)).join('')
+      : '<div style="font-size:11px;color:var(--textm)">Aucun membre au siège.</div>';
+  }
+}
+
+function membreCard(m){
+  const telClean=(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+  const siteUrl=window.location.origin;
+  const reinvitMsg=encodeURIComponent(
+    `Bonjour ${m.nom} 👋\n\nRappel : connectez-vous sur PROVENDA avec cet email : *${m.email}*\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
+  );
+  return `<div style="padding:10px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700;font-size:13px">${m.nom||'—'}</div>
+        <div style="font-size:10px;color:var(--textm)">${m.email||'—'} ${m.telephone?'· '+m.telephone:''}</div>
+        <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
+          <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
+          <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'};">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
+          ${m.point_vente?pvBadgeHtml(m.point_vente):''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px">
+        ${m.telephone&&!m.user_id?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
+        <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function localisermoi(){
+  if(!navigator.geolocation){notify('GPS non disponible','r');return;}
+  notify('Récupération de votre position...','gold');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      document.getElementById('pv_lat').value=pos.coords.latitude.toFixed(6);
+      document.getElementById('pv_lng').value=pos.coords.longitude.toFixed(6);
+      notify('Position GPS obtenue ✓','gold');
+    },
+    ()=>notify('Impossible d\'obtenir la position GPS','r')
+  );
 }
 
 async function savePDV(){
   const nom=document.getElementById('pv_nom')?.value.trim();
+  const tel=document.getElementById('pv_tel')?.value.trim()||null;
+  const adresse=document.getElementById('pv_adresse')?.value.trim()||null;
+  const lat=parseFloat(document.getElementById('pv_lat')?.value)||null;
+  const lng=parseFloat(document.getElementById('pv_lng')?.value)||null;
   const err=document.getElementById('pv_err');
   if(!nom){err.textContent='Nom requis.';return;}
-  const{error}=await SB.from('gp_points_vente').insert({admin_id:GP_ADMIN_ID,nom});
+  const{error}=await SB.from('gp_points_vente').insert({
+    admin_id:GP_ADMIN_ID,nom,telephone:tel,adresse,
+    latitude:lat,longitude:lng
+  });
   if(error){err.textContent='Erreur: '+error.message;return;}
-  document.getElementById('pv_nom').value='';
+  ['pv_nom','pv_tel','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
   err.textContent='';
-  renderPDV();
+  await renderPDV();
   notify('Point de vente "'+nom+'" créé ✓','gold');
 }
 
 async function deletePDV(id,nom){
-  if(!confirm(`Supprimer le point de vente "${nom}" ?`))return;
+  if(!confirm(`Supprimer le point de vente "${nom}" ?\nLes membres assignés passeront au siège principal.`))return;
+  // Retirer le point_vente des membres
+  await SB.from('gp_membres').update({point_vente:null}).eq('admin_id',GP_ADMIN_ID).eq('point_vente',nom);
   await SB.from('gp_points_vente').delete().eq('id',id);
   renderPDV();
   notify('Point de vente supprimé','r');

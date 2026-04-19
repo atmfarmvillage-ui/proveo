@@ -118,7 +118,13 @@ async function bootApp(user){
   // Afficher le point de vente dans la topbar
   const pvBadge=document.getElementById('tb-pv-badge');
   if(pvBadge){
-    if(GP_POINT_VENTE){pvBadge.textContent='📍 '+GP_POINT_VENTE;pvBadge.style.display='inline-block';}
+    if(GP_POINT_VENTE){
+      pvBadge.innerHTML=pvBadgeHtml(GP_POINT_VENTE);
+      pvBadge.style.display='inline-block';
+      pvBadge.style.background='none';
+      pvBadge.style.border='none';
+      pvBadge.style.padding='0';
+    }
     else pvBadge.style.display='none';
   }
   // Apply role restrictions

@@ -721,26 +721,20 @@
 
 <!-- ÉQUIPE (admin) -->
 <div class="page" id="page-equipe">
-  <div class="page-title">Équipe & Points de Vente</div>
-  <div class="page-sub">Gérer les points de vente · Inviter des secrétaires</div>
+  <div class="page-title">Points de Vente & Équipe</div>
+  <div class="page-sub">Créez vos points de vente · Ajoutez les secrétaires dedans</div>
 
-  <!-- POINTS DE VENTE -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-title"><div class="ct-left"><span>📍 Points de Vente</span></div></div>
-    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Chaque point de vente peut avoir ses propres secrétaires. Toutes leurs ventes et dépenses seront automatiquement étiquetées avec le nom du point de vente.</div>
-    <div class="fg2" style="align-items:end">
-      <div class="fr"><label>Nom du point de vente</label><input type="text" id="pv_nom" placeholder="Ex: Lomé Centre, Sanguera, Kara..."></div>
-      <button class="btn btn-g" onclick="savePDV()" style="margin-bottom:0">➕ Créer</button>
-    </div>
-    <div class="a-err" id="pv_err"></div>
-    <div id="pdv-liste" style="margin-top:12px"></div>
-  </div>
-
-  <div class="g2" style="align-items:start">
-    <div class="card">
-      <div class="card-title"><div class="ct-left"><span>➕ Ajouter un membre</span></div></div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Le secrétaire verra les pages opérationnelles mais pas les chiffres financiers.</div>
-      <div class="fr"><label>Nom complet</label><input type="text" id="eq_nom" placeholder="Marie Koffi"></div>
+  <!-- MODAL AJOUT SECRÉTAIRE DANS UN PDV -->
+  <div id="modal-eq" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalEq()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:440px;width:100%">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div style="font-weight:700;font-size:15px">➕ Ajouter un membre</div>
+          <div style="font-size:11px;color:var(--gold);margin-top:2px" id="modal-eq-pv-label"></div>
+        </div>
+        <button onclick="fermerModalEq()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div class="fr"><label>Nom complet *</label><input type="text" id="eq_nom" placeholder="Marie Koffi"></div>
       <div class="fg2">
         <div class="fr"><label>Email *</label><input type="email" id="eq_email" placeholder="marie@email.com"></div>
         <div class="fr"><label>WhatsApp *</label><input type="tel" id="eq_tel" placeholder="+228 90 00 00 00"></div>
@@ -751,19 +745,60 @@
           <option value="admin">Admin (accès complet)</option>
         </select>
       </div>
-      <div class="fr"><label>📍 Point de vente</label>
-        <select id="eq_pv">
-          <option value="">— Aucun (siège principal) —</option>
-        </select>
-      </div>
-      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEquipe()">➕ Ajouter le membre</button>
+      <input type="hidden" id="eq_pv_hidden">
       <div class="a-err" id="eq_err"></div>
-      <div class="a-ok" id="eq_ok"></div>
+      <div id="eq_ok" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="saveEquipe()" style="flex:1;justify-content:center">➕ Ajouter</button>
+        <button class="btn btn-out" onclick="fermerModalEq()" style="flex:1;justify-content:center">Annuler</button>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title"><div class="ct-left"><span>👥 Membres de l'équipe</span></div></div>
-      <div id="equipe-liste"></div>
+  </div>
+
+  <!-- CRÉER UN POINT DE VENTE -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><div class="ct-left"><span>📍 Créer un point de vente</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
+      Chaque point de vente a ses propres secrétaires. Toutes leurs ventes sont automatiquement étiquetées avec le nom du point de vente.
     </div>
+    <div class="fg2" style="align-items:end">
+      <div class="fr" style="flex:2"><label>Nom du point de vente</label>
+        <input type="text" id="pv_nom" placeholder="Ex: Lomé Centre, Sanguera, Kara...">
+      </div>
+      <div class="fr"><label>Téléphone (optionnel)</label>
+        <input type="tel" id="pv_tel" placeholder="+228 90 00 00 00">
+      </div>
+    </div>
+    <div class="fg2" style="align-items:end">
+      <div class="fr" style="flex:2"><label>Adresse / Localisation</label>
+        <input type="text" id="pv_adresse" placeholder="Ex: Carrefour Zion, Sanguera, Togo">
+      </div>
+      <div class="fr"><label>Latitude</label>
+        <input type="number" id="pv_lat" placeholder="6.1375" step="0.0001">
+      </div>
+      <div class="fr"><label>Longitude</label>
+        <input type="number" id="pv_lng" placeholder="1.2123" step="0.0001">
+      </div>
+      <button class="btn btn-out btn-sm" onclick="localisermoi()" style="margin-bottom:0;white-space:nowrap" title="Utiliser ma position GPS actuelle">📍 Ma position</button>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:4px">
+      Cliquez <strong>📍 Ma position</strong> si vous êtes sur place, ou entrez les coordonnées manuellement. Les clients verront ce point sur la carte.
+    </div>
+      <button class="btn btn-g" onclick="savePDV()" style="margin-top:8px;width:100%;justify-content:center">➕ Créer le point de vente</button>
+    <div class="a-err" id="pv_err"></div>
+  </div>
+
+  <!-- LISTE DES POINTS DE VENTE AVEC MEMBRES DEDANS -->
+  <div id="pdv-liste-complet"></div>
+
+  <!-- SIÈGE PRINCIPAL -->
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">
+      <div class="ct-left"><span>🏭 Siège principal</span></div>
+      <button class="btn btn-g btn-sm" onclick="ouvrirModalEq('')">➕ Ajouter un membre</button>
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Membres sans point de vente assigné</div>
+    <div id="equipe-siege"></div>
   </div>
 </div>
 
