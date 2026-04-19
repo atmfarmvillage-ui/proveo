@@ -292,3 +292,64 @@ async function testerCallMeBot(){
     status.textContent='⚠ Erreur réseau: '+e.message;
   }
 }
+
+// ══════════════════════════════════════════════════
+// POINTS DE VENTE
+// ══════════════════════════════════════════════════
+async function renderPDV(){
+  const{data}=await SB.from('gp_points_vente').select('*')
+    .eq('admin_id',GP_ADMIN_ID).order('nom');
+  const P=data||[];
+
+  // Remplir select dans formulaire équipe
+  const sel=document.getElementById('eq_pv');
+  if(sel){
+    sel.innerHTML='<option value="">— Aucun (siège principal) —</option>'+
+      P.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
+  }
+
+  const container=document.getElementById('pdv-liste');
+  if(!container)return;
+
+  if(!P.length){
+    container.innerHTML='<div style="color:var(--textm);font-size:12px">Aucun point de vente créé.</div>';
+    return;
+  }
+
+  container.innerHTML=`
+    <table class="tbl" style="font-size:11px">
+      <thead><tr><th>Point de vente</th><th class="num">Ventes</th><th class="num">CA (F)</th><th></th></tr></thead>
+      <tbody>
+      ${await Promise.all(P.map(async p=>{
+        const{data:v}=await SB.from('gp_ventes').select('montant_total')
+          .eq('admin_id',GP_ADMIN_ID).eq('point_vente',p.nom);
+        const ca=(v||[]).reduce((s,x)=>s+Number(x.montant_total||0),0);
+        return `<tr>
+          <td style="font-weight:700">📍 ${p.nom}</td>
+          <td class="num">${(v||[]).length}</td>
+          <td class="num" style="color:var(--gold)">${fmt(ca)}</td>
+          <td><button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button></td>
+        </tr>`;
+      })).then(rows=>rows.join(''))}
+      </tbody>
+    </table>`;
+}
+
+async function savePDV(){
+  const nom=document.getElementById('pv_nom')?.value.trim();
+  const err=document.getElementById('pv_err');
+  if(!nom){err.textContent='Nom requis.';return;}
+  const{error}=await SB.from('gp_points_vente').insert({admin_id:GP_ADMIN_ID,nom});
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  document.getElementById('pv_nom').value='';
+  err.textContent='';
+  renderPDV();
+  notify('Point de vente "'+nom+'" créé ✓','gold');
+}
+
+async function deletePDV(id,nom){
+  if(!confirm(`Supprimer le point de vente "${nom}" ?`))return;
+  await SB.from('gp_points_vente').delete().eq('id',id);
+  renderPDV();
+  notify('Point de vente supprimé','r');
+}

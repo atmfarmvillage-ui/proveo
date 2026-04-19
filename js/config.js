@@ -13,6 +13,7 @@ let GP_CLIENTS = [];
 let GP_PRIX = {};
 let GP_REMISE_MAX = 5;
 let GP_CHARTS = {};
+let GP_POINT_VENTE = null; // Point de vente du membre connecté
 
 // ── 24 FORMULES SADARI PRÉ-CHARGÉES ───────────────
 const FORMULES_SADARI = [

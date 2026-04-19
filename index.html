@@ -65,6 +65,7 @@
   <div class="tb-right">
     <div class="tb-user-info" id="tb-user-info"></div>
     <span class="tb-role" id="tb-role-badge">ADMIN</span>
+    <span id="tb-pv-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:3px 10px;border-radius:20px"></span>
     <div class="notif-badge hidden" id="notif-remises" title="Remises en attente" onclick="showGP('remises')">0</div>
     <button class="tb-btn" onclick="doLogout()">⎋ Déconnexion</button>
   </div>
@@ -720,18 +721,36 @@
 
 <!-- ÉQUIPE (admin) -->
 <div class="page" id="page-equipe">
-  <div class="page-title">Équipe</div>
-  <div class="page-sub">Gérer les secrétaires — Invitations par email</div>
+  <div class="page-title">Équipe & Points de Vente</div>
+  <div class="page-sub">Gérer les points de vente · Inviter des secrétaires</div>
+
+  <!-- POINTS DE VENTE -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><div class="ct-left"><span>📍 Points de Vente</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Chaque point de vente peut avoir ses propres secrétaires. Toutes leurs ventes et dépenses seront automatiquement étiquetées avec le nom du point de vente.</div>
+    <div class="fg2" style="align-items:end">
+      <div class="fr"><label>Nom du point de vente</label><input type="text" id="pv_nom" placeholder="Ex: Lomé Centre, Sanguera, Kara..."></div>
+      <button class="btn btn-g" onclick="savePDV()" style="margin-bottom:0">➕ Créer</button>
+    </div>
+    <div class="a-err" id="pv_err"></div>
+    <div id="pdv-liste" style="margin-top:12px"></div>
+  </div>
+
   <div class="g2" style="align-items:start">
     <div class="card">
-      <div class="card-title"><div class="ct-left"><span>➕ Ajouter un secrétaire</span></div></div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Le secrétaire recevra un email d'invitation pour créer son compte. Il verra les pages opérationnelles mais pas les chiffres financiers.</div>
+      <div class="card-title"><div class="ct-left"><span>➕ Ajouter un membre</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Le secrétaire verra les pages opérationnelles mais pas les chiffres financiers.</div>
       <div class="fr"><label>Nom complet</label><input type="text" id="eq_nom" placeholder="Marie Koffi"></div>
       <div class="fr"><label>Email</label><input type="email" id="eq_email" placeholder="marie@provenderie.com"></div>
       <div class="fr"><label>Rôle</label>
         <select id="eq_role">
           <option value="secretaire">Secrétaire (saisie uniquement)</option>
           <option value="admin">Admin (accès complet)</option>
+        </select>
+      </div>
+      <div class="fr"><label>📍 Point de vente</label>
+        <select id="eq_pv">
+          <option value="">— Aucun (siège principal) —</option>
         </select>
       </div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEquipe()">📧 Envoyer l'invitation</button>

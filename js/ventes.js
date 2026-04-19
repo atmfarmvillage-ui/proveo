@@ -77,7 +77,7 @@ async function saveVente(){
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,
     client_id:finalClientId||null,client_nom:clientNom,client_tel:clientTel,
     formule_nom:nom_v,espece,qte_vendue:qte,prix_unitaire:prix,remise,remise_validee:true,
-    montant_total:total,statut_paiement:statut,montant_paye:paye,point_vente:pv
+    montant_total:total,statut_paiement:statut,montant_paye:paye,point_vente:pv||GP_POINT_VENTE||null
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Update client stats

@@ -90,9 +90,11 @@ async function bootApp(user){
   if(membre){
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
+    GP_POINT_VENTE=membre.point_vente||null;
   } else {
     GP_ROLE='admin';
     GP_ADMIN_ID=user.id;
+    GP_POINT_VENTE=null;
   }
   // Show UI
   document.getElementById('authScreen').classList.add('hidden');
@@ -103,6 +105,12 @@ async function bootApp(user){
   document.getElementById('tb-role-badge').textContent=GP_ROLE.toUpperCase();
   document.getElementById('tb-role-badge').className='tb-role '+GP_ROLE;
   document.getElementById('tb-user-info').textContent=user.email?.split('@')[0]||'';
+  // Afficher le point de vente dans la topbar
+  const pvBadge=document.getElementById('tb-pv-badge');
+  if(pvBadge){
+    if(GP_POINT_VENTE){pvBadge.textContent='📍 '+GP_POINT_VENTE;pvBadge.style.display='inline-block';}
+    else pvBadge.style.display='none';
+  }
   // Apply role restrictions
   applyRoleRestrictions();
   // Load base data
