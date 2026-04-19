@@ -741,7 +741,10 @@
       <div class="card-title"><div class="ct-left"><span>➕ Ajouter un membre</span></div></div>
       <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Le secrétaire verra les pages opérationnelles mais pas les chiffres financiers.</div>
       <div class="fr"><label>Nom complet</label><input type="text" id="eq_nom" placeholder="Marie Koffi"></div>
-      <div class="fr"><label>Email</label><input type="email" id="eq_email" placeholder="marie@provenderie.com"></div>
+      <div class="fg2">
+        <div class="fr"><label>Email *</label><input type="email" id="eq_email" placeholder="marie@email.com"></div>
+        <div class="fr"><label>WhatsApp *</label><input type="tel" id="eq_tel" placeholder="+228 90 00 00 00"></div>
+      </div>
       <div class="fr"><label>Rôle</label>
         <select id="eq_role">
           <option value="secretaire">Secrétaire (saisie uniquement)</option>
@@ -753,7 +756,7 @@
           <option value="">— Aucun (siège principal) —</option>
         </select>
       </div>
-      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEquipe()">📧 Envoyer l'invitation</button>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEquipe()">➕ Ajouter le membre</button>
       <div class="a-err" id="eq_err"></div>
       <div class="a-ok" id="eq_ok"></div>
     </div>

@@ -152,52 +152,87 @@ function openNewFormule(){notify('Nouvelle formule — fonctionnalité en dével
 async function saveEquipe(){
   const nom=document.getElementById('eq_nom').value.trim();
   const email=document.getElementById('eq_email').value.trim();
+  const tel=document.getElementById('eq_tel')?.value.trim()||'';
   const role=document.getElementById('eq_role').value;
   const pv=document.getElementById('eq_pv')?.value.trim()||null;
   const err=document.getElementById('eq_err');
   const ok=document.getElementById('eq_ok');
   if(!nom||!email){err.textContent='Nom et email requis.';return;}
-  err.textContent='';
+  if(!tel){err.textContent='Numéro WhatsApp requis pour envoyer l\'invitation.';return;}
+  err.textContent='';ok.innerHTML='';
 
-  // Vérifier si l'email est déjà enregistré comme membre
+  // Vérifier doublon
   const{data:exist}=await SB.from('gp_membres').select('id').eq('email',email).eq('admin_id',GP_ADMIN_ID);
   if(exist&&exist.length>0){err.textContent='Cet email est déjà dans votre équipe.';return;}
 
-  // Enregistrer le membre en attente (user_id sera lié quand il créera son compte)
+  // Enregistrer le membre
   const{error}=await SB.from('gp_membres').insert({
     admin_id:GP_ADMIN_ID,
     nom,email,role,
     point_vente:pv,
-    user_id:null // sera rempli à la première connexion
+    telephone:tel,
+    user_id:null
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
 
-  // Générer le lien WhatsApp d'invitation
+  // Envoyer invitation WhatsApp au numéro de la secrétaire
   const siteUrl=window.location.origin;
+  const telClean=tel.replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+  const roleLabel=role==='admin'?'Administrateur':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
-    `Vous avez été ajouté(e) comme *${role==='admin'?'Administrateur':'Secrétaire'}* sur *PROVENDA*`+
-    (pv?` — Point de vente : *${pv}*`:'')+
-    `.\n\n`+
-    `📌 *Pour accéder au logiciel :*\n`+
-    `1. Ouvrez ce lien : ${siteUrl}\n`+
+    `Vous avez été ajouté(e) comme *${roleLabel}* sur *PROVENDA*`+
+    (pv?`\n📍 Point de vente : *${pv}*`:'')+
+    `\n\n`+
+    `📌 *Comment accéder au logiciel :*\n`+
+    `1. Ouvrez ce lien : *${siteUrl}*\n`+
     `2. Cliquez *"Créer un compte"*\n`+
-    `3. Utilisez cet email : *${email}*\n`+
+    `3. Utilisez exactement cet email : *${email}*\n`+
     `4. Choisissez un mot de passe\n\n`+
+    `⚠️ Utilisez bien l'adresse email *${email}* — sinon l'accès ne sera pas reconnu.\n\n`+
     `_PROVENDA · ATM Farm Village_`
   );
-  const waLink=`https://wa.me/?text=${msg}`;
 
-  ok.innerHTML=`✓ <strong>${nom}</strong> ajouté(e) comme ${role}${pv?' · '+pv:''} !
-    <div style="margin-top:8px">
-      <a href="${waLink}" target="_blank" class="btn btn-g btn-sm" style="display:inline-flex;text-decoration:none">
-        📲 Envoyer les instructions par WhatsApp
-      </a>
-    </div>`;
+  ['eq_nom','eq_email','eq_tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
 
-  ['eq_nom','eq_email'].forEach(id=>document.getElementById(id).value='');
+  ok.innerHTML=`
+    <div style="color:var(--green);margin-bottom:8px">✓ <strong>${nom}</strong> ajouté(e) — ${roleLabel}${pv?' · '+pv:''}</div>
+    <a href="https://wa.me/228${telClean}?text=${msg}" target="_blank"
+      class="btn btn-g btn-sm" style="display:inline-flex;text-decoration:none;width:100%;justify-content:center">
+      📲 Envoyer l'invitation WhatsApp à ${nom}
+    </a>`;
+
   notify(`${nom} ajouté(e) ✓`,'gold');
   renderEquipe();
+}
+async function renderEquipe(){
+  const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
+  const M=data||[];
+  document.getElementById('equipe-liste').innerHTML=M.length?M.map(m=>`
+    <div style="padding:10px;background:var(--g2);border-radius:8px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:700">${m.nom||'—'}</div>
+          <div style="font-size:10px;color:var(--textm);margin-top:2px">${m.email||'—'}</div>
+          ${m.telephone?`<div style="font-size:10px;color:var(--textm)">📞 ${m.telephone}</div>`:''}
+          <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">
+            <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${m.role?.toUpperCase()||'SECRÉTAIRE'}</span>
+            ${m.point_vente?`<span class="badge" style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)">📍 ${m.point_vente}</span>`:''}
+            <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'}">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px">
+          ${m.telephone?`<a href="https://wa.me/228${(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'')}?text=${encodeURIComponent('Bonjour '+m.nom+', rappel : connectez-vous sur PROVENDA ('+window.location.origin+') avec l\'email '+m.email)}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
+          <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
+        </div>
+      </div>
+    </div>`).join(''):'<div style="color:var(--textm);font-size:12px">Aucun membre dans l\'équipe.</div>';
+}
+async function deleteMembre(id){
+  if(!confirm('Supprimer ce membre ?'))return;
+  await SB.from('gp_membres').delete().eq('id',id);
+  renderEquipe();
+  notify('Membre supprimé','r');
 }
 async function renderEquipe(){
   const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
