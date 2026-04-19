@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// GP ERP — PAGE MATIÈRES PREMIÈRES
+// PROVENDA — PAGE MATIÈRES PREMIÈRES
 // ══════════════════════════════════════════════════
 
 async function renderMatieresPremieresPage(){

@@ -254,8 +254,8 @@ function afficherModalExpire(plan){
       </div>
       <p style="color:#94A3B8;font-size:14px;margin-bottom:24px;line-height:1.6">
         ${estTrial
-          ? 'Vos 15 jours d\'essai gratuit sont écoulés. Abonnez-vous pour continuer à utiliser GP Provenderie.'
-          : 'Votre abonnement GP Provenderie est expiré. Renouvelez pour accéder à vos données.'}
+          ? 'Vos 15 jours d\'essai gratuit sont écoulés. Abonnez-vous pour continuer à utiliser PROVENDA.'
+          : 'Votre abonnement PROVENDA est expiré. Renouvelez pour accéder à vos données.'}
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
         <div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:10px;padding:16px;text-align:center">

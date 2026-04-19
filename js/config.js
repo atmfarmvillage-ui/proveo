@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// GP ERP — CONFIGURATION SUPABASE
+// PROVENDA — CONFIGURATION SUPABASE
 // ══════════════════════════════════════════════════
 const GP_URL = 'https://edvgtxzwpopqflaxbown.supabase.co';
 const GP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY';

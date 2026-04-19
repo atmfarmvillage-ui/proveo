@@ -342,7 +342,7 @@ function imprimerRapportJour(date, dateAff, ca, dep, impaye, prod, bilan){
   </div>
 
   <div class="footer">
-    <div>Généré par GP ERP · avifarmer.net</div>
+    <div>Généré par PROVENDA · avifarmer.net</div>
     <div>Imprimé le ${new Date().toLocaleDateString('fr-FR')}</div>
   </div>
   <div style="text-align:center;margin-top:10px">

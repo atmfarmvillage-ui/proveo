@@ -275,7 +275,7 @@ async function testerCallMeBot(){
   if(!apikey){status.style.color='#ef4444';status.textContent='⚠ Entrez votre clé API CallMeBot.';return;}
   if(!tel){status.style.color='#ef4444';status.textContent='⚠ Entrez votre numéro de téléphone.';return;}
   status.style.color='#94A3B8';status.textContent='⏳ Envoi en cours...';
-  const msg=encodeURIComponent('✅ Test GP Provenderie — Vos alertes stock automatiques sont activées !');
+  const msg=encodeURIComponent('✅ Test PROVENDA — Vos alertes stock automatiques sont activées !');
   const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
   try{
     const res=await fetch(url);

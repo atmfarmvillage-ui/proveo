@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════
-// GP ERP — MODULE IMPRESSION
+// PROVENDA — MODULE IMPRESSION
 // Reçu thermique 58mm + Étiquettes sac A4 (8/page)
 // ══════════════════════════════════════════════════
 
