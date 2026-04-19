@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GP — Logiciel de Gestion Provenderie · ATM Farm Village</title>
+<meta name="description" content="Gérez votre provenderie comme un professionnel. Stock, production, ventes, clients — tout en un. Essai gratuit 30 jours.">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --noir:#050A02;
+  --vert:#0F5C1A;
+  --vert2:#1A8A2A;
+  --vert3:#25C23A;
+  --lime:#B8F566;
+  --or:#E8C547;
+  --texte:#F0EDE6;
+  --textm:#9A9E8F;
+  --card:rgba(15,92,26,.12);
+  --border:rgba(184,245,102,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--noir);
+  color:var(--texte);
+  font-family:'Syne',sans-serif;
+  font-size:16px;
+  line-height:1.6;
+  overflow-x:hidden;
+}
+
+/* ── FOND ANIMÉ ── */
+.bg-orbs{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.35;animation:drift 18s ease-in-out infinite}
+.orb1{width:600px;height:600px;background:var(--vert);top:-200px;left:-200px;animation-delay:0s}
+.orb2{width:400px;height:400px;background:var(--vert2);bottom:-100px;right:-100px;animation-delay:-6s}
+.orb3{width:300px;height:300px;background:#2D5A1B;top:40%;left:60%;animation-delay:-12s}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.05)}66%{transform:translate(-20px,40px) scale(.95)}}
+
+/* ── BRUIT ── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:18px 5%;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(5,10,2,.7);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{display:flex;align-items:center;gap:10px}
+.nav-mark{width:38px;height:38px;background:linear-gradient(135deg,var(--vert2),var(--vert3));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.nav-name{font-family:'DM Serif Display',serif;font-size:20px;color:var(--texte)}
+.nav-name em{font-style:italic;color:var(--lime)}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-links a{color:var(--textm);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--lime)}
+.nav-cta{
+  background:var(--lime);color:var(--noir);
+  padding:9px 22px;border-radius:100px;
+  font-size:14px;font-weight:700;text-decoration:none;
+  transition:all .2s;white-space:nowrap;
+}
+.nav-cta:hover{background:#cef57a;transform:translateY(-1px)}
+
+/* ── SECTIONS ── */
+section{position:relative;z-index:1}
+.container{max-width:1100px;margin:0 auto;padding:0 5%}
+
+/* ── HERO ── */
+.hero{
+  min-height:100vh;display:flex;align-items:center;
+  padding:120px 5% 80px;
+  max-width:1100px;margin:0 auto;
+}
+.hero-content{flex:1}
+.hero-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(184,245,102,.1);border:1px solid rgba(184,245,102,.3);
+  border-radius:100px;padding:6px 16px;
+  font-size:12px;font-weight:600;color:var(--lime);
+  letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:28px;
+}
+.hero-tag::before{content:'';width:6px;height:6px;background:var(--lime);border-radius:50%;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+h1{
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(42px,6.5vw,78px);
+  line-height:1.05;
+  color:var(--texte);
+  margin-bottom:24px;
+}
+h1 em{font-style:italic;color:var(--lime)}
+h1 span{color:var(--textm)}
+.hero-sub{
+  font-size:18px;color:var(--textm);
+  max-width:520px;margin-bottom:40px;
+  line-height:1.7;font-weight:400;
+}
+.hero-btns{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.btn-primary{
+  background:var(--lime);color:var(--noir);
+  padding:16px 36px;border-radius:100px;
+  font-size:16px;font-weight:700;text-decoration:none;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:all .25s;border:none;cursor:pointer;font-family:'Syne',sans-serif;
+}
+.btn-primary:hover{background:#cef57a;transform:translateY(-2px);box-shadow:0 8px 30px rgba(184,245,102,.3)}
+.btn-secondary{
+  background:transparent;color:var(--texte);
+  padding:16px 36px;border-radius:100px;
+  font-size:16px;font-weight:600;text-decoration:none;
+  border:1px solid rgba(240,237,230,.2);
+  transition:all .25s;
+}
+.btn-secondary:hover{border-color:var(--lime);color:var(--lime)}
+.hero-note{font-size:12px;color:var(--textm);margin-top:14px}
+.hero-note strong{color:var(--lime)}
+
+/* ── STATS ── */
+.stats-bar{
+  position:relative;z-index:1;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  background:rgba(15,92,26,.08);
+  padding:32px 5%;
+}
+.stats-inner{
+  max-width:1100px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;
+}
+.stat{
+  text-align:center;padding:0 20px;
+  border-right:1px solid var(--border);
+}
+.stat:last-child{border-right:none}
+.stat-n{
+  font-family:'DM Serif Display',serif;
+  font-size:42px;color:var(--lime);
+  line-height:1;margin-bottom:6px;
+}
+.stat-l{font-size:13px;color:var(--textm);font-weight:500}
+
+/* ── FEATURES ── */
+.features{padding:100px 0}
+.section-tag{
+  font-size:11px;font-weight:700;color:var(--lime);
+  text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:14px;
+}
+h2{
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(32px,4.5vw,52px);
+  line-height:1.1;margin-bottom:18px;
+}
+h2 em{font-style:italic;color:var(--lime)}
+.section-sub{font-size:17px;color:var(--textm);max-width:520px;line-height:1.7}
+
+.features-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:2px;
+  margin-top:60px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
+}
+.feat{
+  background:rgba(15,92,26,.08);
+  padding:32px 28px;
+  transition:background .3s;
+  border-right:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.feat:hover{background:rgba(15,92,26,.2)}
+.feat:nth-child(3n){border-right:none}
+.feat:nth-child(n+4){border-bottom:none}
+.feat-icon{
+  width:48px;height:48px;
+  background:rgba(184,245,102,.1);
+  border:1px solid rgba(184,245,102,.2);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;margin-bottom:18px;
+}
+.feat h3{font-size:17px;font-weight:700;margin-bottom:10px;color:var(--texte)}
+.feat p{font-size:14px;color:var(--textm);line-height:1.6}
+
+/* ── FORMULES ── */
+.formules{padding:80px 0;background:rgba(15,92,26,.05)}
+.esp-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;margin-top:50px;
+}
+.esp{
+  background:rgba(15,92,26,.1);
+  border:1px solid var(--border);
+  border-radius:12px;padding:20px;
+  text-align:center;transition:all .3s;cursor:default;
+}
+.esp:hover{
+  border-color:var(--lime);
+  background:rgba(184,245,102,.08);
+  transform:translateY(-4px);
+}
+.esp-icon{font-size:32px;margin-bottom:10px;display:block}
+.esp-name{font-weight:700;font-size:15px;margin-bottom:4px}
+.esp-count{font-size:12px;color:var(--lime);font-family:'DM Mono',monospace}
+
+/* ── PRIX ── */
+.prix{padding:100px 0}
+.prix-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:20px;margin-top:60px;max-width:800px;
+}
+.prix-card{
+  background:rgba(15,92,26,.1);
+  border:1px solid var(--border);
+  border-radius:20px;padding:40px;
+  position:relative;overflow:hidden;
+  transition:all .3s;
+}
+.prix-card:hover{border-color:rgba(184,245,102,.4);transform:translateY(-4px)}
+.prix-card.featured{
+  background:linear-gradient(135deg,rgba(184,245,102,.15),rgba(37,194,58,.08));
+  border-color:rgba(184,245,102,.4);
+}
+.prix-badge{
+  position:absolute;top:16px;right:16px;
+  background:var(--lime);color:var(--noir);
+  padding:4px 14px;border-radius:100px;
+  font-size:11px;font-weight:700;
+}
+.prix-nom{font-size:13px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
+.prix-montant{
+  font-family:'DM Serif Display',serif;
+  font-size:48px;color:var(--texte);
+  line-height:1;margin-bottom:6px;
+}
+.prix-montant small{font-size:16px;color:var(--textm);font-family:'Syne',sans-serif}
+.prix-periode{font-size:13px;color:var(--textm);margin-bottom:6px}
+.prix-eco{font-size:12px;color:var(--or);font-weight:600;margin-bottom:24px}
+.prix-feats{list-style:none;margin-bottom:28px}
+.prix-feats li{
+  font-size:14px;color:var(--textm);
+  padding:7px 0;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+.prix-feats li::before{content:'→';color:var(--lime);font-weight:700;flex-shrink:0}
+.prix-feats li:last-child{border-bottom:none}
+.btn-prix{
+  width:100%;padding:14px;border-radius:100px;
+  font-size:15px;font-weight:700;
+  cursor:pointer;border:none;font-family:'Syne',sans-serif;
+  transition:all .25s;text-decoration:none;display:block;text-align:center;
+}
+.btn-prix-main{background:var(--lime);color:var(--noir)}
+.btn-prix-main:hover{background:#cef57a}
+.btn-prix-out{background:transparent;border:1px solid rgba(240,237,230,.2);color:var(--texte)}
+.btn-prix-out:hover{border-color:var(--lime);color:var(--lime)}
+
+/* ── PERSONNALISATION ── */
+.perso{padding:80px 0;background:rgba(15,92,26,.05)}
+.perso-inner{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:60px;align-items:center;
+}
+.perso-list{list-style:none;margin-top:24px}
+.perso-list li{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 0;border-bottom:1px solid var(--border);
+  font-size:15px;color:var(--textm);
+}
+.perso-list li::before{
+  content:'✓';width:24px;height:24px;
+  background:rgba(184,245,102,.15);border:1px solid rgba(184,245,102,.3);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--lime);font-size:11px;font-weight:700;flex-shrink:0;
+}
+.perso-visual{
+  background:rgba(15,92,26,.12);
+  border:1px solid var(--border);
+  border-radius:16px;padding:24px;
+}
+.mock-bar{
+  background:rgba(5,10,2,.6);border-radius:8px;
+  padding:10px 14px;display:flex;align-items:center;gap:10px;
+  margin-bottom:10px;border:1px solid var(--border);
+}
+.mock-dot{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.mock-name{font-family:'DM Serif Display',serif;font-size:14px}
+.mock-sub{font-size:9px;color:var(--textm)}
+
+/* ── CTA ── */
+.cta-section{
+  padding:100px 5%;text-align:center;
+  background:linear-gradient(180deg,transparent,rgba(15,92,26,.15));
+}
+.cta-box{
+  max-width:700px;margin:0 auto;
+  background:rgba(15,92,26,.15);
+  border:1px solid rgba(184,245,102,.25);
+  border-radius:24px;padding:60px 40px;
+}
+.cta-box h2{font-size:clamp(28px,4vw,46px);margin-bottom:16px}
+.cta-box p{color:var(--textm);font-size:17px;margin-bottom:36px}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border);
+  padding:32px 5%;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:14px;
+}
+.footer-logo{font-family:'DM Serif Display',serif;font-size:17px}
+.footer-logo em{font-style:italic;color:var(--lime)}
+.footer-info{font-size:13px;color:var(--textm);text-align:center}
+.footer-contact{font-size:13px;color:var(--textm);text-align:right}
+.footer-contact a{color:var(--lime);text-decoration:none}
+
+/* ── ANIMATIONS ── */
+.reveal{opacity:0;transform:translateY(30px);transition:all .7s cubic-bezier(.4,0,.2,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  .nav-links{display:none}
+  .features-grid{grid-template-columns:1fr}
+  .feat{border-right:none}
+  .feat:nth-child(n+4){border-bottom:1px solid var(--border)}
+  .feat:last-child{border-bottom:none}
+  .esp-grid{grid-template-columns:repeat(2,1fr)}
+  .prix-grid{grid-template-columns:1fr}
+  .stats-inner{grid-template-columns:1fr 1fr}
+  .stat{border-right:none;border-bottom:1px solid var(--border);padding:16px 0}
+  .stat:nth-child(2n){border-right:none}
+  .perso-inner{grid-template-columns:1fr}
+  .hero{padding:100px 5% 60px}
+  .cta-box{padding:40px 24px}
+  footer{flex-direction:column;text-align:center}
+  .footer-contact{text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- FOND -->
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-mark">🌾</div>
+    <div class="nav-name">GP <em>·</em> Provenderie</div>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Fonctionnalités</a>
+    <a href="#formules">Formules</a>
+    <a href="#prix">Tarifs</a>
+    <a href="#contact">Contact</a>
+  </div>
+  <a href="gp_paiement.html" class="nav-cta">Démarrer →</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-tag">🌾 Logiciel de gestion provenderie</div>
+    <h1>Gérez votre<br>provenderie<br><em>comme un pro</em></h1>
+    <p class="hero-sub">Stock, production, ventes, clients — tout en un seul logiciel. Personnalisé à votre marque. Prêt en 5 minutes.</p>
+    <div class="hero-btns">
+      <a href="index.html#signup" class="btn-primary">🚀 Essayer gratuitement — 15 jours</a>
+      <a href="gp_paiement.html" class="btn-secondary">💳 S'abonner directement</a>
+    </div>
+    <p class="hero-note">✅ <strong>15 jours gratuits</strong> · Sans carte bancaire · Sans engagement</p>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat reveal">
+      <div class="stat-n">24</div>
+      <div class="stat-l">Formules incluses</div>
+    </div>
+    <div class="stat reveal">
+      <div class="stat-n">7</div>
+      <div class="stat-l">Espèces animales</div>
+    </div>
+    <div class="stat reveal">
+      <div class="stat-n">5 min</div>
+      <div class="stat-l">Pour démarrer</div>
+    </div>
+    <div class="stat reveal">
+      <div class="stat-n">100%</div>
+      <div class="stat-l">Votre marque</div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-tag">Fonctionnalités</div>
+    <h2>Tout ce dont votre<br>provenderie a <em>besoin</em></h2>
+    <p class="section-sub">Un seul logiciel pour gérer toute votre activité, de la réception des matières premières à la livraison client.</p>
+
+    <div class="features-grid reveal">
+      <div class="feat">
+        <div class="feat-icon">📦</div>
+        <h3>Stock matières premières</h3>
+        <p>Réceptionnez vos MP, suivez les niveaux en temps réel. Alertes automatiques quand le stock est bas.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🏭</div>
+        <h3>Gestion de production</h3>
+        <p>Créez un lot — le système calcule automatiquement la quantité de chaque MP utilisée et met à jour le stock.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🧪</div>
+        <h3>24 formules incluses</h3>
+        <p>Lapin, pondeuse, chair, porc, canard, tilapia, goliath — toutes les formules SADARI prêtes à l'emploi.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">💰</div>
+        <h3>Ventes & clients</h3>
+        <p>Enregistrez vos ventes, suivez les paiements et les créances. Historique complet par client.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🖨️</div>
+        <h3>Étiquettes automatiques</h3>
+        <p>À chaque lot produit, imprimez 8 étiquettes sac avec composition nutritionnelle et numéro de lot.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📊</div>
+        <h3>Inventaire mensuel</h3>
+        <p>Rapport mensuel complet : entrées, sorties, consommation par ingrédient, stock restant. Exportable.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">👥</div>
+        <h3>Multi-utilisateurs</h3>
+        <p>Ajoutez des secrétaires pour la saisie. L'admin voit les chiffres, les secrétaires gèrent les données.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🏆</div>
+        <h3>Classement clients</h3>
+        <p>Top 15 en vert, 16-30 en jaune. Suivi de fréquence d'achat. Alerte rouge si client inactif.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🎨</div>
+        <h3>Votre marque</div>
+        <p>Uploadez votre logo, choisissez votre couleur. Le logiciel prend votre identité visuelle.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FORMULES -->
+<section class="formules" id="formules">
+  <div class="container">
+    <div class="section-tag">Formules incluses</div>
+    <h2>24 formules <em>SADARI</em><br>— 7 espèces</h2>
+    <p class="section-sub">Formules développées par ATM Farm Village, adaptées au contexte ouest-africain.</p>
+    <div class="esp-grid reveal">
+      <div class="esp"><span class="esp-icon">🐰</span><div class="esp-name">Lapin</div><div class="esp-count">2 formules</div></div>
+      <div class="esp"><span class="esp-icon">🥚</span><div class="esp-name">Pondeuse</div><div class="esp-count">4 formules</div></div>
+      <div class="esp"><span class="esp-icon">🐔</span><div class="esp-name">Poulet Chair</div><div class="esp-count">3 formules</div></div>
+      <div class="esp"><span class="esp-icon">🐷</span><div class="esp-name">Porc</div><div class="esp-count">4 formules</div></div>
+      <div class="esp"><span class="esp-icon">🦆</span><div class="esp-name">Canard Barbarie</div><div class="esp-count">3 formules</div></div>
+      <div class="esp"><span class="esp-icon">🐟</span><div class="esp-name">Tilapia</div><div class="esp-count">3 formules</div></div>
+      <div class="esp"><span class="esp-icon">🐸</span><div class="esp-name">Grenouille Goliath</div><div class="esp-count">4 formules</div></div>
+      <div class="esp" style="border-style:dashed;opacity:.7"><span class="esp-icon">➕</span><div class="esp-name">Vos formules</div><div class="esp-count">Illimitées</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PERSONNALISATION -->
+<section class="perso" id="marque">
+  <div class="container">
+    <div class="perso-inner">
+      <div class="reveal">
+        <div class="section-tag">Personnalisation</div>
+        <h2>Votre logo,<br>votre <em>identité</em></h2>
+        <p style="color:var(--textm);font-size:16px;margin-bottom:10px">Le logiciel s'adapte à votre provenderie — pas l'inverse.</p>
+        <ul class="perso-list">
+          <li>Uploadez votre logo PNG ou JPG</li>
+          <li>Choisissez votre couleur principale</li>
+          <li>Personnalisez nom et slogan</li>
+          <li>Données 100% privées et isolées</li>
+          <li>Accessible sur téléphone et ordinateur</li>
+          <li>Aucune installation — fonctionne dans le navigateur</li>
+        </ul>
+      </div>
+      <div class="perso-visual reveal">
+        <div style="font-size:11px;color:var(--textm);margin-bottom:12px;text-align:center;text-transform:uppercase;letter-spacing:1px">Aperçu</div>
+        <div class="mock-bar">
+          <div class="mock-dot" style="background:linear-gradient(135deg,#16A34A,#15803D)">🌾</div>
+          <div>
+            <div class="mock-name">Provenderie Alpha SARL</div>
+            <div class="mock-sub">GESTION PROVENDERIE</div>
+          </div>
+        </div>
+        <div class="mock-bar">
+          <div class="mock-dot" style="background:linear-gradient(135deg,#1A56DB,#2563EB)">🌾</div>
+          <div>
+            <div class="mock-name">Aliments Beta Togo</div>
+            <div class="mock-sub">GESTION PROVENDERIE</div>
+          </div>
+        </div>
+        <div class="mock-bar">
+          <div class="mock-dot" style="background:linear-gradient(135deg,#D97706,#F59E0B)">🌾</div>
+          <div>
+            <div class="mock-name">Ferme Gamma Avicole</div>
+            <div class="mock-sub">GESTION PROVENDERIE</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--textm)">Chaque provenderie a son propre look</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIX -->
+<section class="prix" id="prix">
+  <div class="container">
+    <div class="section-tag">Tarifs</div>
+    <h2>Simple et <em>transparent</em></h2>
+    <p class="section-sub">Pas de frais cachés. Commencez gratuitement 30 jours.</p>
+    <div class="prix-grid reveal">
+      <div class="prix-card">
+        <div class="prix-nom">Mensuel</div>
+        <div class="prix-montant">20 000<small> FCFA</small></div>
+        <div class="prix-periode">par mois · sans engagement</div>
+        <div class="prix-eco">&nbsp;</div>
+        <ul class="prix-feats">
+          <li>Accès complet au logiciel GP</li>
+          <li>24 formules SADARI incluses</li>
+          <li>Votre logo et couleur</li>
+          <li>Multi-utilisateurs</li>
+          <li>Support WhatsApp</li>
+        </ul>
+        <a href="gp_paiement.html" class="btn-prix btn-prix-out">Choisir Mensuel →</a>
+      </div>
+      <div class="prix-card featured">
+        <div class="prix-badge">⭐ Meilleure offre</div>
+        <div class="prix-nom">Annuel</div>
+        <div class="prix-montant">200 000<small> FCFA</small></div>
+        <div class="prix-periode">par an · soit 16 667 FCFA/mois</div>
+        <div class="prix-eco">🎁 2 mois offerts par rapport au mensuel</div>
+        <ul class="prix-feats">
+          <li>Tout du plan Mensuel</li>
+          <li>Priorité support</li>
+          <li>Formation à distance incluse</li>
+          <li>Mises à jour gratuites</li>
+          <li>Accès nouvelles fonctionnalités</li>
+        </ul>
+        <a href="gp_paiement.html" class="btn-prix btn-prix-main">Payer maintenant →</a>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:20px;font-size:13px;color:var(--textm)">Essai gratuit 30 jours · Paiement sécurisé FedaPay · Mobile Money et carte bancaire</p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="contact">
+  <div class="cta-box reveal">
+    <h2>Prêt à professionnaliser<br>votre <em>provenderie ?</em></h2>
+    <p>Rejoignez les provenderies qui gèrent leur activité avec GP. Démarrez en 5 minutes.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:16px">
+      <a href="index.html#signup" class="btn-primary">🚀 Essai gratuit 15 jours</a>
+      <a href="gp_paiement.html" style="background:transparent;border:2px solid var(--lime);color:var(--lime);padding:16px 36px;border-radius:100px;font-size:16px;font-weight:600;text-decoration:none;transition:all .25s">💳 S'abonner</a>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:20px">
+      <a href="https://wa.me/22899313110" style="color:var(--lime);text-decoration:none;font-size:14px">📲 WhatsApp : (+228) 99313110</a>
+      <span style="color:var(--textm)">·</span>
+      <span style="color:var(--textm);font-size:14px">📍 Lomé, Togo</span>
+      <span style="color:var(--textm)">·</span>
+      <a href="https://avifarmer.net" style="color:var(--lime);text-decoration:none;font-size:14px">🌐 avifarmer.net</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">GP <em>·</em> Provenderie Sadari</div>
+  <div class="footer-info">© 2026 ATM Farm Village · Tous droits réservés</div>
+  <div class="footer-contact">
+    <a href="https://wa.me/22899313110">(+228) 99313110</a> · Lomé, Togo
+  </div>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){
+      e.target.classList.add('visible');
+      // Stagger children
+      Array.from(e.target.children).forEach(function(child, i){
+        child.style.transitionDelay = (i * 0.08) + 's';
+        child.classList.add('visible');
+      });
+    }
+  });
+}, {threshold: 0.1});
+
+document.querySelectorAll('.reveal').forEach(function(el){
+  observer.observe(el);
+});
+
+// Stats counter animation
+function animateCounter(el, target, suffix){
+  let current = 0;
+  const step = target / 40;
+  const timer = setInterval(function(){
+    current += step;
+    if(current >= target){
+      current = target;
+      clearInterval(timer);
+    }
+    el.textContent = Math.round(current) + (suffix||'');
+  }, 40);
+}
+
+const statsObs = new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){
+      const nums = e.target.querySelectorAll('.stat-n');
+      nums.forEach(function(n){
+        const text = n.textContent;
+        if(text.includes('min')) return;
+        if(text.includes('%')){ animateCounter(n, parseInt(text), '%'); }
+        else{ animateCounter(n, parseInt(text)); }
+      });
+      statsObs.unobserve(e.target);
+    }
+  });
+}, {threshold: 0.5});
+
+const statsBar = document.querySelector('.stats-inner');
+if(statsBar) statsObs.observe(statsBar);
+</script>
+</body>
+</html>

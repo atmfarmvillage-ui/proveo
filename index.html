@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GP ERP — Gestion Provenderie</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authScreen">
+  <div class="a-box">
+    <div class="a-logo" id="auth-logo-display">🌾</div>
+    <div class="a-title" id="auth-title">GP — Provenderie</div>
+    <div class="a-sub" id="auth-sub">Gestion Provenderie · ATM Farm Village</div>
+    <div id="auth-login-form">
+      <label class="a-label">Email</label>
+      <input class="a-inp" id="a_email" type="email" placeholder="votre@email.com">
+      <label class="a-label">Mot de passe</label>
+      <div class="pw-wrap">
+        <input class="a-inp" id="a_pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        <button class="pw-eye" onclick="togglePw('a_pass',this)">👁</button>
+      </div>
+      <div class="a-err" id="a_err"></div>
+      <button class="a-btn" onclick="doLogin()">Se connecter →</button>
+      <div class="a-link">Pas de compte ? <span onclick="showAuthForm('signup')">Créer un compte</span></div>
+      <div class="a-link"><span onclick="doForgot()">Mot de passe oublié ?</span></div>
+    </div>
+    <div id="auth-signup-form" style="display:none">
+      <label class="a-label">Nom complet</label>
+      <input class="a-inp" id="s_nom" type="text" placeholder="Jean Adekou">
+      <label class="a-label">Email</label>
+      <input class="a-inp" id="s_email" type="email" placeholder="votre@email.com">
+      <label class="a-label">Mot de passe</label>
+      <div class="pw-wrap">
+        <input class="a-inp" id="s_pass" type="password" placeholder="Min. 6 caractères">
+        <button class="pw-eye" onclick="togglePw('s_pass',this)">👁</button>
+      </div>
+      <div class="a-err" id="s_err"></div>
+      <div class="a-ok" id="s_ok"></div>
+      <button class="a-btn" onclick="doSignup()">Créer mon compte →</button>
+      <div class="a-link">Déjà un compte ? <span onclick="showAuthForm('login')">Se connecter</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LICENCE EXPIRÉE -->
+<div id="licence-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px"></div>
+
+<!-- BANNIÈRE TRIAL -->
+<div id="trial-banniere" style="display:none;position:fixed;top:var(--topbar);left:0;right:0;z-index:99;background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(245,158,11,.08));border-bottom:1px solid rgba(245,158,11,.3);padding:8px 20px;font-size:12px;color:var(--gold);align-items:center;justify-content:center;gap:14px"></div>
+
+<!-- TOPBAR -->
+<div id="topbar" style="display:none">
+  <div class="tb-logo" id="tb-logo">🌾</div>
+  <div>
+    <div class="tb-name" id="tb-name">GP — Provenderie</div>
+    <div class="tb-sub">GESTION PROVENDERIE · ATM FARM VILLAGE</div>
+  </div>
+  <span class="tb-tag">GP</span>
+  <div class="tb-right">
+    <div class="tb-user-info" id="tb-user-info"></div>
+    <span class="tb-role" id="tb-role-badge">ADMIN</span>
+    <div class="notif-badge hidden" id="notif-remises" title="Remises en attente" onclick="showGP('remises')">0</div>
+    <button class="tb-btn" onclick="doLogout()">⎋ Déconnexion</button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar" style="display:none">
+  <div class="nav-sect">Tableau de bord</div>
+  <div class="nav-item active" onclick="showGP('dashboard')" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+
+  <div class="nav-sect">Production & Stock</div>
+  <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production</div>
+  <div class="nav-item" onclick="showGP('stock')" data-page="stock"><span class="nav-icon">📦</span>Stock MP</div>
+  <div class="nav-item admin-only" onclick="showGP('matieres')" data-page="matieres"><span class="nav-icon">🌾</span>Matières Premières</div>
+  <div class="nav-item admin-only" onclick="showGP('inventaire')" data-page="inventaire"><span class="nav-icon">📋</span>Inventaire mensuel</div>
+  <div class="nav-item admin-only" onclick="showGP('rapport')" data-page="rapport"><span class="nav-icon">🖨️</span>Rapport production</div>
+
+  <div class="nav-sect">Commercial</div>
+  <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
+  <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
+  <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
+  <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
+
+  <div class="nav-sect">Clients</div>
+  <div class="nav-item" onclick="showGP('clients')" data-page="clients"><span class="nav-icon">👥</span>Clients</div>
+  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi"><span class="nav-icon">📞</span>Suivi & Appels</div>
+  <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
+
+  <div class="nav-sect">Administration</div>
+  <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
+  <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">👤</span>Équipe</div>
+  <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div id="main" style="display:none">
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="page-title">Tableau de bord</div>
+  <div class="page-sub" id="dash-date-sub">Chargement...</div>
+  <div class="g4" id="dash-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" id="dash-body"></div>
+</div>
+
+<!-- PRODUCTION -->
+<div class="page" id="page-production">
+  <div class="page-title">Production</div>
+  <div class="page-sub">Enregistrer les lots — le stock MP se met à jour automatiquement</div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🏭 Nouveau lot</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Date</label><input type="date" id="lot_date"></div>
+        <div class="fr"><label>N° Lot</label><input type="text" id="lot_ref" placeholder="LOT-001"></div>
+      </div>
+      <div class="fr"><label>Formule</label>
+        <select id="lot_formule" onchange="onFormuleChange()">
+          <option value="">— Sélectionner une formule —</option>
+        </select>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Quantité produite (kg)</label><input type="number" id="lot_qte" placeholder="1000" oninput="previewLot()"></div>
+        <div class="fr"><label>Main d'œuvre (FCFA)</label><input type="number" id="lot_mo" value="0" oninput="previewLot()"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Emballage (FCFA)</label><input type="number" id="lot_emb" value="0" oninput="previewLot()"></div>
+        <div class="fr"><label>Point de vente</label><input type="text" id="lot_pv" placeholder="Dépôt principal"></div>
+      </div>
+      <div class="fr"><label>Observations</label><input type="text" id="lot_obs" placeholder="Notes..."></div>
+      <div id="lot-preview" style="background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px">Sélectionnez une formule et une quantité.</div>
+      <div id="lot-mp-preview" style="display:none;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📦 MP qui seront utilisées</div>
+        <div id="lot-mp-list"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveLot()">✓ Enregistrer + Mettre à jour le stock</button>
+      <div class="a-err" id="lot_err"></div>
+      <div id="lot-print-zone" style="display:none"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Historique production</span></div>
+        <div style="display:flex;gap:6px">
+          <input type="month" id="lot-filtre-mois" onchange="renderLots()" style="font-size:10px;padding:3px 6px;width:auto">
+        </div>
+      </div>
+      <div id="lots-liste"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STOCK MP -->
+<div class="page" id="page-stock">
+  <div class="page-title">Stock Matières Premières</div>
+  <div class="page-sub">Entrées MP · Sorties automatiques à la production · Niveaux en temps réel</div>
+  <div class="g4" id="stock-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📥 Réception MP</span></div></div>
+        <div class="fr"><label>Date réception</label><input type="date" id="mp_date"></div>
+        <div class="fr">
+          <label>Matière première</label>
+          <div style="display:flex;gap:6px">
+            <select id="mp_ingr" onchange="onMPChange()" style="flex:1"></select>
+            <button class="btn btn-out btn-sm" onclick="toggleNouvelleMP()" title="Ajouter une nouvelle MP" style="flex-shrink:0;white-space:nowrap">➕ Nouveau</button>
+          </div>
+        </div>
+        <!-- Formulaire nouvelle MP (caché par défaut) -->
+        <div id="nouvelle-mp-form" style="display:none;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">➕ Nouvelle matière première</div>
+          <div class="fr"><label>Nom</label><input type="text" id="nmp_nom" placeholder="Ex: Tourteau de soja 44"></div>
+          <div class="fg2">
+            <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="nmp_prix" placeholder="400"></div>
+            <div class="fr"><label>Seuil alerte (kg)</label><input type="number" id="nmp_seuil" value="200"></div>
+          </div>
+          <div class="fg2">
+            <div class="fr"><label>Protéines (%)</label><input type="number" id="nmp_prot" placeholder="44" step="0.1"></div>
+            <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="nmp_em" placeholder="2770"></div>
+          </div>
+          <div class="fr"><label>Fournisseur</label><input type="text" id="nmp_fourn" placeholder="Marché de Lomé..."></div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn btn-g btn-sm" onclick="saveNouvelleMP()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+            <button class="btn btn-out btn-sm" onclick="toggleNouvelleMP()" style="flex:1;justify-content:center">Annuler</button>
+          </div>
+          <div class="a-err" id="nmp_err"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Quantité reçue (kg)</label><input type="number" id="mp_qte" placeholder="500" step="0.1"></div>
+          <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="mp_prix" placeholder="200"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Fournisseur</label><input type="text" id="mp_fourn" placeholder="Nom fournisseur"></div>
+          <div class="fr"><label>Référence BL</label><input type="text" id="mp_ref" placeholder="BL-2026-001"></div>
+        </div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveMPEntree()">📥 Enregistrer la réception</button>
+        <div class="a-err" id="mp_err"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>📊 Niveaux actuels</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="stock-search" placeholder="🔍 Filtrer..." oninput="filtrerStock()" style="width:110px;font-size:10px;padding:3px 7px">
+            <button class="btn btn-out btn-sm" onclick="verifierAlerteStock()" title="Envoyer les alertes par WhatsApp" style="white-space:nowrap">📲 Alertes</button>
+          </div>
+        </div>
+        <div id="stock-niveaux"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-left"><span>📋 Mouvements récents</span></div>
+      <div style="display:flex;gap:6px">
+        <select id="mp-filtre-type" onchange="renderMouvements()" style="font-size:10px;padding:3px 6px;width:auto">
+          <option value="">Tous types</option>
+          <option value="entree">Entrées</option>
+          <option value="sortie_production">Sorties production</option>
+          <option value="sortie_perte">Pertes</option>
+        </select>
+        <input type="month" id="mp-filtre-mois" onchange="renderMouvements()" style="font-size:10px;padding:3px 6px;width:auto">
+      </div>
+    </div>
+    <div style="overflow-x:auto"><div id="mouvements-liste"></div></div>
+  </div>
+</div>
+
+<!-- MATIÈRES PREMIÈRES -->
+<div class="page" id="page-matieres">
+  <div class="page-title">Matières Premières</div>
+  <div class="page-sub">Gérer les ingrédients · Prix · Seuils d'alerte critique</div>
+  <div class="g4" id="mp-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+
+    <!-- LISTE DES MP -->
+    <div style="grid-column:1/-1" class="card">
+      <div class="card-title">
+        <div class="ct-left"><span>📋 Liste des matières premières</span></div>
+        <input type="text" id="mp-search-page" placeholder="🔍 Rechercher..." oninput="renderMatieresPremieresPage()" style="width:160px;font-size:11px;padding:4px 8px">
+      </div>
+      <div style="overflow-x:auto"><div id="mp-liste-page"></div></div>
+    </div>
+
+    <!-- AJOUTER UNE MP -->
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Ajouter une matière première</span></div></div>
+      <div class="fr"><label>Nom *</label><input type="text" id="mpp_nom" placeholder="Ex: Tourteau de soja 44"></div>
+      <div class="fg2">
+        <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="mpp_prix" placeholder="400"></div>
+        <div class="fr"><label>Seuil critique (kg)</label><input type="number" id="mpp_seuil" placeholder="200" value="200"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Protéines (%)</label><input type="number" id="mpp_prot" placeholder="44" step="0.1"></div>
+        <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="mpp_em" placeholder="2770"></div>
+      </div>
+      <div class="fr"><label>Fournisseur</label><input type="text" id="mpp_fourn" placeholder="Marché de Lomé..."></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveMPPage()">➕ Ajouter</button>
+      <div class="a-err" id="mpp_err"></div>
+    </div>
+
+    <!-- MODIFIER SEUIL RAPIDE -->
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>⚙️ Modifier un seuil critique</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Choisissez une MP et définissez le seuil en dessous duquel une alerte est déclenchée.</div>
+      <div class="fr"><label>Matière première</label>
+        <select id="mpp_seuil_ingr" onchange="prefillSeuilRapide()">
+          <option value="">— Sélectionner —</option>
+        </select>
+      </div>
+      <div class="fr"><label>Seuil critique (kg)</label>
+        <input type="number" id="mpp_seuil_val" placeholder="200">
+      </div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:10px" id="mpp_seuil_actuel"></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="sauverSeuilRapide()">✓ Enregistrer le seuil</button>
+      <div class="a-err" id="mpp_seuil_err"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- INVENTAIRE MENSUEL -->
+<div class="page" id="page-inventaire">
+  <div class="page-title">Inventaire mensuel</div>
+  <div class="page-sub">Historique complet — Choisissez le mois et l'année</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
+    <div>
+      <label class="lbl">Mois</label>
+      <input type="month" id="inv-mois" style="width:auto" onchange="renderInventaire()">
+    </div>
+    <button class="btn btn-print no-print" onclick="window.print()">🖨️ Imprimer</button>
+    <button class="btn btn-out no-print" onclick="exportInventaireExcel()">📊 Exporter Excel</button>
+  </div>
+  <div class="g4" id="inv-kpis" style="margin-bottom:14px"></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📥 Entrées MP du mois</span></div></div>
+      <div id="inv-entrees"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📤 Sorties MP du mois</span></div></div>
+      <div id="inv-sorties"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📊 Consommation par ingrédient</span></div></div>
+    <div id="inv-conso-table" style="overflow-x:auto"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>🏭 Production du mois par formule</span></div></div>
+    <div id="inv-prod-table" style="overflow-x:auto"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📦 Stock restant en fin de mois</span></div></div>
+    <div id="inv-stock-restant" style="overflow-x:auto"></div>
+  </div>
+</div>
+
+<!-- RAPPORT PRODUCTION -->
+<div class="page" id="page-rapport">
+  <div class="page-title">Rapport de Production</div>
+  <div class="page-sub">Rapport mensuel imprimable — Production par espèce et formule</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap" class="no-print">
+    <div><label class="lbl">Mois</label><input type="month" id="rpt-mois" style="width:auto" onchange="renderRapport()"></div>
+    <button class="btn btn-print" onclick="window.print()">🖨️ Imprimer le rapport</button>
+    <button class="btn btn-out" onclick="exportRapportExcel()">📊 Excel</button>
+  </div>
+  <div id="rapport-content"></div>
+</div>
+
+<!-- VENTES -->
+<div class="page" id="page-ventes">
+  <div class="page-title">Ventes</div>
+  <div class="page-sub">Enregistrer les ventes · Suivi des paiements</div>
+  <div class="g4" id="ventes-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>💰 Nouvelle vente</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Date</label><input type="date" id="vt_date"></div>
+        <div class="fr"><label>Point de vente</label><input type="text" id="vt_pv" placeholder="Dépôt principal"></div>
+      </div>
+      <div class="fr"><label>Client</label>
+        <select id="vt_client" onchange="onClientChange()"><option value="">— Choisir ou nouveau client —</option><option value="__nouveau__">➕ Nouveau client</option></select>
+      </div>
+      <div id="vt-nouveau-client" style="display:none;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:10px">
+        <div class="fg2">
+          <div class="fr"><label>Nom du client</label><input type="text" id="vt_cl_nom" placeholder="Ferme Adekou"></div>
+          <div class="fr"><label>Téléphone</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00"></div>
+        </div>
+      </div>
+      <div class="fr"><label>Formule / Aliment</label>
+        <select id="vt_formule" onchange="onVenteFormuleChange()"><option value="">— Sélectionner —</option></select>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Quantité (kg)</label><input type="number" id="vt_qte" placeholder="100" oninput="calcVente()"></div>
+        <div class="fr" id="vt-prix-wrap">
+          <label>Prix/kg (FCFA) <span id="vt-prix-lock" style="font-size:9px;color:var(--textm)">🔒 Admin</span></label>
+          <input type="number" id="vt_prix" placeholder="350" oninput="calcVente()" id="vt_prix">
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Remise (FCFA)</label><input type="number" id="vt_remise" value="0" oninput="calcVente()"></div>
+        <div class="fr"><label>Statut paiement</label>
+          <select id="vt_statut" onchange="calcVente()">
+            <option value="paye">✅ Payé</option>
+            <option value="partiel">⚠ Partiel</option>
+            <option value="credit">❌ Crédit</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr" id="vt-paye-wrap" style="display:none"><label>Montant payé (FCFA)</label><input type="number" id="vt_paye" placeholder="0"></div>
+      <div id="vt-preview" style="background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px">Saisissez les informations pour voir le total.</div>
+      <div id="vt-remise-warning" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:8px;font-size:11px;color:var(--gold);margin-bottom:8px">⚠ Remise > 5% : validation admin requise</div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveVente()">✓ Enregistrer la vente</button>
+      <div class="a-err" id="vt_err"></div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>📋 Historique ventes</span></div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <input type="date" id="vt-filtre-date" onchange="renderVentes()" style="font-size:10px;padding:3px 6px;width:auto">
+            <select id="vt-filtre-statut" onchange="renderVentes()" style="font-size:10px;padding:3px 6px;width:auto">
+              <option value="">Tous statuts</option>
+              <option value="paye">Payés</option>
+              <option value="partiel">Partiels</option>
+              <option value="credit">Crédit</option>
+            </select>
+          </div>
+        </div>
+        <div id="ventes-liste" style="overflow-x:auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DÉPENSES -->
+<div class="page" id="page-depenses">
+  <div class="page-title">Dépenses</div>
+  <div class="page-sub">Enregistrer toutes les charges de la provenderie</div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>💸 Nouvelle dépense</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Date</label><input type="date" id="dep_date"></div>
+        <div class="fr"><label>Catégorie</label>
+          <select id="dep_cat">
+            <option value="matiere_premiere">🌾 Matière première</option>
+            <option value="salaire">👤 Salaire</option>
+            <option value="transport">🚚 Transport</option>
+            <option value="emballage">📦 Emballage</option>
+            <option value="energie">⚡ Énergie</option>
+            <option value="maintenance">🔧 Maintenance</option>
+            <option value="autre">📝 Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr"><label>Description</label><input type="text" id="dep_desc" placeholder="Description de la dépense"></div>
+      <div class="fg2">
+        <div class="fr"><label>Montant (FCFA)</label><input type="number" id="dep_montant" placeholder="25000"></div>
+        <div class="fr"><label>Bénéficiaire</label><input type="text" id="dep_benef" placeholder="Fournisseur / Personne"></div>
+      </div>
+      <div class="fr"><label>Point de vente</label><input type="text" id="dep_pv" placeholder="Dépôt principal"></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveDep()">✓ Enregistrer</button>
+      <div class="a-err" id="dep_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <div class="ct-left"><span>📋 Historique dépenses</span></div>
+        <input type="month" id="dep-filtre-mois" onchange="renderDep()" style="font-size:10px;padding:3px 6px;width:auto">
+      </div>
+      <div id="dep-liste"></div>
+    </div>
+  </div>
+</div>
+
+<!-- BILAN JOURNALIER (admin only) -->
+<div class="page" id="page-bilan_jour">
+  <div class="page-title">Bilan journalier</div>
+  <div class="page-sub">Résumé complet de la journée</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap" class="no-print">
+    <div><label class="lbl">Date</label><input type="date" id="bj_date" onchange="renderBilanJour()" style="width:auto"></div>
+    <button class="btn btn-print" onclick="window.print()">🖨️ Imprimer</button>
+  </div>
+  <div class="g4" id="bj-kpis" style="margin-bottom:14px"></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>💰 Ventes du jour</span></div></div>
+      <div id="bj-ventes"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>💸 Dépenses du jour</span></div></div>
+      <div id="bj-depenses"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📊 Bilan du jour</span></div></div>
+    <div id="bj-bilan"></div>
+  </div>
+</div>
+
+<!-- REMISES À VALIDER (admin only) -->
+<div class="page" id="page-remises">
+  <div class="page-title">Remises à valider</div>
+  <div class="page-sub">Les secrétaires ont demandé des remises — validez ou refusez</div>
+  <div id="remises-liste"></div>
+</div>
+
+<!-- CLIENTS -->
+<div class="page" id="page-clients">
+  <div class="page-title">Clients</div>
+  <div class="page-sub">Base de données clients · Gérer le portefeuille</div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Nouveau client</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Nom</label><input type="text" id="cl_nom" placeholder="Ferme Adekou"></div>
+        <div class="fr"><label>Téléphone</label><input type="tel" id="cl_tel" placeholder="+228 90 00 00 00"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Localisation</label><input type="text" id="cl_loc" placeholder="Lomé, Agoè..."></div>
+        <div class="fr"><label>Type d'élevage</label>
+          <select id="cl_type">
+            <option value="pondeuse">Pondeuse</option>
+            <option value="chair">Chair</option>
+            <option value="mixte">Mixte</option>
+            <option value="lapin">Lapin</option>
+            <option value="porc">Porc</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr"><label>Note</label><input type="text" id="cl_note" placeholder="Infos utiles..."></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveClient()">➕ Ajouter</button>
+      <div class="a-err" id="cl_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <div class="ct-left"><span>👥 Liste clients</span></div>
+        <input type="text" id="cl-search" placeholder="🔍 Rechercher..." oninput="renderClients()" style="width:140px;font-size:11px;padding:4px 8px">
+      </div>
+      <div id="clients-liste"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SUIVI & APPELS -->
+<div class="page" id="page-suivi">
+  <div class="page-title">Suivi Clients & Appels</div>
+  <div class="page-sub">Clients à risque · Enregistrer les appels · Messages WhatsApp</div>
+
+  <!-- MODAL MESSAGES WHATSAPP -->
+  <div id="modal-wa" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalWA()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px">📲 Envoyer un message WhatsApp</div>
+        <button onclick="fermerModalWA()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Client : <strong id="wa-client-nom" style="color:var(--text)">—</strong></div>
+      <div class="fr"><label>Circonstance</label>
+        <select id="wa-type" onchange="previewWA()">
+          <option value="" disabled style="color:#666">── Clients existants ──</option>
+          <option value="relance">🔴 Client inactif — Relance</option>
+          <option value="merci">🏆 Remerciements meilleur client</option>
+          <option value="promo">🎉 Annonce promotion</option>
+          <option value="nouveau_produit">🆕 Nouveau produit</option>
+          <option value="perso">✏️ Message personnalisé</option>
+          <option value="dette">💰 Rappel solde dette</option>
+          <option value="" disabled style="color:#666">── Prospection ──</option>
+          <option value="prosp_intro">👋 Introduction provenderie</option>
+          <option value="prosp_essai">🎁 Invitation à essayer</option>
+          <option value="prosp_suivi">🔁 Suivi après 1er contact</option>
+          <option value="prosp_parrainage">🤝 Recommandé par un client</option>
+          <option value="prosp_eleveur">🐔 Ciblage éleveur spécifique</option>
+        </select>
+      </div>
+      <div class="fr" id="wa-promo-champ" style="display:none">
+        <label>Détails de la promotion</label>
+        <input type="text" id="wa-promo-detail" placeholder="Ex: -10% sur SADARI CROÎT jusqu'au 30 avril" oninput="previewWA()">
+      </div>
+      <div class="fr" id="wa-produit-champ" style="display:none">
+        <label>Nom du nouveau produit</label>
+        <input type="text" id="wa-produit-nom" placeholder="Ex: SADARI TILAPIA FINITION" oninput="previewWA()">
+      </div>
+      <div class="fr">
+        <label>Aperçu du message</label>
+        <textarea id="wa-preview" rows="7" style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-g" onclick="envoyerWAClient()" style="flex:1;justify-content:center">📲 Ouvrir WhatsApp</button>
+        <button class="btn btn-out" onclick="fermerModalWA()" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="g2" style="align-items:start;margin-bottom:14px">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>⚠ Clients à relancer</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">🔴 N'a pas acheté depuis plus longtemps que sa fréquence habituelle + 7 jours</div>
+      <div id="clients-relance"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📞 Enregistrer un appel</span></div></div>
+      <div class="fr"><label>Client</label>
+        <select id="app_client"><option value="">— Sélectionner —</option></select>
+      </div>
+      <div class="fr"><label>Téléphone (si différent)</label><input type="tel" id="app_tel" placeholder="+228 90 00 00 00"></div>
+      <div class="fr"><label>Résultat de l'appel</label>
+        <select id="app_resultat" onchange="toggleAutreResultat()">
+          <option value="interesse">✅ Intéressé — va commander</option>
+          <option value="bientot">🕐 Commande bientôt</option>
+          <option value="pas_repondu">📵 N'a pas répondu</option>
+          <option value="pas_interesse">❌ Pas intéressé</option>
+          <option value="probleme">⚠ Problème signalé</option>
+          <option value="commande_passee">🛒 A passé commande</option>
+          <option value="paiement_prevu">💳 Paiement prévu</option>
+          <option value="autre">✏️ Autre résultat...</option>
+        </select>
+      </div>
+      <div class="fr" id="autre-resultat-champ" style="display:none">
+        <label>Préciser le résultat</label>
+        <input type="text" id="app_resultat_autre" placeholder="Décrivez le résultat de l'appel...">
+      </div>
+      <div class="fr"><label>Note de l'appel</label>
+        <textarea id="app_note" rows="2" placeholder="Ce que le client a dit..."></textarea>
+      </div>
+      <div class="fr">
+        <label>Observation client</label>
+        <textarea id="app_observation" rows="2" placeholder="Remarques, besoins spéciaux, informations utiles..."></textarea>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveAppel()">📞 Enregistrer l'appel</button>
+      <div class="a-err" id="app_err"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📋 Historique des appels</span></div></div>
+    <div id="appels-liste"></div>
+  </div>
+
+  <!-- PROSPECTION NOUVEAUX CLIENTS -->
+  <div class="card" style="margin-top:14px">
+    <div class="card-title"><div class="ct-left"><span>🎯 Prospecter un nouveau client</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Envoyer un message WhatsApp à un prospect qui n'est pas encore dans votre base clients.</div>
+    <div class="fg2">
+      <div class="fr"><label>Nom du prospect</label><input type="text" id="prosp_nom" placeholder="Jean Adekou" oninput="previewProspect()"></div>
+      <div class="fr"><label>Téléphone WhatsApp</label><input type="tel" id="prosp_tel" placeholder="+228 90 00 00 00"></div>
+    </div>
+    <div class="fr"><label>Type d'élevage</label>
+      <select id="prosp_elevage" onchange="previewProspect()">
+        <option value="">— Non spécifié —</option>
+        <option value="poulets de chair">🐔 Poulets de chair</option>
+        <option value="pondeuses">🥚 Pondeuses</option>
+        <option value="lapins">🐰 Lapins</option>
+        <option value="porcs">🐷 Porcs</option>
+        <option value="canards">🦆 Canards</option>
+        <option value="tilapia">🐟 Tilapia</option>
+        <option value="animaux d'élevage">🐄 Autre élevage</option>
+      </select>
+    </div>
+    <div class="fr"><label>Message à envoyer</label>
+      <select id="prosp_type" onchange="previewProspect()">
+        <option value="prosp_intro">👋 Introduction de la provenderie</option>
+        <option value="prosp_essai">🎁 Invitation à essayer nos produits</option>
+        <option value="prosp_suivi">🔁 Suivi après premier contact</option>
+        <option value="prosp_parrainage">🤝 Recommandé par un client</option>
+        <option value="prosp_eleveur">🐔 Ciblage éleveur spécifique</option>
+      </select>
+    </div>
+    <div class="fr" id="prosp-parrain-champ" style="display:none">
+      <label>Nom du client qui recommande</label>
+      <input type="text" id="prosp_parrain" placeholder="Jean Adekou" oninput="previewProspect()">
+    </div>
+    <div class="fr">
+      <label>Aperçu du message</label>
+      <textarea id="prosp-preview" rows="6" style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
+    </div>
+    <div class="a-err" id="prosp_err"></div>
+    <button class="btn btn-g" style="width:100%;justify-content:center" onclick="envoyerProspect()">📲 Envoyer par WhatsApp</button>
+  </div>
+</div>
+
+<!-- CLASSEMENT CLIENTS -->
+<div class="page" id="page-classement">
+  <div class="page-title">Classement des meilleurs clients</div>
+  <div class="page-sub">🟢 Top 15 · 🟡 Positions 16–30 · Classement par quantité et fréquence</div>
+  <div class="g4" id="class-kpis" style="margin-bottom:14px"></div>
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-left"><span>🏆 Classement</span></div>
+      <div style="display:flex;gap:6px">
+        <select id="class-filtre-periode" onchange="renderClassement()" style="font-size:10px;padding:3px 6px;width:auto">
+          <option value="all">Depuis toujours</option>
+          <option value="month">Ce mois</option>
+          <option value="3months">3 derniers mois</option>
+          <option value="year">Cette année</option>
+        </select>
+      </div>
+    </div>
+    <div id="classement-liste"></div>
+  </div>
+</div>
+
+<!-- FORMULES & PRIX (admin) -->
+<div class="page" id="page-formules">
+  <div class="page-title">Formules & Prix</div>
+  <div class="page-sub">Gérer les formules et les prix de vente</div>
+  <div class="g2" style="align-items:start">
+    <div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>💲 Prix de vente par formule</span></div></div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Les secrétaires voient ces prix mais ne peuvent pas les modifier.</div>
+        <div id="prix-formules-liste"></div>
+        <hr class="divider">
+        <div class="fg2">
+          <div class="fr"><label>Formule</label><select id="pf_formule" style="width:100%"><option value="">— Sélectionner —</option></select></div>
+          <div class="fr"><label>Nouveau prix/kg (FCFA)</label><input type="number" id="pf_prix" placeholder="350"></div>
+        </div>
+        <button class="btn btn-g btn-sm" onclick="savePrixFormule()">✓ Mettre à jour le prix</button>
+        <div class="a-err" id="pf_err"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>🧪 Formules personnalisées</span></div></div>
+        <div id="custom-formules-liste"></div>
+        <button class="btn btn-out btn-sm" style="margin-top:8px" onclick="openNewFormule()">➕ Nouvelle formule</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <div class="ct-left"><span>📦 Matières Premières</span></div>
+        <input type="text" id="ingr-search" placeholder="🔍 Rechercher..." oninput="renderIngrAdmin()" style="width:160px;font-size:11px;padding:4px 8px">
+      </div>
+      <div id="ingr-liste-admin"></div>
+      <hr class="divider">
+      <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">➕ Ajouter une matière première</div>
+      <div class="fg2">
+        <div class="fr"><label>Nom</label><input type="text" id="ni_nom" placeholder="Maïs, Soja..."></div>
+        <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="ni_prix" placeholder="200"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Protéines (%)</label><input type="number" id="ni_prot" placeholder="8.5" step="0.1"></div>
+        <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="ni_em" placeholder="3050"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Seuil alerte (kg)</label><input type="number" id="ni_seuil" value="200"></div>
+        <div class="fr"><label>Fournisseur</label><input type="text" id="ni_fourn" placeholder="Marché..."></div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="saveIngredient()">➕ Ajouter manuellement</button>
+      <div class="a-err" id="ni_err"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ÉQUIPE (admin) -->
+<div class="page" id="page-equipe">
+  <div class="page-title">Équipe</div>
+  <div class="page-sub">Gérer les secrétaires — Invitations par email</div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Ajouter un secrétaire</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">Le secrétaire recevra un email d'invitation pour créer son compte. Il verra les pages opérationnelles mais pas les chiffres financiers.</div>
+      <div class="fr"><label>Nom complet</label><input type="text" id="eq_nom" placeholder="Marie Koffi"></div>
+      <div class="fr"><label>Email</label><input type="email" id="eq_email" placeholder="marie@provenderie.com"></div>
+      <div class="fr"><label>Rôle</label>
+        <select id="eq_role">
+          <option value="secretaire">Secrétaire (saisie uniquement)</option>
+          <option value="admin">Admin (accès complet)</option>
+        </select>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEquipe()">📧 Envoyer l'invitation</button>
+      <div class="a-err" id="eq_err"></div>
+      <div class="a-ok" id="eq_ok"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>👥 Membres de l'équipe</span></div></div>
+      <div id="equipe-liste"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG (admin) -->
+<div class="page" id="page-config">
+  <div class="page-title">Configuration</div>
+  <div class="page-sub">Personnalisez votre provenderie</div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🏭 Informations</span></div></div>
+      <div class="fr"><label>Nom provenderie</label><input type="text" id="cfg_nom" placeholder="Provenderie Sadari"></div>
+      <div class="fr"><label>Slogan</label><input type="text" id="cfg_slogan" placeholder="Qualité · Nutrition..."></div>
+      <div class="fg2">
+        <div class="fr"><label>Téléphone</label><input type="tel" id="cfg_tel" placeholder="+228 99 00 00 00"></div>
+        <div class="fr"><label>Email</label><input type="email" id="cfg_email" placeholder="contact@prova.com"></div>
+      </div>
+      <div class="fr"><label>Localisation</label><input type="text" id="cfg_loc" placeholder="Lomé, Togo"></div>
+      <div class="fr">
+        <label>📲 Numéro WhatsApp — Alertes stock critique</label>
+        <input type="tel" id="cfg_tel_alerte" placeholder="+228 90 00 00 00" style="border-color:rgba(245,158,11,.4)">
+        <div style="font-size:10px;color:var(--textm);margin-top:4px">Ce numéro reçoit les alertes quand un stock passe sous le seuil critique. Peut être différent du numéro principal (ex: responsable de stock).</div>
+      </div>
+      <div style="background:rgba(37,211,102,.06);border:1px solid rgba(37,211,102,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:#25D366;margin-bottom:8px">🤖 CallMeBot — Alertes automatiques WhatsApp</div>
+        <div style="font-size:10px;color:var(--textm);margin-bottom:10px;line-height:1.6">
+          Pour recevoir les alertes <strong>automatiquement</strong> sans cliquer :<br>
+          1. Ajoute <strong>+34 644 65 13 82</strong> dans tes contacts WhatsApp<br>
+          2. Envoie-lui : <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px">I allow callmebot to send me messages</code><br>
+          3. Colle la clé API reçue ci-dessous
+        </div>
+        <div class="fr"><label>Clé API CallMeBot</label>
+          <input type="text" id="cfg_callmebot_apikey" placeholder="Ex: 123456" style="border-color:rgba(37,211,102,.4);letter-spacing:2px">
+        </div>
+        <button class="btn btn-out btn-sm" onclick="testerCallMeBot()" style="border-color:#25D366;color:#25D366">📲 Tester l'envoi automatique</button>
+        <div id="callmebot-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+      </div>
+      <div class="fr"><label>Couleur principale</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="cfg_couleur" value="#16A34A" style="width:50px;height:36px;padding:2px;border-radius:6px;cursor:pointer" oninput="applyColor(this.value)">
+          <span style="font-size:11px;color:var(--textm)">Couleur de votre marque</span>
+        </div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveConfig()">✓ Enregistrer</button>
+      <div class="a-err" id="cfg_err"></div>
+      <div class="a-ok" id="cfg_ok"></div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>🖼️ Logo</span></div></div>
+        <div id="cfg-logo-preview" style="text-align:center;margin-bottom:14px">
+          <div style="width:100px;height:100px;background:var(--g3);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 8px">🌾</div>
+        </div>
+        <div class="fr"><label>Uploader logo (PNG/JPG max 2MB)</label><input type="file" id="cfg_logo" accept="image/*" style="padding:6px"></div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="uploadLogo()">📤 Uploader</button>
+        <div class="a-err" id="logo_err"></div>
+        <div class="a-ok" id="logo_ok"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>🔒 Remises</span></div></div>
+        <div style="font-size:12px;color:var(--textm)">
+          <div style="margin-bottom:8px">Seuil au-delà duquel une remise nécessite votre validation :</div>
+          <div class="fg2">
+            <div class="fr"><label>Remise max auto (%)</label><input type="number" id="cfg_remise_max" value="5" min="0" max="50"></div>
+            <button class="btn btn-g btn-sm" style="align-self:end;margin-bottom:10px" onclick="saveRemiseMax()">✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end main -->
+
+<button class="sb-toggle" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show')">☰</button>
+<div class="overlay" id="overlay" onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('show')"></div>
+<div class="notif" id="notif-toast"></div>
+
+<!-- ── MODULES JS ── -->
+<script src="js/config.js"></script>
+<script src="js/print.js"></script>
+<script src="js/matieres.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/stock.js"></script>
+<script src="js/production.js"></script>
+<script src="js/ventes.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/admin.js"></script>
+
+</body>
+</html>

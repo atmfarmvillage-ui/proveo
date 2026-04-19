@@ -1,0 +1,294 @@
+// ── PRODUCTION ─────────────────────────────────────
+function onFormuleChange(){
+  const nom=document.getElementById('lot_formule').value;
+  const qte=+document.getElementById('lot_qte').value||0;
+  previewLot();
+  if(nom){
+    const prix=getPrix(nom);
+    // No prix input in production form — just show
+  }
+}
+function previewLot(){
+  const nom=document.getElementById('lot_formule').value;
+  const qte=+document.getElementById('lot_qte').value||0;
+  const mo=+document.getElementById('lot_mo').value||0;
+  const emb=+document.getElementById('lot_emb').value||0;
+  const f=getFormule(nom);
+  if(!nom||!qte){
+    document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
+    document.getElementById('lot-mp-preview').style.display='none';
+    return;
+  }
+  // Calculate MP needed
+  let coutMP=0;
+  if(f){
+    const mpLines=f.ingredients.map(ing=>{
+      const kgNeeded=(ing.pct/100)*qte;
+      const ingData=GP_INGREDIENTS.find(i=>i.nom.toLowerCase().includes(ing.nom.toLowerCase().slice(0,6)));
+      const prixKg=ingData?.prix_actuel||0;
+      coutMP+=kgNeeded*prixKg;
+      return{nom:ing.nom,kg:kgNeeded,pct:ing.pct,prix:prixKg};
+    });
+    document.getElementById('lot-mp-list').innerHTML=mpLines.map(l=>`
+      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
+        <span>${l.nom} (${l.pct}%)</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--g6)">${fmtKg(l.kg)} kg</span>
+      </div>`).join('');
+    document.getElementById('lot-mp-preview').style.display='block';
+  }
+  const coutTotal=coutMP+mo+emb;
+  const prixVente=getPrix(nom);
+  const margeKg=prixVente-coutTotal/Math.max(1,qte);
+  document.getElementById('lot-preview').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+      ${GP_ROLE==='admin'?`<div>Coût MP : <strong style="color:var(--gold)">${fmt(coutMP)} F</strong></div>
+      <div>Coût total : <strong style="color:var(--red)">${fmt(coutTotal)} F</strong></div>
+      <div>Prix vente : <strong style="color:var(--g6)">${fmt(prixVente)} F/kg</strong></div>
+      <div>Marge/kg : <strong style="color:${margeKg>=0?'var(--green)':'var(--red)'}">${fmt(margeKg)} F</strong></div>`
+      :`<div>Formule : <strong style="color:var(--g6)">${nom}</strong></div>
+      <div>Quantité : <strong style="color:var(--g6)">${fmt(qte)} kg</strong></div>`}
+    </div>`;
+}
+async function saveLot(){
+  const nom=document.getElementById('lot_formule').value;
+  const date=document.getElementById('lot_date').value;
+  const qte=+document.getElementById('lot_qte').value||0;
+  const ref=document.getElementById('lot_ref').value.trim();
+  const mo=+document.getElementById('lot_mo').value||0;
+  const emb=+document.getElementById('lot_emb').value||0;
+  const obs=document.getElementById('lot_obs').value.trim();
+  const pv=document.getElementById('lot_pv').value.trim();
+  const err=document.getElementById('lot_err');
+  if(!nom||!date||!qte){err.textContent='Formule, date et quantité requis.';return;}
+  err.textContent='Enregistrement...';
+  const f=getFormule(nom);
+  let coutMP=0;const mpSorties=[];
+  if(f){
+    f.ingredients.forEach(ing=>{
+      const kgNeeded=(ing.pct/100)*qte;
+      const ingData=GP_INGREDIENTS.find(i=>i.nom.toLowerCase().includes(ing.nom.toLowerCase().slice(0,6)));
+      if(ingData)coutMP+=kgNeeded*ingData.prix_actuel;
+      mpSorties.push({nom:ing.nom,kg:kgNeeded,ingrData:ingData});
+    });
+  }
+  const coutTotal=coutMP+mo+emb;
+  const prixVente=getPrix(nom);
+  const espece=FORMULES_SADARI.find(x=>x.nom===nom)?.espece||'';
+  // Insert lot
+  const{data:lot,error}=await SB.from('gp_lots').insert({
+    admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
+    qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
+    cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:true
+  }).select().single();
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  // Auto-create stock sorties
+  for(const s of mpSorties){
+    if(s.ingrData){
+      await SB.from('gp_stock_mp').insert({
+        admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,type:'sortie_production',date,
+        ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,
+        prix_unit:s.ingrData.prix_actuel,lot_id:lot?.id,ref:'Production '+ref
+      });
+    }
+  }
+  err.textContent='';
+  ['lot_qte','lot_mo','lot_emb','lot_obs','lot_pv'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('lot_mo').value='0';document.getElementById('lot_emb').value='0';
+  document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
+  document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
+  document.getElementById('lot-mp-preview').style.display='none';
+  notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
+  // Afficher bouton impression immédiatement
+  afficherBoutonImpressionLot(nom, ref, qte, date);
+  renderLots();
+}
+
+function afficherBoutonImpressionLot(formuleNom, numLot, qteProduite, dateLot){
+  const container=document.getElementById('lot-print-zone');
+  if(!container)return;
+  container.style.display='block';
+  container.innerHTML=`
+    <div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.4);border-radius:10px;padding:14px;margin-top:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--g6);margin-bottom:8px">✅ Lot enregistré — Prêt à imprimer</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--textm);margin-bottom:12px">
+        <span>📦 <strong style="color:var(--text)">${formuleNom}</strong></span>
+        <span>🔖 <strong style="color:var(--gold)">${numLot}</strong></span>
+        <span>⚖️ <strong style="color:var(--text)">${fmt(qteProduite)} kg</strong></span>
+      </div>
+      <button class="btn btn-print" style="width:100%;justify-content:center;font-size:13px;padding:10px"
+        onclick="imprimerEtiquettesLot('${formuleNom}','${numLot}','${qteProduite}','${dateLot}')">
+        🖨️ Imprimer les étiquettes du lot ${numLot}
+      </button>
+      <div style="font-size:10px;color:var(--textm);text-align:center;margin-top:6px">8 étiquettes par page A4 · Numéro de lot inclus</div>
+    </div>`;
+}
+async function renderLots(){
+  const filtMois=document.getElementById('lot-filtre-mois')?.value||thisMonth();
+  let q=SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false});
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMois+'-31');
+  const{data}=await q;
+  const L=data||[];
+  const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  document.getElementById('lots-liste').innerHTML=`
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Ce mois : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
+    <div style="overflow-x:auto">${L.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th>':''}<th></th></tr></thead><tbody>
+    ${L.map(l=>`<tr>
+      <td style="font-family:'DM Mono',monospace;font-size:10px">${l.date}</td>
+      <td><div style="font-weight:600">${ESPECE_ICON[l.espece]||''} ${l.formule_nom}</div></td>
+      <td style="font-size:10px;color:var(--textm)">${l.ref||'—'}</td>
+      <td class="num" style="color:var(--g6)">${fmt(l.qte_produite)}</td>
+      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${l.qte_produite>0?fmt(Math.round(Number(l.cout_total||0)/l.qte_produite)):0} F</td>`:''}
+      <td><button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button></td>
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}</div>`;
+}
+async function deleteLot(id){
+  if(!confirm('Supprimer ce lot ? Les sorties de stock associées seront supprimées.'))return;
+  await SB.from('gp_stock_mp').delete().eq('lot_id',id);
+  await SB.from('gp_lots').delete().eq('id',id);
+  renderLots();notify('Lot supprimé','r');
+}
+
+// ── INVENTAIRE MENSUEL ─────────────────────────────
+async function renderInventaire(){
+  const mois=document.getElementById('inv-mois')?.value||thisMonth();
+  const debut=mois+'-01';
+  const fin=mois+'-31';
+  const[{data:S},{data:L},{data:Sprev}]=await Promise.all([
+    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
+    SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
+    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).lt('date',debut),
+  ]);
+  const stock=S||[];const lots=L||[];
+  const niveauxDebut=calcNiveaux(Sprev||[]);
+  const niveauxFin={...niveauxDebut};
+  stock.forEach(m=>{
+    if(!niveauxFin[m.ingredient_nom])niveauxFin[m.ingredient_nom]=0;
+    if(m.type==='entree')niveauxFin[m.ingredient_nom]+=Number(m.quantite||0);
+    else niveauxFin[m.ingredient_nom]-=Number(m.quantite||0);
+  });
+  // KPIs
+  const totEntrees=stock.filter(m=>m.type==='entree').reduce((s,m)=>s+Number(m.quantite||0),0);
+  const totSorties=stock.filter(m=>m.type!=='entree').reduce((s,m)=>s+Number(m.quantite||0),0);
+  const totProd=lots.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const valEntrees=GP_ROLE==='admin'?stock.filter(m=>m.type==='entree').reduce((s,m)=>s+Number(m.quantite||0)*Number(m.prix_unit||0),0):0;
+  document.getElementById('inv-kpis').innerHTML=`
+    <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(totEntrees)}</div><div class="econo-lbl">Kg reçus</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(totSorties)}</div><div class="econo-lbl">Kg utilisés</div></div>
+    <div class="econo-box"><div class="econo-val">${fmt(totProd)}</div><div class="econo-lbl">Kg produits</div></div>
+    ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(valEntrees)}</div><div class="econo-lbl">Valeur achats (F)</div></div>`:'<div class="econo-box"><div class="econo-val">${lots.length}</div><div class="econo-lbl">Lots produits</div></div>'}`;
+  // Entrées
+  const entrees=stock.filter(m=>m.type==='entree');
+  document.getElementById('inv-entrees').innerHTML=entrees.length?`
+    <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Valeur</th>':''}</tr></thead><tbody>
+    ${entrees.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num good">${fmtKg(m.quantite)}</td>${GP_ROLE==='admin'?`<td class="num">${fmt(Number(m.quantite)*Number(m.prix_unit||0))} F</td>`:''}</tr>`).join('')}
+    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
+  // Sorties
+  const sorties=stock.filter(m=>m.type!=='entree');
+  document.getElementById('inv-sorties').innerHTML=sorties.length?`
+    <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
+    ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':'bdg-r'}" style="font-size:9px">${m.type==='sortie_production'?'Production':'Perte'}</span></td></tr>`).join('')}
+    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
+  // Consommation par ingrédient
+  const conso={};
+  sorties.forEach(m=>{conso[m.ingredient_nom]=(conso[m.ingredient_nom]||0)+Number(m.quantite||0);});
+  document.getElementById('inv-conso-table').innerHTML=Object.keys(conso).length?`
+    <table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Consommé (kg)</th><th>% du total</th></tr></thead><tbody>
+    ${Object.entries(conso).sort((a,b)=>b[1]-a[1]).map(([nom,qte])=>`<tr>
+      <td style="font-weight:600">${nom}</td>
+      <td class="num">${fmtKg(qte)}</td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:rgba(30,45,74,.8);border-radius:3px"><div style="width:${totSorties>0?qte/totSorties*100:0}%;height:100%;background:var(--g4);border-radius:3px"></div></div><span style="font-size:10px;color:var(--textm)">${totSorties>0?(qte/totSorties*100).toFixed(1):0}%</span></div></td>
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation ce mois.</div>';
+  // Production par formule
+  const prodFormule={};
+  lots.forEach(l=>{
+    if(!prodFormule[l.formule_nom])prodFormule[l.formule_nom]={qte:0,espece:l.espece,nb:0};
+    prodFormule[l.formule_nom].qte+=Number(l.qte_produite||0);
+    prodFormule[l.formule_nom].nb++;
+  });
+  document.getElementById('inv-prod-table').innerHTML=Object.keys(prodFormule).length?`
+    <table class="tbl"><thead><tr><th>Formule</th><th>Espèce</th><th class="num">Lots</th><th class="num">Qté (kg)</th><th class="num">% total</th></tr></thead><tbody>
+    ${Object.entries(prodFormule).sort((a,b)=>b[1].qte-a[1].qte).map(([nom,d])=>`<tr>
+      <td style="font-weight:600">${nom}</td>
+      <td>${ESPECE_ICON[d.espece]||''} ${d.espece||'—'}</td>
+      <td class="num">${d.nb}</td>
+      <td class="num" style="color:var(--g6)">${fmt(d.qte)}</td>
+      <td class="num" style="color:var(--textm)">${totProd>0?(d.qte/totProd*100).toFixed(1):0}%</td>
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune production ce mois.</div>';
+  // Stock restant
+  document.getElementById('inv-stock-restant').innerHTML=`
+    <table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Stock début mois</th><th class="num">Reçu</th><th class="num">Utilisé</th><th class="num">Stock fin mois</th><th>Statut</th></tr></thead><tbody>
+    ${Object.keys({...niveauxDebut,...niveauxFin}).sort().map(nom=>{
+      const debut2=niveauxDebut[nom]||0;
+      const recu=entrees.filter(m=>m.ingredient_nom===nom).reduce((s,m)=>s+Number(m.quantite),0);
+      const utilise=sorties.filter(m=>m.ingredient_nom===nom).reduce((s,m)=>s+Number(m.quantite),0);
+      const fin2=niveauxFin[nom]||0;
+      const ingr=GP_INGREDIENTS.find(i=>i.nom===nom);
+      const seuil=ingr?.seuil_alerte||200;
+      return `<tr>
+        <td style="font-weight:600">${nom}</td>
+        <td class="num" style="color:var(--textm)">${fmtKg(debut2)}</td>
+        <td class="num" style="color:var(--green)">+${fmtKg(recu)}</td>
+        <td class="num" style="color:var(--red)">−${fmtKg(utilise)}</td>
+        <td class="num ${fin2<seuil?fin2<=0?'bad':'warn':'good'}">${fmtKg(fin2)}</td>
+        <td><span class="badge ${fin2<=0?'bdg-r':fin2<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${fin2<=0?'Épuisé':fin2<seuil?'Bas':'OK'}</span></td>
+      </tr>`;}).join('')}</tbody></table>`;
+}
+function exportInventaireExcel(){notify('Fonction export Excel — en cours de développement','gold');}
+
+// ── RAPPORT PRODUCTION ─────────────────────────────
+async function renderRapport(){
+  const mois=document.getElementById('rpt-mois')?.value||thisMonth();
+  const{data:L}=await SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31').order('date');
+  const lots=L||[];
+  if(!lots.length){document.getElementById('rapport-content').innerHTML='<div class="card"><div style="color:var(--textm);font-size:13px;text-align:center;padding:20px">Aucune production pour ce mois.</div></div>';return;}
+  // Group by espece
+  const groupEspece={};
+  lots.forEach(l=>{
+    const esp=l.espece||'autre';
+    if(!groupEspece[esp])groupEspece[esp]={lots:[],totalKg:0,totalCout:0};
+    groupEspece[esp].lots.push(l);
+    groupEspece[esp].totalKg+=Number(l.qte_produite||0);
+    groupEspece[esp].totalCout+=Number(l.cout_total||0);
+  });
+  const totKg=lots.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const totCout=lots.reduce((s,l)=>s+Number(l.cout_total||0),0);
+  const nomMois=new Date(mois+'-15').toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  let html=`
+    <div class="card" style="text-align:center;margin-bottom:14px">
+      <div style="font-family:'Crimson Pro',serif;font-size:22px;font-weight:700">RAPPORT DE PRODUCTION</div>
+      <div style="font-size:14px;color:var(--textm);margin-top:4px">${GP_CONFIG.nom_provenderie||'Provenderie'} · ${nomMois.charAt(0).toUpperCase()+nomMois.slice(1)}</div>
+    </div>
+    <div class="g4" style="margin-bottom:14px">
+      <div class="econo-box"><div class="econo-val">${lots.length}</div><div class="econo-lbl">Lots produits</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(totKg)}</div><div class="econo-lbl">Kg total produits</div></div>
+      <div class="econo-box"><div class="econo-val">${Object.keys(groupEspece).length}</div><div class="econo-lbl">Espèces</div></div>
+      ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(totCout)}</div><div class="econo-lbl">Coût total (F)</div></div>`:'<div></div>'}
+    </div>`;
+  // Par espèce
+  Object.entries(groupEspece).sort((a,b)=>b[1].totalKg-a[1].totalKg).forEach(([esp,g])=>{
+    // Group by formule within espece
+    const formuleG={};
+    g.lots.forEach(l=>{if(!formuleG[l.formule_nom])formuleG[l.formule_nom]=0;formuleG[l.formule_nom]+=Number(l.qte_produite||0);});
+    html+=`<div class="card">
+      <div class="card-title"><div class="ct-left"><span>${ESPECE_ICON[esp]||'📦'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}</span></div>
+        <div style="font-family:'DM Mono',monospace;color:var(--g6);font-size:12px">${fmt(g.totalKg)} kg total</div>
+      </div>
+      <table class="tbl"><thead><tr><th>Formule</th><th class="num">Quantité (kg)</th><th class="num">% du groupe</th>${GP_ROLE==='admin'?'<th class="num">Coût</th>':''}</tr></thead><tbody>
+      ${Object.entries(formuleG).sort((a,b)=>b[1]-a[1]).map(([nom,qte])=>{
+        const coutF=g.lots.filter(l=>l.formule_nom===nom).reduce((s,l)=>s+Number(l.cout_total||0),0);
+        return `<tr><td style="font-weight:600">${nom}</td><td class="num" style="color:var(--g6)">${fmt(qte)}</td><td class="num" style="color:var(--textm)">${g.totalKg>0?(qte/g.totalKg*100).toFixed(1):0}%</td>${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(coutF)} F</td>`:''}</tr>`;}).join('')}
+      <tr style="background:rgba(22,163,74,.05);font-weight:700"><td>SOUS-TOTAL ${esp.toUpperCase()}</td><td class="num" style="color:var(--g6)">${fmt(g.totalKg)}</td><td class="num">100%</td>${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(g.totalCout)} F</td>`:''}</tr>
+      </tbody></table>
+    </div>`;
+  });
+  html+=`<div class="card" style="border:2px solid rgba(22,163,74,.3)">
+    <div class="card-title"><div class="ct-left"><span>📊 RÉCAPITULATIF MENSUEL</span></div></div>
+    <table class="tbl"><thead><tr><th>Espèce</th><th class="num">Kg</th><th class="num">% total</th></tr></thead><tbody>
+    ${Object.entries(groupEspece).sort((a,b)=>b[1].totalKg-a[1].totalKg).map(([esp,g])=>`
+      <tr><td>${ESPECE_ICON[esp]||''} <strong>${esp}</strong></td><td class="num" style="color:var(--g6)">${fmt(g.totalKg)}</td><td class="num">${totKg>0?(g.totalKg/totKg*100).toFixed(1):0}%</td></tr>`).join('')}
+    <tr style="font-size:14px;font-weight:700;background:rgba(22,163,74,.07)"><td>TOTAL GÉNÉRAL</td><td class="num" style="color:var(--g6)">${fmt(totKg)}</td><td class="num">100%</td></tr>
+    </tbody></table>
+  </div>`;
+  document.getElementById('rapport-content').innerHTML=html;
+}
+function exportRapportExcel(){notify('Export Excel en développement','gold');}
