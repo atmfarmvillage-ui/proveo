@@ -57,15 +57,25 @@ async function doSignup(){
   const{data,error}=await SB.auth.signUp({email,password:pass,options:{data:{nom}}});
   if(error){err.textContent=error.message;return;}
   err.textContent='';ok.textContent='✓ Compte créé ! Connectez-vous.';
-  // Initialiser le trial de 15 jours dès l'inscription
   if(data?.user){
-    await SB.from('gp_config').upsert({
-      user_id:data.user.id,
-      plan:'TRIAL',
-      trial_debut:new Date().toISOString(),
-      trial_utilise:true,
-      plan_expire_le:new Date(Date.now()+15*24*60*60*1000).toISOString()
-    },{onConflict:'user_id'});
+    // Vérifier si cet email est un membre en attente
+    const{data:membre}=await SB.from('gp_membres').select('*')
+      .eq('email',email).is('user_id',null).single();
+    if(membre){
+      // Lier le compte au membre existant — pas de trial, c'est un secrétaire
+      await SB.from('gp_membres').update({user_id:data.user.id})
+        .eq('id',membre.id);
+      ok.textContent='✓ Compte créé ! Vous êtes membre de l\'équipe. Connectez-vous.';
+    } else {
+      // Nouvel admin — initialiser le trial de 15 jours
+      await SB.from('gp_config').upsert({
+        user_id:data.user.id,
+        plan:'TRIAL',
+        trial_debut:new Date().toISOString(),
+        trial_utilise:true,
+        plan_expire_le:new Date(Date.now()+15*24*60*60*1000).toISOString()
+      },{onConflict:'user_id'});
+    }
   }
   setTimeout(()=>showAuthForm('login'),2000);
 }

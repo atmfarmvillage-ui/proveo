@@ -153,16 +153,50 @@ async function saveEquipe(){
   const nom=document.getElementById('eq_nom').value.trim();
   const email=document.getElementById('eq_email').value.trim();
   const role=document.getElementById('eq_role').value;
-  const err=document.getElementById('eq_err');const ok=document.getElementById('eq_ok');
+  const pv=document.getElementById('eq_pv')?.value.trim()||null;
+  const err=document.getElementById('eq_err');
+  const ok=document.getElementById('eq_ok');
   if(!nom||!email){err.textContent='Nom et email requis.';return;}
-  // Invite via Supabase (creates magic link)
-  const{error}=await SB.auth.admin?.inviteUserByEmail?.(email,{data:{nom,role:role,admin_id:GP_ADMIN_ID}});
-  // If no admin SDK, store the invitation in gp_membres pending
-  await SB.from('gp_membres').insert({admin_id:GP_ADMIN_ID,nom,email,role}).catch(()=>{});
   err.textContent='';
-  ok.textContent=`✓ ${nom} ajouté(e). Il/elle peut créer son compte avec l'email ${email}.`;
+
+  // Vérifier si l'email est déjà enregistré comme membre
+  const{data:exist}=await SB.from('gp_membres').select('id').eq('email',email).eq('admin_id',GP_ADMIN_ID);
+  if(exist&&exist.length>0){err.textContent='Cet email est déjà dans votre équipe.';return;}
+
+  // Enregistrer le membre en attente (user_id sera lié quand il créera son compte)
+  const{error}=await SB.from('gp_membres').insert({
+    admin_id:GP_ADMIN_ID,
+    nom,email,role,
+    point_vente:pv,
+    user_id:null // sera rempli à la première connexion
+  });
+  if(error){err.textContent='Erreur: '+error.message;return;}
+
+  // Générer le lien WhatsApp d'invitation
+  const siteUrl=window.location.origin;
+  const msg=encodeURIComponent(
+    `Bonjour ${nom} 👋\n\n`+
+    `Vous avez été ajouté(e) comme *${role==='admin'?'Administrateur':'Secrétaire'}* sur *PROVENDA*`+
+    (pv?` — Point de vente : *${pv}*`:'')+
+    `.\n\n`+
+    `📌 *Pour accéder au logiciel :*\n`+
+    `1. Ouvrez ce lien : ${siteUrl}\n`+
+    `2. Cliquez *"Créer un compte"*\n`+
+    `3. Utilisez cet email : *${email}*\n`+
+    `4. Choisissez un mot de passe\n\n`+
+    `_PROVENDA · ATM Farm Village_`
+  );
+  const waLink=`https://wa.me/?text=${msg}`;
+
+  ok.innerHTML=`✓ <strong>${nom}</strong> ajouté(e) comme ${role}${pv?' · '+pv:''} !
+    <div style="margin-top:8px">
+      <a href="${waLink}" target="_blank" class="btn btn-g btn-sm" style="display:inline-flex;text-decoration:none">
+        📲 Envoyer les instructions par WhatsApp
+      </a>
+    </div>`;
+
   ['eq_nom','eq_email'].forEach(id=>document.getElementById(id).value='');
-  notify(`${nom} ajouté(e) comme ${role} ✓`,'gold');
+  notify(`${nom} ajouté(e) ✓`,'gold');
   renderEquipe();
 }
 async function renderEquipe(){
