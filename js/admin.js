@@ -515,12 +515,23 @@ async function savePDV(){
     latitude:lat,longitude:lng
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
+  // Créer automatiquement la caisse physique du PDV
+  await SB.from('gp_caisses').insert({
+    admin_id:GP_ADMIN_ID,
+    nom:'Caisse '+nom,
+    type:'physique',
+    point_vente:nom,
+    solde_initial:0,
+    solde_actuel:0,
+    couleur:pvPalette(nom).border,
+    actif:true
+  });
   ['pv_nom','pv_tel','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   err.textContent='';
   await renderPDV();
-  notify('Point de vente "'+nom+'" créé ✓','gold');
+  notify('Point de vente "'+nom+'" créé avec sa caisse ✓','gold');
 }
 
 async function deletePDV(id,nom){

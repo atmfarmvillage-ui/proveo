@@ -51,11 +51,10 @@ async function renderCaisse(){
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-g btn-sm" onclick="ouvrirMouvement('${c.id}','${c.nom}','entree')">+ Entrée</button>
-        <button class="btn btn-out btn-sm" onclick="ouvrirMouvement('${c.id}','${c.nom}','sortie')">- Sortie</button>
-        <button class="btn btn-out btn-sm" style="border-color:#3b82f6;color:#60a5fa" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
+        <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
-        <button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>
+        ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
+        ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -93,7 +92,98 @@ function populateCaisseSelects(caisses,soldes){
 }
 
 // ── CRÉER UNE CAISSE ──────────────────────────────
+// ── CAISSES ARCHIVÉES ────────────────────────────
+async function renderCaissesArchivees(){
+  if(GP_ROLE!=='admin'){return;}
+  const{data}=await SB.from('gp_caisses').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',false).order('nom');
+  const arch=data||[];
+  const container=document.getElementById('caisses-archivees');
+  if(!container)return;
+  if(!arch.length){
+    container.innerHTML='<div style="color:var(--textm);font-size:12px">Aucune caisse archivée.</div>';
+    return;
+  }
+  container.innerHTML=arch.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;opacity:.7">
+      <div>
+        <span style="font-weight:600">${c.type==='banque'?'🏦':'💵'} ${c.nom}</span>
+        ${c.point_vente?`<span style="font-size:10px;color:var(--textm);margin-left:8px">📍 ${c.point_vente}</span>`:''}
+      </div>
+      <button class="btn btn-g btn-sm" onclick="reactiverCaisse('${c.id}')">🔄 Réactiver</button>
+    </div>`).join('');
+}
+
+async function reactiverCaisse(id){
+  await SB.from('gp_caisses').update({actif:true}).eq('id',id);
+  renderCaisse();
+  notify('Caisse réactivée ✓','gold');
+}
+
+// ── CORRECTION D'ÉCART ───────────────────────────
+function ouvrirCorrectionEcart(caisseId,nom){
+  const montant=prompt(`Correction d'écart — ${nom}
+
+Entrez le montant (positif = excédent, négatif = manque) :`);
+  if(montant===null)return;
+  const val=parseFloat(montant);
+  if(isNaN(val)){notify('Montant invalide','r');return;}
+  const note=prompt('Note justificative obligatoire :');
+  if(!note?.trim()){notify('Note obligatoire','r');return;}
+  const type=val>=0?'entree':'sortie';
+  SB.from('gp_mouvements_caisse').insert({
+    admin_id:GP_ADMIN_ID,caisse_id:caisseId,
+    type,montant:Math.abs(val),
+    categorie:'correction_ecart',
+    description:'⚠ Correction écart: '+note,
+    date_mouvement:today(),
+    enregistre_par:GP_USER.id,
+    enregistre_par_nom:GP_USER.email?.split('@')[0]
+  }).then(()=>{
+    renderCaisse();
+    notify('Correction enregistrée ✓','gold');
+  });
+}
+
+// ── TRANSFERT AVEC VALIDATION ─────────────────────
+async function saveTransfertAvecValidation(){
+  const source=document.getElementById('transfert-source')?.value;
+  const dest=document.getElementById('transfert-dest')?.value;
+  const montant=+document.getElementById('transfert-montant')?.value||0;
+  const desc=document.getElementById('transfert-desc')?.value.trim()||null;
+  const err=document.getElementById('transfert-err');
+  if(!source||!dest){err.textContent='Sélectionnez les deux caisses.';return;}
+  if(source===dest){err.textContent='Source et destination doivent être différentes.';return;}
+  if(!montant){err.textContent='Montant requis.';return;}
+
+  // Admin/DAF → transfert direct
+  // Secrétaire → transfert en attente de validation
+  const statut=GP_ROLE==='admin'||GP_ROLE==='daf'?'valide':'en_attente';
+
+  await SB.from('gp_mouvements_caisse').insert({
+    admin_id:GP_ADMIN_ID,caisse_id:source,caisse_dest_id:dest,
+    type:'transfert',montant,description:desc,
+    statut_transfert:statut,
+    date_mouvement:today(),
+    enregistre_par:GP_USER.id,
+    enregistre_par_nom:GP_USER.email?.split('@')[0]
+  });
+
+  err.textContent='';
+  document.getElementById('modal-transfert').style.display='none';
+  document.getElementById('transfert-montant').value='';
+  document.getElementById('transfert-desc').value='';
+
+  if(statut==='en_attente'){
+    notify('Transfert soumis — en attente de validation admin ✓','gold');
+  } else {
+    notify('Transfert effectué ✓','gold');
+  }
+  renderCaisse();
+}
+
 async function saveCaisse(){
+  if(GP_ROLE!=='admin'){notify('Seul l\'admin peut créer des caisses','r');return;}
   const nom=document.getElementById('caisse_nom')?.value.trim();
   const type=document.getElementById('caisse_type')?.value||'physique';
   const solde=+document.getElementById('caisse_solde_init')?.value||0;
@@ -147,7 +237,10 @@ async function saveMouvement(){
 }
 
 // ── TRANSFERT ─────────────────────────────────────
-async function saveTransfert(){
+async function saveTransfert(){ // gardé pour compatibilité
+  return saveTransfertAvecValidation();
+}
+async function saveTransfertAvecValidation_OLD(){
   const source=document.getElementById('transfert-source')?.value;
   const dest=document.getElementById('transfert-dest')?.value;
   const montant=+document.getElementById('transfert-montant')?.value||0;
@@ -198,4 +291,57 @@ async function voirHistoriqueCaisse(caisseId,nom){
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
   modal.style.display='flex';
+}
+
+// ── TRANSFERTS EN ATTENTE ────────────────────────
+async function renderTransfertsAttente(){
+  const{data}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID)
+    .eq('type','transfert')
+    .eq('statut_transfert','en_attente')
+    .order('created_at',{ascending:false});
+  const T=data||[];
+  const section=document.getElementById('transferts-attente-section');
+  if(section) section.style.display=T.length?'block':'none';
+  const container=document.getElementById('transferts-attente-liste');
+  if(!container)return;
+  if(!T.length){container.innerHTML='';return;}
+
+  // Charger les noms des caisses
+  const{data:C}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID);
+  const caisseMap={};
+  (C||[]).forEach(c=>caisseMap[c.id]=c.nom);
+
+  container.innerHTML=T.map(t=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;margin-bottom:6px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${caisseMap[t.caisse_id]||'—'} → ${caisseMap[t.caisse_dest_id]||'—'}</div>
+        <div style="font-size:11px;color:var(--textm)">${t.date_mouvement} · Par ${t.enregistre_par_nom||'—'}</div>
+        ${t.description?`<div style="font-size:10px;color:var(--textm)">${t.description}</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:var(--gold)">${fmt(t.montant)} F</div>
+        <button class="btn btn-g btn-sm" onclick="validerTransfert('${t.id}')">✅ Valider</button>
+        <button class="btn btn-red btn-sm" onclick="refuserTransfert('${t.id}')">✕ Refuser</button>
+      </div>
+    </div>`).join('');
+}
+
+async function validerTransfert(id){
+  await SB.from('gp_mouvements_caisse').update({
+    statut_transfert:'valide',
+    valide_par:GP_USER.id
+  }).eq('id',id);
+  renderCaisse();
+  notify('Transfert validé ✓','gold');
+}
+
+async function refuserTransfert(id){
+  const raison=prompt('Raison du refus (optionnel) :');
+  await SB.from('gp_mouvements_caisse').update({
+    statut_transfert:'refuse',
+    description:(raison?'Refusé: '+raison:'Refusé')
+  }).eq('id',id);
+  renderCaisse();
+  notify('Transfert refusé','r');
 }
