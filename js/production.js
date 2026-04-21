@@ -11,9 +11,14 @@ function onFormuleChange(){
 function previewLot(){
   const nom=document.getElementById('lot_formule').value;
   const qte=+document.getElementById('lot_qte').value||0;
-  const mo=+document.getElementById('lot_mo').value||0;
-  const emb=+document.getElementById('lot_emb').value||0;
   const f=getFormule(nom);
+  // Coûts depuis la formule (pré-remplis automatiquement)
+  const avecEmb=f?.avec_emballage!==false;
+  const avecTrans=f?.avec_transport===true;
+  const mo=f?.cout_mo_tonne?f.cout_mo_tonne*(qte/1000):0;
+  const emb=avecEmb&&f?.cout_emballage_kg?f.cout_emballage_kg*qte:0;
+  const transport=avecTrans&&f?.cout_transport_lot?f.cout_transport_lot:0;
+
   if(!nom||!qte){
     document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
     document.getElementById('lot-mp-preview').style.display='none';
@@ -36,7 +41,7 @@ function previewLot(){
       </div>`).join('');
     document.getElementById('lot-mp-preview').style.display='block';
   }
-  const coutTotal=coutMP+mo+emb;
+  const coutTotal=coutMP+mo+emb+(transport||0);
   const prixVente=getPrix(nom);
   const margeKg=prixVente-coutTotal/Math.max(1,qte);
   document.getElementById('lot-preview').innerHTML=`
@@ -54,8 +59,13 @@ async function saveLot(){
   const date=document.getElementById('lot_date').value;
   const qte=+document.getElementById('lot_qte').value||0;
   const ref=document.getElementById('lot_ref').value.trim();
-  const mo=+document.getElementById('lot_mo').value||0;
-  const emb=+document.getElementById('lot_emb').value||0;
+  // Coûts automatiques depuis la formule
+  const fData=getFormule(nom);
+  const avecEmb=fData?.avec_emballage!==false;
+  const avecTrans=fData?.avec_transport===true;
+  const mo=fData?.cout_mo_tonne?fData.cout_mo_tonne*(qte/1000):0;
+  const emb=avecEmb&&fData?.cout_emballage_kg?fData.cout_emballage_kg*qte:0;
+  const transport=avecTrans&&fData?.cout_transport_lot?fData.cout_transport_lot:0;
   const obs=document.getElementById('lot_obs').value.trim();
   const pv=document.getElementById('lot_pv').value.trim();
   const err=document.getElementById('lot_err');
@@ -71,7 +81,7 @@ async function saveLot(){
       mpSorties.push({nom:ing.nom,kg:kgNeeded,ingrData:ingData});
     });
   }
-  const coutTotal=coutMP+mo+emb;
+  const coutTotal=coutMP+mo+emb+(transport||0);
   const prixVente=getPrix(nom);
   const espece=FORMULES_SADARI.find(x=>x.nom===nom)?.espece||'';
   // Insert lot

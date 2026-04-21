@@ -67,8 +67,8 @@ async function renderMatieresPremieresPage(){
               <input type="number" id="mpp-prix-inp-${i.id}" value="${i.prix_actuel||0}"
                 style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
                 onkeydown="if(event.key==='Enter')mppSauverPrix('${i.id}');if(event.key==='Escape')mppAnnulerPrix('${i.id}')">
-              <button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px">✏️</button>
-              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>
+              ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Admin uniquement">✏️</button>
+              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
             </div>
           </td>
 
@@ -114,10 +114,18 @@ function mppAnnulerPrix(id){
   document.getElementById('mpp-prix-save-'+id).style.display='none';
 }
 async function mppSauverPrix(id){
+  if(GP_ROLE!=='admin'){notify('Seul l\'admin peut modifier les prix','r');return;}
   const val=+document.getElementById('mpp-prix-inp-'+id).value||0;
+  const ingr=GP_INGREDIENTS.find(i=>i.id===id);
+  // Alerte si hausse de prix
+  if(ingr&&ingr.prix_actuel>0&&val>ingr.prix_actuel){
+    const pct=((val-ingr.prix_actuel)/ingr.prix_actuel*100).toFixed(1);
+    if(!confirm(`⚠️ Hausse de prix détectée !\n\nPrix actuel : ${fmt(ingr.prix_actuel)} F/kg\nNouveau prix : ${fmt(val)} F/kg\nHausse : +${pct}%\n\nConfirmer quand même ?`)){
+      mppAnnulerPrix(id);return;
+    }
+  }
   const{error}=await SB.from('gp_ingredients').update({prix_actuel:val}).eq('id',id);
   if(error){notify('Erreur: '+error.message,'r');return;}
-  const ingr=GP_INGREDIENTS.find(i=>i.id===id);
   if(ingr)ingr.prix_actuel=val;
   document.getElementById('mpp-prix-val-'+id).textContent=fmt(val);
   mppAnnulerPrix(id);
@@ -221,4 +229,89 @@ async function sauverSeuilRapide(){
     `✓ Seuil mis à jour : ${fmt(val)} kg`;
   renderMatieresPremieresPage();
   notify('Seuil critique mis à jour ✓','gold');
+}
+
+// ── SEUIL DYNAMIQUE ───────────────────────────────
+async function calculerSeuilDynamique(){
+  // Analyser la consommation des 4 dernières semaines
+  const dateLimite=new Date();
+  dateLimite.setDate(dateLimite.getDate()-28);
+  const dateStr=dateLimite.toISOString().slice(0,10);
+
+  const{data:sorties}=await SB.from('gp_stock_mp').select('ingredient_nom,quantite')
+    .eq('admin_id',GP_ADMIN_ID)
+    .eq('type','sortie_production')
+    .gte('date',dateStr);
+
+  if(!sorties?.length){notify('Pas assez de données de consommation','r');return;}
+
+  // Calculer consommation par semaine par ingrédient
+  const conso={};
+  sorties.forEach(s=>{
+    conso[s.ingredient_nom]=(conso[s.ingredient_nom]||0)+Number(s.quantite||0);
+  });
+
+  // Générer suggestions (2 semaines de stock)
+  const suggestions=Object.entries(conso).map(([nom,total])=>{
+    const parSemaine=total/4;
+    const seuilSuggere=Math.ceil(parSemaine*2/50)*50; // arrondi à 50kg
+    const ingr=GP_INGREDIENTS.find(i=>i.nom===nom);
+    return{nom,parSemaine:parSemaine.toFixed(1),seuilActuel:ingr?.seuil_alerte||200,seuilSuggere,ingrId:ingr?.id};
+  }).filter(s=>s.ingrId).sort((a,b)=>b.parSemaine-a.parSemaine);
+
+  // Afficher dans modal
+  const modal=document.getElementById('modal-seuil-dynamique');
+  document.getElementById('seuil-dynamique-content').innerHTML=`
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
+      Basé sur la consommation des 4 dernières semaines. Seuil suggéré = 2 semaines de stock.
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+      <thead><tr>
+        <th>Ingrédient</th>
+        <th class="num">Conso/semaine</th>
+        <th class="num">Seuil actuel</th>
+        <th class="num">Seuil suggéré</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      ${suggestions.map(s=>`<tr>
+        <td style="font-weight:600">${s.nom}</td>
+        <td class="num">${s.parSemaine} kg</td>
+        <td class="num" style="color:var(--textm)">${fmt(s.seuilActuel)} kg</td>
+        <td class="num" style="color:${s.seuilSuggere>s.seuilActuel?'var(--gold)':'var(--green)'}">${fmt(s.seuilSuggere)} kg</td>
+        <td>
+          <button class="btn btn-g btn-sm" onclick="appliquerSeuilSuggere('${s.ingrId}',${s.seuilSuggere},'${s.nom}',this)">
+            Appliquer
+          </button>
+        </td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-g btn-sm" onclick="appliquerTousSeuilsSuggeres(${JSON.stringify(suggestions).replace(/'/g,'\\'+'')})">
+        ✓ Appliquer tous
+      </button>
+    </div>`;
+  modal.style.display='flex';
+}
+
+async function appliquerSeuilSuggere(ingrId,seuil,nom,btn){
+  await SB.from('gp_ingredients').update({seuil_alerte:seuil}).eq('id',ingrId);
+  const ingr=GP_INGREDIENTS.find(i=>i.id===ingrId);
+  if(ingr)ingr.seuil_alerte=seuil;
+  if(btn){btn.textContent='✓';btn.disabled=true;btn.classList.remove('btn-g');btn.classList.add('btn-out');}
+  notify(nom+' : seuil mis à jour → '+fmt(seuil)+' kg','gold');
+}
+
+async function appliquerTousSeuilsSuggeres(suggestions){
+  for(const s of suggestions){
+    if(s.ingrId){
+      await SB.from('gp_ingredients').update({seuil_alerte:s.seuilSuggere}).eq('id',s.ingrId);
+      const ingr=GP_INGREDIENTS.find(i=>i.id===s.ingrId);
+      if(ingr)ingr.seuil_alerte=s.seuilSuggere;
+    }
+  }
+  document.getElementById('modal-seuil-dynamique').style.display='none';
+  renderMatieresPremieresPage();
+  notify('Tous les seuils mis à jour ✓','gold');
 }

@@ -3,7 +3,23 @@ function renderPrixFormules(){
   const all=getAllFormules();
   document.getElementById('prix-formules-liste').innerHTML=`
     <table class="tbl" style="font-size:11px"><thead><tr><th>Formule</th><th>Espèce</th><th class="num">Prix/kg (FCFA)</th></tr></thead><tbody>
-    ${all.slice(0,24).map(f=>`<tr><td style="font-weight:600;font-size:11px">${f.nom}</td><td>${ESPECE_ICON[f.espece]||''} ${f.espece||'—'}</td><td class="num" style="color:var(--gold)">${fmt(getPrix(f.nom))} F</td><td><button class="btn btn-print btn-sm" onclick="imprimerFiche('${f.nom}')">🖨️ Fiche</button></td></tr>`).join('')}
+    ${all.slice(0,24).map(f=>`<tr>
+      <td style="font-weight:600;font-size:11px">${f.nom}</td>
+      <td>${ESPECE_ICON[f.espece]||''} ${f.espece||'—'}</td>
+      <td class="num" style="color:var(--gold)">${fmt(getPrix(f.nom))} F</td>
+      <td class="num" style="color:var(--textm);font-size:10px">
+        ${f.cout_emballage_kg?fmt(f.cout_emballage_kg)+' F/kg':'-'}
+      </td>
+      <td class="num" style="color:var(--textm);font-size:10px">
+        ${f.cout_mo_tonne?fmt(f.cout_mo_tonne)+' F/t':'-'}
+      </td>
+      <td>
+        <div style="display:flex;gap:3px">
+          <button class="btn btn-out btn-sm" onclick="editerCoutsFormule('${f.nom}')">⚙️</button>
+          <button class="btn btn-print btn-sm" onclick="imprimerFiche('${f.nom}')">🖨️</button>
+        </div>
+      </td>
+    </tr>`).join('')}
     </tbody></table>`;
   renderIngrAdmin();
 }
@@ -541,4 +557,52 @@ async function deletePDV(id,nom){
   await SB.from('gp_points_vente').delete().eq('id',id);
   renderPDV();
   notify('Point de vente supprimé','r');
+}
+
+// ── COÛTS DE PRODUCTION PAR FORMULE ──────────────
+function editerCoutsFormule(formuleNom){
+  const f=getAllFormules().find(x=>x.nom===formuleNom);
+  if(!f)return;
+  const modal=document.getElementById('modal-couts-formule');
+  document.getElementById('cf-formule-nom').textContent=formuleNom;
+  document.getElementById('cf-emballage').value=f.cout_emballage_kg||0;
+  document.getElementById('cf-mo').value=f.cout_mo_tonne||0;
+  document.getElementById('cf-transport').value=f.cout_transport_lot||0;
+  document.getElementById('cf-avec-emballage').checked=f.avec_emballage!==false;
+  document.getElementById('cf-avec-transport').checked=f.avec_transport===true;
+  document.getElementById('cf-formule-id').value=f.id||'';
+  document.getElementById('cf-formule-nom-hidden').value=formuleNom;
+  modal.style.display='flex';
+}
+
+async function saveCoutsFormule(){
+  const id=document.getElementById('cf-formule-id')?.value;
+  const nom=document.getElementById('cf-formule-nom-hidden')?.value;
+  const emballage=+document.getElementById('cf-emballage')?.value||0;
+  const mo=+document.getElementById('cf-mo')?.value||0;
+  const transport=+document.getElementById('cf-transport')?.value||0;
+  const avecEmb=document.getElementById('cf-avec-emballage')?.checked;
+  const avecTrans=document.getElementById('cf-avec-transport')?.checked;
+
+  if(id){
+    await SB.from('gp_formules').update({
+      cout_emballage_kg:emballage,
+      cout_mo_tonne:mo,
+      cout_transport_lot:transport,
+      avec_emballage:avecEmb,
+      avec_transport:avecTrans
+    }).eq('id',id);
+  }
+  // Mettre à jour FORMULES_SADARI en mémoire aussi
+  const f=getAllFormules().find(x=>x.nom===nom);
+  if(f){
+    f.cout_emballage_kg=emballage;
+    f.cout_mo_tonne=mo;
+    f.cout_transport_lot=transport;
+    f.avec_emballage=avecEmb;
+    f.avec_transport=avecTrans;
+  }
+  document.getElementById('modal-couts-formule').style.display='none';
+  renderPrixFormules();
+  notify('Coûts de production mis à jour ✓','gold');
 }

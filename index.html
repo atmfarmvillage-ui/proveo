@@ -81,6 +81,7 @@
   <div class="nav-item" onclick="showGP('stock')" data-page="stock"><span class="nav-icon">📦</span>Stock MP</div>
   <div class="nav-item admin-only" onclick="showGP('matieres')" data-page="matieres"><span class="nav-icon">🌾</span>Matières Premières</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire')" data-page="inventaire"><span class="nav-icon">📋</span>Inventaire mensuel</div>
+  <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">🔍</span>Inventaire physique</div>
   <div class="nav-item admin-only" onclick="showGP('rapport')" data-page="rapport"><span class="nav-icon">🖨️</span>Rapport production</div>
 
   <div class="nav-sect">Commercial</div>
@@ -99,6 +100,7 @@
   <div class="nav-item" onclick="showGP('achats')" data-page="achats"><span class="nav-icon">🛒</span>Achats MP</div>
   <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse</div>
   <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
+  <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">📊</span>Inventaire physique</div>
   <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">👤</span>Équipe</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 </div>
@@ -242,13 +244,20 @@
   <div class="page-title">Matières Premières</div>
   <div class="page-sub">Gérer les ingrédients · Prix · Seuils d'alerte critique</div>
   <div class="g4" id="mp-kpis" style="margin-bottom:14px"></div>
+  <div id="seuils-suggestions" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px;margin-bottom:14px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-out btn-sm" onclick="analyserSeuilsDynamiques()">💡 Analyser seuils dynamiques</button>
+  </div>
   <div class="g2" style="align-items:start">
 
     <!-- LISTE DES MP -->
     <div style="grid-column:1/-1" class="card">
       <div class="card-title">
         <div class="ct-left"><span>📋 Liste des matières premières</span></div>
-        <input type="text" id="mp-search-page" placeholder="🔍 Rechercher..." oninput="renderMatieresPremieresPage()" style="width:160px;font-size:11px;padding:4px 8px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="mp-search-page" placeholder="🔍 Rechercher..." oninput="renderMatieresPremieresPage()" style="width:150px;font-size:11px;padding:4px 8px">
+          <button class="btn btn-out btn-sm" onclick="calculerSeuilDynamique()" title="Analyser la consommation et suggérer les seuils">📊 Seuils auto</button>
+        </div>
       </div>
       <div style="overflow-x:auto"><div id="mp-liste-page"></div></div>
     </div>
@@ -1043,6 +1052,18 @@
   </div>
 </div>
 
+<!-- INVENTAIRE PHYSIQUE -->
+<div class="page" id="page-inventaire_physique">
+  <div class="page-title">Inventaire Physique</div>
+  <div class="page-sub">Compter les stocks réels · Détecter les écarts · Valider</div>
+  <div class="g4" id="inv-phys-kpis" style="margin-bottom:14px"></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap" class="no-print">
+    <div><label class="lbl">Mois</label><input type="month" id="inv-phys-mois" style="width:auto" onchange="renderInventairePhysique()"></div>
+    <button class="btn btn-out btn-sm" onclick="renderInventairePhysique()">🔄 Actualiser</button>
+  </div>
+  <div id="inv-phys-content"></div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
@@ -1124,6 +1145,8 @@
 <script src="js/fournisseurs.js"></script>
 <script src="js/achats.js"></script>
 <script src="js/caisse.js"></script>
+<script src="js/inventaire_physique.js"></script>
+<script src="js/inventaire_physique.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/stock.js"></script>

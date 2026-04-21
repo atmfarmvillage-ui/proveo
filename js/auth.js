@@ -137,7 +137,7 @@ async function bootApp(user){
   setTimeout(autoVerifierStockAlerte, 5000);
   // Set defaults
   ['lot_date','mp_date','vt_date','dep_date','bj_date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today();});
-  ['lot-filtre-mois','mp-filtre-mois','dep-filtre-mois','inv-mois','rpt-mois'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=thisMonth();});
+  ['lot-filtre-mois','mp-filtre-mois','dep-filtre-mois','inv-mois','rpt-mois','inv-phys-mois'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=thisMonth();});
   document.getElementById('vt-filtre-date').value=today();
   populateSelects();
   renderDashboard();
