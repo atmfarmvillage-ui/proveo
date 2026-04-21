@@ -115,7 +115,11 @@ async function bootApp(user){
   document.getElementById('tb-role-badge').textContent=GP_ROLE.toUpperCase();
   document.getElementById('tb-role-badge').className='tb-role '+GP_ROLE;
   document.getElementById('tb-user-info').textContent=user.email?.split('@')[0]||'';
-  // Afficher le point de vente dans la topbar
+  // Afficher le point de vente dans la topbar et formulaire vente
+  const pvNomEl=document.getElementById('vt-pv-nom');
+  const pvHiddenEl=document.getElementById('vt_pv');
+  if(pvNomEl)pvNomEl.textContent=GP_POINT_VENTE||'Siège principal';
+  if(pvHiddenEl)pvHiddenEl.value=GP_POINT_VENTE||'';
   const pvBadge=document.getElementById('tb-pv-badge');
   if(pvBadge){
     if(GP_POINT_VENTE){
@@ -198,9 +202,11 @@ async function loadClients(){
 }
 async function loadPrix(){
   const{data}=await SB.from('gp_prix_formules').select('*').eq('admin_id',GP_ADMIN_ID);
-  GP_PRIX={};
-  if(data)data.forEach(p=>{GP_PRIX[p.formule_nom]=p.prix;});
-  // Fill with defaults if not set
+  GP_PRIX={};GP_PRIX_GROS={};
+  if(data)data.forEach(p=>{
+    GP_PRIX[p.formule_nom]=p.prix;
+    if(p.prix_gros)GP_PRIX_GROS[p.formule_nom]=p.prix_gros;
+  });
   FORMULES_SADARI.forEach(f=>{if(!GP_PRIX[f.nom])GP_PRIX[f.nom]=f.prix_defaut;});
 }
 function populateSelects(){

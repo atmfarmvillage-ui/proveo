@@ -86,6 +86,8 @@
 
   <div class="nav-sect">Commercial</div>
   <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
+  <div class="nav-item admin-only" onclick="showGP('distribution')" data-page="distribution"><span class="nav-icon">🚚</span>Distribution PDV</div>
+  <div class="nav-item admin-only" onclick="showGP('salaires')" data-page="salaires"><span class="nav-icon">👤</span>Salaires</div>
   <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
   <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
@@ -370,7 +372,16 @@
       <div class="card-title"><div class="ct-left"><span>💰 Nouvelle vente</span></div></div>
       <div class="fg2">
         <div class="fr"><label>Date</label><input type="date" id="vt_date"></div>
-        <div class="fr"><label>Point de vente</label><input type="text" id="vt_pv" placeholder="Dépôt principal"></div>
+        <div id="vt-pv-info" style="font-size:11px;color:var(--g6);padding:6px 0">
+        📍 Point de vente : <strong id="vt-pv-nom">—</strong>
+        <input type="hidden" id="vt_pv">
+      </div>
+      </div>
+      <div class="fr" style="position:relative">
+        <label>🔍 Rechercher client (nom ou téléphone)</label>
+        <input type="text" id="vt_tel_search" placeholder="Tapez le nom ou numéro..." oninput="rechercherClientTel()" autocomplete="off">
+        <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9999;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:200px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.6)"></div>
+        <input type="hidden" id="vt_client">
       </div>
       <div class="fr"><label>Client</label>
         <select id="vt_client" onchange="onClientChange()"><option value="">— Choisir ou nouveau client —</option><option value="__nouveau__">➕ Nouveau client</option></select>
@@ -1132,6 +1143,145 @@
   <div id="inv-phys-content"></div>
 </div>
 
+
+<!-- DISTRIBUTION PDV -->
+<div class="page" id="page-distribution">
+  <div class="page-title">Distribution PDV</div>
+  <div class="page-sub">Livraisons entre points de vente · Suivi stock · Paiements</div>
+  <div class="g4" id="dist-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start;margin-bottom:14px">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📤 Nouvelle livraison</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>De (PDV Source)</label><select id="dist_source"></select></div>
+        <div class="fr"><label>Vers (PDV Destination)</label><select id="dist_dest"></select></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Type</label>
+          <select id="dist_type">
+            <option value="vente_gros">💰 Vente au prix gros</option>
+            <option value="depot_vente">🤝 Dépôt-vente</option>
+          </select>
+        </div>
+        <div class="fr"><label>Produit (formule)</label><select id="dist_formule"></select></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
+        <div class="fr"><label>Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveLivraison()">📤 Créer la livraison</button>
+      <div class="a-err" id="dist_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📦 Stock produits finis par PDV</span></div></div>
+      <div id="stock-pdv-liste"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📋 Historique livraisons</span></div></div>
+    <div id="dist-liste"></div>
+  </div>
+
+  <!-- Modal confirmation réception -->
+  <div id="modal-confirm-reception" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+      <div style="font-weight:700;font-size:15px;margin-bottom:14px">📦 Confirmer la réception</div>
+      <input type="hidden" id="cr-livraison-id">
+      <div id="cr-info"></div>
+      <div class="fr"><label>Quantité réellement reçue (sacs)</label><input type="number" id="cr-qte" placeholder="30"></div>
+      <div class="fr"><label>Note</label><textarea id="cr-note" rows="2" placeholder="Observations..."></textarea></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="confirmerReceptionLivraison()" style="flex:1;justify-content:center">✅ Confirmer</button>
+        <button class="btn btn-out" onclick="document.getElementById('modal-confirm-reception').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal paiement livraison -->
+  <div id="modal-paiement-livraison" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">💳 Paiement livraison</div>
+      <div id="pl-dest-nom" style="font-size:12px;color:var(--textm);margin-bottom:4px"></div>
+      <div style="font-size:12px;color:var(--red);margin-bottom:12px">Reste à payer : <strong id="pl-reste"></strong></div>
+      <input type="hidden" id="pl-livraison-id">
+      <div class="fg2">
+        <div class="fr"><label>Montant (F)</label><input type="number" id="pl-montant" placeholder="50000"></div>
+        <div class="fr"><label>Mode</label>
+          <select id="pl-mode">
+            <option value="especes">Espèces</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="virement">Virement</option>
+            <option value="cheque">Chèque</option>
+          </select>
+        </div>
+      </div>
+      <div class="a-err" id="pl-err"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="savePaiementLivraison()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+        <button class="btn btn-out" onclick="document.getElementById('modal-paiement-livraison').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal seuil PDV -->
+  <div id="modal-seuil-pdv" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">⚙️ Seuils — <span id="seuil-pdv-nom"></span></div>
+        <button onclick="document.getElementById('modal-seuil-pdv').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="seuil-pdv-content"></div>
+    </div>
+  </div>
+
+  <!-- Modal détail livraison -->
+  <div id="modal-detail-livraison" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">📋 Détail livraison</div>
+        <button onclick="document.getElementById('modal-detail-livraison').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="detail-livraison-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SALAIRES -->
+<div class="page" id="page-salaires">
+  <div class="page-title">Salaires</div>
+  <div class="page-sub">Enregistrer et suivre les salaires</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+    <div><label class="lbl">Mois</label><input type="month" id="sal-mois" onchange="renderSalaires()" style="width:auto"></div>
+  </div>
+  <div class="g4" id="sal-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Enregistrer un salaire</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Nom & Prénom *</label><input type="text" id="sal_nom" placeholder="Jean Adekou"></div>
+        <div class="fr"><label>Matricule</label><input type="text" id="sal_matricule" placeholder="EMP-001"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Mois *</label><input type="month" id="sal_mois_saisie"></div>
+        <div class="fr"><label>Montant (F) *</label><input type="number" id="sal_montant" placeholder="75000"></div>
+      </div>
+      <div class="fr"><label>Mode de paiement</label>
+        <select id="sal_mode">
+          <option value="especes">Espèces</option>
+          <option value="mobile_money">Mobile Money</option>
+          <option value="virement">Virement</option>
+        </select>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveSalaire()">✓ Enregistrer</button>
+      <div class="a-err" id="sal_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Salaires du mois</span></div></div>
+      <div id="sal-liste"></div>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
@@ -1214,7 +1364,11 @@
 <script src="js/achats.js"></script>
 <script src="js/caisse.js"></script>
 <script src="js/inventaire_physique.js"></script>
+<script src="js/distribution.js"></script>
+<script src="js/salaires.js"></script>
 <script src="js/inventaire_physique.js"></script>
+<script src="js/distribution.js"></script>
+<script src="js/salaires.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/stock.js"></script>

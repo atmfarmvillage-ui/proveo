@@ -34,76 +34,111 @@ function calcVente(){
     </div>`:'Saisissez les informations pour voir le total.';
 }
 async function saveVente(){
-  const clientId=document.getElementById('vt_client').value;
-  const nom_v=document.getElementById('vt_formule').value;
-  const date=document.getElementById('vt_date').value;
-  const qte=+document.getElementById('vt_qte').value||0;
-  const prix=+document.getElementById('vt_prix').value||0;
-  const remise=+document.getElementById('vt_remise').value||0;
-  const statut=document.getElementById('vt_statut').value;
-  const pv=document.getElementById('vt_pv').value.trim();
+  const clientId=document.getElementById('vt_client')?.value;
+  const note=document.getElementById('vt_note')?.value.trim()||null;
+  const paye=+document.getElementById('vt_paye')?.value||0;
+  const pv=GP_POINT_VENTE||document.getElementById('vt_pv')?.value.trim()||null;
   const err=document.getElementById('vt_err');
-  if(!nom_v||!date||!qte||!prix){err.textContent='Formule, date, quantité et prix requis.';return;}
-  const total=qte*prix-remise;
-  const paye=statut==='paye'?total:(+document.getElementById('vt_paye').value||0);
-  // Check remise approval
-  const remisePct=qte*prix>0?remise/(qte*prix)*100:0;
-  if(remisePct>GP_REMISE_MAX&&GP_ROLE!=='admin'){
-    // Store remise request
-    await SB.from('gp_remises_attente').insert({
-      admin_id:GP_ADMIN_ID,demande_par:GP_USER.id,
-      client_nom:document.getElementById('vt_cl_nom')?.value||GP_CLIENTS.find(c=>c.id===clientId)?.nom||'Inconnu',
-      formule_nom:nom_v,qte,prix_base:prix,remise
-    });
-    notify('Remise envoyée pour validation admin — vente en attente','gold');
-    err.textContent='';checkPendingRemises();return;
-  }
-  // Client management
-  let finalClientId=clientId;
-  let clientNom='',clientTel='';
-  if(clientId==='__nouveau__'){
-    clientNom=document.getElementById('vt_cl_nom').value.trim();
-    clientTel=document.getElementById('vt_cl_tel').value.trim();
-    if(!clientNom){err.textContent='Nom du nouveau client requis.';return;}
-    const{data:newC}=await SB.from('gp_clients').insert({admin_id:GP_ADMIN_ID,nom:clientNom,telephone:clientTel}).select().single();
-    if(newC){finalClientId=newC.id;await loadClients();populateSelects();}
-  } else if(clientId){
-    const c=GP_CLIENTS.find(x=>x.id===clientId);
-    clientNom=c?.nom||'';clientTel=c?.telephone||'';
-  }
-  err.textContent='Enregistrement...';
-  const espece=FORMULES_SADARI.find(f=>f.nom===nom_v)?.espece||'';
-  const{error}=await SB.from('gp_ventes').insert({
-    admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,
-    client_id:finalClientId||null,client_nom:clientNom,client_tel:clientTel,
-    formule_nom:nom_v,espece,qte_vendue:qte,prix_unitaire:prix,remise,remise_validee:true,
-    montant_total:total,statut_paiement:statut,montant_paye:paye,point_vente:pv||GP_POINT_VENTE||null
-  });
+
+  if(!VT_LIGNES.length){err.textContent='Ajoutez au moins un produit.';return;}
+
+  const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+
+  // Déterminer type client
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const typeClient=client?.type_client||'detail';
+
+  const{data:vente,error}=await SB.from('gp_ventes').insert({
+    admin_id:GP_ADMIN_ID,
+    client_id:clientId||null,
+    client_nom:client?.nom||'Client comptant',
+    montant_total:total,
+    montant_paye:paye,
+    statut_paiement:statut,
+    type_client:typeClient,
+    nb_produits:VT_LIGNES.length,
+    point_vente:pv,
+    note,
+    date:today(),
+    saisi_par:GP_USER?.id,
+    formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', ')
+  }).select().single();
+
   if(error){err.textContent='Erreur: '+error.message;return;}
-  // Update client stats
-  if(finalClientId&&finalClientId!=='__nouveau__'){
-    const c=GP_CLIENTS.find(x=>x.id===finalClientId);
-    const prevDate=c?.dernier_achat;
-    let freqJours=c?.frequence_jours;
-    if(prevDate){
-      const diff=Math.ceil((new Date(date)-new Date(prevDate))/86400000);
-      freqJours=Math.round(((freqJours||diff)*2+diff)/3);// rolling avg
+
+  // Insérer les lignes
+  await SB.from('gp_ventes_lignes').insert(
+    VT_LIGNES.map(l=>({
+      vente_id:vente.id,admin_id:GP_ADMIN_ID,
+      formule_nom:l.formule_nom,quantite:l.quantite,
+      prix_unitaire:l.prix_unitaire,montant_ligne:l.montant_ligne,
+      type_prix:l.type_prix
+    }))
+  );
+
+  // Mouvement caisse automatique
+  if(paye>0){
+    const{data:caisses}=await SB.from('gp_caisses').select('id')
+      .eq('admin_id',GP_ADMIN_ID)
+      .eq('point_vente',pv||'').single();
+    if(caisses){
+      await SB.from('gp_mouvements_caisse').insert({
+        admin_id:GP_ADMIN_ID,caisse_id:caisses.id,
+        type:'entree',categorie:'vente',
+        montant:paye,date_mouvement:today(),
+        description:'Vente '+vente.id.slice(0,8),
+        vente_id:vente.id,
+        enregistre_par:GP_USER?.id,
+        enregistre_par_nom:GP_USER?.email?.split('@')[0]
+      });
     }
-    await SB.from('gp_clients').update({
-      dernier_achat:date,nb_achats:(c?.nb_achats||0)+1,
-      total_achats:(c?.total_achats||0)+total,frequence_jours:freqJours
-    }).eq('id',finalClientId);
-    await loadClients();
   }
+
+  // Déduire du stock PDV si applicable
+  if(GP_POINT_VENTE){
+    for(const l of VT_LIGNES){
+      const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE)
+        .eq('formule_nom',l.formule_nom).single();
+      if(stock){
+        const newQte=Math.max(0,Number(stock.qte_disponible)-Number(l.quantite));
+        await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()})
+          .eq('id',stock.id);
+        // Vérifier seuil critique
+        if(newQte<=stock.seuil_critique){
+          envoyerAlerteSeuil(GP_POINT_VENTE,l.formule_nom,newQte,stock.seuil_critique);
+        }
+      }
+    }
+  }
+
+  VT_LIGNES=[];renderLignesVente();
+  ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('vt_client').value='';
   err.textContent='';
-  ['vt_qte','vt_prix','vt_paye','vt_cl_nom','vt_cl_tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('vt_remise').value='0';
-  document.getElementById('vt-nouveau-client').style.display='none';
-  document.getElementById('vt-preview').textContent='Saisissez les informations pour voir le total.';
-  document.getElementById('vt-remise-warning').style.display='none';
+  if(paye>0) imprimerRecu(vente.id);
   notify('Vente enregistrée ✓','gold');
-  renderVentes();updateVentesKPIs();
+  renderVentes();
 }
+
+async function envoyerAlerteSeuil(pdvNom,formule,qteActuelle,seuil){
+  const cfg=GP_CONFIG||{};
+  const apikey=cfg.callmebot_apikey||'';
+  const tel=(cfg.tel_alerte_stock||cfg.telephone||'').replace(/[\s\-\+]/g,'').replace(/^228/,'');
+  if(!apikey||!tel)return;
+  const msg=encodeURIComponent(
+    `⚠️ Stock critique PDV\n`+
+    `📍 ${pdvNom}\n`+
+    `🌾 ${formule}\n`+
+    `Quantité restante : ${qteActuelle} sacs\n`+
+    `Seuil : ${seuil} sacs\n\n`+
+    `Veuillez réapprovisionner.`
+  );
+  fetch(`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`).catch(()=>{});
+}
+
+
 async function updateVentesKPIs(){
   const{data:V}=await SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
   const vd=V||[];
@@ -391,3 +426,111 @@ async function validerRemise(id,statut){
   notify(statut==='validee'?'Remise validée ✓':'Remise refusée',statut==='validee'?'gold':'r');
   renderRemises();checkPendingRemises();
 }
+// ── LIGNES DE VENTE ───────────────────────────────
+let VT_LIGNES = [];
+
+function ajouterLigneVente(){
+  const formule=document.getElementById('vt_formule')?.value;
+  const qte=+document.getElementById('vt_qte')?.value||0;
+  const clientId=document.getElementById('vt_client')?.value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const typeClient=client?.type_client||'detail';
+  const err=document.getElementById('vt_err');
+
+  if(!formule||!qte){err.textContent='Sélectionnez un produit et une quantité.';return;}
+
+  // Déterminer le prix selon type client
+  const prixGros=GP_PRIX_GROS?.[formule]||0;
+  const prixDetail=GP_PRIX?.[formule]||0;
+  const typePrix=typeClient==='gros'?'gros':'detail';
+  const prixUnit=typePrix==='gros'?prixGros:prixDetail;
+
+  // Alerte si quantité grosse mais type détail
+  const seuilGros=10; // à rendre configurable
+  if(qte>=seuilGros&&typePrix==='detail'&&prixGros>0){
+    if(!confirm(`Ce client achète ${qte} sacs. Voulez-vous appliquer le prix gros (${fmt(prixGros)} F) ?`)){
+      // garder détail
+    } else {
+      VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixGros,montant_ligne:qte*prixGros,type_prix:'gros'});
+      document.getElementById('vt_qte').value='';
+      renderLignesVente();
+      return;
+    }
+  }
+
+  VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,montant_ligne:qte*prixUnit,type_prix:typePrix});
+  document.getElementById('vt_qte').value='';
+  err.textContent='';
+  renderLignesVente();
+}
+
+function supprimerLigneVente(idx){
+  VT_LIGNES.splice(idx,1);
+  renderLignesVente();
+}
+
+function renderLignesVente(){
+  const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  const container=document.getElementById('vt-lignes-preview');
+  if(!container)return;
+  container.innerHTML=VT_LIGNES.length?`
+    <table class="tbl" style="font-size:11px;margin-top:8px">
+      <thead><tr><th>Produit</th><th class="num">Qté</th><th class="num">Prix unit.</th><th class="num">Montant</th><th></th></tr></thead>
+      <tbody>
+      ${VT_LIGNES.map((l,i)=>`<tr>
+        <td style="font-weight:600">${l.formule_nom}
+          <span class="badge ${l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_prix}</span>
+        </td>
+        <td class="num">${l.quantite}</td>
+        <td class="num">${fmt(l.prix_unitaire)} F</td>
+        <td class="num" style="color:var(--gold)">${fmt(l.montant_ligne)} F</td>
+        <td><button class="btn btn-red btn-sm" onclick="supprimerLigneVente(${i})">✕</button></td>
+      </tr>`).join('')}
+      <tr style="font-weight:700">
+        <td colspan="3">TOTAL</td>
+        <td class="num" style="color:var(--gold)">${fmt(total)} F</td>
+        <td></td>
+      </tr>
+      </tbody>
+    </table>`:'';
+}
+
+// Recherche client par téléphone
+function rechercherClientTel(){
+  const search=(document.getElementById('vt_tel_search')?.value||'').toLowerCase();
+  const results=document.getElementById('vt_client_results');
+  if(!results)return;
+  if(search.length<2){results.style.display='none';return;}
+  const found=GP_CLIENTS.filter(c=>
+    (c.telephone||'').toLowerCase().includes(search)||
+    (c.nom||'').toLowerCase().includes(search)
+  ).slice(0,6);
+  if(!found.length){results.style.display='none';return;}
+  results.style.display='block';
+  results.innerHTML=found.map(c=>`
+    <div onclick="selectionnerClientVente('${c.id}')"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'"
+      onmouseout="this.style.background=''">
+      <div style="font-weight:600">${c.nom}
+        <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${c.type_client==='gros'?'GROSSISTE':'DÉTAILLANT'}</span>
+      </div>
+      <div style="font-size:10px;color:var(--textm)">${c.telephone||'—'}</div>
+    </div>`).join('');
+}
+
+function selectionnerClientVente(id){
+  const c=GP_CLIENTS.find(x=>x.id===id);
+  if(!c)return;
+  document.getElementById('vt_client').value=id;
+  document.getElementById('vt_tel_search').value=c.nom+(c.telephone?' — '+c.telephone:'');
+  document.getElementById('vt_client_results').style.display='none';
+  // Appliquer prix selon badge client
+  notify(c.type_client==='gros'?'Client GROSSISTE — prix gros appliqué':'Client DÉTAILLANT — prix détail appliqué','gold');
+}
+
+document.addEventListener('click',function(e){
+  const res=document.getElementById('vt_client_results');
+  const inp=document.getElementById('vt_tel_search');
+  if(res&&inp&&!res.contains(e.target)&&!inp.contains(e.target)) res.style.display='none';
+});
