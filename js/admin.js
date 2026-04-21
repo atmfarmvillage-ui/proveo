@@ -628,7 +628,26 @@ async function saveCoutsFormule(){
             <tbody>
             ${formules.map(f=>`<tr>
               <td style="font-weight:600">${f.nom}<br><span style="font-size:10px;color:var(--textm)">${f.stade||''}</span></td>
-              <td class="num" style="color:var(--gold)">${fmt(getPrix(f.nom))} F</td>
+              <td class="num" style="color:var(--gold)">
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
+                  <span id="pf-val-${f.nom.replace(/\s/g,'-')}">${fmt(getPrix(f.nom))}</span>
+                  <input type="number" id="pf-inp-${f.nom.replace(/\s/g,'-')}" value="${getPrix(f.nom)}"
+                    style="width:70px;display:none;font-size:10px;padding:2px 4px;text-align:right"
+                    onkeydown="if(event.key==='Enter')sauverPrixFormule('${f.nom}');if(event.key==='Escape')annulerPrixFormule('${f.nom}')">
+                  <button class="btn btn-out btn-sm" id="pf-edit-${f.nom.replace(/\s/g,'-')}" onclick="editerPrixFormule('${f.nom}')" style="padding:2px 4px;font-size:9px">✏️</button>
+                  <button class="btn btn-g btn-sm" id="pf-save-${f.nom.replace(/\s/g,'-')}" onclick="sauverPrixFormule('${f.nom}')" style="padding:2px 4px;font-size:9px;display:none">✓</button>
+                </div>
+              </td>
+              <td class="num" style="color:rgba(245,158,11,.8)">
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
+                  <span id="pg-val-${f.nom.replace(/\s/g,'-')}">${fmt(GP_PRIX_GROS[f.nom]||0)}</span>
+                  <input type="number" id="pg-inp-${f.nom.replace(/\s/g,'-')}" value="${GP_PRIX_GROS[f.nom]||0}"
+                    style="width:70px;display:none;font-size:10px;padding:2px 4px;text-align:right"
+                    onkeydown="if(event.key==='Enter')sauverPrixGros('${f.nom}');if(event.key==='Escape')annulerPrixGros('${f.nom}')">
+                  <button class="btn btn-out btn-sm" id="pg-edit-${f.nom.replace(/\s/g,'-')}" onclick="editerPrixGros('${f.nom}')" style="padding:2px 4px;font-size:9px;border-color:rgba(245,158,11,.4)">✏️</button>
+                  <button class="btn btn-g btn-sm" id="pg-save-${f.nom.replace(/\s/g,'-')}" onclick="sauverPrixGros('${f.nom}')" style="padding:2px 4px;font-size:9px;display:none">✓</button>
+                </div>
+              </td>
               <td class="num" style="color:var(--textm)">${f.cout_emballage_kg?fmt(f.cout_emballage_kg)+' F':'-'}</td>
               <td class="num" style="color:var(--textm)">${f.cout_mo_tonne?fmt(f.cout_mo_tonne)+' F':'-'}</td>
               <td>
@@ -1212,4 +1231,60 @@ async function saveCoutsFormule(){
   document.getElementById('modal-couts-formule').style.display='none';
   renderPrixFormules();
   notify('Coûts de production mis à jour ✓','gold');
+}
+
+// ── ÉDITION PRIX DÉTAIL PAR FORMULE ──────────────
+function editerPrixFormule(nom){
+  const key=nom.replace(/\s/g,'-');
+  document.getElementById('pf-val-'+key).style.display='none';
+  document.getElementById('pf-inp-'+key).style.display='inline-block';
+  document.getElementById('pf-edit-'+key).style.display='none';
+  document.getElementById('pf-save-'+key).style.display='inline-flex';
+  document.getElementById('pf-inp-'+key).focus();
+}
+function annulerPrixFormule(nom){
+  const key=nom.replace(/\s/g,'-');
+  document.getElementById('pf-val-'+key).style.display='inline';
+  document.getElementById('pf-inp-'+key).style.display='none';
+  document.getElementById('pf-edit-'+key).style.display='inline-flex';
+  document.getElementById('pf-save-'+key).style.display='none';
+}
+async function sauverPrixFormule(nom){
+  const key=nom.replace(/\s/g,'-');
+  const val=+document.getElementById('pf-inp-'+key)?.value||0;
+  await SB.from('gp_prix_formules').upsert({
+    admin_id:GP_ADMIN_ID,formule_nom:nom,prix:val
+  },{onConflict:'admin_id,formule_nom'});
+  GP_PRIX[nom]=val;
+  document.getElementById('pf-val-'+key).textContent=fmt(val);
+  annulerPrixFormule(nom);
+  notify('Prix détail mis à jour ✓','gold');
+}
+
+// ── ÉDITION PRIX GROS PAR FORMULE ────────────────
+function editerPrixGros(nom){
+  const key=nom.replace(/\s/g,'-');
+  document.getElementById('pg-val-'+key).style.display='none';
+  document.getElementById('pg-inp-'+key).style.display='inline-block';
+  document.getElementById('pg-edit-'+key).style.display='none';
+  document.getElementById('pg-save-'+key).style.display='inline-flex';
+  document.getElementById('pg-inp-'+key).focus();
+}
+function annulerPrixGros(nom){
+  const key=nom.replace(/\s/g,'-');
+  document.getElementById('pg-val-'+key).style.display='inline';
+  document.getElementById('pg-inp-'+key).style.display='none';
+  document.getElementById('pg-edit-'+key).style.display='inline-flex';
+  document.getElementById('pg-save-'+key).style.display='none';
+}
+async function sauverPrixGros(nom){
+  const key=nom.replace(/\s/g,'-');
+  const val=+document.getElementById('pg-inp-'+key)?.value||0;
+  await SB.from('gp_prix_formules').upsert({
+    admin_id:GP_ADMIN_ID,formule_nom:nom,prix_gros:val
+  },{onConflict:'admin_id,formule_nom'});
+  GP_PRIX_GROS[nom]=val;
+  document.getElementById('pg-val-'+key).textContent=fmt(val);
+  annulerPrixGros(nom);
+  notify('Prix gros mis à jour ✓','gold');
 }

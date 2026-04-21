@@ -82,7 +82,6 @@
   <div class="nav-item admin-only" onclick="showGP('matieres')" data-page="matieres"><span class="nav-icon">🌾</span>Matières Premières</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire')" data-page="inventaire"><span class="nav-icon">📋</span>Inventaire mensuel</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">🔍</span>Inventaire physique</div>
-  <div class="nav-item admin-only" onclick="showGP('rapport')" data-page="rapport"><span class="nav-icon">🖨️</span>Rapport production</div>
 
   <div class="nav-sect">Commercial</div>
   <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
@@ -90,6 +89,7 @@
   <div class="nav-item admin-only" onclick="showGP('salaires')" data-page="salaires"><span class="nav-icon">👤</span>Salaires</div>
   <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
+  <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
   <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
 
   <div class="nav-sect">Clients</div>
@@ -98,11 +98,11 @@
   <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
   <div class="nav-sect">Administration</div>
-  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs"><span class="nav-icon">🏢</span>Fournisseurs</div>
-  <div class="nav-item" onclick="showGP('achats')" data-page="achats"><span class="nav-icon">🛒</span>Achats MP</div>
+  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
+  <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
   <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse</div>
   <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
-  <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">📊</span>Inventaire physique</div>
+  <div class="nav-item admin-only" onclick="showGP('dettes')" data-page="dettes"><span class="nav-icon">💳</span>Dettes secrétaires</div>
   <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">👤</span>Équipe</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 </div>
@@ -1173,7 +1173,10 @@
       <div class="a-err" id="dist_err"></div>
     </div>
     <div class="card">
-      <div class="card-title"><div class="ct-left"><span>📦 Stock produits finis par PDV</span></div></div>
+      <div class="card-title">
+        <div class="ct-left"><span>📦 Stock produits finis par PDV</span></div>
+        <button class="btn btn-out btn-sm" onclick="actualiserStockPDV()">🔄</button>
+      </div>
       <div id="stock-pdv-liste"></div>
     </div>
   </div>
@@ -1282,6 +1285,83 @@
   </div>
 </div>
 
+
+<!-- BILAN & RAPPORTS -->
+<div class="page" id="page-bilan_avance">
+  <div class="page-title">Bilan & Rapports</div>
+  <div class="page-sub">Mensuel · Annuel · Production · WhatsApp</div>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+    <button id="bilan-tab-mensuel" class="btn btn-g btn-sm" onclick="switchBilanTab('mensuel')">📅 Bilan mensuel</button>
+    <button id="bilan-tab-annuel" class="btn btn-out btn-sm" onclick="switchBilanTab('annuel')">📆 Bilan annuel</button>
+    <button id="bilan-tab-prod" class="btn btn-out btn-sm" onclick="switchBilanTab('prod')">🏭 Rapport production</button>
+  </div>
+
+  <!-- Bilan mensuel -->
+  <div id="tab-mensuel">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <div><label class="lbl">Mois</label><input type="month" id="bilan-mois" onchange="renderBilanAvance()" style="width:auto"></div>
+      <button class="btn btn-out btn-sm" onclick="renderBilanAvance()">🔄 Actualiser</button>
+    </div>
+    <div class="g4" id="bilan-kpis" style="margin-bottom:14px"></div>
+    <div id="bilan-content"></div>
+  </div>
+
+  <!-- Bilan annuel -->
+  <div id="tab-annuel" style="display:none">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <div><label class="lbl">Année</label>
+        <select id="bilan-annee" onchange="renderBilanAnnuel()" style="width:auto">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+        </select>
+      </div>
+      <button class="btn btn-out btn-sm" onclick="renderBilanAnnuel()">🔄 Actualiser</button>
+    </div>
+    <div id="bilan-annuel-content"></div>
+  </div>
+
+  <!-- Rapport production -->
+  <div id="tab-prod" style="display:none">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <div><label class="lbl">Mois</label><input type="month" id="rapport-mois" onchange="renderRapportProduction()" style="width:auto"></div>
+      <button class="btn btn-out btn-sm" onclick="renderRapportProduction()">🔄 Actualiser</button>
+    </div>
+    <div class="g4" id="rapport-prod-kpis" style="margin-bottom:14px"></div>
+    <div id="rapport-prod-content"></div>
+  </div>
+</div>
+
+<!-- DETTES SECRÉTAIRES -->
+<div class="page" id="page-dettes">
+  <div class="page-title">Dettes Secrétaires</div>
+  <div class="page-sub">Suivi des écarts d'inventaire · Remboursements</div>
+  <div class="g4" id="dettes-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>💳 Enregistrer un remboursement</span></div></div>
+      <div class="fr"><label>Secrétaire</label><select id="dette-membre-select"></select></div>
+      <div class="fr"><label>Montant remboursé (F)</label><input type="number" id="dette-montant" placeholder="50000"></div>
+      <div class="fr"><label>Mode</label>
+        <select id="dette-mode">
+          <option value="especes">Espèces</option>
+          <option value="deduction_salaire">Déduction salaire</option>
+          <option value="mobile_money">Mobile Money</option>
+        </select>
+      </div>
+      <div class="fr"><label>Note</label><input type="text" id="dette-note" placeholder="Remboursement partiel..."></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveRemboursement()">✓ Enregistrer</button>
+      <div class="a-err" id="dette-err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Dettes en cours</span></div></div>
+      <div id="dettes-liste"></div>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
@@ -1366,9 +1446,13 @@
 <script src="js/inventaire_physique.js"></script>
 <script src="js/distribution.js"></script>
 <script src="js/salaires.js"></script>
+<script src="js/rapports.js"></script>
+<script src="js/dettes.js"></script>
 <script src="js/inventaire_physique.js"></script>
 <script src="js/distribution.js"></script>
 <script src="js/salaires.js"></script>
+<script src="js/rapports.js"></script>
+<script src="js/dettes.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/stock.js"></script>

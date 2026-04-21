@@ -81,6 +81,51 @@ function preFillAppel(clientId){
   document.getElementById('app_client').scrollIntoView({behavior:'smooth',block:'center'});
 }
 
+
+// ── PROSPECTION AMÉLIORÉE ─────────────────────────
+async function verifierProspect(){
+  const tel=document.getElementById('app_tel')?.value.trim();
+  const nom=document.getElementById('app_nom')?.value.trim();
+  if(!tel&&!nom)return;
+  const info=document.getElementById('prospect-info');
+  if(!info)return;
+
+  // Chercher dans les clients existants
+  let query=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID);
+  if(tel) query=query.eq('telephone',tel);
+  else if(nom) query=query.ilike('nom','%'+nom+'%');
+  const{data:clients}=await query.limit(1);
+
+  if(clients?.length){
+    const c=clients[0];
+    info.innerHTML=`<div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:8px;padding:8px 12px;font-size:11px">
+      ✅ <strong>Client existant :</strong> ${c.nom} — ${c.telephone||'—'}
+      <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-g'}" style="font-size:9px;margin-left:4px">${c.type_client==='gros'?'GROSSISTE':'DÉTAILLANT'}</span>
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">Total achats : ${fmt(c.total_achats||0)} F</div>
+    </div>`;
+  } else if(tel||nom){
+    info.innerHTML=`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px 12px;font-size:11px">
+      🔍 Prospect non enregistré
+      <button class="btn btn-g btn-sm" style="margin-left:8px" onclick="convertirProspectEnClient()">➕ Ajouter comme client</button>
+    </div>`;
+  }
+}
+
+async function convertirProspectEnClient(){
+  const tel=document.getElementById('app_tel')?.value.trim();
+  const nom=document.getElementById('app_nom')?.value.trim();
+  if(!nom){notify('Entrez le nom du prospect','r');return;}
+  const{error}=await SB.from('gp_clients').insert({
+    admin_id:GP_ADMIN_ID,nom,telephone:tel,
+    type_client:'detail',total_achats:0
+  });
+  if(error){notify('Erreur: '+error.message,'r');return;}
+  await loadClients();
+  populateSelects();
+  notify(nom+' ajouté comme client ✓','gold');
+  verifierProspect();
+}
+
 async function saveAppel(){
   const clientId=document.getElementById('app_client').value;
   const tel=document.getElementById('app_tel').value.trim();

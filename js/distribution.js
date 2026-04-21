@@ -337,3 +337,5 @@ async function voirDetailLivraison(id){
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement.</div>'}`;
   modal.style.display='flex';
 }
+
+function actualiserStockPDV(){renderDistribution();notify('Stock actualisé ✓','gold');}

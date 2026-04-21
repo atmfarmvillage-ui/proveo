@@ -12,7 +12,7 @@ async function renderDashboard(){
   const caMois=V.filter(v=>v.date>=mDebut).reduce((s,v)=>s+Number(v.montant_total||0),0);
   const impaye=V.reduce((s,v)=>s+(Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
   const depMois=D.filter(d=>d.date>=mDebut).reduce((s,d)=>s+Number(d.montant||0),0);
-  const prodMois=L.filter(l=>l.date>=mDebut).reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const prodMois=L.filter(l=>l.date>=mDebut).reduce((s,l)=>s+Number(l.quantite_kg||0),0);
   // Stock alerts
   const niveaux=calcNiveaux(S);
   const alertes=Object.entries(niveaux).filter(([nom,n])=>{
@@ -31,7 +31,7 @@ async function renderDashboard(){
   const derniersLots=L.slice(0,4).map(l=>`
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
       <div><div style="font-weight:600">${ESPECE_ICON[l.espece]||''} ${l.formule_nom}</div><div style="color:var(--textm)">${l.date} · ${l.ref||''}</div></div>
-      <div style="text-align:right;font-family:'DM Mono',monospace;color:var(--g6)">${fmt(l.qte_produite)} kg</div>
+      <div style="text-align:right;font-family:'DM Mono',monospace;color:var(--g6)">${fmt(l.quantite_kg)} kg</div>
     </div>`).join('');
   const alerteH=alertes.slice(0,5).map(([nom,n])=>`
     <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;border-bottom:1px solid rgba(239,68,68,.1)">
@@ -43,6 +43,27 @@ async function renderDashboard(){
       <div><div style="font-weight:600">${v.client_nom||'—'}</div><div style="color:var(--textm)">${v.formule_nom||'—'} · ${fmtKg(v.qte_vendue)} kg</div></div>
       ${isAdmin?`<div style="text-align:right"><div style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(v.montant_total)} F</div><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${v.statut_paiement}</span></div>`:'<div></div>'}
     </div>`).join('');
+  // Dashboard PDV pour secrétaire
+  if(GP_POINT_VENTE){
+    const banner=document.getElementById('dash-pdv-banner');
+    if(banner)banner.style.display='block';
+    const nomEl=document.getElementById('dash-pdv-nom');
+    if(nomEl)nomEl.textContent=GP_POINT_VENTE;
+    // Stock PDV
+    const{data:stockPDV}=await SB.from('gp_stock_produits_pdv').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE);
+    const SP=stockPDV||[];
+    const ok=SP.filter(s=>s.qte_disponible>s.seuil_critique).length;
+    const alerte=SP.filter(s=>s.qte_disponible<=s.seuil_critique).length;
+    const ventesJourEl=document.getElementById('dash-pdv-ventes-jour');
+    const stockOkEl=document.getElementById('dash-pdv-stock-ok');
+    const stockAlEl=document.getElementById('dash-pdv-stock-alert');
+    if(stockOkEl)stockOkEl.textContent=ok;
+    if(stockAlEl){stockAlEl.textContent=alerte;stockAlEl.style.color=alerte>0?'var(--red)':'var(--green)';}
+    const ventesAuj=V.filter(v=>v.date===today()&&v.point_vente===GP_POINT_VENTE);
+    if(ventesJourEl)ventesJourEl.textContent=fmt(ventesAuj.reduce((s,v)=>s+Number(v.montant_total||0),0))+' F';
+  }
+
   document.getElementById('dash-body').innerHTML=`
     <div>
       <div class="card">

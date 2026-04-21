@@ -110,6 +110,17 @@ async function bootApp(user){
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('topbar').style.display='flex';
   document.getElementById('sidebar').style.display='block';
+  // Gérer visibilité nav selon rôle
+  document.querySelectorAll('.nav-item').forEach(item=>{
+    const roles=item.dataset.roles;
+    if(roles){
+      const allowed=roles.split(',').map(r=>r.trim());
+      item.style.display=allowed.includes(GP_ROLE)?'flex':'none';
+    }
+    if(item.classList.contains('admin-only')){
+      item.style.display=GP_ROLE==='admin'?'flex':'none';
+    }
+  });
   document.getElementById('main').style.display='block';
   // Set role in topbar
   document.getElementById('tb-role-badge').textContent=GP_ROLE.toUpperCase();
@@ -166,20 +177,13 @@ function applyRoleRestrictions(){
 function showGP(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const pg=document.getElementById('page-'+page);
-  if(pg)pg.classList.add('active');
-  document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
-  const loaders={
-    dashboard:renderDashboard,stock:()=>{renderStockNiveaux();renderMouvements();},
-    production:renderLots,inventaire:renderInventaire,rapport:renderRapport,
-    ventes:()=>{renderVentes();updateVentesKPIs();},depenses:renderDep,
-    bilan_jour:renderBilanJour,remises:renderRemises,
-    clients:renderClients,suivi:renderSuivi,classement:renderClassement,
-    formules:()=>{renderPrixFormules();renderIngrAdmin();},equipe:renderEquipe,config:loadConfigForm
-  };
-  if(loaders[page])loaders[page]();
-  if(window.innerWidth<=768){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
+  const pageEl=document.getElementById('page-'+page);
+  if(pageEl)pageEl.classList.add('active');
+  const navEl=document.querySelector(`[data-page="${page}"]`);
+  if(navEl)navEl.classList.add('active');
+  if(PAGE_RENDERERS[page])PAGE_RENDERERS[page]();
 }
+
 
 // ── DATA LOADERS ───────────────────────────────────
 async function loadConfig(){
