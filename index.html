@@ -816,12 +816,10 @@
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>➕ Nouveau fournisseur</span></div></div>
-      <div class="fr"><label>Nom *</label><input type="text" id="fn_nom" placeholder="Nom du fournisseur"></div>
-      <div class="fg2">
-        <div class="fr"><label>Téléphone</label><input type="tel" id="fn_tel" placeholder="+228 90 00 00 00"></div>
-        <div class="fr"><label>WhatsApp</label><input type="tel" id="fn_wa" placeholder="+228 90 00 00 00"></div>
-      </div>
-      <div class="fr"><label>Nom du contact</label><input type="text" id="fn_contact" placeholder="Jean Adekou"></div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:10px">Remplissez au moins un des deux premiers champs. Pour un particulier, remplissez uniquement "Personne de contact".</div>
+      <div class="fr"><label>Nom de l'entreprise</label><input type="text" id="fn_nom" placeholder="Ex: Société Agro Togo, Ferme Adekou..."></div>
+      <div class="fr"><label>Personne de contact</label><input type="text" id="fn_contact" placeholder="Ex: Jean Adekou"></div>
+      <div class="fr"><label>WhatsApp / Téléphone</label><input type="tel" id="fn_wa" placeholder="+228 90 00 00 00"></div>
       <div class="fr"><label>Adresse</label><input type="text" id="fn_adresse" placeholder="Lomé, Togo"></div>
       <div class="fg2">
         <div class="fr"><label>Condition de paiement</label>
@@ -906,11 +904,16 @@
       </div>
       <hr class="divider">
       <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ingrédients à commander</div>
+      <div class="fr" style="position:relative"><label>Rechercher un ingrédient</label>
+        <input type="text" id="achat_ingr_search" placeholder="🔍 Tapez le nom de l'ingrédient..." oninput="filtrerIngrAchat()" autocomplete="off">
+        <div id="achat_ingr_results" style="display:none;position:absolute;z-index:99;background:var(--card2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;width:100%;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>
+        <input type="hidden" id="achat_ingr">
+        <div id="achat_ingr_selected" style="font-size:11px;color:var(--g6);margin-top:4px;display:none"></div>
+      </div>
       <div class="fg2" style="align-items:end">
-        <div class="fr" style="flex:2"><label>Ingrédient</label><select id="achat_ingr"></select></div>
         <div class="fr"><label>Quantité (kg)</label><input type="number" id="achat_qte" placeholder="500" step="0.1"></div>
         <div class="fr"><label>Prix/kg (F)</label><input type="number" id="achat_prix" placeholder="200"></div>
-        <button class="btn btn-out btn-sm" onclick="ajouterLigneAchat()" style="margin-bottom:0">➕</button>
+        <button class="btn btn-g btn-sm" onclick="ajouterLigneAchat()" style="margin-bottom:0;white-space:nowrap">➕ Ajouter</button>
       </div>
       <div id="achat-lignes-preview"></div>
       <div class="fr" style="margin-top:10px"><label>Note logistique</label><textarea id="achat_note" rows="2" placeholder="Instructions spéciales..."></textarea></div>

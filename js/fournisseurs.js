@@ -19,7 +19,7 @@ async function renderFournisseurs(){
       <tbody>
       ${F.map(f=>`<tr>
         <td><div style="font-weight:700">${f.nom}</div><div style="font-size:10px;color:var(--textm)">${f.adresse||''}</div></td>
-        <td><div style="font-size:11px">${f.contact_nom||'—'}</div><div style="font-size:10px;color:var(--textm)">${f.telephone||''}</div></td>
+        <td><div style="font-size:11px">${f.contact_nom||'—'}</div><div style="font-size:10px;color:var(--textm)">${f.whatsapp||''}</div></td>
         <td><span class="badge ${f.condition_paiement==='credit'?'bdg-gold':f.condition_paiement==='avance'?'bdg-r':'bdg-g'}" style="font-size:9px">${condLabel(f.condition_paiement)}</span></td>
         <td class="num" id="fa-${f.id}">—</td>
         <td class="num" id="fd-${f.id}" style="color:var(--red)">—</td>
@@ -70,22 +70,25 @@ async function loadFournisseurStats(){
 
 // ── AJOUTER FOURNISSEUR ───────────────────────────
 async function saveFournisseur(){
-  const nom=document.getElementById('fn_nom')?.value.trim();
+  const nom=document.getElementById('fn_nom')?.value.trim()||null;
+  const contact=document.getElementById('fn_contact')?.value.trim()||null;
   const err=document.getElementById('fn_err');
-  if(!nom){err.textContent='Nom requis.';return;}
+  // Au moins un des deux doit être rempli
+  if(!nom&&!contact){err.textContent='Remplissez au moins le nom de l\'entreprise ou la personne de contact.';return;}
+  // Nom d'affichage : entreprise si disponible, sinon contact
+  const nomAffichage=nom||contact;
   const{error}=await SB.from('gp_fournisseurs').insert({
     admin_id:GP_ADMIN_ID,
-    nom,
-    telephone:document.getElementById('fn_tel')?.value.trim()||null,
+    nom:nomAffichage,
     whatsapp:document.getElementById('fn_wa')?.value.trim()||null,
     adresse:document.getElementById('fn_adresse')?.value.trim()||null,
-    contact_nom:document.getElementById('fn_contact')?.value.trim()||null,
+    contact_nom:contact,
     condition_paiement:document.getElementById('fn_condition')?.value||'livraison',
     delai_credit_jours:+document.getElementById('fn_delai')?.value||0,
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   err.textContent='';
-  ['fn_nom','fn_tel','fn_wa','fn_adresse','fn_contact'].forEach(id=>{
+  ['fn_nom','fn_wa','fn_adresse','fn_contact'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   populateFournisseurSelect();

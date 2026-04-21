@@ -7,8 +7,9 @@ let ACHAT_LIGNES = []; // lignes du bon en cours
 
 // ── PAGE PRINCIPALE ───────────────────────────────
 async function renderAchats(){
+  // Recharger les ingrédients si nécessaire
+  if(!GP_INGREDIENTS.length) await loadIngredients();
   await populateFournisseurSelect();
-  populateIngredientsAchat();
 
   const{data}=await SB.from('gp_achats').select('*')
     .eq('admin_id',GP_ADMIN_ID)
@@ -83,7 +84,7 @@ function actionsAchat(a){
 // ── CRÉER UN BON DE COMMANDE ──────────────────────
 function ajouterLigneAchat(){
   const ingr=document.getElementById('achat_ingr')?.value;
-  const ingrNom=document.getElementById('achat_ingr')?.options[document.getElementById('achat_ingr').selectedIndex]?.text?.split(' (')[0];
+  const ingrNom=document.getElementById('achat_ingr_search')?.value.trim();
   const qte=+document.getElementById('achat_qte')?.value||0;
   const prix=+document.getElementById('achat_prix')?.value||0;
 
@@ -99,6 +100,10 @@ function ajouterLigneAchat(){
   ACHAT_LIGNES.push({ingredient_id:ingr,ingredient_nom:ingrNom,qte_commandee:qte,prix_unitaire:prix,montant_ligne:qte*prix});
   document.getElementById('achat_qte').value='';
   document.getElementById('achat_prix').value='';
+  document.getElementById('achat_ingr').value='';
+  document.getElementById('achat_ingr_search').value='';
+  const sel=document.getElementById('achat_ingr_selected');
+  if(sel){sel.style.display='none';sel.innerHTML='';}
   renderLignesAchat();
 }
 
@@ -331,9 +336,54 @@ async function voirDetailAchat(id){
 }
 
 function populateIngredientsAchat(){
-  const sel=document.getElementById('achat_ingr');
-  if(!sel)return;
-  sel.innerHTML='<option value="">— Sélectionner —</option>'+
-    [...GP_INGREDIENTS].sort((a,b)=>a.nom.localeCompare(b.nom))
-    .map(i=>`<option value="${i.id}">${i.nom} (${fmt(i.prix_actuel||0)} F/kg)</option>`).join('');
+  // La liste est gérée par la recherche — rien à faire ici
 }
+
+function filtrerIngrAchat(){
+  const search=document.getElementById('achat_ingr_search')?.value.toLowerCase().trim()||'';
+  const results=document.getElementById('achat_ingr_results');
+  if(!results)return;
+  if(!search){results.style.display='none';return;}
+
+  const filtered=[...GP_INGREDIENTS]
+    .filter(i=>i.nom.toLowerCase().includes(search))
+    .sort((a,b)=>a.nom.localeCompare(b.nom))
+    .slice(0,10);
+
+  if(!filtered.length){
+    results.style.display='none';return;
+  }
+
+  results.style.display='block';
+  results.innerHTML=filtered.map(i=>`
+    <div onclick="selectionnerIngrAchat('${i.id}','${i.nom.replace(/'/g,"\'")}',${i.prix_actuel||0})"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);transition:background .15s"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'"
+      onmouseout="this.style.background=''">
+      <span style="font-weight:600">${i.nom}</span>
+      <span style="color:var(--textm);margin-left:8px">${fmt(i.prix_actuel||0)} F/kg</span>
+    </div>`).join('');
+}
+
+function selectionnerIngrAchat(id,nom,prix){
+  document.getElementById('achat_ingr').value=id;
+  document.getElementById('achat_ingr_search').value=nom;
+  document.getElementById('achat_ingr_results').style.display='none';
+  const selected=document.getElementById('achat_ingr_selected');
+  if(selected){
+    selected.style.display='block';
+    selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg`;
+  }
+  // Pré-remplir le prix
+  const prixEl=document.getElementById('achat_prix');
+  if(prixEl&&prix>0)prixEl.value=prix;
+}
+
+// Fermer la liste si clic ailleurs
+document.addEventListener('click',function(e){
+  const search=document.getElementById('achat_ingr_search');
+  const results=document.getElementById('achat_ingr_results');
+  if(search&&results&&!search.contains(e.target)&&!results.contains(e.target)){
+    results.style.display='none';
+  }
+});

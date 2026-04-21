@@ -63,6 +63,7 @@ async function renderCaisse(){
   // Remplir les selects de transfert
   populateCaisseSelects(caisses,soldes);
 
+  // Remplir les selects de transfert (après rendu)
   // Mouvements récents
   const recents=M.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,20);
   const caisseMap={};
@@ -85,8 +86,9 @@ function populateCaisseSelects(caisses,soldes){
   ['mvt-caisse','transfert-source','transfert-dest'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
+    const cur=el.value; // Garder la sélection actuelle
     el.innerHTML='<option value="">— Sélectionner —</option>'+
-      caisses.map(c=>`<option value="${c.id}">${c.type==='banque'?'🏦':'💵'} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
+      caisses.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
   });
 }
 
