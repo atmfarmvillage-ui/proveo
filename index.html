@@ -95,6 +95,9 @@
   <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
   <div class="nav-sect">Administration</div>
+  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs"><span class="nav-icon">🏢</span>Fournisseurs</div>
+  <div class="nav-item" onclick="showGP('achats')" data-page="achats"><span class="nav-icon">🛒</span>Achats MP</div>
+  <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse</div>
   <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
   <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">👤</span>Équipe</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
@@ -742,6 +745,8 @@
       <div class="fr"><label>Rôle</label>
         <select id="eq_role">
           <option value="secretaire">Secrétaire (saisie uniquement)</option>
+          <option value="logistique">Logistique (achats MP)</option>
+          <option value="daf">DAF (validation financière)</option>
           <option value="admin">Admin (accès complet)</option>
         </select>
       </div>
@@ -799,6 +804,227 @@
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Membres sans point de vente assigné</div>
     <div id="equipe-siege"></div>
+  </div>
+</div>
+
+
+<!-- FOURNISSEURS -->
+<div class="page" id="page-fournisseurs">
+  <div class="page-title">Fournisseurs</div>
+  <div class="page-sub">Gérer les fournisseurs · Bilans d'achats · Paiements</div>
+  <div class="g4" id="fourn-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Nouveau fournisseur</span></div></div>
+      <div class="fr"><label>Nom *</label><input type="text" id="fn_nom" placeholder="Nom du fournisseur"></div>
+      <div class="fg2">
+        <div class="fr"><label>Téléphone</label><input type="tel" id="fn_tel" placeholder="+228 90 00 00 00"></div>
+        <div class="fr"><label>WhatsApp</label><input type="tel" id="fn_wa" placeholder="+228 90 00 00 00"></div>
+      </div>
+      <div class="fr"><label>Nom du contact</label><input type="text" id="fn_contact" placeholder="Jean Adekou"></div>
+      <div class="fr"><label>Adresse</label><input type="text" id="fn_adresse" placeholder="Lomé, Togo"></div>
+      <div class="fg2">
+        <div class="fr"><label>Condition de paiement</label>
+          <select id="fn_condition">
+            <option value="livraison">À la livraison</option>
+            <option value="avance">Avance (avant livraison)</option>
+            <option value="credit">Crédit (après livraison)</option>
+            <option value="tranches">En tranches</option>
+          </select>
+        </div>
+        <div class="fr"><label>Délai crédit (jours)</label><input type="number" id="fn_delai" value="0" placeholder="30"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveFournisseur()">➕ Ajouter</button>
+      <div class="a-err" id="fn_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🏢 Liste des fournisseurs</span></div></div>
+      <div id="fourn-liste"></div>
+    </div>
+  </div>
+
+  <!-- Modal bilan fournisseur -->
+  <div id="modal-bilan-fourn" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div id="bilan-fourn-titre" style="font-weight:700;font-size:15px"></div>
+        <button onclick="document.getElementById('modal-bilan-fourn').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="bilan-fourn-content"></div>
+    </div>
+  </div>
+
+  <!-- Modal paiement fournisseur -->
+  <div id="modal-paiement-fourn" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">💳 Paiement fournisseur</div>
+      <div id="pf-fourn-nom" style="font-size:12px;color:var(--textm);margin-bottom:14px"></div>
+      <div class="fr"><label>Commande</label><select id="pf-achat-select" style="width:100%"></select></div>
+      <div class="fg2">
+        <div class="fr"><label>Montant (FCFA)</label><input type="number" id="pf-montant" placeholder="50000"></div>
+        <div class="fr"><label>Mode</label>
+          <select id="pf-mode">
+            <option value="especes">Espèces</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="virement">Virement</option>
+            <option value="cheque">Chèque</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr"><label>Référence (optionnel)</label><input type="text" id="pf-ref" placeholder="N° chèque, reçu..."></div>
+      <div class="a-err" id="pf-err"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="savePaiementFourn()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+        <button class="btn btn-out" onclick="document.getElementById('modal-paiement-fourn').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ACHATS MP -->
+<div class="page" id="page-achats">
+  <div class="page-title">Achats Matières Premières</div>
+  <div class="page-sub">Bons de commande · Réception · Validation DAF</div>
+  <div class="g4" id="achats-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Nouveau bon de commande</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Fournisseur *</label><select id="achat_fournisseur"></select></div>
+        <div class="fr"><label>Condition paiement</label>
+          <select id="achat_condition">
+            <option value="livraison">À la livraison</option>
+            <option value="avance">Avance</option>
+            <option value="credit">Crédit</option>
+            <option value="tranches">En tranches</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Date commande</label><input type="date" id="achat_date"></div>
+        <div class="fr"><label>Livraison prévue</label><input type="date" id="achat_date_liv"></div>
+      </div>
+      <hr class="divider">
+      <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ingrédients à commander</div>
+      <div class="fg2" style="align-items:end">
+        <div class="fr" style="flex:2"><label>Ingrédient</label><select id="achat_ingr"></select></div>
+        <div class="fr"><label>Quantité (kg)</label><input type="number" id="achat_qte" placeholder="500" step="0.1"></div>
+        <div class="fr"><label>Prix/kg (F)</label><input type="number" id="achat_prix" placeholder="200"></div>
+        <button class="btn btn-out btn-sm" onclick="ajouterLigneAchat()" style="margin-bottom:0">➕</button>
+      </div>
+      <div id="achat-lignes-preview"></div>
+      <div class="fr" style="margin-top:10px"><label>Note logistique</label><textarea id="achat_note" rows="2" placeholder="Instructions spéciales..."></textarea></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center;margin-top:8px" onclick="saveAchat()">📋 Créer le bon de commande</button>
+      <div class="a-err" id="achat_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Bons de commande</span></div></div>
+      <div id="achats-liste"></div>
+    </div>
+  </div>
+
+  <!-- Modal réception -->
+  <div id="modal-reception" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto">
+      <div style="font-weight:700;font-size:15px;margin-bottom:14px">📦 Confirmer la réception</div>
+      <div id="reception-lignes"></div>
+      <input type="hidden" id="reception-achat-id">
+      <div class="fr" style="margin-top:12px"><label>Note de réception</label><textarea id="reception-note" rows="2" placeholder="Observations sur la livraison..."></textarea></div>
+      <div class="a-err" id="reception-err"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-g" onclick="confirmerReception()" style="flex:1;justify-content:center">✅ Confirmer la réception</button>
+        <button class="btn btn-out" onclick="document.getElementById('modal-reception').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal détail achat -->
+  <div id="modal-detail-achat" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">📋 Détail commande</div>
+        <button onclick="document.getElementById('modal-detail-achat').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="detail-achat-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CAISSE -->
+<div class="page" id="page-caisse">
+  <div class="page-title">Caisse & Banques</div>
+  <div class="page-sub">Caisse physique · Comptes bancaires · Transferts</div>
+  <div class="g4" id="caisse-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start;margin-bottom:14px">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Nouvelle caisse / banque</span></div></div>
+      <div class="fg2">
+        <div class="fr"><label>Nom</label><input type="text" id="caisse_nom" placeholder="Caisse Bureau, Ecobank..."></div>
+        <div class="fr"><label>Type</label>
+          <select id="caisse_type">
+            <option value="physique">💵 Caisse physique</option>
+            <option value="banque">🏦 Banque</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Solde initial (F)</label><input type="number" id="caisse_solde_init" value="0"></div>
+        <div class="fr"><label>Couleur</label><input type="color" id="caisse_couleur" value="#16A34A" style="height:40px;padding:4px"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveCaisse()">➕ Créer</button>
+      <div class="a-err" id="caisse_err"></div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Transfert entre caisses</div>
+      <div class="card">
+        <div class="fr"><label>De (source)</label><select id="transfert-source"></select></div>
+        <div class="fr"><label>Vers (destination)</label><select id="transfert-dest"></select></div>
+        <div class="fr"><label>Montant (F)</label><input type="number" id="transfert-montant" placeholder="50000"></div>
+        <div class="fr"><label>Description</label><input type="text" id="transfert-desc" placeholder="Dépôt banque, retrait..."></div>
+        <div class="a-err" id="transfert-err"></div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveTransfert()">⇄ Effectuer le transfert</button>
+      </div>
+    </div>
+  </div>
+  <div id="caisses-cartes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:14px"></div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📋 Mouvements récents</span></div></div>
+    <div id="mouvements-caisse-liste"></div>
+  </div>
+
+  <!-- Modal mouvement -->
+  <div id="modal-mvt-caisse" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%">
+      <div id="mvt-caisse-titre" style="font-weight:700;font-size:15px;margin-bottom:14px"></div>
+      <div class="fr"><label>Montant (F) *</label><input type="number" id="mvt-montant" placeholder="50000"></div>
+      <div class="fr"><label>Catégorie</label>
+        <select id="mvt-categorie">
+          <option value="vente">💰 Recette vente</option>
+          <option value="achat_mp">🌾 Achat matière première</option>
+          <option value="salaire">👤 Salaire</option>
+          <option value="depot_banque">🏦 Dépôt banque</option>
+          <option value="retrait_banque">💵 Retrait banque</option>
+          <option value="autre">📝 Autre</option>
+        </select>
+      </div>
+      <div class="fr"><label>Description</label><input type="text" id="mvt-desc" placeholder="Détails..."></div>
+      <div class="a-err" id="mvt-err"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-g" onclick="saveMouvement()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+        <button class="btn btn-out" onclick="document.getElementById('modal-mvt-caisse').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal historique caisse -->
+  <div id="modal-historique-caisse" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:650px;width:100%;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div id="historique-caisse-titre" style="font-weight:700;font-size:15px"></div>
+        <button onclick="document.getElementById('modal-historique-caisse').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="historique-caisse-content"></div>
+    </div>
   </div>
 </div>
 
@@ -880,6 +1106,9 @@
 <script src="js/config.js"></script>
 <script src="js/print.js"></script>
 <script src="js/matieres.js"></script>
+<script src="js/fournisseurs.js"></script>
+<script src="js/achats.js"></script>
+<script src="js/caisse.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/stock.js"></script>
