@@ -12,36 +12,42 @@ function previewLot(){
   const nom=document.getElementById('lot_formule').value;
   const qte=+document.getElementById('lot_qte').value||0;
   const f=getFormule(nom);
-  // Coûts depuis la formule (pré-remplis automatiquement)
-  const avecEmb=f?.avec_emballage!==false;
-  const avecTrans=f?.avec_transport===true;
-  const mo=f?.cout_mo_tonne?f.cout_mo_tonne*(qte/1000):0;
-  const emb=avecEmb&&f?.cout_emballage_kg?f.cout_emballage_kg*qte:0;
-  const transport=avecTrans&&f?.cout_transport_lot?f.cout_transport_lot:0;
+  const coutZone=document.getElementById('lot-couts-auto');
+
+  if(f&&nom){
+    if(coutZone)coutZone.style.display='block';
+    // Pré-cocher cases selon formule (une seule fois)
+    const avecEmbCheck=document.getElementById('lot_avec_emb');
+    const avecTransCheck=document.getElementById('lot_avec_trans');
+    if(avecEmbCheck&&!avecEmbCheck.dataset.touched) avecEmbCheck.checked=f.avec_emballage!==false;
+    if(avecTransCheck&&!avecTransCheck.dataset.touched) avecTransCheck.checked=f.avec_transport===true;
+  } else {
+    if(coutZone)coutZone.style.display='none';
+  }
 
   if(!nom||!qte){
     document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
     document.getElementById('lot-mp-preview').style.display='none';
     return;
   }
-  // Calculate MP needed
-  let coutMP=0;
-  if(f){
-    const mpLines=f.ingredients.map(ing=>{
-      const kgNeeded=(ing.pct/100)*qte;
-      const ingData=GP_INGREDIENTS.find(i=>i.nom.toLowerCase().includes(ing.nom.toLowerCase().slice(0,6)));
-      const prixKg=ingData?.prix_actuel||0;
-      coutMP+=kgNeeded*prixKg;
-      return{nom:ing.nom,kg:kgNeeded,pct:ing.pct,prix:prixKg};
-    });
-    document.getElementById('lot-mp-list').innerHTML=mpLines.map(l=>`
-      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
-        <span>${l.nom} (${l.pct}%)</span>
-        <span style="font-family:'DM Mono',monospace;color:var(--g6)">${fmtKg(l.kg)} kg</span>
-      </div>`).join('');
-    document.getElementById('lot-mp-preview').style.display='block';
-  }
-  const coutTotal=coutMP+mo+emb+(transport||0);
+
+  const avecEmb=document.getElementById('lot_avec_emb')?.checked||false;
+  const avecTrans=document.getElementById('lot_avec_trans')?.checked||false;
+  const moVal=f?.cout_mo_tonne?(f.cout_mo_tonne*(qte/1000)):0;
+  const embVal=avecEmb&&f?.cout_emballage_kg?(f.cout_emballage_kg*qte):0;
+  const transVal=avecTrans&&f?.cout_transport_lot?f.cout_transport_lot:0;
+
+  // Mettre à jour labels et hidden inputs
+  const moLabel=document.getElementById('lot_mo_label');
+  const embLabel=document.getElementById('lot_emb_label');
+  const transLabel=document.getElementById('lot_trans_label');
+  if(moLabel)moLabel.textContent=fmt(moVal)+' F';
+  if(embLabel)embLabel.textContent=fmt(embVal)+' F';
+  if(transLabel)transLabel.textContent=fmt(transVal)+' F';
+  if(document.getElementById('lot_mo'))document.getElementById('lot_mo').value=moVal;
+  if(document.getElementById('lot_emb'))document.getElementById('lot_emb').value=embVal;
+
+
   const prixVente=getPrix(nom);
   const margeKg=prixVente-coutTotal/Math.max(1,qte);
   document.getElementById('lot-preview').innerHTML=`
@@ -59,12 +65,11 @@ async function saveLot(){
   const date=document.getElementById('lot_date').value;
   const qte=+document.getElementById('lot_qte').value||0;
   const ref=document.getElementById('lot_ref').value.trim();
-  // Coûts automatiques depuis la formule
+  // Lire les coûts depuis les champs hidden (mis à jour par previewLot)
+  const mo=+document.getElementById('lot_mo')?.value||0;
+  const emb=+document.getElementById('lot_emb')?.value||0;
   const fData=getFormule(nom);
-  const avecEmb=fData?.avec_emballage!==false;
-  const avecTrans=fData?.avec_transport===true;
-  const mo=fData?.cout_mo_tonne?fData.cout_mo_tonne*(qte/1000):0;
-  const emb=avecEmb&&fData?.cout_emballage_kg?fData.cout_emballage_kg*qte:0;
+  const avecTrans=document.getElementById('lot_avec_trans')?.checked;
   const transport=avecTrans&&fData?.cout_transport_lot?fData.cout_transport_lot:0;
   const obs=document.getElementById('lot_obs').value.trim();
   const pv=document.getElementById('lot_pv').value.trim();

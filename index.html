@@ -134,11 +134,23 @@
       </div>
       <div class="fg2">
         <div class="fr"><label>Quantité produite (kg)</label><input type="number" id="lot_qte" placeholder="1000" oninput="previewLot()"></div>
-        <div class="fr"><label>Main d'œuvre (FCFA)</label><input type="number" id="lot_mo" value="0" oninput="previewLot()"></div>
       </div>
-      <div class="fg2">
-        <div class="fr"><label>Emballage (FCFA)</label><input type="number" id="lot_emb" value="0" oninput="previewLot()"></div>
-        <div class="fr"><label>Point de vente</label><input type="text" id="lot_pv" placeholder="Dépôt principal"></div>
+      <!-- Coûts automatiques depuis la formule -->
+      <div id="lot-couts-auto" style="display:none;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">
+        <div style="font-weight:700;color:var(--g6);margin-bottom:6px">💡 Coûts pré-remplis depuis la formule</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="lot_avec_emb" onchange="previewLot()">
+            <span>Emballage : <strong id="lot_emb_label">0 F</strong></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="lot_avec_trans" onchange="previewLot()">
+            <span>Transport : <strong id="lot_trans_label">0 F</strong></span>
+          </label>
+          <span>MO : <strong id="lot_mo_label">0 F</strong></span>
+        </div>
+        <input type="hidden" id="lot_mo" value="0">
+        <input type="hidden" id="lot_emb" value="0">
       </div>
       <div class="fr"><label>Observations</label><input type="text" id="lot_obs" placeholder="Notes..."></div>
       <div id="lot-preview" style="background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px">Sélectionnez une formule et une quantité.</div>
@@ -732,6 +744,62 @@
 </div>
 
 <!-- ÉQUIPE (admin) -->
+<!-- MODAL COÛTS DE PRODUCTION -->
+<div id="modal-couts-formule" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px">⚙️ Coûts de production</div>
+    <div id="cf-formule-nom" style="font-size:12px;color:var(--gold);margin-bottom:14px"></div>
+    <input type="hidden" id="cf-formule-id">
+    <input type="hidden" id="cf-formule-nom-hidden">
+    <div class="fr">
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="checkbox" id="cf-avec-emballage" checked>
+        <span>Avec emballage</span>
+      </label>
+      <input type="number" id="cf-emballage" placeholder="0" step="0.1">
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">FCFA par kg produit</div>
+    </div>
+    <div class="fr">
+      <label>Main d'œuvre (FCFA par tonne produite)</label>
+      <input type="number" id="cf-mo" placeholder="0">
+    </div>
+    <div class="fr">
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="checkbox" id="cf-avec-transport">
+        <span>Avec transport</span>
+      </label>
+      <input type="number" id="cf-transport" placeholder="0">
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">FCFA par lot</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-g" onclick="saveCoutsFormule()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+      <button class="btn btn-out" onclick="document.getElementById('modal-couts-formule').style.display='none'" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SEUIL DYNAMIQUE -->
+<div id="modal-seuil-dynamique" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+      <div style="font-weight:700;font-size:15px">📊 Seuils suggérés</div>
+      <button onclick="document.getElementById('modal-seuil-dynamique').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="seuil-dynamique-content"></div>
+  </div>
+</div>
+
+<!-- INVENTAIRE PHYSIQUE -->
+<div class="page" id="page-inventaire_physique">
+  <div class="page-title">Inventaire Physique</div>
+  <div class="page-sub">Comptage physique · Écarts · Validation admin</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <div><label class="lbl">Mois</label><input type="month" id="invp-mois" style="width:auto"></div>
+    <button class="btn btn-out btn-sm" onclick="renderInventairePhysique()">🔄 Charger</button>
+  </div>
+  <div id="invp-content"><div style="color:var(--textm);font-size:12px">Sélectionnez un mois et cliquez Charger.</div></div>
+</div>
+
 <div class="page" id="page-equipe">
   <div class="page-title">Points de Vente & Équipe</div>
   <div class="page-sub">Créez vos points de vente · Ajoutez les secrétaires dedans</div>
