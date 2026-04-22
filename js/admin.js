@@ -221,15 +221,6 @@ async function uploadLogo(){
   notify('Logo uploadé ✓','gold');
 }
 
-// ── BOOT ───────────────────────────────────────────
-window.addEventListener('load',function(){
-  try{SB=supabase.createClient(GP_URL,GP_KEY);}
-  catch(e){document.getElementById('a_err').textContent='Erreur réseau. Rechargez la page.';return;}
-  SB.auth.getSession().then(function(res){
-    const session=res.data&&res.data.session;
-    if(session)bootApp(session.user);
-  }).catch(function(e){console.error('Session check failed:',e);});
-});
 async function testerCallMeBot(){
   const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
   const tel=(document.getElementById('cfg_tel_alerte')?.value||document.getElementById('cfg_tel')?.value||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
