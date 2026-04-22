@@ -503,8 +503,14 @@ function closeSidebar(){
   if(ov)ov.classList.remove('show');
 }
 // ── REALTIME SYNC GLOBAL ─────────────────────
+let _realtimeChannel=null;
 function initRealtimeSync(){
   if(!GP_ADMIN_ID)return;
+  // Supprimer l'ancien canal si existe
+  if(_realtimeChannel){
+    SB.removeChannel(_realtimeChannel);
+    _realtimeChannel=null;
+  }
   const tables=[
     'gp_ventes','gp_clients','gp_depenses','gp_lots',
     'gp_stock_mp','gp_fournisseurs','gp_achats',
@@ -535,6 +541,7 @@ function initRealtimeSync(){
     });
   });
 
+  _realtimeChannel=channel;
   channel.subscribe();
 }
 
