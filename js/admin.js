@@ -809,6 +809,9 @@ function fermerModalEq(){
 }
 
 async function renderPDV(){
+  // Cacher section création PDV pour non-admin
+  const creationSection=document.getElementById('pdv-creation-section');
+  if(creationSection)creationSection.style.display=GP_ROLE==='admin'?'block':'none';
   const{data:P}=await SB.from('gp_points_vente').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   const{data:M}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
   const membres=M||[];
@@ -840,8 +843,8 @@ async function renderPDV(){
             ${p.latitude&&p.longitude?`<a href="https://www.google.com/maps?q=${p.latitude},${p.longitude}" target="_blank" style="font-size:10px;color:var(--g6);text-decoration:none">🗺️ Voir sur carte</a>`:''}
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-g btn-sm" onclick="ouvrirModalEq('${p.nom}')">➕ Ajouter secrétaire</button>
-            <button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button>
+            ${GP_ROLE==='admin'?`<button class="btn btn-g btn-sm" onclick="ouvrirModalEq('${p.nom}')">➕ Ajouter secrétaire</button>`:''}
+            ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button>`:''}
           </div>
         </div>
         ${membresP.length
@@ -900,7 +903,7 @@ function membreCard(m){
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
         ${m.telephone?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
-        <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
+        ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>`:''}
       </div>
     </div>
   </div>`;

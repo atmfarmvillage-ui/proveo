@@ -105,12 +105,14 @@ async function bootApp(user){
       .eq('email',user.email).maybeSingle();
     if(membreEmail){
       membre=membreEmail;
-      // Lier le user_id maintenant qu'il est authentifié
-      await SB.from('gp_membres').update({
+      // Lier le user_id — utiliser l'email comme clé (RLS autorise user_id = auth.uid() OR admin_id)
+      // On tente les deux approches
+      const{error:updErr}=await SB.from('gp_membres').update({
         user_id:user.id,
         code_invitation:null,
         code_expire_le:null
-      }).eq('id',membreEmail.id);
+      }).eq('email',user.email).is('user_id',null);
+      if(updErr) console.warn('Update user_id failed silently:', updErr.message);
     }
   }
 
@@ -447,7 +449,13 @@ async function joinEquipe(){
     code_expire_le:null
   }).eq('code_invitation',code);
 
+  // Connexion automatique après création du compte
   err.textContent='';
-  ok.textContent='✓ Compte créé ! Connectez-vous maintenant avec votre email et mot de passe.';
-  setTimeout(()=>showAuthForm('login'),2500);
+  ok.innerHTML='<div style="color:var(--green);font-weight:600">✓ Compte créé ! Connexion en cours...</div>';
+  const{data:loginData,error:loginErr}=await SB.auth.signInWithPassword({email,password:pass});
+  if(loginErr||!loginData?.user){
+    ok.innerHTML='<div style="color:var(--green)">✓ Compte créé !</div><div style="font-size:11px;color:var(--textm)">Connectez-vous maintenant.</div>';
+    setTimeout(()=>showAuthForm('login'),2000);
+  }
+  // bootApp sera appelé automatiquement par onAuthStateChange
 }

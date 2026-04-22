@@ -138,7 +138,7 @@
 
   <!-- ADMINISTRATION -->
   <div class="nav-sect">⚙️ Administration</div>
-  <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
+  <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 
 </div>
@@ -873,8 +873,8 @@
     </div>
   </div>
 
-  <!-- CRÉER UN POINT DE VENTE -->
-  <div class="card" style="margin-bottom:14px">
+  <!-- CRÉER UN POINT DE VENTE (admin only) -->
+  <div id="pdv-creation-section" class="card" style="margin-bottom:14px">
     <div class="card-title"><div class="ct-left"><span>📍 Créer un point de vente</span></div></div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
       Chaque point de vente a ses propres secrétaires. Toutes leurs ventes sont automatiquement étiquetées.
