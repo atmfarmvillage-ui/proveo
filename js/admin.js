@@ -267,32 +267,6 @@ function fermerModalEq(){
 }
 
 
-function membreCard(m){
-  const telClean=(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const siteUrl=window.location.origin;
-  const reinvitMsg=encodeURIComponent(
-    `Bonjour ${m.nom} 👋\n\nRappel : connectez-vous sur PROVENDA avec cet email : *${m.email}*\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
-  );
-  return `<div style="padding:10px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-weight:700;font-size:13px">${m.nom||'—'}</div>
-        <div style="font-size:10px;color:var(--textm)">${m.email||'—'} ${m.telephone?'· '+m.telephone:''}</div>
-        <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
-          <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
-          <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'};">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
-          ${m.point_vente?pvBadgeHtml(m.point_vente):''}
-          ${!m.user_id&&m.code_invitation?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${m.code_invitation}</span>`:''}
-        </div>
-      </div>
-      <div style="display:flex;gap:4px">
-        ${m.telephone&&!m.user_id?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
-        <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 function localisermoi(){
   if(!navigator.geolocation){notify('GPS non disponible','r');return;}
   notify('Récupération de votre position...','gold');
@@ -891,41 +865,47 @@ async function renderPDV(){
 function membreCard(m){
   const telClean=(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
   const siteUrl=window.location.origin;
+  const code=m.code_invitation&&!m.code_invitation.startsWith('USED_')?m.code_invitation:null;
   const reinvitMsg=encodeURIComponent(
-    `Bonjour ${m.nom} 👋\n\nRappel : connectez-vous sur PROVENDA avec cet email : *${m.email}*\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
+    `Bonjour ${m.nom} 👋\n\n`+
+    (code?
+      `Votre code d'invitation PROVENDA :\n\`${code}\`\n_(appuyez longuement pour copier)_\n\n📧 Email : \`${m.email}\`\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
+      :`Rappel : connectez-vous sur PROVENDA.\n\nEmail : *${m.email}*\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`)
   );
-  return `<div style="padding:10px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-weight:700;font-size:13px">${m.nom||'—'}</div>
-        <div style="font-size:10px;color:var(--textm)">${m.email||'—'} ${m.telephone?'· '+m.telephone:''}</div>
-        <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
-          <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
-          <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'};">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
-          ${m.point_vente?pvBadgeHtml(m.point_vente):''}
-          ${!m.user_id&&m.code_invitation?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${m.code_invitation}</span>`:''}
+
+  // Badge PDV avec couleur
+  const pvBadge=m.point_vente
+    ?pvBadgeHtml(m.point_vente)
+    :'<span style="font-size:10px;color:var(--textm);background:rgba(30,45,74,.5);padding:2px 8px;border-radius:10px">🏭 Siège principal</span>';
+
+  // Statut connexion
+  const statutBadge=m.user_id
+    ?'<span style="font-size:9px;background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.3);padding:2px 8px;border-radius:10px">✅ Compte actif</span>'
+    :'<span style="font-size:9px;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
+
+  // Badge rôle
+  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
+
+  return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${m.nom||'—'}</div>
+        <div style="font-size:10px;color:var(--textm);margin-bottom:6px">${m.email||'—'}${m.telephone?' · '+m.telephone:''}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          <span class="badge ${roleColor}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
+          ${pvBadge}
+          ${statutBadge}
+          ${code?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${code}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;gap:4px">
-        ${m.telephone&&!m.user_id?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${m.telephone?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
         <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
       </div>
     </div>
   </div>`;
 }
 
-function localisermoi(){
-  if(!navigator.geolocation){notify('GPS non disponible','r');return;}
-  notify('Récupération de votre position...','gold');
-  navigator.geolocation.getCurrentPosition(
-    pos=>{
-      document.getElementById('pv_lat').value=pos.coords.latitude.toFixed(6);
-      document.getElementById('pv_lng').value=pos.coords.longitude.toFixed(6);
-      notify('Position GPS obtenue ✓','gold');
-    },
-    ()=>notify('Impossible d\'obtenir la position GPS','r')
-  );
-}
 
 async function savePDV(){
   const nom=document.getElementById('pv_nom')?.value.trim();

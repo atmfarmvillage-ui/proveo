@@ -243,9 +243,8 @@ var PAGE_RENDERERS = {
     renderSalaires();
   },
   dettes:        renderDettes,
-  equipe:        function(){renderPDV();},
+  equipe:        function(){renderPDV();initChat();},
   config:        loadConfigForm,
-  chat:          initChat,
 };
 
 function showGP(page){
