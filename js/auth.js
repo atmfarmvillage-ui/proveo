@@ -168,6 +168,8 @@ async function bootApp(user){
   document.getElementById('vt-filtre-date').value=today();
   populateSelects();
   renderDashboard();
+  // Initialiser présence en ligne
+  mettreAJourPresence(true);
   // Check pending remises
   checkPendingRemises();
   // Auto lot ref
@@ -243,6 +245,7 @@ var PAGE_RENDERERS = {
   dettes:        renderDettes,
   equipe:        function(){renderPDV();},
   config:        loadConfigForm,
+  chat:          initChat,
 };
 
 function showGP(page){
