@@ -368,9 +368,13 @@ async function savePDV(){
   const lng=parseFloat(document.getElementById('pv_lng')?.value)||null;
   const err=document.getElementById('pv_err');
   if(!nom){err.textContent='Nom requis.';return;}
+  const typePdv=document.getElementById('pv_type')?.value||'secondaire';
+  const secSalariee=document.getElementById('pv_sec_type')?.value==='true';
   const{error}=await SB.from('gp_points_vente').insert({
     admin_id:GP_ADMIN_ID,nom,telephone:tel,adresse,
-    latitude:lat,longitude:lng
+    latitude:lat,longitude:lng,
+    type_pdv:typePdv,
+    secretaire_salariee:secSalariee
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Créer automatiquement la caisse physique du PDV
@@ -972,9 +976,13 @@ async function savePDV(){
   const lng=parseFloat(document.getElementById('pv_lng')?.value)||null;
   const err=document.getElementById('pv_err');
   if(!nom){err.textContent='Nom requis.';return;}
+  const typePdv=document.getElementById('pv_type')?.value||'secondaire';
+  const secSalariee=document.getElementById('pv_sec_type')?.value==='true';
   const{error}=await SB.from('gp_points_vente').insert({
     admin_id:GP_ADMIN_ID,nom,telephone:tel,adresse,
-    latitude:lat,longitude:lng
+    latitude:lat,longitude:lng,
+    type_pdv:typePdv,
+    secretaire_salariee:secSalariee
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Créer automatiquement la caisse physique du PDV

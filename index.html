@@ -866,6 +866,22 @@
       <div class="fr" style="flex:2"><label>Nom du point de vente</label>
         <input type="text" id="pv_nom" placeholder="Ex: Lomé Centre, Sanguera, Kara...">
       </div>
+      <div class="fg2">
+        <div class="fr"><label>Type de point de vente *</label>
+          <select id="pv_type">
+            <option value="secondaire">🏪 PDV Secondaire — Vente au détail local</option>
+            <option value="principal">🏬 PDV Principal — Dépôt-vente régional</option>
+            <option value="production">🏭 Point de Production — Usine + vente directe</option>
+          </select>
+        </div>
+        <div class="fr"><label>Secrétaire</label>
+          <select id="pv_sec_type">
+            <option value="false">Commissionnaire (garde sa marge)</option>
+            <option value="true">Salariée (tout va en caisse)</option>
+          </select>
+        </div>
+      </div>
+      </div>
       <div class="fr"><label>Téléphone (optionnel)</label>
         <input type="tel" id="pv_tel" placeholder="+228 90 00 00 00">
       </div>
@@ -1477,9 +1493,16 @@
 <div class="notif" id="notif-toast"></div>
 
 <!-- ── MODULES JS ── -->
+<!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
 <script src="js/config.js"></script>
 <script src="js/print.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/stock.js"></script>
 <script src="js/matieres.js"></script>
+<script src="js/production.js"></script>
+<script src="js/ventes.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/admin.js"></script>
 <script src="js/fournisseurs.js"></script>
 <script src="js/achats.js"></script>
 <script src="js/caisse.js"></script>
@@ -1489,19 +1512,8 @@
 <script src="js/rapports.js"></script>
 <script src="js/dettes.js"></script>
 <script src="js/reversements.js"></script>
-<script src="js/inventaire_physique.js"></script>
-<script src="js/distribution.js"></script>
-<script src="js/salaires.js"></script>
-<script src="js/rapports.js"></script>
-<script src="js/dettes.js"></script>
-<script src="js/reversements.js"></script>
+<!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js"></script>
-<script src="js/dashboard.js"></script>
-<script src="js/stock.js"></script>
-<script src="js/production.js"></script>
-<script src="js/ventes.js"></script>
-<script src="js/clients.js"></script>
-<script src="js/admin.js"></script>
 
 </body>
 </html>
