@@ -194,6 +194,95 @@ async function saveModalPaiement(){
   }
 
   notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
+
+  // Récupérer numéro WhatsApp du fournisseur
+  const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref')
+    .eq('id',achatId).maybeSingle();
+  if(achat?.fournisseur_id){
+    const{data:fourn}=await SB.from('gp_fournisseurs').select('telephone,nom')
+      .eq('id',achat.fournisseur_id).maybeSingle();
+    if(fourn?.telephone){
+      const paysInfo=detecterPays(fourn.telephone);
+      const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
+      const nomFourn=fourn.nom||achat.fournisseur_nom||'Partenaire';
+      const provNom=GP_CONFIG?.nom_provenderie||'PROVENDA';
+
+      // Messages d'intro dynamiques
+      const intros=[
+        `Nous avons le plaisir de vous confirmer le règlement suivant`,
+        `Nous vous adressons ce message pour confirmer notre paiement`,
+        `C'est avec plaisir que nous vous informons du règlement effectué`,
+        `Nous vous confirmons la bonne réception de votre livraison et le paiement correspondant`,
+      ];
+      const motivations=[
+        `Votre sérieux et la qualité de vos produits font de vous un partenaire précieux pour nous.`,
+        `Nous apprécions énormément votre fiabilité et la qualité constante de vos livraisons.`,
+        `Votre professionnalisme est un atout précieux pour notre activité. Merci de votre confiance.`,
+        `C'est un honneur de travailler avec un fournisseur aussi sérieux et ponctuel que vous.`,
+      ];
+      const closings=[
+        `Nous espérons poursuivre cette belle collaboration encore longtemps.`,
+        `Nous comptons sur vous pour de futures commandes et restons à votre disposition.`,
+        `Votre partenariat est très important pour nous et nous tenons à vous en remercier sincèrement.`,
+        `Nous vous renouvelons notre confiance et espérons renforcer notre partenariat.`,
+      ];
+      const intro=intros[Math.floor(Math.random()*intros.length)];
+      const motiv=motivations[Math.floor(Math.random()*motivations.length)];
+      const closing=closings[Math.floor(Math.random()*closings.length)];
+
+      let msgText;
+
+      if(reste<=0){
+        // Dernier paiement — message de solde complet avec historique
+        const{data:allPmts}=await SB.from('gp_achats_paiements').select('*')
+          .eq('achat_id',achatId).order('date_paiement');
+        const lignesHisto=(allPmts||[]).map((p,i)=>
+          `   ${i+1}. ${p.date_paiement} — ${fmt(p.montant)} F (${({especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[p.mode_paiement]||p.mode_paiement)})`
+        ).join('\n');
+
+        msgText=
+          `Monsieur/Madame ${nomFourn},\n\n`+
+          `${intro} concernant notre commande *${achat.ref||achatId.slice(0,8)}*.\n\n`+
+          `✅ *SOLDE COMPLET*\n`+
+          `Nous avons le plaisir de vous informer que l'intégralité du montant dû a été réglée.\n\n`+
+          `💳 *Dernier paiement :*\n`+
+          `   • Montant : *${fmt(montant)} F*\n`+
+          `   • Mode : ${modeLabel}\n`+
+          (ref?`   • Réf : ${ref}\n`:'')+
+          `   • Date : ${date}\n\n`+
+          `📋 *Récapitulatif de tous les paiements :*\n`+
+          lignesHisto+`\n`+
+          `   ─────────────────────\n`+
+          `   Total réglé : *${fmt(nouveauPaye)} F*\n\n`+
+          `${motiv}\n\n`+
+          `${closing}\n\n`+
+          `Cordialement,\n*${provNom}*`;
+      } else {
+        // Paiement partiel
+        const pct=Math.round(nouveauPaye/montantTotal*100);
+        msgText=
+          `Monsieur/Madame ${nomFourn},\n\n`+
+          `${intro} concernant notre commande *${achat.ref||achatId.slice(0,8)}*.\n\n`+
+          `💵 *Paiement effectué :*\n`+
+          `   • Montant : *${fmt(montant)} F*\n`+
+          `   • Mode : ${modeLabel}\n`+
+          (ref?`   • Réf : ${ref}\n`:'')+
+          `   • Date : ${date}\n\n`+
+          `📊 *État du règlement :*\n`+
+          `   • Montant total : ${fmt(montantTotal)} F\n`+
+          `   • Total payé : *${fmt(nouveauPaye)} F* (${pct}%)\n`+
+          `   • ⏳ Reste dû : *${fmt(reste)} F*\n\n`+
+          `${motiv}\n\n`+
+          `Nous procéderons au règlement du solde restant dans les meilleurs délais.\n\n`+
+          `Cordialement,\n*${provNom}*`;
+      }
+
+      const msg=encodeURIComponent(msgText);
+      // Ouvrir WhatsApp
+      window.open(`https://wa.me/${paysInfo.numero_whatsapp}?text=${msg}`,'_blank');
+    }
+  }
+
   fermerModalPaiement();
   await renderPaiementsMP();
 }

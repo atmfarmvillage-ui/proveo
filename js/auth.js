@@ -568,3 +568,52 @@ function afficherBanniereMAJ(nouvelleVersion){
 
 // Vérifier toutes les 5 minutes
 setInterval(verifierMiseAJour, 5*60*1000);
+
+// ── ACTUALISATION PAGE ───────────────────────────
+function refreshPage(){
+  const btn=document.getElementById('refresh-btn');
+  if(btn){btn.style.transform='rotate(360deg)';btn.style.transition='transform .5s';}
+  setTimeout(()=>{if(btn)btn.style.transform='';},500);
+  // Recharger la page active
+  const active=document.querySelector('.page.active')?.id?.replace('page-','');
+  if(active&&PAGE_RENDERERS[active]){
+    try{PAGE_RENDERERS[active]();}catch(e){}
+  }
+  // Recharger les données globales
+  Promise.all([loadClients(),loadPrix(),loadIngredients()]);
+  notify('Données actualisées ✓','gold');
+}
+
+// ── PULL TO REFRESH (Android) ────────────────────
+(function(){
+  let startY=0, pulling=false;
+  const threshold=80;
+
+  document.addEventListener('touchstart',e=>{
+    if(window.scrollY===0||document.getElementById('main').scrollTop===0){
+      startY=e.touches[0].clientY;
+      pulling=true;
+    }
+  },{passive:true});
+
+  document.addEventListener('touchmove',e=>{
+    if(!pulling)return;
+    const dist=e.touches[0].clientY-startY;
+    if(dist>20&&dist<threshold+20){
+      const pct=Math.min(dist/threshold,1);
+      const btn=document.getElementById('refresh-btn');
+      if(btn)btn.style.transform=`rotate(${pct*180}deg)`;
+    }
+  },{passive:true});
+
+  document.addEventListener('touchend',e=>{
+    if(!pulling)return;
+    const dist=e.changedTouches[0].clientY-startY;
+    pulling=false;
+    const btn=document.getElementById('refresh-btn');
+    if(btn)btn.style.transform='';
+    if(dist>threshold){
+      refreshPage();
+    }
+  },{passive:true});
+})();
