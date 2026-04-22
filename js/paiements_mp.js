@@ -67,10 +67,17 @@ async function renderPaiementsMP(){
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
           <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:var(--gold)">${fmt(total)} F</div>
-          ${!solde?`<button class="btn btn-g btn-sm" onclick="ouvrirModalPaiement('${a.id}','${a.fournisseur_nom?.replace(/'/g,"\\'")}',${total},${paye})" style="white-space:nowrap">
+          ${!solde?`<button class="btn btn-g btn-sm pmt-payer-btn"
+            data-id="${a.id}"
+            data-nom="${(a.fournisseur_nom||'').replace(/"/g,'&quot;')}"
+            data-total="${total}"
+            data-paye="${paye}"
+            style="white-space:nowrap">
             💳 Payer
           </button>`:`<span style="font-size:11px;color:var(--green)">✓ Soldé</span>`}
-          <button class="btn btn-out btn-sm" onclick="voirHistoPaiements('${a.id}','${a.fournisseur_nom?.replace(/'/g,"\\'")}')">
+          <button class="btn btn-out btn-sm pmt-histo-btn"
+            data-id="${a.id}"
+            data-nom="${(a.fournisseur_nom||'').replace(/"/g,'&quot;')}">
             📋 Historique
           </button>
         </div>
@@ -81,6 +88,23 @@ async function renderPaiementsMP(){
   document.getElementById('pmt-achats-liste').innerHTML=A.length
     ? aPayerHtml
     : '<div style="color:var(--textm);font-size:12px;text-align:center;padding:20px">Aucun achat à crédit ou en tranches.</div>';
+
+  // Délégation événements — boutons Payer et Historique
+  document.querySelectorAll('.pmt-payer-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ouvrirModalPaiement(
+        btn.dataset.id,
+        btn.dataset.nom,
+        +btn.dataset.total,
+        +btn.dataset.paye
+      );
+    });
+  });
+  document.querySelectorAll('.pmt-histo-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      voirHistoPaiements(btn.dataset.id, btn.dataset.nom);
+    });
+  });
 
   // Historique global des paiements
   const histoHtml=P.slice(0,30).map(p=>`
