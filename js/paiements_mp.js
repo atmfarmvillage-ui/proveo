@@ -279,14 +279,15 @@ async function saveModalPaiement(){
           `Cordialement,\n*${provNom}*`;
       }
 
-      const msg=encodeURIComponent(msgText);
-      // Ouvrir WhatsApp
-      // Afficher bouton WhatsApp visible plutôt que window.open (évite blocage navigateur)
-      afficherBoutonWA(paysInfo.numero_whatsapp||'', msg, telFourn);
+      // Stocker dans variables globales
+      _waTel = paysInfo.numero_whatsapp||'';
+      _waTexte = msgText;
+
+      // Transformer le modal en écran de succès avec bouton WhatsApp
+      afficherSuccesModal(montant, nomFourn);
     }
   }
 
-  fermerModalPaiement();
   await renderPaiementsMP();
 }
 
@@ -377,4 +378,56 @@ function envoyerWAPaiement(msgEncoded){
   }
   window.open(`https://wa.me/${numero}?text=${msgEncoded}`,'_blank');
   if(btn)btn.remove();
+}
+// ── SUCCÈS + WHATSAPP ────────────────────────────
+// Variables globales pour le message WA
+let _waTel='', _waTexte='';
+
+function afficherSuccesModal(montant, nomFourn){
+  const form=document.getElementById('pmt-modal-form');
+  const titre=document.getElementById('pmt-modal-titre');
+  const reste_el=document.getElementById('pmt-modal-reste');
+  if(!form)return;
+  if(titre)titre.textContent='✅ Paiement confirmé';
+  if(reste_el)reste_el.textContent='';
+
+  form.innerHTML=`
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="font-size:36px;margin-bottom:6px">✅</div>
+      <div style="font-weight:700;font-size:18px;color:var(--green)">${fmt(montant)} F enregistrés</div>
+      <div style="font-size:12px;color:var(--textm);margin-top:4px">Pour : ${nomFourn}</div>
+    </div>
+    ${!_waTel?`<div class="fr" style="margin-bottom:12px">
+      <label>📱 Numéro WhatsApp du fournisseur</label>
+      <input type="tel" id="wa-tel-saisi" placeholder="+228 90 00 00 00">
+    </div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <a id="wa-send-link" href="#"
+        style="width:100%;background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none"
+        onclick="return ouvrirWA()">
+        📲 Envoyer confirmation WhatsApp
+      </a>
+      <button onclick="fermerModalPaiement()"
+        style="width:100%;background:rgba(30,45,74,.6);border:1px solid var(--border2);color:var(--textm);padding:11px;border-radius:10px;font-size:13px;cursor:pointer">
+        Fermer sans envoyer
+      </button>
+    </div>`;
+}
+
+function ouvrirWA(){
+  let tel=_waTel;
+  if(!tel){
+    const inp=document.getElementById('wa-tel-saisi');
+    if(inp?.value.trim()){
+      tel=detecterPays(inp.value.trim()).numero_whatsapp;
+    }
+    if(!tel){
+      if(inp){inp.style.borderColor='var(--red)';inp.focus();}
+      return false;
+    }
+  }
+  const lien=document.getElementById('wa-send-link');
+  if(lien)lien.href='https://wa.me/'+tel+'?text='+encodeURIComponent(_waTexte);
+  setTimeout(fermerModalPaiement,300);
+  return true; // laisser le lien s'ouvrir normalement
 }
