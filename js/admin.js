@@ -946,7 +946,7 @@ function membreCard(m){
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-        ${m.telephone?`<a href="https://wa.me/${paysInfo2.numero_whatsapp}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
+        ${m.telephone?`<a href="https://wa.me/${paysInfo.numero_whatsapp}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
         <button class="btn btn-sm membre-admin-btn" onclick="toggleMembreActif('${m.id}',${m.actif!==false})"
           style="background:${m.actif!==false?'rgba(245,158,11,.15)':'rgba(22,163,74,.15)'};border:1px solid ${m.actif!==false?'rgba(245,158,11,.4)':'rgba(22,163,74,.4)'};color:${m.actif!==false?'var(--gold)':'var(--green)'}">
           ${m.actif!==false?'🔒 Désactiver':'✅ Réactiver'}
