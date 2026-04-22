@@ -329,7 +329,42 @@ async function voirDetailAchat(id){
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement enregistré.</div>'}
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
-    ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}`;
+    ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}
+    ${['credit','tranches'].includes(a.condition_paiement)&&Number(a.montant_total||0)>Number(a.montant_paye||0)?`
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">
+        💳 Enregistrer un paiement
+        <span style="color:var(--red);font-weight:400;margin-left:8px">
+          Reste dû : ${fmt(Number(a.montant_total||0)-Number(a.montant_paye||0))} F
+        </span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="fr"><label>Montant (F)</label>
+          <input type="number" id="pmt_montant" placeholder="${Number(a.montant_total||0)-Number(a.montant_paye||0)}"
+            style="font-size:14px;font-weight:700">
+        </div>
+        <div class="fr"><label>Mode</label>
+          <select id="pmt_mode">
+            <option value="especes">Espèces</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="virement">Virement</option>
+            <option value="cheque">Chèque</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="fr"><label>Date</label>
+          <input type="date" id="pmt_date" value="${today()}">
+        </div>
+        <div class="fr"><label>Référence (optionnel)</label>
+          <input type="text" id="pmt_ref" placeholder="N° reçu, transaction...">
+        </div>
+      </div>
+      <div class="a-err" id="pmt_err"></div>
+      <button class="btn btn-g" onclick="savePaiementAchat('${a.id}',${a.montant_total||0},${a.montant_paye||0})" style="width:100%;justify-content:center">
+        ✓ Enregistrer ce paiement
+      </button>
+    </div>`:''}`;
   modal.style.display='flex';
 }
 
@@ -385,3 +420,73 @@ document.addEventListener('click',function(e){
     results.style.display='none';
   }
 });
+
+// ── PAIEMENT FOURNISSEUR ─────────────────────────
+async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
+  const montant=+document.getElementById('pmt_montant')?.value||0;
+  const mode=document.getElementById('pmt_mode')?.value||'especes';
+  const date=document.getElementById('pmt_date')?.value||today();
+  const ref=document.getElementById('pmt_ref')?.value.trim()||null;
+  const err=document.getElementById('pmt_err');
+
+  if(!montant||montant<=0){err.textContent='Entrez un montant valide.';return;}
+
+  const nouveauPaye=Number(montantDejaPayé)+montant;
+  const reste=Number(montantTotal)-nouveauPaye;
+  const statutPaiement=reste<=0?'solde':'partiel';
+
+  // Enregistrer le paiement
+  const{error}=await SB.from('gp_achats_paiements').insert({
+    achat_id:achatId,
+    admin_id:GP_ADMIN_ID,
+    montant,mode_paiement:mode,
+    date_paiement:date,
+    reference:ref,
+    enregistre_par:GP_USER?.id,
+    enregistre_par_nom:GP_USER?.email?.split('@')[0]
+  });
+
+  if(error){err.textContent='Erreur: '+error.message;return;}
+
+  // Mettre à jour montant_paye et statut sur l'achat
+  await SB.from('gp_achats').update({
+    montant_paye:nouveauPaye,
+    statut_paiement:statutPaiement
+  }).eq('id',achatId);
+
+  // Mouvement caisse automatique
+  const{data:caisses}=await SB.from('gp_caisses').select('id')
+    .eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+  if(caisses?.length){
+    await SB.from('gp_mouvements_caisse').insert({
+      admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,
+      type:'sortie',categorie:'paiement_fournisseur',
+      montant,date_mouvement:date,
+      description:`Paiement fournisseur · ${ref||mode}`,
+      enregistre_par:GP_USER?.id,
+      enregistre_par_nom:GP_USER?.email?.split('@')[0]
+    });
+  }
+
+  // Notification WhatsApp au fournisseur si configuré
+  const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref')
+    .eq('id',achatId).maybeSingle();
+  if(achat?.fournisseur_id){
+    const{data:fourn}=await SB.from('gp_fournisseurs').select('telephone')
+      .eq('id',achat.fournisseur_id).maybeSingle();
+    if(fourn?.telephone){
+      const paysInfo=detecterPays(fourn.telephone);
+      const msg=encodeURIComponent(
+        `Bonjour,\n\nNous vous confirmons un paiement de *${fmt(montant)} F* pour la commande *${achat.ref||achatId.slice(0,8)}*.\n`+
+        `Mode : ${mode}${ref?' · Réf: '+ref:''}\n`+
+        (reste>0?`Reste à payer : *${fmt(reste)} F*`:`✅ Commande entièrement soldée`)+
+        `\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`
+      );
+      window.open(`https://wa.me/${paysInfo.numero_whatsapp}?text=${msg}`,'_blank');
+    }
+  }
+
+  notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
+  document.getElementById('modal-detail-achat').style.display='none';
+  await renderAchats();
+}
