@@ -384,14 +384,29 @@ async function joinEquipe(){
   if(pass.length<6){err.textContent='Mot de passe min. 6 caractères.';return;}
   err.textContent='Vérification du code...';
 
-  // Vérifier le code
-  const{data:membre}=await SB.from('gp_membres').select('*')
+  // Chercher par code uniquement d'abord
+  const{data:membreCode}=await SB.from('gp_membres').select('*')
     .eq('code_invitation',code)
-    .eq('email',email)
-    .is('user_id',null)
     .maybeSingle();
 
-  if(!membre){err.textContent='Code invalide ou email incorrect.';return;}
+  if(!membreCode){
+    err.textContent='Code invalide. Vérifiez le code à 6 chiffres reçu par WhatsApp.';
+    return;
+  }
+
+  // Vérifier l'email (insensible à la casse)
+  if(membreCode.email.toLowerCase().trim()!==email.toLowerCase().trim()){
+    err.textContent='Email incorrect. Utilisez exactement l\'email indiqué dans le message WhatsApp : '+membreCode.email;
+    return;
+  }
+
+  // Vérifier si déjà utilisé
+  if(membreCode.user_id){
+    err.textContent='Ce code a déjà été utilisé. Connectez-vous normalement.';
+    return;
+  }
+
+  const membre=membreCode;
 
   // Vérifier expiration
   if(membre.code_expire_le&&new Date(membre.code_expire_le)<new Date()){
