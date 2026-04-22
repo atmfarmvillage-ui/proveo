@@ -330,7 +330,7 @@ async function voirDetailAchat(id){
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
     ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}
-    ${['credit','tranches'].includes(a.condition_paiement)&&Number(a.montant_total||0)>Number(a.montant_paye||0)?`
+    ${['credit','tranches'].includes(a.condition_paiement)?`
     <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
       <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">
         💳 Enregistrer un paiement
