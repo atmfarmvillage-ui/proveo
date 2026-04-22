@@ -385,12 +385,19 @@ async function joinEquipe(){
   err.textContent='Vérification du code...';
 
   // Chercher par code uniquement d'abord
-  const{data:membreCode}=await SB.from('gp_membres').select('*')
+  // DEBUG : chercher tous les membres pour voir les codes
+  const{data:tousLesMembers}=await SB.from('gp_membres').select('nom,email,code_invitation,user_id');
+  console.log('Tous les membres:', JSON.stringify(tousLesMembers));
+  console.log('Code saisi:', code, 'Email saisi:', email);
+
+  const{data:membreCode,error:errCode}=await SB.from('gp_membres').select('*')
     .eq('code_invitation',code)
     .maybeSingle();
 
+  console.log('Résultat recherche par code:', membreCode, 'Erreur:', errCode);
+
   if(!membreCode){
-    err.textContent='Code invalide. Vérifiez le code à 6 chiffres reçu par WhatsApp.';
+    err.textContent='Code invalide. Codes disponibles: '+(tousLesMembers?.map(m=>m.code_invitation).filter(Boolean).join(', ')||'aucun');
     return;
   }
 
