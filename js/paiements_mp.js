@@ -199,10 +199,11 @@ async function saveModalPaiement(){
   const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref')
     .eq('id',achatId).maybeSingle();
   if(achat?.fournisseur_id){
-    const{data:fourn}=await SB.from('gp_fournisseurs').select('telephone,nom')
+    const{data:fourn}=await SB.from('gp_fournisseurs').select('telephone,whatsapp,nom')
       .eq('id',achat.fournisseur_id).maybeSingle();
-    if(fourn?.telephone){
-      const paysInfo=detecterPays(fourn.telephone);
+    const telFourn=fourn?.whatsapp||fourn?.telephone||null;
+    if(telFourn){
+      const paysInfo=detecterPays(telFourn);
       const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
       const nomFourn=fourn.nom||achat.fournisseur_nom||'Partenaire';
       const provNom=GP_CONFIG?.nom_provenderie||'PROVENDA';
@@ -279,7 +280,8 @@ async function saveModalPaiement(){
 
       const msg=encodeURIComponent(msgText);
       // Ouvrir WhatsApp
-      window.open(`https://wa.me/${paysInfo.numero_whatsapp}?text=${msg}`,'_blank');
+      // Afficher bouton WhatsApp visible plutôt que window.open (évite blocage navigateur)
+      afficherBoutonWA(paysInfo.numero_whatsapp, msg);
     }
   }
 
@@ -317,4 +319,35 @@ async function voirHistoPaiements(achatId, fournisseurNom){
     <button class="btn btn-out" onclick="fermerModalPaiement()" style="width:100%;justify-content:center;margin-top:10px">Fermer</button>`;
 
   modal.style.display='flex';
+}
+
+// ── BOUTON WHATSAPP APRÈS PAIEMENT ───────────────
+function afficherBoutonWA(numeroWA, msg){
+  // Supprimer ancien bouton si présent
+  const old=document.getElementById('wa-pmt-btn');
+  if(old)old.remove();
+
+  const div=document.createElement('div');
+  div.id='wa-pmt-btn';
+  div.style.cssText='position:fixed;bottom:90px;right:16px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:8px;animation:fadeIn .3s ease';
+  div.innerHTML=`
+    <div style="background:rgba(14,20,40,.95);border:1px solid rgba(37,211,102,.4);border-radius:12px;padding:12px 16px;font-size:12px;color:#E2E8F0;max-width:260px;text-align:right">
+      ✅ Paiement enregistré !<br>
+      <span style="font-size:11px;color:var(--textm)">Envoyer la confirmation au fournisseur ?</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="this.closest('#wa-pmt-btn').remove()" style="background:rgba(14,20,40,.9);border:1px solid var(--border2);color:var(--textm);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px">
+        Ignorer
+      </button>
+      <a href="https://wa.me/${numeroWA}?text=${msg}" target="_blank"
+        onclick="setTimeout(()=>this.closest('#wa-pmt-btn').remove(),500)"
+        style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(37,211,102,.4)">
+        📲 WhatsApp
+      </a>
+    </div>`;
+
+  document.body.appendChild(div);
+
+  // Auto-supprimer après 15 secondes
+  setTimeout(()=>{const el=document.getElementById('wa-pmt-btn');if(el)el.remove();},15000);
 }
