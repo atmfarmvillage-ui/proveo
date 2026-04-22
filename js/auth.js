@@ -250,6 +250,7 @@ var PAGE_RENDERERS = {
   caisse:        renderCaisse,
   distribution:  renderDistribution,
   reversements:  renderReversements,
+  paiements_mp:  renderPaiementsMP,
   salaires:      function(){
     const sm=document.getElementById('sal-mois');
     const ss=document.getElementById('sal_mois_saisie');

@@ -115,6 +115,7 @@
   <div class="nav-sect">🛒 Approvisionnement</div>
   <div class="nav-item" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
   <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
+  <div class="nav-item" onclick="showGP('paiements_mp')" data-page="paiements_mp" data-roles="admin,logistique,daf"><span class="nav-icon">💳</span>Paiements MP</div>
 
   <!-- ÉTAPE 2 : MATIÈRES PREMIÈRES & STOCK -->
   <div class="nav-sect">🌾 Matières Premières</div>
@@ -1030,6 +1031,77 @@
   </div>
 </div>
 
+
+<!-- PAIEMENTS MP & DETTES FOURNISSEURS -->
+<div class="page" id="page-paiements_mp">
+  <div class="page-title">Paiements MP & Dettes</div>
+  <div class="page-sub">Suivi des paiements fournisseurs · Crédit · Tranches</div>
+
+  <!-- KPIs -->
+  <div class="g4" id="pmt-kpis" style="margin-bottom:16px"></div>
+
+  <!-- Achats à payer -->
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-left"><span>💳 Achats à payer</span></div>
+      <button class="btn btn-out btn-sm" onclick="renderPaiementsMP()">🔄 Actualiser</button>
+    </div>
+    <div id="pmt-achats-liste"></div>
+  </div>
+
+  <!-- Historique global -->
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>📋 Historique des paiements</span></div></div>
+    <div id="pmt-histo"></div>
+  </div>
+</div>
+
+<!-- MODAL PAIEMENT -->
+<div id="modal-paiement-mp" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalPaiement()">
+  <div style="background:var(--card2,#0E1428);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-weight:700;font-size:15px" id="pmt-modal-titre">Paiement</div>
+      <button onclick="fermerModalPaiement()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="pmt-modal-reste" style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:14px"></div>
+    <div id="pmt-modal-form">
+      <input type="hidden" id="pmt-modal-achat-id">
+      <input type="hidden" id="pmt-modal-total">
+      <input type="hidden" id="pmt-modal-paye">
+      <div class="fg2">
+        <div class="fr"><label>Montant à payer (F) *</label>
+          <input type="number" id="pmt-modal-montant" placeholder="0" style="font-size:16px;font-weight:700;color:var(--gold)">
+        </div>
+        <div class="fr"><label>Mode de paiement</label>
+          <select id="pmt-modal-mode">
+            <option value="especes">💵 Espèces</option>
+            <option value="mobile_money">📱 Mobile Money</option>
+            <option value="virement">🏦 Virement</option>
+            <option value="cheque">📝 Chèque</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Date du paiement</label>
+          <input type="date" id="pmt-modal-date">
+        </div>
+        <div class="fr"><label>Référence / N° reçu</label>
+          <input type="text" id="pmt-modal-ref" placeholder="TXN-001, reçu N°...">
+        </div>
+      </div>
+      <div class="a-err" id="pmt-modal-err"></div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-g" onclick="saveModalPaiement()" style="flex:1;justify-content:center;font-size:14px;min-height:44px">
+          ✓ Confirmer le paiement
+        </button>
+        <button class="btn btn-out" onclick="fermerModalPaiement()" style="padding:0 16px">
+          Annuler
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- FOURNISSEURS -->
 <div class="page" id="page-fournisseurs">
   <div class="page-title">Fournisseurs</div>
@@ -1610,6 +1682,7 @@
 <script src="js/dettes.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/reversements.js"></script>
+<script src="js/paiements_mp.js"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js"></script>
 
