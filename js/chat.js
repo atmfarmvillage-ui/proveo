@@ -67,13 +67,19 @@ async function renderPresence(){
 function presenceBadge(m,enLigne){
   const depuis=tempsDepuis(m.derniere_vue);
   const pal=m.point_vente?pvPalette(m.point_vente):{bg:'rgba(30,45,74,.5)',border:'rgba(100,116,139,.3)',text:'#94A3B8',emoji:'🏭'};
-  return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:rgba(14,20,40,.5)">
-    <div style="width:8px;height:8px;border-radius:50%;background:${enLigne?'#22c55e':'#475569'};flex-shrink:0"></div>
+  const pvHtml=m.point_vente
+    ?`<span style="font-size:9px;background:${pal.bg};color:${pal.text};border:1px solid ${pal.border};padding:1px 6px;border-radius:8px;white-space:nowrap">${pal.emoji} ${m.point_vente}</span>`
+    :'<span style="font-size:9px;color:var(--textm)">🏭 Siège</span>';
+  return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;margin-bottom:4px;background:rgba(14,20,40,.5)">
+    <div style="width:8px;height:8px;border-radius:50%;background:${enLigne?'#22c55e':'#475569'};flex-shrink:0;margin-top:2px"></div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nom}</div>
-      <div style="font-size:10px;color:var(--textm)">${m.role?.toUpperCase()||'—'} ${m.point_vente?'· '+m.point_vente:''}</div>
+      <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:2px">
+        <span style="font-size:12px;font-weight:700">${m.nom}</span>
+        <span style="font-size:9px;font-weight:600;color:var(--g6);background:rgba(30,45,74,.8);padding:1px 6px;border-radius:8px">${(m.role||'').toUpperCase()}</span>
+        ${pvHtml}
+      </div>
+      <div style="font-size:10px;color:var(--textm)">${enLigne?'<span style="color:var(--green);font-weight:600">● En ligne</span>':'<span>● '+depuis+'</span>'}</div>
     </div>
-    <div style="font-size:10px;color:var(--textm);white-space:nowrap">${enLigne?'<span style="color:var(--green)">maintenant</span>':depuis}</div>
   </div>`;
 }
 

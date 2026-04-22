@@ -1,3 +1,40 @@
+
+// ── DÉTECTION PAYS DEPUIS NUMÉRO ─────────────────
+function detecterPays(tel){
+  const t=tel.replace(/[\s\-\.\(\)]/g,'');
+  // Retourne {indicatif, pays, numero_local}
+  const pays=[
+    {code:'+228',pays:'Togo',flag:'🇹🇬'},
+    {code:'+225',pays:'Côte d\'Ivoire',flag:'🇨🇮'},
+    {code:'+229',pays:'Bénin',flag:'🇧🇯'},
+    {code:'+226',pays:'Burkina Faso',flag:'🇧🇫'},
+    {code:'+223',pays:'Mali',flag:'🇲🇱'},
+    {code:'+221',pays:'Sénégal',flag:'🇸🇳'},
+    {code:'+224',pays:'Guinée',flag:'🇬🇳'},
+    {code:'+227',pays:'Niger',flag:'🇳🇪'},
+    {code:'+237',pays:'Cameroun',flag:'🇨🇲'},
+    {code:'+242',pays:'Congo',flag:'🇨🇬'},
+    {code:'+243',pays:'RDC',flag:'🇨🇩'},
+    {code:'+233',pays:'Ghana',flag:'🇬🇭'},
+    {code:'+234',pays:'Nigeria',flag:'🇳🇬'},
+    {code:'+212',pays:'Maroc',flag:'🇲🇦'},
+    {code:'+213',pays:'Algérie',flag:'🇩🇿'},
+    {code:'+216',pays:'Tunisie',flag:'🇹🇳'},
+    {code:'+33',pays:'France',flag:'🇫🇷'},
+    {code:'+1',pays:'USA/Canada',flag:'🇺🇸'},
+  ];
+  // Tester avec indicatif (ex: +228, 00228, 228)
+  for(const p of pays){
+    const ind=p.code.replace('+','');
+    if(t.startsWith('+'+ind)||t.startsWith('00'+ind)||t.startsWith(ind)){
+      const local=t.replace(/^(\+|00)?/,'').replace(/^0*/,'').slice(ind.length);
+      return {...p,numero_complet:p.code+local,numero_whatsapp:ind+local};
+    }
+  }
+  // Par défaut Togo si 8 chiffres
+  if(t.replace(/^0+/,'').length===8) return {code:'+228',pays:'Togo',flag:'🇹🇬',numero_complet:'+228'+t,numero_whatsapp:'228'+t};
+  return {code:'',pays:'Inconnu',flag:'🌍',numero_complet:'+'+t,numero_whatsapp:t};
+}
 // ── FORMULES & PRIX ────────────────────────────────
 
 async function savePrixFormule(){
@@ -616,11 +653,12 @@ async function saveEquipe(){
 
   // Envoyer invitation WhatsApp avec le code
   const siteUrl=window.location.origin;
-  const telClean=tel.replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+  const paysInfo=detecterPays(tel);
+  const telClean=paysInfo.numero_whatsapp;
   const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
-    `Vous êtes invité(e) à rejoindre *PROVENDA* en tant que *${roleLabel}*`+
+    `Vous êtes invité(e) à rejoindre *${GP_CONFIG?.nom_provenderie||'PROVENDA'}* en tant que *${roleLabel}*`+
     (pv?`\n📍 Point de vente : *${pv}*`:'')+
     `\n\n`+
     `🔑 *Votre code d'invitation :*\n`+
@@ -866,7 +904,8 @@ async function renderPDV(){
 }
 
 function membreCard(m){
-  const telClean=(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+  const paysInfo=detecterPays(m.telephone||'');
+  const telClean=paysInfo.numero_whatsapp;
   const siteUrl=window.location.origin;
   const code=m.code_invitation&&!m.code_invitation.startsWith('USED_')?m.code_invitation:null;
   const reinvitMsg=encodeURIComponent(

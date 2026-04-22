@@ -269,7 +269,14 @@ async function loadConfig(){
   if(data){
     GP_CONFIG=data;
     if(data.couleur)applyColor(data.couleur);
-    if(data.nom_provenderie){document.getElementById('tb-name').textContent=data.nom_provenderie;}
+    if(data.nom_provenderie){
+      document.getElementById('tb-name').textContent=data.nom_provenderie;
+      // Mettre à jour le lien rejoindre dans la page login
+      const joinLink=document.getElementById('join-link-text');
+      if(joinLink)joinLink.textContent='🔑 Rejoindre '+data.nom_provenderie;
+      const joinTitle=document.getElementById('join-form-title');
+      if(joinTitle)joinTitle.textContent='Rejoindre '+data.nom_provenderie;
+    }
     if(data.logo_url)applyLogo(data.logo_url);
     if(data.remise_max!==undefined)GP_REMISE_MAX=data.remise_max||5;
   }
@@ -414,6 +421,13 @@ async function joinEquipe(){
     err.textContent='Code invalide. Vérifiez le code à 6 chiffres reçu par WhatsApp.';
     return;
   }
+
+  // Charger le nom de la provenderie pour affichage
+  const{data:cfg}=await SB.from('gp_config').select('nom_provenderie')
+    .eq('user_id',membreCode.admin_id).maybeSingle();
+  const nomProv=cfg?.nom_provenderie||'PROVENDA';
+  const joinTitle=document.getElementById('join-form-title');
+  if(joinTitle)joinTitle.textContent='Rejoindre '+nomProv;
 
   // Vérifier l'email (insensible à la casse)
   if(membreCode.email.toLowerCase().trim()!==email.toLowerCase().trim()){

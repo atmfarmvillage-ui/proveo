@@ -28,7 +28,7 @@
       <div class="a-err" id="a_err"></div>
       <button class="a-btn" onclick="doLogin()">Se connecter →</button>
       <div class="a-link">Pas de compte ? <span onclick="showAuthForm('signup')">Créer un compte</span></div>
-      <div class="a-link"><span onclick="showAuthForm('join')" style="color:var(--g6)">🔑 Rejoindre une équipe avec un code</span></div>
+      <div class="a-link"><span onclick="showAuthForm('join')" style="color:var(--g6)" id="join-link-text">🔑 Rejoindre une provenderie</span></div>
       <div class="a-link"><span onclick="doForgot()">Mot de passe oublié ?</span></div>
     </div>
     <div id="auth-signup-form" style="display:none">
@@ -47,6 +47,7 @@
       <div class="a-link">Déjà un compte ? <span onclick="showAuthForm('login')">Se connecter</span></div>
     </div>
     <div id="auth-join-form" style="display:none">
+      <div class="a-title" id="join-form-title">Rejoindre une provenderie</div>
       <label class="a-label">Votre email</label>
       <input class="a-inp" id="j_email" type="email" placeholder="votre@email.com">
       <label class="a-label">Code d'invitation (6 chiffres)</label>
@@ -119,8 +120,8 @@
   <!-- ÉTAPE 5 : VENTES & CLIENTS -->
   <div class="nav-sect">💰 Ventes & Clients</div>
   <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
-  <div class="nav-item" onclick="showGP('clients')" data-page="clients"><span class="nav-icon">👥</span>Clients</div>
-  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi"><span class="nav-icon">📞</span>Suivi & Appels</div>
+  <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">👥</span>Clients</div>
+  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">📞</span>Suivi & Appels</div>
   <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
   <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
