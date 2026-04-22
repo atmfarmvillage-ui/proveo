@@ -173,10 +173,18 @@ async function bootApp(user){
   },30000);
 }
 function applyRoleRestrictions(){
-  const isAdmin=GP_ROLE==='admin';
-  document.querySelectorAll('.nav-item.admin-only').forEach(el=>{
-    el.classList.toggle('visible',isAdmin);
-    el.style.display=isAdmin?'flex':'none';
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const roles=el.dataset.roles;
+    if(roles){
+      const allowed=roles.split(',').map(r=>r.trim());
+      el.style.display=allowed.includes(GP_ROLE)?'flex':'none';
+      return;
+    }
+    if(el.classList.contains('admin-only')){
+      el.style.display=GP_ROLE==='admin'?'flex':'none';
+      return;
+    }
+    el.style.display='flex';
   });
 }
 // ── ROUTER COMPLET ────────────────────────────────
@@ -234,7 +242,10 @@ function showGP(page){
   if(pageEl)pageEl.classList.add('active');
   const navEl=document.querySelector(`[data-page="${page}"]`);
   if(navEl)navEl.classList.add('active');
-  if(PAGE_RENDERERS[page])PAGE_RENDERERS[page]();
+  if(typeof PAGE_RENDERERS!=='undefined'&&PAGE_RENDERERS[page]){
+    try{PAGE_RENDERERS[page]();}
+    catch(e){console.error('Erreur page',page,e);}
+  }
 }
 
 
