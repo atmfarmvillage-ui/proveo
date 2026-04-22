@@ -2,6 +2,19 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#16A34A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PROVENDA">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144.png">
+<link rel="apple-touch-icon" sizes="128x128" href="/icons/icon-128.png">
+<!-- Splash screen iOS -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PROVENDA — Gestion Provenderie</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -81,6 +94,9 @@
   </div>
   <span class="tb-tag">GP</span>
   <div class="tb-right">
+    <button id="pwa-install-btn" onclick="installPWA()" style="display:none;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;align-items:center;gap:5px;font-family:'Outfit',sans-serif">
+      📲 Installer l'app
+    </button>
     <div class="tb-user-info" id="tb-user-info"></div>
     <span class="tb-role" id="tb-role-badge">ADMIN</span>
     <span id="tb-pv-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:3px 10px;border-radius:20px"></span>
@@ -1597,5 +1613,51 @@
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js"></script>
 
+<script>
+// Enregistrement Service Worker PWA
+if('serviceWorker' in navigator){
+  window.addEventListener('load', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('✓ PWA Service Worker actif');
+      // Vérifier les mises à jour
+      reg.addEventListener('updatefound', ()=>{
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', ()=>{
+          if(newWorker.state==='installed' && navigator.serviceWorker.controller){
+            // Nouvelle version disponible — notifier l'app
+            if(typeof afficherBanniereMAJ === 'function') afficherBanniereMAJ('nouvelle');
+          }
+        });
+      });
+    } catch(e){ console.log('SW non supporté:', e); }
+  });
+}
+
+// Bouton d'installation PWA
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  // Afficher bouton install si disponible
+  const btn = document.getElementById('pwa-install-btn');
+  if(btn) btn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', ()=>{
+  deferredPrompt = null;
+  const btn = document.getElementById('pwa-install-btn');
+  if(btn) btn.style.display = 'none';
+  if(typeof notify==='function') notify('✓ PROVENDA installé sur votre appareil !', 'gold');
+});
+
+function installPWA(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(choice=>{
+    deferredPrompt = null;
+  });
+}
+</script>
 </body>
 </html>
