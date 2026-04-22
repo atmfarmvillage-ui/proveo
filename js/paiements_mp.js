@@ -198,15 +198,16 @@ async function saveModalPaiement(){
   // Récupérer numéro WhatsApp du fournisseur
   const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref')
     .eq('id',achatId).maybeSingle();
-  if(achat?.fournisseur_id){
-    const{data:fourn}=await SB.from('gp_fournisseurs').select('telephone,whatsapp,nom')
-      .eq('id',achat.fournisseur_id).maybeSingle();
-    const telFourn=fourn?.whatsapp||fourn?.telephone||null;
-    if(telFourn){
-      const paysInfo=detecterPays(telFourn);
-      const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
-      const nomFourn=fourn.nom||achat.fournisseur_nom||'Partenaire';
-      const provNom=GP_CONFIG?.nom_provenderie||'PROVENDA';
+  {
+    const{data:fourn}=achat?.fournisseur_id
+      ? await SB.from('gp_fournisseurs').select('telephone,whatsapp,nom').eq('id',achat.fournisseur_id).maybeSingle()
+      : {data:null};
+    const telFourn=fourn?.whatsapp||fourn?.telephone||'';
+    const paysInfo=telFourn?detecterPays(telFourn):{numero_whatsapp:''};
+    const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
+    const nomFourn=fourn?.nom||achat?.fournisseur_nom||'Partenaire';
+    const provNom=GP_CONFIG?.nom_provenderie||'PROVENDA';
+    if(true){  // toujours afficher
 
       // Messages d'intro dynamiques
       const intros=[
@@ -281,7 +282,7 @@ async function saveModalPaiement(){
       const msg=encodeURIComponent(msgText);
       // Ouvrir WhatsApp
       // Afficher bouton WhatsApp visible plutôt que window.open (évite blocage navigateur)
-      afficherBoutonWA(paysInfo.numero_whatsapp, msg);
+      afficherBoutonWA(paysInfo.numero_whatsapp||'', msg, telFourn);
     }
   }
 
@@ -322,32 +323,58 @@ async function voirHistoPaiements(achatId, fournisseurNom){
 }
 
 // ── BOUTON WHATSAPP APRÈS PAIEMENT ───────────────
-function afficherBoutonWA(numeroWA, msg){
-  // Supprimer ancien bouton si présent
+function afficherBoutonWA(numeroWA, msg, telOriginal){
   const old=document.getElementById('wa-pmt-btn');
   if(old)old.remove();
 
   const div=document.createElement('div');
   div.id='wa-pmt-btn';
-  div.style.cssText='position:fixed;bottom:90px;right:16px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:8px;animation:fadeIn .3s ease';
+  div.style.cssText='position:fixed;bottom:80px;right:16px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:8px';
+
   div.innerHTML=`
-    <div style="background:rgba(14,20,40,.95);border:1px solid rgba(37,211,102,.4);border-radius:12px;padding:12px 16px;font-size:12px;color:#E2E8F0;max-width:260px;text-align:right">
-      ✅ Paiement enregistré !<br>
-      <span style="font-size:11px;color:var(--textm)">Envoyer la confirmation au fournisseur ?</span>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="this.closest('#wa-pmt-btn').remove()" style="background:rgba(14,20,40,.9);border:1px solid var(--border2);color:var(--textm);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px">
-        Ignorer
-      </button>
-      <a href="https://wa.me/${numeroWA}?text=${msg}" target="_blank"
-        onclick="setTimeout(()=>this.closest('#wa-pmt-btn').remove(),500)"
-        style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(37,211,102,.4)">
-        📲 WhatsApp
-      </a>
+    <div style="background:rgba(8,11,24,.97);border:1px solid rgba(37,211,102,.5);border-radius:14px;padding:16px;max-width:300px;box-shadow:0 8px 30px rgba(0,0,0,.6)">
+      <div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:4px">✅ Paiement enregistré !</div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Envoyer la confirmation WhatsApp ?</div>
+      ${!numeroWA?`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;color:var(--textm);margin-bottom:4px">Numéro WhatsApp fournisseur</div>
+        <input type="tel" id="wa-numero-input" placeholder="+228 90 00 00 00"
+          style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);font-size:13px">
+      </div>`:''}
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('wa-pmt-btn').remove()"
+          style="background:rgba(30,45,74,.8);border:1px solid var(--border2);color:var(--textm);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;flex:1">
+          Ignorer
+        </button>
+        <button onclick="envoyerWAPaiement('${encodeURIComponent(msg)}')"
+          style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;flex:2;display:flex;align-items:center;justify-content:center;gap:6px">
+          📲 Envoyer WhatsApp
+        </button>
+      </div>
     </div>`;
 
+  // Stocker le numéro pour envoi
+  div.dataset.numero = numeroWA;
   document.body.appendChild(div);
+  setTimeout(()=>{const el=document.getElementById('wa-pmt-btn');if(el)el.remove();},20000);
+}
 
-  // Auto-supprimer après 15 secondes
-  setTimeout(()=>{const el=document.getElementById('wa-pmt-btn');if(el)el.remove();},15000);
+function envoyerWAPaiement(msgEncoded){
+  const btn=document.getElementById('wa-pmt-btn');
+  let numero=btn?.dataset.numero||'';
+  if(!numero){
+    // Lire depuis le champ input si pas de numéro
+    const inp=document.getElementById('wa-numero-input');
+    if(inp?.value.trim()){
+      const paysInfo=detecterPays(inp.value.trim());
+      numero=paysInfo.numero_whatsapp;
+    }
+  }
+  if(!numero){
+    const inp=document.getElementById('wa-numero-input');
+    if(inp)inp.style.borderColor='var(--red)';
+    return;
+  }
+  window.open(`https://wa.me/${numero}?text=${msgEncoded}`,'_blank');
+  if(btn)btn.remove();
 }
