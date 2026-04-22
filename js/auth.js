@@ -180,7 +180,7 @@ function applyRoleRestrictions(){
   });
 }
 // ── ROUTER COMPLET ────────────────────────────────
-const PAGE_RENDERERS = {
+var PAGE_RENDERERS = {
   dashboard:     renderDashboard,
   stock:         renderStockNiveaux,
   matieres:      renderMatieresPremieresPage,
