@@ -539,7 +539,7 @@ function renderIngrAdmin(){
         </td>
       </tr>`).join('')}
       </tbody>
-    </table></div>`
+    </table>`
   :'<div style="color:var(--textm);font-size:12px">Aucun ingrédient trouvé.</div>';
 }
 

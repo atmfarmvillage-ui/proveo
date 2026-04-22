@@ -184,12 +184,15 @@ async function bootApp(user){
   checkPendingRemises();
   // Auto lot ref
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
-  // Auto refresh
+  // Auto refresh toutes les 30s
   setInterval(()=>{
     const active=document.querySelector('.page.active')?.id?.replace('page-','');
-    if(['dashboard','stock','ventes'].includes(active))showGP(active);
+    if(active)showGP(active);
     checkPendingRemises();
   },30000);
+
+  // Realtime sync — recharger la page active à chaque changement DB
+  initRealtimeSync();
 }
 function applyRoleRestrictions(){
   document.querySelectorAll('.nav-item').forEach(el=>{
@@ -495,4 +498,39 @@ function closeSidebar(){
   const ov=document.getElementById('overlay');
   sb.classList.remove('open');
   if(ov)ov.classList.remove('show');
+}
+// ── REALTIME SYNC GLOBAL ─────────────────────
+function initRealtimeSync(){
+  if(!GP_ADMIN_ID)return;
+  const tables=[
+    'gp_ventes','gp_clients','gp_depenses','gp_lots',
+    'gp_stock_mp','gp_fournisseurs','gp_achats',
+    'gp_caisses','gp_mouvements_caisse','gp_membres',
+    'gp_stock_produits_pdv','gp_livraisons_pdv',
+    'gp_ingredients','gp_prix_formules','gp_points_vente'
+  ];
+
+  // Un seul canal pour tous les changements
+  const channel=SB.channel('provenda-sync-'+GP_ADMIN_ID);
+
+  tables.forEach(table=>{
+    channel.on('postgres_changes',{
+      event:'*',
+      schema:'public',
+      table:table,
+      filter:'admin_id=eq.'+GP_ADMIN_ID
+    },()=>{
+      // Recharger les données globales si besoin
+      if(['gp_clients'].includes(table))loadClients();
+      if(['gp_prix_formules'].includes(table))loadPrix();
+      if(['gp_ingredients'].includes(table))loadIngredients();
+      // Rafraîchir la page active
+      const active=document.querySelector('.page.active')?.id?.replace('page-','');
+      if(active&&PAGE_RENDERERS[active]){
+        try{PAGE_RENDERERS[active]();}catch(e){}
+      }
+    });
+  });
+
+  channel.subscribe();
 }

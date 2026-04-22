@@ -19,7 +19,7 @@ async function saveClient(){
 function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   const filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
-  document.getElementById('clients-liste').innerHTML=filtered.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nom</th><th>Téléphone</th><th>Type</th><th class="num">Achats</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th></th></tr></thead><tbody>
+  document.getElementById('clients-liste').innerHTML=filtered.length?`<table class="tbl"><thead><tr><th>Nom</th><th>Téléphone</th><th>Type</th><th class="num">Achats</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th></th></tr></thead><tbody>
     ${filtered.map(c=>`<tr>
       <td><div style="font-weight:600">${c.nom}</div><div style="font-size:10px;color:var(--textm)">${c.localisation||''}</div></td>
       <td>${c.telephone||'—'}</td>
@@ -27,7 +27,7 @@ function renderClients(){
       <td class="num">${c.nb_achats||0}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(c.total_achats||0)} F</td>`:''}
       <td><button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button></td>
-    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
 }
 async function deleteClient(id){
   if(!confirm('Supprimer ce client ?'))return;
@@ -71,7 +71,7 @@ function renderSuivi(){
         <td style="font-size:10px;color:var(--textm);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.note||'—'}</td>
         <td style="font-size:10px;color:var(--textm);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.note_observation||'—'}</td>
         <td>${a.client_id?`<button class="btn btn-g btn-sm" onclick="ouvrirModalWA('${a.client_id}')" title="WhatsApp">📲</button>`:'—'}</td>
-      </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun appel enregistré.</div>';
+      </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun appel enregistré.</div>';
   });
 }
 
@@ -182,12 +182,12 @@ async function renderClassement(){
     <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(totKg)}</div><div class="econo-lbl">Kg total vendus</div></div>
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totCA)}</div><div class="econo-lbl">CA total (F)</div></div>`:'<div></div>'}
     <div class="econo-box"><div class="econo-val">${totKg>0&&sorted.length>0?fmt(Math.round(totKg/sorted.length)):0}</div><div class="econo-lbl">Moy kg/client</div></div>`;
-  document.getElementById('classement-liste').innerHTML=sorted.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Client</th><th>Téléphone</th><th class="num">Achats</th><th class="num">Kg total</th>${GP_ROLE==='admin'?'<th class="num">CA (F)</th>':''}<th>Segment</th></tr></thead><tbody>
+  document.getElementById('classement-liste').innerHTML=sorted.length?`<table class="tbl"><thead><tr><th>#</th><th>Client</th><th>Téléphone</th><th class="num">Achats</th><th class="num">Kg total</th>${GP_ROLE==='admin'?'<th class="num">CA (F)</th>':''}<th>Segment</th></tr></thead><tbody>
     ${sorted.map((c,i)=>{
       const pos=i+1;
       const cls=pos<=15?'client-vert':pos<=30?'client-jaune':'';
       const seg=pos<=15?'<span class="badge bdg-g">🥇 Top 15</span>':pos<=30?'<span class="badge bdg-gold">🥈 16-30</span>':'<span class="badge" style="background:rgba(30,45,74,.5);color:var(--textm);">Standard</span>';
-      return `<tr class="${cls}"><td style="font-weight:700;color:${pos<=15?'var(--green)':pos<=30?'var(--gold)':'var(--textm)'}">#${pos}</td><td style="font-weight:600">${c.nom}</td><td>${c.tel||'—'}</td><td class="num">${c.nbAchats}</td><td class="num">${fmt(c.totalKg)} kg</td>${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(c.totalCA)} F</td>`:''}  <td>${seg}</td></tr>`;}).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente enregistrée.</div>';
+      return `<tr class="${cls}"><td style="font-weight:700;color:${pos<=15?'var(--green)':pos<=30?'var(--gold)':'var(--textm)'}">#${pos}</td><td style="font-weight:600">${c.nom}</td><td>${c.tel||'—'}</td><td class="num">${c.nbAchats}</td><td class="num">${fmt(c.totalKg)} kg</td>${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(c.totalCA)} F</td>`:''}  <td>${seg}</td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente enregistrée.</div>';
 }
 // ── MESSAGES WHATSAPP ──────────────────────────────
 let waClientCourant = null;

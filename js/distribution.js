@@ -76,7 +76,7 @@ async function renderDistribution(){
         </tr>`;
       }).join('')}
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune livraison enregistrée.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucune livraison enregistrée.</div>';
 
   // Stock produits finis par PDV
   await renderStockPDV();

@@ -34,7 +34,7 @@ async function renderReversements(){
     <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalAnnuel)}</div><div class="econo-lbl">Total annuel (F)</div></div>
     <div class="econo-box"><div class="econo-val">${P.length}</div><div class="econo-lbl">PDV en dépôt-vente</div></div>`;
 
-  document.getElementById('rev-liste').innerHTML=R.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+  document.getElementById('rev-liste').innerHTML=R.length?`<table class="tbl" style="font-size:11px">
       <thead><tr><th>PDV</th><th>Mois</th><th class="num">Montant</th><th>Mode</th><th>Note</th><th>Par</th></tr></thead>
       <tbody>
       ${R.map(r=>`<tr>
@@ -46,7 +46,7 @@ async function renderReversements(){
         <td style="font-size:10px;color:var(--textm)">${r.enregistre_par_nom||'—'}</td>
       </tr>`).join('')}
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun reversement enregistré.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun reversement enregistré.</div>';
 }
 
 async function saveReversement(){

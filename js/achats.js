@@ -45,7 +45,7 @@ async function renderAchats(){
         </tr>`;
       }).join('')}
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
 }
 
 function statutAchatBadge(s){
@@ -114,7 +114,7 @@ function supprimerLigneAchat(idx){
 
 function renderLignesAchat(){
   const total=ACHAT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
-  document.getElementById('achat-lignes-preview').innerHTML=ACHAT_LIGNES.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px;margin-top:8px">
+  document.getElementById('achat-lignes-preview').innerHTML=ACHAT_LIGNES.length?`<table class="tbl" style="font-size:11px;margin-top:8px">
       <thead><tr><th>Ingrédient</th><th class="num">Qté (kg)</th><th class="num">Prix/kg</th><th class="num">Montant</th><th></th></tr></thead>
       <tbody>
       ${ACHAT_LIGNES.map((l,i)=>`<tr>
@@ -130,7 +130,7 @@ function renderLignesAchat(){
         <td></td>
       </tr>
       </tbody>
-    </table></div>`:'';
+    </table>`:'';
 }
 
 async function saveAchat(){
@@ -185,7 +185,7 @@ async function ouvrirReception(achatId){
   const L=lignes||[];
   const modal=document.getElementById('modal-reception');
   document.getElementById('reception-achat-id').value=achatId;
-  document.getElementById('reception-lignes').innerHTML=`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+  document.getElementById('reception-lignes').innerHTML=`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Ingrédient</th><th class="num">Commandé</th><th class="num">Quantité reçue</th></tr></thead>
       <tbody>
       ${L.map(l=>`<tr>
@@ -197,7 +197,7 @@ async function ouvrirReception(achatId){
         </td>
       </tr>`).join('')}
       </tbody>
-    </table></div>`;
+    </table>`;
   modal.style.display='flex';
 }
 
@@ -316,7 +316,7 @@ async function voirDetailAchat(id){
       </tbody>
     </table>
     <div style="font-size:11px;font-weight:700;color:var(--g6);margin-bottom:6px">Historique paiements</div>
-    ${P.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+    ${P.length?`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Date</th><th>Mode</th><th>Réf</th><th class="num">Montant</th></tr></thead>
       <tbody>${P.map(p=>`<tr>
         <td>${p.date_paiement}</td>
@@ -326,7 +326,7 @@ async function voirDetailAchat(id){
       </tr>`).join('')}
       <tr style="font-weight:700"><td colspan="3">TOTAL PAYÉ</td><td class="num" style="color:var(--green)">${fmt(a.montant_paye)} F</td></tr>
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement enregistré.</div>'}
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement enregistré.</div>'}
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
     ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}`;

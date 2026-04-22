@@ -78,7 +78,7 @@ async function renderCaisse(){
         <td class="num" style="color:${m.type==='entree'?'var(--green)':'var(--red)'}">${m.type==='entree'?'+':'−'}${fmt(m.montant)}</td>
         <td style="font-size:10px;color:var(--textm)">${m.enregistre_par_nom||'—'}</td>
       </tr>`).join('')}</tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
 }
 
 function populateCaisseSelects(caisses,soldes){
@@ -277,7 +277,7 @@ async function voirHistoriqueCaisse(caisseId,nom){
   const M=data||[];
   const modal=document.getElementById('modal-historique-caisse');
   document.getElementById('historique-caisse-titre').textContent='📋 '+nom;
-  document.getElementById('historique-caisse-content').innerHTML=M.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+  document.getElementById('historique-caisse-content').innerHTML=M.length?`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Montant</th></tr></thead>
       <tbody>${M.map(m=>{
         const entrant=(m.caisse_id===caisseId&&m.type==='entree')||(m.caisse_dest_id===caisseId&&m.type==='transfert');
@@ -288,7 +288,7 @@ async function voirHistoriqueCaisse(caisseId,nom){
           <td class="num" style="color:${entrant?'var(--green)':'var(--red)'}">${entrant?'+':'−'}${fmt(m.montant)}</td>
         </tr>`;}).join('')}
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
   modal.style.display='flex';
 }
 

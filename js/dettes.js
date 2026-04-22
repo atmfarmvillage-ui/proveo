@@ -27,7 +27,7 @@ async function renderDettes(){
       membres.map(m=>`<option value="${m.id}">${m.nom||m.email}</option>`).join('');
   }
 
-  document.getElementById('dettes-liste').innerHTML=D.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+  document.getElementById('dettes-liste').innerHTML=D.length?`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Secrétaire</th><th class="num">Montant dû</th><th class="num">Remboursé</th><th class="num">Reste</th><th>Statut</th></tr></thead>
       <tbody>
       ${D.map(d=>{
@@ -40,7 +40,7 @@ async function renderDettes(){
           <td><span class="badge ${d.statut==='rembourse'?'bdg-g':d.statut==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${d.statut}</span></td>
         </tr>`;}).join('')}
       </tbody>
-    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune dette enregistrée.</div>';
+    </table>`:'<div style="color:var(--textm);font-size:12px">Aucune dette enregistrée.</div>';
 }
 
 async function saveRemboursement(){

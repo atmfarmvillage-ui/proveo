@@ -39,7 +39,7 @@ async function renderMatieresPremieresPage(){
   // Trier par nom
   const sorted=[...filtered].sort((a,b)=>a.nom.localeCompare(b.nom));
 
-  document.getElementById('mp-liste-page').innerHTML=`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
+  document.getElementById('mp-liste-page').innerHTML=`<table class="tbl" style="font-size:11px">
       <thead><tr>
         <th>Nom</th>
         <th class="num">Prix/kg (F)</th>
@@ -91,7 +91,7 @@ async function renderMatieresPremieresPage(){
         </tr>`;
       }).join('')}
       </tbody>
-    </table></div>`;
+    </table>`;
 
   // Remplir aussi le select du seuil rapide
   populateMPSelect();
