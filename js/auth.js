@@ -96,7 +96,24 @@ async function doLogout(){
 async function bootApp(user){
   GP_USER=user;
   // Check if admin or member
-  const{data:membre}=await SB.from('gp_membres').select('*').eq('user_id',user.id).maybeSingle();
+  // Chercher le membre par user_id d'abord
+  let{data:membre}=await SB.from('gp_membres').select('*').eq('user_id',user.id).maybeSingle();
+
+  // Si pas trouvé par user_id, chercher par email (compte récemment créé via code)
+  if(!membre){
+    const{data:membreEmail}=await SB.from('gp_membres').select('*')
+      .eq('email',user.email).maybeSingle();
+    if(membreEmail){
+      membre=membreEmail;
+      // Lier le user_id maintenant qu'il est authentifié
+      await SB.from('gp_membres').update({
+        user_id:user.id,
+        code_invitation:null,
+        code_expire_le:null
+      }).eq('id',membreEmail.id);
+    }
+  }
+
   if(membre){
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
@@ -385,19 +402,12 @@ async function joinEquipe(){
   err.textContent='Vérification du code...';
 
   // Chercher par code uniquement d'abord
-  // DEBUG : chercher tous les membres pour voir les codes
-  const{data:tousLesMembers}=await SB.from('gp_membres').select('nom,email,code_invitation,user_id');
-  console.log('Tous les membres:', JSON.stringify(tousLesMembers));
-  console.log('Code saisi:', code, 'Email saisi:', email);
-
-  const{data:membreCode,error:errCode}=await SB.from('gp_membres').select('*')
+  const{data:membreCode}=await SB.from('gp_membres').select('*')
     .eq('code_invitation',code)
     .maybeSingle();
 
-  console.log('Résultat recherche par code:', membreCode, 'Erreur:', errCode);
-
   if(!membreCode){
-    err.textContent='Code invalide. Codes disponibles: '+(tousLesMembers?.map(m=>m.code_invitation).filter(Boolean).join(', ')||'aucun');
+    err.textContent='Code invalide. Vérifiez le code à 6 chiffres reçu par WhatsApp.';
     return;
   }
 
@@ -423,19 +433,19 @@ async function joinEquipe(){
 
   err.textContent='Création du compte...';
 
-  // Créer le compte
+  // Créer le compte Supabase
   const{data,error}=await SB.auth.signUp({email,password:pass,options:{data:{nom:membre.nom}}});
   if(error){err.textContent=error.message;return;}
   if(!data?.user){err.textContent='Erreur lors de la création du compte.';return;}
 
-  // Lier le compte au membre
+  // Marquer le code comme utilisé (user_id sera lié au prochain login)
+  // On utilise le code comme clé car l'user n'est pas encore authentifié
   await SB.from('gp_membres').update({
-    user_id:data.user.id,
-    code_invitation:null,
+    code_invitation:'USED_'+data.user.id,
     code_expire_le:null
-  }).eq('id',membre.id);
+  }).eq('code_invitation',code);
 
   err.textContent='';
-  ok.textContent='✓ Compte créé ! Vous pouvez maintenant vous connecter.';
+  ok.textContent='✓ Compte créé ! Connectez-vous maintenant avec votre email et mot de passe.';
   setTimeout(()=>showAuthForm('login'),2500);
 }
