@@ -94,62 +94,7 @@ async function deleteIngredient(id){
 function openNewFormule(){notify('Nouvelle formule — fonctionnalité en développement','gold');}
 
 // ── ÉQUIPE ─────────────────────────────────────────
-async function saveEquipe(){
-  const nom=document.getElementById('eq_nom').value.trim();
-  const email=document.getElementById('eq_email').value.trim();
-  const tel=document.getElementById('eq_tel')?.value.trim()||'';
-  const role=document.getElementById('eq_role').value;
-  const pv=document.getElementById('eq_pv_hidden')?.value.trim()||null;
-  const err=document.getElementById('eq_err');
-  const ok=document.getElementById('eq_ok');
-  if(!nom||!email){err.textContent='Nom et email requis.';return;}
-  if(!tel){err.textContent='Numéro WhatsApp requis pour envoyer l\'invitation.';return;}
-  err.textContent='';ok.innerHTML='';
 
-  // Vérifier doublon
-  const{data:exist}=await SB.from('gp_membres').select('id').eq('email',email).eq('admin_id',GP_ADMIN_ID);
-  if(exist&&exist.length>0){err.textContent='Cet email est déjà dans votre équipe.';return;}
-
-  // Enregistrer le membre
-  const{error}=await SB.from('gp_membres').insert({
-    admin_id:GP_ADMIN_ID,
-    nom,email,role,
-    point_vente:pv,
-    telephone:tel,
-    user_id:null
-  });
-  if(error){err.textContent='Erreur: '+error.message;return;}
-
-  // Envoyer invitation WhatsApp au numéro de la secrétaire
-  const siteUrl=window.location.origin;
-  const telClean=tel.replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const roleLabel=role==='admin'?'Administrateur':'Secrétaire';
-  const msg=encodeURIComponent(
-    `Bonjour ${nom} 👋\n\n`+
-    `Vous avez été ajouté(e) comme *${roleLabel}* sur *PROVENDA*`+
-    (pv?`\n📍 Point de vente : *${pv}*`:'')+
-    `\n\n`+
-    `📌 *Comment accéder au logiciel :*\n`+
-    `1. Ouvrez ce lien : *${siteUrl}*\n`+
-    `2. Cliquez *"Créer un compte"*\n`+
-    `3. Utilisez exactement cet email : *${email}*\n`+
-    `4. Choisissez un mot de passe\n\n`+
-    `⚠️ Utilisez bien l'adresse email *${email}* — sinon l'accès ne sera pas reconnu.\n\n`+
-    `_PROVENDA · ATM Farm Village_`
-  );
-
-  ['eq_nom','eq_email','eq_tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-
-  ok.innerHTML=`
-    <div style="color:var(--green);margin-bottom:8px">✓ <strong>${nom}</strong> ajouté(e) — ${roleLabel}${pv?' · '+pv:''}</div>
-    <a href="https://wa.me/228${telClean}?text=${msg}" target="_blank"
-      class="btn btn-g btn-sm" style="display:inline-flex;text-decoration:none;width:100%;justify-content:center">
-      📲 Envoyer l'invitation WhatsApp à ${nom}
-    </a>`;
-
-  notify(`${nom} ajouté(e) ✓`,'gold');
-  renderEquipe();
-}
 
 async function deleteMembre(id){
   if(!confirm('Supprimer ce membre ?'))return;
@@ -691,7 +636,7 @@ async function saveEquipe(){
   // Envoyer invitation WhatsApp au numéro de la secrétaire
   const siteUrl=window.location.origin;
   const telClean=tel.replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const roleLabel=role==='admin'?'Administrateur':'Secrétaire';
+  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
     `Vous avez été ajouté(e) comme *${roleLabel}* sur *PROVENDA*`+
