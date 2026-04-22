@@ -189,7 +189,10 @@ async function bootApp(user){
   // Auto refresh toutes les 30s
   setInterval(()=>{
     const active=document.querySelector('.page.active')?.id?.replace('page-','');
-    if(active)showGP(active);
+    const pagesExclues2=['achats','ventes','fournisseurs','clients','production'];
+    const formulaireActif2=document.activeElement&&
+      ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
+    if(active&&!(formulaireActif2&&pagesExclues2.includes(active)))showGP(active);
     checkPendingRemises();
   },30000);
 
@@ -535,7 +538,11 @@ function initRealtimeSync(){
       if(['gp_ingredients'].includes(table))loadIngredients();
       // Rafraîchir la page active
       const active=document.querySelector('.page.active')?.id?.replace('page-','');
-      if(active&&PAGE_RENDERERS[active]){
+      // Ne pas rafraîchir si un formulaire est en cours de saisie
+      const pagesExclues=['achats','ventes','fournisseurs','clients','production'];
+      const formulaireActif=document.activeElement&&
+        ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
+      if(active&&PAGE_RENDERERS[active]&&!(formulaireActif&&pagesExclues.includes(active))){
         try{PAGE_RENDERERS[active]();}catch(e){}
       }
     });
