@@ -31,7 +31,7 @@ function calcVente(){
   const statut=document.getElementById('vt_statut').value;
   const total=qte*prix-remise;
   const remisePct=qte*prix>0?remise/(qte*prix)*100:0;
-  document.getElementById('vt-paye-wrap').style.display=statut!=='paye'?'block':'none';
+  // statut calculé automatiquement
   const warn=document.getElementById('vt-remise-warning');
   warn.style.display=remisePct>GP_REMISE_MAX?'block':'none';
   document.getElementById('vt-preview').innerHTML=qte&&prix?`
@@ -41,7 +41,7 @@ function calcVente(){
     </div>`:'Saisissez les informations pour voir le total.';
 }
 async function saveVente(){
-  const clientId=document.getElementById('vt_client')?.value;
+  let clientId=document.getElementById('vt_client')?.value;
   const note=document.getElementById('vt_note')?.value.trim()||null;
   const paye=+document.getElementById('vt_paye')?.value||0;
   const pv=GP_POINT_VENTE||document.getElementById('vt_pv')?.value.trim()||null;
@@ -49,12 +49,36 @@ async function saveVente(){
 
   if(!VT_LIGNES.length){err.textContent='Ajoutez au moins un produit.';return;}
 
+  // ── NOUVEAU CLIENT ──────────────────────────────
+  if(clientId==='__nouveau__'){
+    const nom=document.getElementById('vt_cl_nom')?.value.trim();
+    const prenom=document.getElementById('vt_cl_prenom')?.value.trim()||'';
+    const ferme=document.getElementById('vt_cl_ferme')?.value.trim()||null;
+    const localite=document.getElementById('vt_cl_localite')?.value.trim()||null;
+    const tel=document.getElementById('vt_cl_tel')?.value.trim()||null;
+    const typeNv=document.getElementById('vt_cl_type')?.value||'detail';
+    if(!nom){err.textContent='Entrez le nom du nouveau client.';return;}
+    const nomComplet=(nom+(prenom?' '+prenom:'')).trim();
+    const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
+      admin_id:GP_ADMIN_ID,
+      nom:nomComplet,telephone:tel,
+      type_client:typeNv,total_achats:0,
+      nom_ferme:ferme,localite
+    }).select().maybeSingle();
+    if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
+    clientId=nc?.id||null;
+    await loadClients();
+    populateSelects();
+    notify(nomComplet+' enregistré comme client ✓','gold');
+  }
+
   const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  // Statut paiement automatique
   const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
 
   // Déterminer type client
   const client=GP_CLIENTS.find(c=>c.id===clientId);
-  const typeClient=client?.type_client||'detail';
+  const typeClient=client?.type_client||document.getElementById('vt_cl_type')?.value||'detail';
 
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,

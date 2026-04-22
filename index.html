@@ -97,7 +97,7 @@
 
   <!-- ÉTAPE 1 : APPROVISIONNEMENT -->
   <div class="nav-sect">🛒 Approvisionnement</div>
-  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
+  <div class="nav-item" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
   <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
 
   <!-- ÉTAPE 2 : MATIÈRES PREMIÈRES & STOCK -->
@@ -444,15 +444,12 @@
       </div>
       <div class="fg2">
         <div class="fr"><label>Remise (FCFA)</label><input type="number" id="vt_remise" value="0" oninput="calcVente()"></div>
-        <div class="fr"><label>Statut paiement</label>
-          <select id="vt_statut" onchange="calcVente()">
-            <option value="paye">✅ Payé</option>
-            <option value="partiel">⚠ Partiel</option>
-            <option value="credit">❌ Crédit</option>
-          </select>
-        </div>
+        <div class="fr"><label>Montant payé (FCFA)</label><input type="number" id="vt_paye" placeholder="0" oninput="calcVente()"></div>
       </div>
-      <div class="fr" id="vt-paye-wrap" style="display:none"><label>Montant payé (FCFA)</label><input type="number" id="vt_paye" placeholder="0"></div>
+      <div class="fr">
+        <label>Statut (automatique)</label>
+        <div id="vt-statut-badge" style="padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)">⏳ Impayé</div>
+      </div>
       <div id="vt-preview" style="background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px">Saisissez les informations pour voir le total.</div>
       <div id="vt-remise-warning" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:8px;font-size:11px;color:var(--gold);margin-bottom:8px">⚠ Remise > 5% : validation admin requise</div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveVente()">✓ Enregistrer la vente</button>

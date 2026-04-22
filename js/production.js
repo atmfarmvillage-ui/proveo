@@ -9,18 +9,36 @@ function onFormuleChange(){
   }
 }
 function previewLot(){
-  const nom=document.getElementById('lot_formule').value;
-  const qte=+document.getElementById('lot_qte').value||0;
-  const f=getFormule(nom);
+  const nom=document.getElementById('lot_formule')?.value;
+  const qte=+document.getElementById('lot_qte')?.value||0;
+  const f=getFormule(nom)||FORMULES_SADARI.find(x=>x.nom===nom)||null;
+
+  // Mettre à jour labels coûts
+  if(f&&qte>0){
+    const avecEmb=document.getElementById('lot_avec_emb')?.checked;
+    const avecTrans=document.getElementById('lot_avec_trans')?.checked;
+    const mo=f.cout_mo_tonne?(f.cout_mo_tonne*(qte/1000)):0;
+    const emb=avecEmb&&f.cout_emballage_kg?(f.cout_emballage_kg*qte):0;
+    const trans=avecTrans&&f.cout_transport_lot?f.cout_transport_lot:0;
+    const moLabel=document.getElementById('lot_mo_label');
+    const embLabel=document.getElementById('lot_emb_label');
+    const transLabel=document.getElementById('lot_trans_label');
+    if(moLabel)moLabel.textContent=fmt(mo)+' F';
+    if(embLabel)embLabel.textContent=fmt(emb)+' F';
+    if(transLabel)transLabel.textContent=fmt(trans)+' F';
+    const moInput=document.getElementById('lot_mo');
+    if(moInput)moInput.value=mo;
+  }
+
   const coutZone=document.getElementById('lot-couts-auto');
 
   if(f&&nom){
     if(coutZone)coutZone.style.display='block';
-    // Pré-cocher cases selon formule (une seule fois)
+    // Pré-cocher cases selon formule
     const avecEmbCheck=document.getElementById('lot_avec_emb');
     const avecTransCheck=document.getElementById('lot_avec_trans');
-    if(avecEmbCheck&&!avecEmbCheck.dataset.touched) avecEmbCheck.checked=f.avec_emballage!==false;
-    if(avecTransCheck&&!avecTransCheck.dataset.touched) avecTransCheck.checked=f.avec_transport===true;
+    if(avecEmbCheck) avecEmbCheck.checked=f.avec_emballage!==false;
+    if(avecTransCheck) avecTransCheck.checked=f.avec_transport===true;
   } else {
     if(coutZone)coutZone.style.display='none';
   }

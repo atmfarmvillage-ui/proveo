@@ -9,6 +9,12 @@ async function renderBilanAvance(){
   const[annee,moisNum]=mois.split('-');
 
   // Charger données parallèlement
+  // Debug : vérifier GP_ADMIN_ID
+  if(!GP_ADMIN_ID){
+    document.getElementById('bilan-kpis').innerHTML='<div style="color:var(--red)">Erreur : non connecté.</div>';
+    return;
+  }
+
   const[ventesRes,depRes,lotsRes,salRes]=await Promise.all([
     SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
