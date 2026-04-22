@@ -193,13 +193,13 @@ async function savePaiementFourn(){
   });
 
   // Mettre à jour montant_paye sur l'achat
-  const{data:achat}=await SB.from('gp_achats').select('montant_paye,montant_total,fournisseur_id,fournisseur_nom').eq('id',achatId).single();
+  const{data:achat}=await SB.from('gp_achats').select('montant_paye,montant_total,fournisseur_id,fournisseur_nom').eq('id',achatId).maybeSingle();
   if(achat){
     const nouveauPaye=Number(achat.montant_paye||0)+montant;
     await SB.from('gp_achats').update({montant_paye:nouveauPaye}).eq('id',achatId);
 
     // Envoyer WhatsApp au fournisseur si numéro disponible
-    const{data:fourn}=await SB.from('gp_fournisseurs').select('whatsapp,nom').eq('id',achat.fournisseur_id).single();
+    const{data:fourn}=await SB.from('gp_fournisseurs').select('whatsapp,nom').eq('id',achat.fournisseur_id).maybeSingle();
     if(fourn?.whatsapp){
       const reste=Number(achat.montant_total)-nouveauPaye;
       const tel=fourn.whatsapp.replace(/[\s\-\+]/g,'').replace(/^228/,'');

@@ -11,11 +11,11 @@ async function renderBilanAvance(){
   // Charger données parallèlement
   const[ventesRes,depRes,lotsRes,salRes]=await Promise.all([
     SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31'),
+      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant,categorie,description,point_vente,date,prix_unitaire,quantite')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31'),
+      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_lots').select('formule_nom,quantite_kg,cout_total,date')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31'),
+      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_salaires').select('montant,nom_prenom')
       .eq('admin_id',GP_ADMIN_ID).eq('mois',mois)
   ]);
@@ -130,9 +130,9 @@ async function renderBilanAnnuel(){
     const moisStr=`${annee}-${m}`;
     const[v,d,s]=await Promise.all([
       SB.from('gp_ventes').select('montant_paye').eq('admin_id',GP_ADMIN_ID)
-        .gte('date',moisStr+'-01').lte('date',moisStr+'-31'),
+        .gte('date',moisStr+'-01').lte('date',moisStrfinMois(mois)),
       SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
-        .gte('date',moisStr+'-01').lte('date',moisStr+'-31'),
+        .gte('date',moisStr+'-01').lte('date',moisStrfinMois(mois)),
       SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',moisStr)
     ]);
     const recettes=(v.data||[]).reduce((s,x)=>s+Number(x.montant_paye||0),0);
@@ -196,9 +196,9 @@ async function envoyerBilanWhatsApp(mois){
 
   const[ventesRes,depRes,salRes]=await Promise.all([
     SB.from('gp_ventes').select('montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID)
-      .gte('date',mois+'-01').lte('date',mois+'-31'),
+      .gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
-      .gte('date',mois+'-01').lte('date',mois+'-31'),
+      .gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',mois)
   ]);
 
@@ -233,7 +233,7 @@ async function renderRapportProduction(){
   const mois=document.getElementById('rapport-mois')?.value||thisMonth();
   const{data:lots}=await SB.from('gp_lots').select('*')
     .eq('admin_id',GP_ADMIN_ID)
-    .gte('date',mois+'-01').lte('date',mois+'-31')
+    .gte('date',mois+'-01').lte('date',finMois(mois))
     .order('date',{ascending:false});
   const L=lots||[];
 
@@ -288,7 +288,7 @@ async function renderRapportProduction(){
 async function envoyerRapportProdWhatsApp(mois){
   const cfg=GP_CONFIG||{};
   const{data:lots}=await SB.from('gp_lots').select('formule_nom,quantite_kg,cout_total')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31');
+    .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois));
   const L=lots||[];
   const parFormule={};
   L.forEach(l=>{

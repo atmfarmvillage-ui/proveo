@@ -147,7 +147,7 @@ async function saveLivraison(){
 
 // ── CONFIRMATION RÉCEPTION ────────────────────────
 async function ouvrirConfirmationReception(livId){
-  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',livId).single();
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',livId).maybeSingle();
   if(!l)return;
   const modal=document.getElementById('modal-confirm-reception');
   document.getElementById('cr-livraison-id').value=livId;
@@ -166,7 +166,7 @@ async function confirmerReceptionLivraison(){
   const qteConfirmee=+document.getElementById('cr-qte')?.value||0;
   const note=document.getElementById('cr-note')?.value.trim()||null;
 
-  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',livId).single();
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',livId).maybeSingle();
   if(!l)return;
 
   const statut=qteConfirmee<l.qte_envoyee?'litige':'confirme';
@@ -179,7 +179,7 @@ async function confirmerReceptionLivraison(){
 
   // Mettre à jour stock PDV destination
   const{data:stockExist}=await SB.from('gp_stock_produits_pdv').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',l.pdv_dest_nom).eq('formule_nom',l.formule_nom).single();
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',l.pdv_dest_nom).eq('formule_nom',l.formule_nom).maybeSingle();
 
   if(stockExist){
     await SB.from('gp_stock_produits_pdv').update({
@@ -228,7 +228,7 @@ async function savePaiementLivraison(){
     livraison_id:livId,admin_id:GP_ADMIN_ID,montant,mode,date_paiement:today()
   });
 
-  const{data:l}=await SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_dest_nom').eq('id',livId).single();
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_dest_nom').eq('id',livId).maybeSingle();
   if(l){
     const nouveauPaye=Number(l.montant_paye||0)+montant;
     const statutPaiement=nouveauPaye>=Number(l.montant_total)?'paye':nouveauPaye>0?'partiel':'impaye';
@@ -328,7 +328,7 @@ async function mettreAJourSeuilPDV(stockId,seuil){
 }
 
 async function voirDetailLivraison(id){
-  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',id).single();
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',id).maybeSingle();
   const{data:paiements}=await SB.from('gp_paiements_livraison_pdv').select('*')
     .eq('livraison_id',id).order('date_paiement');
   if(!l)return;

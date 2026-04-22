@@ -8,7 +8,7 @@ async function renderInventairePhysique(){
 
   // Chercher inventaire existant pour ce mois
   const{data:existing}=await SB.from('gp_inventaires').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).single();
+    .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).maybeSingle();
 
   if(existing){
     afficherInventaireExistant(existing,mois);
@@ -139,7 +139,7 @@ async function sauvegarderInventairePhysique(mois){
     saisi_par_nom:GP_USER.email?.split('@')[0]||'—',
     statut:'soumis',note,
     cout_ecart_total:coutTotal
-  }).select().single();
+  }).select().maybeSingle();
 
   if(error){notify('Erreur: '+error.message,'r');return;}
 
@@ -206,7 +206,7 @@ async function afficherInventaireExistant(inv,mois){
 
 // ── VALIDATION PAR ADMIN DIFFÉRENT ───────────────
 async function validerInventaire(invId){
-  const{data:inv}=await SB.from('gp_inventaires').select('*').eq('id',invId).single();
+  const{data:inv}=await SB.from('gp_inventaires').select('*').eq('id',invId).maybeSingle();
   if(!inv)return;
   if(inv.saisi_par===GP_USER.id){
     notify('Vous ne pouvez pas valider votre propre inventaire','r');
@@ -260,7 +260,7 @@ async function supprimerInventaire(invId){
 // ── IMPRESSION FICHE D'INVENTAIRE ─────────────────
 async function imprimerFicheInventaire(mois){
   const{data:inv}=await SB.from('gp_inventaires').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).single();
+    .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).maybeSingle();
   const cfg=GP_CONFIG||{};
   const date=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
 

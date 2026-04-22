@@ -156,7 +156,7 @@ async function saveAchat(){
     montant_total:total,montant_paye:0,
     statut:'brouillon',cree_par:GP_USER.id,
     cree_par_nom:GP_USER.email
-  }).select().single();
+  }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
@@ -258,7 +258,7 @@ async function validerAchatDAF(achatId,approuve){
 
   // Valider — mettre à jour le stock MP
   const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
-  const{data:achat}=await SB.from('gp_achats').select('*').eq('id',achatId).single();
+  const{data:achat}=await SB.from('gp_achats').select('*').eq('id',achatId).maybeSingle();
   const L=lignes||[];
 
   // Créer les entrées stock
@@ -291,7 +291,7 @@ async function validerAchatDAF(achatId,approuve){
 
 // ── DÉTAIL ACHAT ──────────────────────────────────
 async function voirDetailAchat(id){
-  const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).single();
+  const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
   const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',id);
   const{data:paiements}=await SB.from('gp_achats_paiements').select('*').eq('achat_id',id).order('date_paiement');
   if(!a)return;

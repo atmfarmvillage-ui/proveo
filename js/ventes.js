@@ -70,7 +70,7 @@ async function saveVente(){
     date:today(),
     saisi_par:GP_USER?.id,
     formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', ')
-  }).select().single();
+  }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
@@ -88,7 +88,7 @@ async function saveVente(){
   if(paye>0){
     const{data:caisses}=await SB.from('gp_caisses').select('id')
       .eq('admin_id',GP_ADMIN_ID)
-      .eq('point_vente',pv||'').single();
+      .eq('point_vente',pv||'').maybeSingle();
     if(caisses){
       await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID,caisse_id:caisses.id,
@@ -107,7 +107,7 @@ async function saveVente(){
     for(const l of VT_LIGNES){
       const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
         .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE)
-        .eq('formule_nom',l.formule_nom).single();
+        .eq('formule_nom',l.formule_nom).maybeSingle();
       if(stock){
         const newQte=Math.max(0,Number(stock.qte_disponible)-Number(l.quantite));
         await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()})
@@ -209,7 +209,7 @@ async function saveDep(){
 async function renderDep(){
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMois+'-31');
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);

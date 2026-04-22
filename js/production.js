@@ -94,7 +94,7 @@ async function saveLot(){
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
     qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
     cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:true
-  }).select().single();
+  }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Auto-create stock sorties
   for(const s of mpSorties){
@@ -140,7 +140,7 @@ function afficherBoutonImpressionLot(formuleNom, numLot, qteProduite, dateLot){
 async function renderLots(){
   const filtMois=document.getElementById('lot-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false});
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMois+'-31');
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
   const{data}=await q;
   const L=data||[];
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
@@ -167,7 +167,7 @@ async function deleteLot(id){
 async function renderInventaire(){
   const mois=document.getElementById('inv-mois')?.value||thisMonth();
   const debut=mois+'-01';
-  const fin=mois+'-31';
+  const fin=finMois(mois);
   const[{data:S},{data:L},{data:Sprev}]=await Promise.all([
     SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
     SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
@@ -253,7 +253,7 @@ function exportInventaireExcel(){notify('Fonction export Excel — en cours de d
 // ── RAPPORT PRODUCTION ─────────────────────────────
 async function renderRapport(){
   const mois=document.getElementById('rpt-mois')?.value||thisMonth();
-  const{data:L}=await SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',mois+'-31').order('date');
+  const{data:L}=await SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)).order('date');
   const lots=L||[];
   if(!lots.length){document.getElementById('rapport-content').innerHTML='<div class="card"><div style="color:var(--textm);font-size:13px;text-align:center;padding:20px">Aucune production pour ce mois.</div></div>';return;}
   // Group by espece

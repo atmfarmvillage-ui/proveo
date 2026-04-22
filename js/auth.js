@@ -60,7 +60,7 @@ async function doSignup(){
   if(data?.user){
     // Vérifier si cet email est un membre en attente
     const{data:membre}=await SB.from('gp_membres').select('*')
-      .eq('email',email).is('user_id',null).single();
+      .eq('email',email).is('user_id',null).maybeSingle();
     if(membre){
       // Lier le compte au membre existant — pas de trial, c'est un secrétaire
       await SB.from('gp_membres').update({user_id:data.user.id})
@@ -96,7 +96,7 @@ async function doLogout(){
 async function bootApp(user){
   GP_USER=user;
   // Check if admin or member
-  const{data:membre}=await SB.from('gp_membres').select('*').eq('user_id',user.id).single();
+  const{data:membre}=await SB.from('gp_membres').select('*').eq('user_id',user.id).maybeSingle();
   if(membre){
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
@@ -251,7 +251,7 @@ function showGP(page){
 
 // ── DATA LOADERS ───────────────────────────────────
 async function loadConfig(){
-  const{data}=await SB.from('gp_config').select('*').eq('user_id',GP_ADMIN_ID).single();
+  const{data}=await SB.from('gp_config').select('*').eq('user_id',GP_ADMIN_ID).maybeSingle();
   if(data){
     GP_CONFIG=data;
     if(data.couleur)applyColor(data.couleur);

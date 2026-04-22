@@ -235,7 +235,7 @@ async function imprimerDerniereVente(){
   const res=await SB.from('gp_ventes').select('*')
     .eq('admin_id',GP_ADMIN_ID)
     .order('created_at',{ascending:false})
-    .limit(1).single();
+    .limit(1).maybeSingle();
   if(res.data) printRecu(res.data);
   else notify('Aucune vente trouvee','r');
 }

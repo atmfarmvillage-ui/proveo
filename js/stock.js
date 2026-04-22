@@ -86,7 +86,7 @@ async function renderMouvements(){
   const filtMois=document.getElementById('mp-filtre-mois')?.value||'';
   let q=SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
   if(filtType)q=q.eq('type',filtType);
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMois+'-31');
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
   const{data}=await q;
   const M=data||[];
   document.getElementById('mouvements-liste').innerHTML=M.length?`
@@ -153,7 +153,7 @@ async function saveNouvelleMP(){
     admin_id: GP_ADMIN_ID, nom, prix_actuel: prix,
     unite: 'kg', proteines: prot, energie: em,
     seuil_alerte: seuil, fournisseur: fourn
-  }).select().single();
+  }).select().maybeSingle();
 
   if(error){ err.textContent = 'Erreur: ' + error.message; return; }
 
