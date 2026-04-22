@@ -17,8 +17,7 @@ async function renderSalaires(){
     <div class="econo-box"><div class="econo-val" style="color:var(--textm)">${fmt(totalAnnuel)}</div><div class="econo-lbl">Total annuel (F)</div></div>
     <div class="econo-box"><div class="econo-val">${[...new Set(S.map(s=>s.nom_prenom))].length}</div><div class="econo-lbl">Employés actifs</div></div>`;
 
-  document.getElementById('sal-liste').innerHTML=duMois.length?`
-    <table class="tbl" style="font-size:11px">
+  document.getElementById('sal-liste').innerHTML=duMois.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
       <thead><tr><th>Nom & Prénom</th><th>Matricule</th><th>Mois</th><th class="num">Montant</th><th>Mode</th><th></th></tr></thead>
       <tbody>
       ${duMois.map(s=>`<tr>
@@ -35,7 +34,7 @@ async function renderSalaires(){
         <td colspan="2"></td>
       </tr>
       </tbody>
-    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun salaire pour ce mois.</div>';
+    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun salaire pour ce mois.</div>';
 }
 
 async function saveSalaire(){

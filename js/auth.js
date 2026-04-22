@@ -258,6 +258,8 @@ var PAGE_RENDERERS = {
 };
 
 function showGP(page){
+  // Fermer sidebar sur mobile
+  if(window.innerWidth<=768)closeSidebar();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const pageEl=document.getElementById('page-'+page);
@@ -480,4 +482,17 @@ async function joinEquipe(){
     setTimeout(()=>showAuthForm('login'),2000);
   }
   // bootApp sera appelé automatiquement par onAuthStateChange
+}
+
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('overlay');
+  sb.classList.toggle('open');
+  if(ov)ov.classList.toggle('show');
+}
+function closeSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('overlay');
+  sb.classList.remove('open');
+  if(ov)ov.classList.remove('show');
 }

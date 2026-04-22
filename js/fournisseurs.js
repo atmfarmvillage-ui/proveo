@@ -13,8 +13,7 @@ async function renderFournisseurs(){
     <div class="econo-box"><div class="econo-val" id="fourn-total-du" style="color:var(--red)">—</div><div class="econo-lbl">Total impayé</div></div>
     <div class="econo-box"><div class="econo-val">${F.filter(f=>f.condition_paiement==='credit').length}</div><div class="econo-lbl">À crédit</div></div>`;
   loadFournisseurStats();
-  document.getElementById('fourn-liste').innerHTML=F.length?`
-    <table class="tbl" style="font-size:11px">
+  document.getElementById('fourn-liste').innerHTML=F.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px">
       <thead><tr><th>Fournisseur</th><th>Contact</th><th>Condition</th><th class="num">Achats</th><th class="num">Impayé</th><th></th></tr></thead>
       <tbody>
       ${F.map(f=>`<tr>
@@ -32,7 +31,7 @@ async function renderFournisseurs(){
         </td>
       </tr>`).join('')}
       </tbody>
-    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun fournisseur enregistré.</div>';
+    </table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun fournisseur enregistré.</div>';
 
   // Charger stats par fournisseur
   F.forEach(f=>loadStatsFourn(f.id));

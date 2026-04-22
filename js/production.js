@@ -164,7 +164,7 @@ async function renderLots(){
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
   document.getElementById('lots-liste').innerHTML=`
     <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Ce mois : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
-    <div style="overflow-x:auto">${L.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th>':''}<th></th></tr></thead><tbody>
+    <div style="overflow-x:auto">${L.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th>':''}<th></th></tr></thead><tbody>
     ${L.map(l=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${l.date}</td>
       <td><div style="font-weight:600">${ESPECE_ICON[l.espece]||''} ${l.formule_nom}</div></td>
@@ -172,7 +172,7 @@ async function renderLots(){
       <td class="num" style="color:var(--g6)">${fmt(l.qte_produite)}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${l.qte_produite>0?fmt(Math.round(Number(l.cout_total||0)/l.qte_produite)):0} F</td>`:''}
       <td><button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}</div>`;
+    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}</div>`;
 }
 async function deleteLot(id){
   if(!confirm('Supprimer ce lot ? Les sorties de stock associées seront supprimées.'))return;
@@ -211,26 +211,23 @@ async function renderInventaire(){
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(valEntrees)}</div><div class="econo-lbl">Valeur achats (F)</div></div>`:'<div class="econo-box"><div class="econo-val">${lots.length}</div><div class="econo-lbl">Lots produits</div></div>'}`;
   // Entrées
   const entrees=stock.filter(m=>m.type==='entree');
-  document.getElementById('inv-entrees').innerHTML=entrees.length?`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Valeur</th>':''}</tr></thead><tbody>
+  document.getElementById('inv-entrees').innerHTML=entrees.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Valeur</th>':''}</tr></thead><tbody>
     ${entrees.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num good">${fmtKg(m.quantite)}</td>${GP_ROLE==='admin'?`<td class="num">${fmt(Number(m.quantite)*Number(m.prix_unit||0))} F</td>`:''}</tr>`).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
   // Sorties
   const sorties=stock.filter(m=>m.type!=='entree');
-  document.getElementById('inv-sorties').innerHTML=sorties.length?`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
+  document.getElementById('inv-sorties').innerHTML=sorties.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
     ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':'bdg-r'}" style="font-size:9px">${m.type==='sortie_production'?'Production':'Perte'}</span></td></tr>`).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
   // Consommation par ingrédient
   const conso={};
   sorties.forEach(m=>{conso[m.ingredient_nom]=(conso[m.ingredient_nom]||0)+Number(m.quantite||0);});
-  document.getElementById('inv-conso-table').innerHTML=Object.keys(conso).length?`
-    <table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Consommé (kg)</th><th>% du total</th></tr></thead><tbody>
+  document.getElementById('inv-conso-table').innerHTML=Object.keys(conso).length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Consommé (kg)</th><th>% du total</th></tr></thead><tbody>
     ${Object.entries(conso).sort((a,b)=>b[1]-a[1]).map(([nom,qte])=>`<tr>
       <td style="font-weight:600">${nom}</td>
       <td class="num">${fmtKg(qte)}</td>
       <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:rgba(30,45,74,.8);border-radius:3px"><div style="width:${totSorties>0?qte/totSorties*100:0}%;height:100%;background:var(--g4);border-radius:3px"></div></div><span style="font-size:10px;color:var(--textm)">${totSorties>0?(qte/totSorties*100).toFixed(1):0}%</span></div></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation ce mois.</div>';
+    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation ce mois.</div>';
   // Production par formule
   const prodFormule={};
   lots.forEach(l=>{
@@ -238,18 +235,16 @@ async function renderInventaire(){
     prodFormule[l.formule_nom].qte+=Number(l.qte_produite||0);
     prodFormule[l.formule_nom].nb++;
   });
-  document.getElementById('inv-prod-table').innerHTML=Object.keys(prodFormule).length?`
-    <table class="tbl"><thead><tr><th>Formule</th><th>Espèce</th><th class="num">Lots</th><th class="num">Qté (kg)</th><th class="num">% total</th></tr></thead><tbody>
+  document.getElementById('inv-prod-table').innerHTML=Object.keys(prodFormule).length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Formule</th><th>Espèce</th><th class="num">Lots</th><th class="num">Qté (kg)</th><th class="num">% total</th></tr></thead><tbody>
     ${Object.entries(prodFormule).sort((a,b)=>b[1].qte-a[1].qte).map(([nom,d])=>`<tr>
       <td style="font-weight:600">${nom}</td>
       <td>${ESPECE_ICON[d.espece]||''} ${d.espece||'—'}</td>
       <td class="num">${d.nb}</td>
       <td class="num" style="color:var(--g6)">${fmt(d.qte)}</td>
       <td class="num" style="color:var(--textm)">${totProd>0?(d.qte/totProd*100).toFixed(1):0}%</td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune production ce mois.</div>';
+    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune production ce mois.</div>';
   // Stock restant
-  document.getElementById('inv-stock-restant').innerHTML=`
-    <table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Stock début mois</th><th class="num">Reçu</th><th class="num">Utilisé</th><th class="num">Stock fin mois</th><th>Statut</th></tr></thead><tbody>
+  document.getElementById('inv-stock-restant').innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Stock début mois</th><th class="num">Reçu</th><th class="num">Utilisé</th><th class="num">Stock fin mois</th><th>Statut</th></tr></thead><tbody>
     ${Object.keys({...niveauxDebut,...niveauxFin}).sort().map(nom=>{
       const debut2=niveauxDebut[nom]||0;
       const recu=entrees.filter(m=>m.ingredient_nom===nom).reduce((s,m)=>s+Number(m.quantite),0);
@@ -264,7 +259,7 @@ async function renderInventaire(){
         <td class="num" style="color:var(--red)">−${fmtKg(utilise)}</td>
         <td class="num ${fin2<seuil?fin2<=0?'bad':'warn':'good'}">${fmtKg(fin2)}</td>
         <td><span class="badge ${fin2<=0?'bdg-r':fin2<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${fin2<=0?'Épuisé':fin2<seuil?'Bas':'OK'}</span></td>
-      </tr>`;}).join('')}</tbody></table>`;
+      </tr>`;}).join('')}</tbody></table></div>`;
 }
 function exportInventaireExcel(){notify('Fonction export Excel — en cours de développement','gold');}
 

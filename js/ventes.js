@@ -189,8 +189,7 @@ async function renderVentes(){
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
   const V=data||[];
-  document.getElementById('ventes-liste').innerHTML=V.length?`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th>Statut</th><th></th></tr></thead><tbody>
+  document.getElementById('ventes-liste').innerHTML=V.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th>Statut</th><th></th></tr></thead><tbody>
     ${V.map(v=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${v.date}</td>
       <td><div style="font-weight:600">${v.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${v.client_tel||''}</div></td>
@@ -202,7 +201,7 @@ async function renderVentes(){
         <button class="btn btn-print btn-sm" onclick="imprimerVente('${encodeURIComponent(JSON.stringify(v))}')">🖨️</button>
         <button class="btn btn-red btn-sm" onclick="deleteVente('${v.id}')">✕</button>
       </td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
+    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
 }
 async function deleteVente(id){
   if(!confirm('Supprimer cette vente ?'))return;
@@ -239,7 +238,7 @@ async function renderDep(){
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
   document.getElementById('dep-liste').innerHTML=`
     ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
-    <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
+    <div style="overflow-x:auto">${D.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
     ${D.map(d=>`<tr>
       <td style="font-size:10px">${d.date}</td>
       <td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[d.categorie]||d.categorie}</span></td>
@@ -247,7 +246,7 @@ async function renderDep(){
       <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
       <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
+    </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
 }
 async function deleteDep(id){
   if(!confirm('Supprimer cette dépense ?'))return;
@@ -281,8 +280,7 @@ async function renderBilanJour(){
     <div class="econo-box"><div class="econo-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${fmt(impaye)}</div><div class="econo-lbl">Impayés (F)</div></div>
     <div class="econo-box"><div class="econo-val">${fmt(prodJour)}</div><div class="econo-lbl">Kg produits</div></div>`;
 
-  document.getElementById('bj-ventes').innerHTML=v.length?`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th><th class="num">Total (F)</th><th>Statut</th></tr></thead><tbody>
+  document.getElementById('bj-ventes').innerHTML=v.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th><th class="num">Total (F)</th><th>Statut</th></tr></thead><tbody>
     ${v.map(x=>`<tr>
       <td>${x.client_nom||'—'}</td>
       <td style="font-size:10px">${x.formule_nom||'—'}</td>
@@ -291,13 +289,12 @@ async function renderBilanJour(){
       <td><span class="badge ${x.statut_paiement==='paye'?'bdg-g':x.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${x.statut_paiement}</span></td>
     </tr>`).join('')}
     <tr style="font-weight:700;background:rgba(22,163,74,.05)"><td colspan="3">TOTAL</td><td class="num" style="color:var(--gold)">${fmt(caJour)}</td><td></td></tr>
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune vente ce jour.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune vente ce jour.</div>';
 
-  document.getElementById('bj-depenses').innerHTML=d.length?`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Catégorie</th><th>Description</th><th class="num">Montant (F)</th></tr></thead><tbody>
+  document.getElementById('bj-depenses').innerHTML=d.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px"><thead><tr><th>Catégorie</th><th>Description</th><th class="num">Montant (F)</th></tr></thead><tbody>
     ${d.map(x=>`<tr><td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[x.categorie]||x.categorie}</span></td><td>${x.description}</td><td class="num" style="color:var(--red)">${fmt(x.montant)}</td></tr>`).join('')}
     <tr style="font-weight:700;background:rgba(239,68,68,.05)"><td colspan="2">TOTAL</td><td class="num" style="color:var(--red)">${fmt(depJour)}</td></tr>
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune dépense ce jour.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucune dépense ce jour.</div>';
 
   document.getElementById('bj-bilan').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
@@ -505,8 +502,7 @@ function renderLignesVente(){
   const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
   const container=document.getElementById('vt-lignes-preview');
   if(!container)return;
-  container.innerHTML=VT_LIGNES.length?`
-    <table class="tbl" style="font-size:11px;margin-top:8px">
+  container.innerHTML=VT_LIGNES.length?`<div class="tbl-wrap"><table class="tbl" style="font-size:11px;margin-top:8px">
       <thead><tr><th>Produit</th><th class="num">Qté</th><th class="num">Prix unit.</th><th class="num">Montant</th><th></th></tr></thead>
       <tbody>
       ${VT_LIGNES.map((l,i)=>`<tr>
@@ -524,7 +520,7 @@ function renderLignesVente(){
         <td></td>
       </tr>
       </tbody>
-    </table>`:'';
+    </table></div>`:'';
 }
 
 // Recherche client par téléphone

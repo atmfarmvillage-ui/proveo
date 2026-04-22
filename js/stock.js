@@ -23,8 +23,7 @@ async function renderStockNiveaux(){
     <div class="econo-box"><div class="econo-val" style="color:${alertes>0?'var(--red)':'var(--green)'}">${alertes}</div><div class="econo-lbl">Alertes</div></div>
     <div class="econo-box"><div class="econo-val">${(S||[]).length}</div><div class="econo-lbl">Mouvements</div></div>`;
   const sorted=Object.entries(niveaux).sort((a,b)=>a[0].localeCompare(b[0]));
-  document.getElementById('stock-niveaux').innerHTML=sorted.length?`
-    <table class="tbl"><thead><tr>
+  document.getElementById('stock-niveaux').innerHTML=sorted.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr>
       <th>Ingrédient</th>
       <th class="num">Stock (kg)</th>
       ${GP_ROLE==='admin'?'<th class="num">Prix/kg</th>':''}
@@ -54,7 +53,7 @@ async function renderStockNiveaux(){
         </td>`:''}
         <td><span class="badge ${n<seuil?n<=0?'bdg-r':'bdg-gold':'bdg-g'}">${statut}</span></td>
       </tr>`;}).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun stock enregistré. Réceptionnez des MP.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px">Aucun stock enregistré. Réceptionnez des MP.</div>';
 }
 
 function editerPrixStock(id){
@@ -89,8 +88,7 @@ async function renderMouvements(){
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
   const{data}=await q;
   const M=data||[];
-  document.getElementById('mouvements-liste').innerHTML=M.length?`
-    <table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Prix/kg</th>':''}<th>Réf/Lot</th></tr></thead><tbody>
+  document.getElementById('mouvements-liste').innerHTML=M.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Prix/kg</th>':''}<th>Réf/Lot</th></tr></thead><tbody>
     ${M.map(m=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${m.date}</td>
       <td><span class="badge ${m.type==='entree'?'bdg-g':m.type==='sortie_production'?'bdg-b':'bdg-r'}">${m.type==='entree'?'📥 Entrée':m.type==='sortie_production'?'🏭 Production':'📤 Sortie'}</span></td>
@@ -99,7 +97,7 @@ async function renderMouvements(){
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${fmt(m.prix_unit)} F</td>`:''}
       <td style="font-size:10px;color:var(--textm)">${m.ref||m.note||'—'}</td>
     </tr>`).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucun mouvement.</div>';
+    </tbody></table></div>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucun mouvement.</div>';
 }
 function onMPChange(){
   const sel=document.getElementById('mp_ingr').selectedOptions[0];
