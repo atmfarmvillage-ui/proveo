@@ -28,6 +28,7 @@
       <div class="a-err" id="a_err"></div>
       <button class="a-btn" onclick="doLogin()">Se connecter →</button>
       <div class="a-link">Pas de compte ? <span onclick="showAuthForm('signup')">Créer un compte</span></div>
+      <div class="a-link"><span onclick="showAuthForm('join')" style="color:var(--g6)">🔑 Rejoindre une équipe avec un code</span></div>
       <div class="a-link"><span onclick="doForgot()">Mot de passe oublié ?</span></div>
     </div>
     <div id="auth-signup-form" style="display:none">
@@ -44,6 +45,22 @@
       <div class="a-ok" id="s_ok"></div>
       <button class="a-btn" onclick="doSignup()">Créer mon compte →</button>
       <div class="a-link">Déjà un compte ? <span onclick="showAuthForm('login')">Se connecter</span></div>
+    </div>
+    <div id="auth-join-form" style="display:none">
+      <label class="a-label">Votre email</label>
+      <input class="a-inp" id="j_email" type="email" placeholder="votre@email.com">
+      <label class="a-label">Code d'invitation (6 chiffres)</label>
+      <input class="a-inp" id="j_code" type="text" placeholder="123456" maxlength="6"
+        style="font-size:24px;letter-spacing:10px;text-align:center;font-weight:700">
+      <label class="a-label">Choisir un mot de passe</label>
+      <div class="pw-wrap">
+        <input class="a-inp" id="j_pass" type="password" placeholder="Min. 6 caractères">
+        <button class="pw-eye" onclick="togglePw('j_pass',this)">👁</button>
+      </div>
+      <div class="a-err" id="j_err"></div>
+      <div class="a-ok" id="j_ok"></div>
+      <button class="a-btn" onclick="joinEquipe()">✓ Rejoindre l'équipe →</button>
+      <div class="a-link"><span onclick="showAuthForm('login')">← Retour à la connexion</span></div>
     </div>
   </div>
 </div>

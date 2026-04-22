@@ -18,6 +18,7 @@ function togglePw(id,btn){
 function showAuthForm(f){
   document.getElementById('auth-login-form').style.display=f==='login'?'block':'none';
   document.getElementById('auth-signup-form').style.display=f==='signup'?'block':'none';
+  const jf=document.getElementById('auth-join-form');if(jf)jf.style.display=f==='join'?'block':'none';
 }
 
 function getAllFormules(){
