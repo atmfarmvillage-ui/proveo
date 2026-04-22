@@ -650,13 +650,15 @@ async function saveEquipe(){
     (pv?`\n📍 Point de vente : *${pv}*`:'')+
     `\n\n`+
     `🔑 *Votre code d'invitation :*\n`+
-    `┌─────────────┐\n`+
-    `│   *${code}*   │\n`+
-    `└─────────────┘\n`+
+    `\`${code}\`\n`+
+    `_(appuyez longuement pour copier le code)_\n\n`+
     `⏰ Valide pendant *48 heures*\n\n`+
+    `📧 *Votre email de connexion :*\n`+
+    `\`${email}\`\n`+
+    `_(appuyez longuement pour copier l'email)_\n\n`+
     `📌 *Comment rejoindre l'équipe :*\n`+
     `1. Ouvrez ce lien : ${siteUrl}\n`+
-    `2. Cliquez *"Rejoindre une équipe"*\n`+
+    `2. Cliquez *"🔑 Rejoindre une équipe avec un code"*\n`+
     `3. Entrez votre email et le code ci-dessus\n`+
     `4. Choisissez un mot de passe\n\n`+
     `_PROVENDA · ATM Farm Village_`
