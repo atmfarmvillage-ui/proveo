@@ -110,17 +110,8 @@ async function bootApp(user){
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('topbar').style.display='flex';
   document.getElementById('sidebar').style.display='block';
-  // Gérer visibilité nav selon rôle
-  document.querySelectorAll('.nav-item').forEach(item=>{
-    const roles=item.dataset.roles;
-    if(roles){
-      const allowed=roles.split(',').map(r=>r.trim());
-      item.style.display=allowed.includes(GP_ROLE)?'flex':'none';
-    }
-    if(item.classList.contains('admin-only')){
-      item.style.display=GP_ROLE==='admin'?'flex':'none';
-    }
-  });
+  // Gérer visibilité nav selon rôle (appel unique)
+  applyRoleRestrictions();
   document.getElementById('main').style.display='block';
   // Set role in topbar
   document.getElementById('tb-role-badge').textContent=GP_ROLE.toUpperCase();
@@ -147,8 +138,7 @@ async function bootApp(user){
     }
     else pvBadge.style.display='none';
   }
-  // Apply role restrictions
-  applyRoleRestrictions();
+  // (role restrictions déjà appliquées ci-dessus)
   // Load base data
   await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix()]);
   // Vérifier le statut du trial/licence
@@ -175,15 +165,18 @@ async function bootApp(user){
 function applyRoleRestrictions(){
   document.querySelectorAll('.nav-item').forEach(el=>{
     const roles=el.dataset.roles;
+    // data-roles a priorité absolue sur admin-only
     if(roles){
       const allowed=roles.split(',').map(r=>r.trim());
       el.style.display=allowed.includes(GP_ROLE)?'flex':'none';
-      return;
+      return; // STOP — ne pas tester admin-only ensuite
     }
+    // Sinon : admin-only standard
     if(el.classList.contains('admin-only')){
       el.style.display=GP_ROLE==='admin'?'flex':'none';
       return;
     }
+    // Par défaut : visible
     el.style.display='flex';
   });
 }

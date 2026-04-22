@@ -860,48 +860,49 @@
   <div class="card" style="margin-bottom:14px">
     <div class="card-title"><div class="ct-left"><span>📍 Créer un point de vente</span></div></div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
-      Chaque point de vente a ses propres secrétaires. Toutes leurs ventes sont automatiquement étiquetées avec le nom du point de vente.
+      Chaque point de vente a ses propres secrétaires. Toutes leurs ventes sont automatiquement étiquetées.
     </div>
     <div class="fg2" style="align-items:end">
-      <div class="fr" style="flex:2"><label>Nom du point de vente</label>
+      <div class="fr" style="flex:2"><label>Nom du point de vente *</label>
         <input type="text" id="pv_nom" placeholder="Ex: Lomé Centre, Sanguera, Kara...">
       </div>
       <div class="fg2">
         <div class="fr"><label>Type de point de vente *</label>
           <select id="pv_type">
-            <option value="secondaire">🏪 PDV Secondaire — Vente au détail local</option>
-            <option value="principal">🏬 PDV Principal — Dépôt-vente régional</option>
-            <option value="production">🏭 Point de Production — Usine + vente directe</option>
+            <option value="secondaire">🏪 PDV Secondaire</option>
+            <option value="principal">🏬 PDV Principal</option>
+            <option value="production">🏭 Point de Production</option>
           </select>
         </div>
         <div class="fr"><label>Secrétaire</label>
           <select id="pv_sec_type">
-            <option value="false">Commissionnaire (garde sa marge)</option>
-            <option value="true">Salariée (tout va en caisse)</option>
+            <option value="false">Commissionnaire</option>
+            <option value="true">Salariée</option>
           </select>
         </div>
       </div>
-      </div>
-      <div class="fr"><label>Téléphone (optionnel)</label>
+    </div>
+    <div class="fg2" style="align-items:end;margin-top:8px">
+      <div class="fr"><label>Téléphone</label>
         <input type="tel" id="pv_tel" placeholder="+228 90 00 00 00">
       </div>
-    </div>
-    <div class="fg2" style="align-items:end">
-      <div class="fr" style="flex:2"><label>Adresse / Localisation</label>
-        <input type="text" id="pv_adresse" placeholder="Ex: Carrefour Zion, Sanguera, Togo">
+      <div class="fr" style="flex:2"><label>Adresse</label>
+        <input type="text" id="pv_adresse" placeholder="Ex: Carrefour Zion, Sanguera">
       </div>
+    </div>
+    <div class="fg2" style="align-items:end;margin-top:8px">
       <div class="fr"><label>Latitude</label>
         <input type="number" id="pv_lat" placeholder="6.1375" step="0.0001">
       </div>
       <div class="fr"><label>Longitude</label>
         <input type="number" id="pv_lng" placeholder="1.2123" step="0.0001">
       </div>
-      <button class="btn btn-out btn-sm" onclick="localisermoi()" style="margin-bottom:0;white-space:nowrap" title="Utiliser ma position GPS actuelle">📍 Ma position</button>
+      <button class="btn btn-out btn-sm" onclick="localisermoi()" style="margin-bottom:0" title="Ma position GPS">📍 Ma position</button>
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:4px">
-      Cliquez <strong>📍 Ma position</strong> si vous êtes sur place, ou entrez les coordonnées manuellement. Les clients verront ce point sur la carte.
+      Cliquez <strong>📍 Ma position</strong> si vous êtes sur place pour remplir les coordonnées GPS automatiquement.
     </div>
-      <button class="btn btn-g" onclick="savePDV()" style="margin-top:8px;width:100%;justify-content:center">➕ Créer le point de vente</button>
+    <button class="btn btn-g" onclick="savePDV()" style="margin-top:8px;width:100%;justify-content:center">➕ Créer le point de vente</button>
     <div class="a-err" id="pv_err"></div>
   </div>
 
@@ -918,7 +919,6 @@
     <div id="equipe-siege"></div>
   </div>
 </div>
-
 
 <!-- FOURNISSEURS -->
 <div class="page" id="page-fournisseurs">
@@ -1473,7 +1473,7 @@
   </div>
 </div>
 
-</div><!-- end main -->
+<!-- end main -->
 
 <button class="sb-toggle" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show')">☰</button>
 <div class="overlay" id="overlay" onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('show')"></div>
