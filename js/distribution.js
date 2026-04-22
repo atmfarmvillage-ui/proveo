@@ -18,6 +18,22 @@ async function renderDistribution(){
     if(el)el.innerHTML=pdvOptions;
   });
 
+  // Remplir select formule (depuis FORMULES_SADARI + GP_INGREDIENTS)
+  const distFormule=document.getElementById('dist_formule');
+  if(distFormule){
+    if(!GP_INGREDIENTS.length)await loadIngredients();
+    const allF=getAllFormules();
+    const groups={};
+    allF.forEach(f=>{if(!groups[f.espece])groups[f.espece]=[];groups[f.espece].push(f);});
+    let html='<option value="">— Sélectionner un produit —</option>';
+    Object.entries(groups).forEach(([esp,fs])=>{
+      html+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
+      fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});
+      html+='</optgroup>';
+    });
+    distFormule.innerHTML=html;
+  }
+
   // Charger livraisons
   const{data:livs}=await SB.from('gp_livraisons_pdv').select('*')
     .eq('admin_id',GP_ADMIN_ID)

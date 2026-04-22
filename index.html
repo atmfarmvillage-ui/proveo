@@ -73,38 +73,57 @@
 
 <!-- SIDEBAR -->
 <div id="sidebar" style="display:none">
-  <div class="nav-sect">Tableau de bord</div>
+
+  <!-- TABLEAU DE BORD -->
   <div class="nav-item active" onclick="showGP('dashboard')" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
 
-  <div class="nav-sect">Production & Stock</div>
-  <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production</div>
-  <div class="nav-item" onclick="showGP('stock')" data-page="stock"><span class="nav-icon">📦</span>Stock MP</div>
+  <!-- ÉTAPE 1 : APPROVISIONNEMENT -->
+  <div class="nav-sect">🛒 Approvisionnement</div>
+  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
+  <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
+
+  <!-- ÉTAPE 2 : MATIÈRES PREMIÈRES & STOCK -->
+  <div class="nav-sect">🌾 Matières Premières</div>
   <div class="nav-item admin-only" onclick="showGP('matieres')" data-page="matieres"><span class="nav-icon">🌾</span>Matières Premières</div>
+  <div class="nav-item" onclick="showGP('stock')" data-page="stock"><span class="nav-icon">📦</span>Stock MP</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire')" data-page="inventaire"><span class="nav-icon">📋</span>Inventaire mensuel</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">🔍</span>Inventaire physique</div>
 
-  <div class="nav-sect">Commercial</div>
-  <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
-  <div class="nav-item admin-only" onclick="showGP('distribution')" data-page="distribution"><span class="nav-icon">🚚</span>Distribution PDV</div>
-  <div class="nav-item admin-only" onclick="showGP('salaires')" data-page="salaires"><span class="nav-icon">👤</span>Salaires</div>
-  <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
-  <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
-  <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
-  <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
+  <!-- ÉTAPE 3 : PRODUCTION -->
+  <div class="nav-sect">🏭 Production</div>
+  <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production</div>
+  <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
 
-  <div class="nav-sect">Clients</div>
+  <!-- ÉTAPE 4 : DISTRIBUTION -->
+  <div class="nav-sect">🚚 Distribution</div>
+  <div class="nav-item admin-only" onclick="showGP('distribution')" data-page="distribution"><span class="nav-icon">🚚</span>Distribution PDV</div>
+  <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
+
+  <!-- ÉTAPE 5 : VENTES & CLIENTS -->
+  <div class="nav-sect">💰 Ventes & Clients</div>
+  <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
   <div class="nav-item" onclick="showGP('clients')" data-page="clients"><span class="nav-icon">👥</span>Clients</div>
   <div class="nav-item" onclick="showGP('suivi')" data-page="suivi"><span class="nav-icon">📞</span>Suivi & Appels</div>
   <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
-  <div class="nav-sect">Administration</div>
-  <div class="nav-item admin-only" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
-  <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
-  <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse</div>
-  <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
+  <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
+  <div class="nav-sect">💵 Finances</div>
+  <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse & Banques</div>
+  <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
+  <div class="nav-item admin-only" onclick="showGP('salaires')" data-page="salaires"><span class="nav-icon">👤</span>Salaires</div>
   <div class="nav-item admin-only" onclick="showGP('dettes')" data-page="dettes"><span class="nav-icon">💳</span>Dettes secrétaires</div>
-  <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">👤</span>Équipe</div>
+  <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
+
+  <!-- ÉTAPE 7 : RAPPORTS & CONTRÔLE -->
+  <div class="nav-sect">📊 Rapports</div>
+  <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
+  <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
+
+  <!-- ADMINISTRATION -->
+  <div class="nav-sect">⚙️ Administration</div>
+  <div class="nav-item admin-only" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
+
 </div>
 
 <!-- MAIN CONTENT -->
@@ -351,17 +370,6 @@
 </div>
 
 <!-- RAPPORT PRODUCTION -->
-<div class="page" id="page-rapport">
-  <div class="page-title">Rapport de Production</div>
-  <div class="page-sub">Rapport mensuel imprimable — Production par espèce et formule</div>
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap" class="no-print">
-    <div><label class="lbl">Mois</label><input type="month" id="rpt-mois" style="width:auto" onchange="renderRapport()"></div>
-    <button class="btn btn-print" onclick="window.print()">🖨️ Imprimer le rapport</button>
-    <button class="btn btn-out" onclick="exportRapportExcel()">📊 Excel</button>
-  </div>
-  <div id="rapport-content"></div>
-</div>
-
 <!-- VENTES -->
 <div class="page" id="page-ventes">
   <div class="page-title">Ventes</div>
@@ -1163,7 +1171,7 @@
             <option value="depot_vente">🤝 Dépôt-vente</option>
           </select>
         </div>
-        <div class="fr"><label>Produit (formule)</label><select id="dist_formule"></select></div>
+        <div class="fr"><label>Produit (formule)</label><select id="dist_formule"><option value="">— Sélectionner —</option></select></div>
       </div>
       <div class="fg2">
         <div class="fr"><label>Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
@@ -1362,6 +1370,38 @@
   </div>
 </div>
 
+
+<!-- REVERSEMENTS DÉPÔT-VENTE -->
+<div class="page" id="page-reversements">
+  <div class="page-title">Reversements Dépôt-Vente</div>
+  <div class="page-sub">Suivi des reversements des PDV Principaux vers Sadari Production</div>
+  <div class="g4" id="rev-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>➕ Enregistrer un reversement</span></div></div>
+      <div class="fr"><label>PDV Reversant</label><select id="rev_pdv"></select></div>
+      <div class="fr"><label>Période (mois)</label><input type="month" id="rev_mois" style="width:auto"></div>
+      <div class="fg2">
+        <div class="fr"><label>Montant reversé (F)</label><input type="number" id="rev_montant" placeholder="250000"></div>
+        <div class="fr"><label>Mode</label>
+          <select id="rev_mode">
+            <option value="especes">Espèces</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="virement">Virement</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr"><label>Note</label><input type="text" id="rev_note" placeholder="Reversement semaine 1..."></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveReversement()">✓ Enregistrer</button>
+      <div class="a-err" id="rev_err"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Historique reversements</span></div></div>
+      <div id="rev-liste"></div>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
@@ -1448,11 +1488,13 @@
 <script src="js/salaires.js"></script>
 <script src="js/rapports.js"></script>
 <script src="js/dettes.js"></script>
+<script src="js/reversements.js"></script>
 <script src="js/inventaire_physique.js"></script>
 <script src="js/distribution.js"></script>
 <script src="js/salaires.js"></script>
 <script src="js/rapports.js"></script>
 <script src="js/dettes.js"></script>
+<script src="js/reversements.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/stock.js"></script>

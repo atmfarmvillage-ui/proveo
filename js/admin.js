@@ -1,28 +1,5 @@
 // ── FORMULES & PRIX ────────────────────────────────
-function renderPrixFormules(){
-  const all=getAllFormules();
-  document.getElementById('prix-formules-liste').innerHTML=`
-    <table class="tbl" style="font-size:11px"><thead><tr><th>Formule</th><th>Espèce</th><th class="num">Prix/kg (FCFA)</th></tr></thead><tbody>
-    ${all.slice(0,24).map(f=>`<tr>
-      <td style="font-weight:600;font-size:11px">${f.nom}</td>
-      <td>${ESPECE_ICON[f.espece]||''} ${f.espece||'—'}</td>
-      <td class="num" style="color:var(--gold)">${fmt(getPrix(f.nom))} F</td>
-      <td class="num" style="color:var(--textm);font-size:10px">
-        ${f.cout_emballage_kg?fmt(f.cout_emballage_kg)+' F/kg':'-'}
-      </td>
-      <td class="num" style="color:var(--textm);font-size:10px">
-        ${f.cout_mo_tonne?fmt(f.cout_mo_tonne)+' F/t':'-'}
-      </td>
-      <td>
-        <div style="display:flex;gap:3px">
-          <button class="btn btn-out btn-sm" onclick="editerCoutsFormule('${f.nom}')">⚙️</button>
-          <button class="btn btn-print btn-sm" onclick="imprimerFiche('${f.nom}')">🖨️</button>
-        </div>
-      </td>
-    </tr>`).join('')}
-    </tbody></table>`;
-  renderIngrAdmin();
-}
+
 async function savePrixFormule(){
   const nom=document.getElementById('pf_formule').value;
   const prix=+document.getElementById('pf_prix').value||0;
@@ -39,55 +16,7 @@ async function savePrixFormule(){
   notify(`Prix ${nom} → ${fmt(prix)} F/kg ✓`,'gold');
   renderPrixFormules();
 }
-function renderIngrAdmin(){
-  const search=document.getElementById('ingr-search')?.value?.toLowerCase()||'';
-  const filtered=GP_INGREDIENTS.filter(i=>i.nom.toLowerCase().includes(search));
-  document.getElementById('ingr-liste-admin').innerHTML=filtered.length?`
-    <div style="overflow-x:auto">
-    <table class="tbl" style="font-size:11px">
-      <thead><tr>
-        <th>Ingrédient</th>
-        <th class="num">Prix/kg (F)</th>
-        <th class="num">Protéines</th>
-        <th class="num">EM (kcal)</th>
-        <th class="num">Seuil</th>
-        <th></th>
-      </tr></thead>
-      <tbody>
-      ${filtered.map(i=>`<tr>
-        <td style="font-weight:600">${i.nom}</td>
-        <td class="num" id="prix-cell-${i.id}">
-          <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
-            <span id="prix-val-${i.id}">${fmt(i.prix_actuel)}</span>
-            <input type="number" id="prix-inp-${i.id}" value="${i.prix_actuel}"
-              style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
-              onkeydown="if(event.key==='Enter')sauverPrixIngr('${i.id}');if(event.key==='Escape')annulerEdit('${i.id}')">
-          </div>
-        </td>
-        <td class="num" style="color:var(--textm)">${i.proteines||'—'}%</td>
-        <td class="num" style="color:var(--textm)">${i.energie||'—'}</td>
-        <td class="num">
-          <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
-            <span id="seuil-val-${i.id}">${fmt(i.seuil_alerte||200)}</span>
-            <input type="number" id="seuil-inp-${i.id}" value="${i.seuil_alerte||200}"
-              style="width:65px;display:none;padding:2px 5px;font-size:11px;text-align:right"
-              onkeydown="if(event.key==='Enter')sauverSeuil('${i.id}');if(event.key==='Escape')annulerSeuil('${i.id}')">
-            <button class="btn btn-out btn-sm" onclick="editerSeuil('${i.id}')" id="seuil-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Modifier le seuil">✏️</button>
-            <button class="btn btn-g btn-sm" onclick="sauverSeuil('${i.id}')" id="seuil-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>
-          </div>
-        </td>
-        <td>
-          <div style="display:flex;gap:3px">
-            <button class="btn btn-out btn-sm" onclick="editerPrix('${i.id}')" id="edit-btn-${i.id}" title="Modifier le prix">✏️</button>
-            <button class="btn btn-g btn-sm" onclick="sauverPrixIngr('${i.id}')" id="save-btn-${i.id}" style="display:none" title="Sauvegarder">✓</button>
-            <button class="btn btn-red btn-sm" onclick="deleteIngredient('${i.id}')">✕</button>
-          </div>
-        </td>
-      </tr>`).join('')}
-      </tbody>
-    </table></div>`
-  :'<div style="color:var(--textm);font-size:12px">Aucun ingrédient trouvé.</div>';
-}
+
 
 function editerPrix(id){
   document.getElementById('prix-val-'+id).style.display='none';
@@ -221,48 +150,14 @@ async function saveEquipe(){
   notify(`${nom} ajouté(e) ✓`,'gold');
   renderEquipe();
 }
-async function renderEquipe(){
-  const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
-  const M=data||[];
-  document.getElementById('equipe-liste').innerHTML=M.length?M.map(m=>`
-    <div style="padding:10px;background:var(--g2);border-radius:8px;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-weight:700">${m.nom||'—'}</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:2px">${m.email||'—'}</div>
-          ${m.telephone?`<div style="font-size:10px;color:var(--textm)">📞 ${m.telephone}</div>`:''}
-          <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">
-            <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${m.role?.toUpperCase()||'SECRÉTAIRE'}</span>
-            ${m.point_vente?`<span class="badge" style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)">📍 ${m.point_vente}</span>`:''}
-            <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'}">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:4px">
-          ${m.telephone?`<a href="https://wa.me/228${(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'')}?text=${encodeURIComponent('Bonjour '+m.nom+', rappel : connectez-vous sur PROVENDA ('+window.location.origin+') avec l\'email '+m.email)}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
-          <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
-        </div>
-      </div>
-    </div>`).join(''):'<div style="color:var(--textm);font-size:12px">Aucun membre dans l\'équipe.</div>';
-}
+
 async function deleteMembre(id){
   if(!confirm('Supprimer ce membre ?'))return;
   await SB.from('gp_membres').delete().eq('id',id);
   renderEquipe();
   notify('Membre supprimé','r');
 }
-async function renderEquipe(){
-  const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
-  const M=data||[];
-  document.getElementById('equipe-liste').innerHTML=M.length?M.map(m=>`
-    <div style="padding:10px;background:var(--g2);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-weight:700">${m.nom||'—'}</div>
-        <div style="font-size:10px;color:var(--textm);margin-top:2px">${m.email||'—'}</div>
-        <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-b'}" style="font-size:9px;margin-top:4px">${m.role}</span>
-      </div>
-      <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
-    </div>`).join(''):'<div style="color:var(--textm);font-size:12px">Aucun membre. Ajoutez un secrétaire.</div>';
-}
+
 async function deleteMembre(id){
   if(!confirm('Retirer ce membre ?'))return;
   await SB.from('gp_membres').delete().eq('id',id);
@@ -426,59 +321,6 @@ function fermerModalEq(){
   document.getElementById('modal-eq').style.display='none';
 }
 
-async function renderPDV(){
-  const{data:P}=await SB.from('gp_points_vente').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
-  const{data:M}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
-  const membres=M||[];
-  const points=P||[];
-
-  // Remplir select (gardé pour compatibilité)
-  const sel=document.getElementById('eq_pv');
-  if(sel){
-    sel.innerHTML='<option value="">— Aucun (siège principal) —</option>'+
-      points.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
-  }
-
-  // Afficher liste complète PDV avec membres dedans
-  const container=document.getElementById('pdv-liste-complet');
-  if(!container)return;
-
-  if(!points.length){
-    container.innerHTML='<div style="color:var(--textm);font-size:12px;padding:12px 0">Aucun point de vente créé. Créez-en un ci-dessus.</div>';
-  } else {
-    container.innerHTML=points.map(p=>{
-      const membresP=membres.filter(m=>m.point_vente===p.nom);
-      const pal=pvPalette(p.nom);
-      return `<div class="card" style="margin-bottom:10px;border-left:4px solid ${pal.border}">
-        <div class="card-title">
-          <div class="ct-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            ${pvBadgeHtml(p.nom,'lg')}
-            ${p.telephone?`<span style="font-size:10px;color:var(--textm)">📞 ${p.telephone}</span>`:''}
-            ${p.adresse?`<span style="font-size:10px;color:var(--textm)">📍 ${p.adresse}</span>`:''}
-            ${p.latitude&&p.longitude?`<a href="https://www.google.com/maps?q=${p.latitude},${p.longitude}" target="_blank" style="font-size:10px;color:var(--g6);text-decoration:none">🗺️ Voir sur carte</a>`:''}
-          </div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-g btn-sm" onclick="ouvrirModalEq('${p.nom}')">➕ Ajouter secrétaire</button>
-            <button class="btn btn-red btn-sm" onclick="deletePDV('${p.id}','${p.nom}')">✕</button>
-          </div>
-        </div>
-        ${membresP.length
-          ? membresP.map(m=>membreCard(m)).join('')
-          : '<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucun membre dans ce point de vente.</div>'
-        }
-      </div>`;
-    }).join('');
-  }
-
-  // Siège principal — membres sans point de vente
-  const siege=membres.filter(m=>!m.point_vente);
-  const siegeEl=document.getElementById('equipe-siege');
-  if(siegeEl){
-    siegeEl.innerHTML=siege.length
-      ? siege.map(m=>membreCard(m)).join('')
-      : '<div style="font-size:11px;color:var(--textm)">Aucun membre au siège.</div>';
-  }
-}
 
 function membreCard(m){
   const telClean=(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
@@ -872,29 +714,7 @@ async function saveEquipe(){
   notify(`${nom} ajouté(e) ✓`,'gold');
   renderEquipe();
 }
-async function renderEquipe(){
-  const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
-  const M=data||[];
-  document.getElementById('equipe-liste').innerHTML=M.length?M.map(m=>`
-    <div style="padding:10px;background:var(--g2);border-radius:8px;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-weight:700">${m.nom||'—'}</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:2px">${m.email||'—'}</div>
-          ${m.telephone?`<div style="font-size:10px;color:var(--textm)">📞 ${m.telephone}</div>`:''}
-          <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">
-            <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${m.role?.toUpperCase()||'SECRÉTAIRE'}</span>
-            ${m.point_vente?`<span class="badge" style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)">📍 ${m.point_vente}</span>`:''}
-            <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'}">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:4px">
-          ${m.telephone?`<a href="https://wa.me/228${(m.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'')}?text=${encodeURIComponent('Bonjour '+m.nom+', rappel : connectez-vous sur PROVENDA ('+window.location.origin+') avec l\'email '+m.email)}" target="_blank" class="btn btn-g btn-sm" title="Renvoyer invitation">📲</a>`:''}
-          <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
-        </div>
-      </div>
-    </div>`).join(''):'<div style="color:var(--textm);font-size:12px">Aucun membre dans l\'équipe.</div>';
-}
+
 async function deleteMembre(id){
   if(!confirm('Supprimer ce membre ?'))return;
   await SB.from('gp_membres').delete().eq('id',id);

@@ -1,3 +1,10 @@
+
+function calcMontantDep(){
+  const pu=+document.getElementById('dep_prix_unit')?.value||0;
+  const qt=+document.getElementById('dep_qte')?.value||1;
+  const montantEl=document.getElementById('dep_montant');
+  if(montantEl&&pu>0)montantEl.value=(pu*qt).toFixed(0);
+}
 // ── VENTES ─────────────────────────────────────────
 function onClientChange(){
   const val=document.getElementById('vt_client').value;
@@ -442,7 +449,8 @@ function ajouterLigneVente(){
   // Déterminer le prix selon type client
   const prixGros=GP_PRIX_GROS?.[formule]||0;
   const prixDetail=GP_PRIX?.[formule]||0;
-  const typePrix=typeClient==='gros'?'gros':'detail';
+  // Si pas de prix gros défini, utiliser prix détail comme fallback
+  const typePrix=(typeClient==='gros'&&prixGros>0)?'gros':'detail';
   const prixUnit=typePrix==='gros'?prixGros:prixDetail;
 
   // Alerte si quantité grosse mais type détail

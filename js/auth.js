@@ -131,6 +131,11 @@ async function bootApp(user){
   const pvHiddenEl=document.getElementById('vt_pv');
   if(pvNomEl)pvNomEl.textContent=GP_POINT_VENTE||'Siège principal';
   if(pvHiddenEl)pvHiddenEl.value=GP_POINT_VENTE||'';
+  // Point de vente dans dépenses
+  const depPvNomEl=document.getElementById('dep-pv-nom');
+  const depPvHiddenEl=document.getElementById('dep_pv');
+  if(depPvNomEl)depPvNomEl.textContent=GP_POINT_VENTE||'Siège principal';
+  if(depPvHiddenEl)depPvHiddenEl.value=GP_POINT_VENTE||'';
   const pvBadge=document.getElementById('tb-pv-badge');
   if(pvBadge){
     if(GP_POINT_VENTE){
@@ -174,6 +179,54 @@ function applyRoleRestrictions(){
     el.style.display=isAdmin?'flex':'none';
   });
 }
+// ── ROUTER COMPLET ────────────────────────────────
+const PAGE_RENDERERS = {
+  dashboard:     renderDashboard,
+  stock:         renderStockNiveaux,
+  matieres:      renderMatieresPremieresPage,
+  inventaire:    renderInventaire,
+  inventaire_physique: function(){
+    const el=document.getElementById('invp-mois');
+    if(el&&!el.value)el.value=thisMonth();
+    renderInventairePhysique();
+  },
+  production:    renderLots,
+  rapport:       renderRapport,
+  formules:      function(){
+    renderPrixFormules();
+    loadIngredients().then(()=>{renderIngrAdmin();populateSelects();});
+  },
+  ventes:        renderVentes,
+  depenses:      renderDep,
+  bilan_jour:    renderBilanJour,
+  bilan_avance:  function(){
+    const bm=document.getElementById('bilan-mois');
+    const rm=document.getElementById('rapport-mois');
+    if(bm&&!bm.value)bm.value=thisMonth();
+    if(rm&&!rm.value)rm.value=thisMonth();
+    renderBilanAvance();
+  },
+  remises:       renderRemises,
+  clients:       renderClients,
+  suivi:         renderSuivi,
+  classement:    renderClassement,
+  fournisseurs:  renderFournisseurs,
+  achats:        renderAchats,
+  caisse:        renderCaisse,
+  distribution:  renderDistribution,
+  reversements:  renderReversements,
+  salaires:      function(){
+    const sm=document.getElementById('sal-mois');
+    const ss=document.getElementById('sal_mois_saisie');
+    if(sm&&!sm.value)sm.value=thisMonth();
+    if(ss&&!ss.value)ss.value=thisMonth();
+    renderSalaires();
+  },
+  dettes:        renderDettes,
+  equipe:        function(){renderPDV();},
+  config:        loadConfigForm,
+};
+
 function showGP(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
