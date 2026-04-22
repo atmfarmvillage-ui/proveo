@@ -695,11 +695,18 @@ async function deleteMembre(id){
   renderEquipe();
   notify('Membre supprimé','r');
 }
+async function toggleMembreActif(id, estActif){
+  const action=estActif?'désactiver':'réactiver';
+  if(!confirm(`Voulez-vous ${action} ce membre ?`))return;
+  await SB.from('gp_membres').update({actif:!estActif}).eq('id',id);
+  await renderPDV();
+  notify(`Membre ${estActif?'désactivé':'réactivé'} ✓`,'gold');
+}
 async function deleteMembre(id){
-  if(!confirm('Retirer ce membre ?'))return;
+  if(!confirm('Supprimer définitivement ce membre ? Cette action est irréversible.'))return;
   await SB.from('gp_membres').delete().eq('id',id);
   await renderPDV();
-  notify('Membre retiré ✓','r');
+  notify('Membre supprimé ✓','r');
 }
 
 // ── CONFIG ─────────────────────────────────────────
@@ -838,6 +845,13 @@ async function renderPDV(){
   // Cacher section création PDV pour non-admin
   const creationSection=document.getElementById('pdv-creation-section');
   if(creationSection)creationSection.style.display=GP_ROLE==='admin'?'block':'none';
+  // Cacher boutons admin sur les cartes membres si non-admin
+  // (appliqué après rendu via CSS)
+  setTimeout(()=>{
+    document.querySelectorAll('.membre-admin-btn').forEach(btn=>{
+      btn.style.display=GP_ROLE==='admin'?'inline-flex':'none';
+    });
+  },50);
   const{data:P}=await SB.from('gp_points_vente').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   const{data:M}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
   const membres=M||[];
@@ -908,15 +922,18 @@ function membreCard(m){
     ?pvBadgeHtml(m.point_vente)
     :'<span style="font-size:10px;color:var(--textm);background:rgba(30,45,74,.5);padding:2px 8px;border-radius:10px">🏭 Siège principal</span>';
 
-  // Statut connexion
-  const statutBadge=m.user_id
-    ?'<span style="font-size:9px;background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.3);padding:2px 8px;border-radius:10px">✅ Compte actif</span>'
-    :'<span style="font-size:9px;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
+  // Statut connexion + actif
+  const estActif=m.actif!==false;
+  const statutBadge=!estActif
+    ?'<span style="font-size:9px;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2);padding:2px 8px;border-radius:10px">🔒 Désactivé</span>'
+    :m.user_id
+      ?'<span style="font-size:9px;background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.3);padding:2px 8px;border-radius:10px">✅ Compte actif</span>'
+      :'<span style="font-size:9px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
 
   // Badge rôle
   const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
 
-  return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+  return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;margin-bottom:4px">${m.nom||'—'}</div>
@@ -928,9 +945,13 @@ function membreCard(m){
           ${code?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${code}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
+      <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
         ${m.telephone?`<a href="https://wa.me/${paysInfo2.numero_whatsapp}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
-        ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>`:''}
+        <button class="btn btn-sm membre-admin-btn" onclick="toggleMembreActif('${m.id}',${m.actif!==false})"
+          style="background:${m.actif!==false?'rgba(245,158,11,.15)':'rgba(22,163,74,.15)'};border:1px solid ${m.actif!==false?'rgba(245,158,11,.4)':'rgba(22,163,74,.4)'};color:${m.actif!==false?'var(--gold)':'var(--green)'}">
+          ${m.actif!==false?'🔒 Désactiver':'✅ Réactiver'}
+        </button>
+        <button class="btn btn-red btn-sm membre-admin-btn" onclick="deleteMembre('${m.id}')" title="Supprimer définitivement">🗑 Supprimer</button>
       </div>
     </div>
   </div>`;

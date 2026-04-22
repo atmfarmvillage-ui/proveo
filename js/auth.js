@@ -117,6 +117,14 @@ async function bootApp(user){
   }
 
   if(membre){
+    // Vérifier si le compte est désactivé
+    if(membre.actif===false){
+      await SB.auth.signOut();
+      document.getElementById('authScreen').classList.remove('hidden');
+      ['topbar','sidebar','main'].forEach(id=>document.getElementById(id).style.display='none');
+      document.getElementById('a_err').textContent='Votre compte a été désactivé. Contactez votre administrateur.';
+      return;
+    }
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
     GP_POINT_VENTE=membre.point_vente||null;
