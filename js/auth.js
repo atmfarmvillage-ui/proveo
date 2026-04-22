@@ -62,8 +62,7 @@ async function doSignup(){
     const{data:membre}=await SB.from('gp_membres').select('*')
       .eq('email',email).is('user_id',null).maybeSingle();
     if(membre){
-      // Lier le compte au membre existant — pas de trial, c'est un secrétaire
-      await SB.from('gp_membres').update({user_id:data.user.id})
+      await SB.from('gp_membres').update({user_id:data.user.id,code_invitation:null,code_expire_le:null})
         .eq('id',membre.id);
       ok.textContent='✓ Compte créé ! Vous êtes membre de l\'équipe. Connectez-vous.';
     } else {
@@ -371,4 +370,49 @@ function afficherModalExpire(plan){
         Se déconnecter
       </button>
     </div>`;
+}
+
+// ── REJOINDRE UNE ÉQUIPE PAR CODE ────────────────
+async function joinEquipe(){
+  const email=document.getElementById('j_email')?.value.trim();
+  const code=document.getElementById('j_code')?.value.trim();
+  const pass=document.getElementById('j_pass')?.value;
+  const err=document.getElementById('j_err');
+  const ok=document.getElementById('j_ok');
+  if(!email||!code||!pass){err.textContent='Tous les champs sont requis.';return;}
+  if(pass.length<6){err.textContent='Mot de passe min. 6 caractères.';return;}
+  err.textContent='Vérification du code...';
+
+  // Vérifier le code
+  const{data:membre}=await SB.from('gp_membres').select('*')
+    .eq('code_invitation',code)
+    .eq('email',email)
+    .is('user_id',null)
+    .maybeSingle();
+
+  if(!membre){err.textContent='Code invalide ou email incorrect.';return;}
+
+  // Vérifier expiration
+  if(membre.code_expire_le&&new Date(membre.code_expire_le)<new Date()){
+    err.textContent='Ce code a expiré (validité 48h). Demandez un nouveau code à votre admin.';
+    return;
+  }
+
+  err.textContent='Création du compte...';
+
+  // Créer le compte
+  const{data,error}=await SB.auth.signUp({email,password:pass,options:{data:{nom:membre.nom}}});
+  if(error){err.textContent=error.message;return;}
+  if(!data?.user){err.textContent='Erreur lors de la création du compte.';return;}
+
+  // Lier le compte au membre
+  await SB.from('gp_membres').update({
+    user_id:data.user.id,
+    code_invitation:null,
+    code_expire_le:null
+  }).eq('id',membre.id);
+
+  err.textContent='';
+  ok.textContent='✓ Compte créé ! Vous pouvez maintenant vous connecter.';
+  setTimeout(()=>showAuthForm('login'),2500);
 }

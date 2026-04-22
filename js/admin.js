@@ -282,6 +282,7 @@ function membreCard(m){
           <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
           <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'};">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
           ${m.point_vente?pvBadgeHtml(m.point_vente):''}
+          ${!m.user_id&&m.code_invitation?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${m.code_invitation}</span>`:''}
         </div>
       </div>
       <div style="display:flex;gap:4px">
@@ -623,31 +624,41 @@ async function saveEquipe(){
   const{data:exist}=await SB.from('gp_membres').select('id').eq('email',email).eq('admin_id',GP_ADMIN_ID);
   if(exist&&exist.length>0){err.textContent='Cet email est déjà dans votre équipe.';return;}
 
-  // Enregistrer le membre
+  // Générer un code d'invitation à 6 chiffres valide 48h
+  const code=String(Math.floor(100000+Math.random()*900000));
+  const expiration=new Date(Date.now()+48*60*60*1000).toISOString();
+
+  // Enregistrer le membre avec le code
   const{error}=await SB.from('gp_membres').insert({
     admin_id:GP_ADMIN_ID,
     nom,email,role,
     point_vente:pv,
     telephone:tel,
+    code_invitation:code,
+    code_expire_le:expiration,
     user_id:null
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
 
-  // Envoyer invitation WhatsApp au numéro de la secrétaire
+  // Envoyer invitation WhatsApp avec le code
   const siteUrl=window.location.origin;
   const telClean=tel.replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
   const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
-    `Vous avez été ajouté(e) comme *${roleLabel}* sur *PROVENDA*`+
+    `Vous êtes invité(e) à rejoindre *PROVENDA* en tant que *${roleLabel}*`+
     (pv?`\n📍 Point de vente : *${pv}*`:'')+
     `\n\n`+
-    `📌 *Comment accéder au logiciel :*\n`+
-    `1. Ouvrez ce lien : *${siteUrl}*\n`+
-    `2. Cliquez *"Créer un compte"*\n`+
-    `3. Utilisez exactement cet email : *${email}*\n`+
+    `🔑 *Votre code d'invitation :*\n`+
+    `┌─────────────┐\n`+
+    `│   *${code}*   │\n`+
+    `└─────────────┘\n`+
+    `⏰ Valide pendant *48 heures*\n\n`+
+    `📌 *Comment rejoindre l'équipe :*\n`+
+    `1. Ouvrez ce lien : ${siteUrl}\n`+
+    `2. Cliquez *"Rejoindre une équipe"*\n`+
+    `3. Entrez votre email et le code ci-dessus\n`+
     `4. Choisissez un mot de passe\n\n`+
-    `⚠️ Utilisez bien l'adresse email *${email}* — sinon l'accès ne sera pas reconnu.\n\n`+
     `_PROVENDA · ATM Farm Village_`
   );
 
@@ -890,6 +901,7 @@ function membreCard(m){
           <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-g'}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
           <span class="badge" style="font-size:9px;background:${m.user_id?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};color:${m.user_id?'var(--green)':'var(--red)'};">${m.user_id?'✅ Connecté':'⏳ En attente'}</span>
           ${m.point_vente?pvBadgeHtml(m.point_vente):''}
+          ${!m.user_id&&m.code_invitation?`<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);padding:2px 8px;border-radius:6px;letter-spacing:2px">🔑 ${m.code_invitation}</span>`:''}
         </div>
       </div>
       <div style="display:flex;gap:4px">
