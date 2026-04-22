@@ -72,12 +72,12 @@ async function saveSalaire(){
     const el=document.getElementById(id);if(el)el.value='';
   });
   notify(`Salaire ${nom} enregistré ✓`,'gold');
-  renderSalaires();
+  await renderSalaires();
 }
 
 async function deleteSalaire(id){
   if(!confirm('Supprimer ce salaire ?'))return;
   await SB.from('gp_salaires').delete().eq('id',id);
-  renderSalaires();
+  await renderSalaires();
   notify('Salaire supprimé','r');
 }

@@ -116,7 +116,7 @@ async function renderCaissesArchivees(){
 
 async function reactiverCaisse(id){
   await SB.from('gp_caisses').update({actif:true}).eq('id',id);
-  renderCaisse();
+  await renderCaisse();
   notify('Caisse réactivée ✓','gold');
 }
 
@@ -197,14 +197,14 @@ async function saveCaisse(){
   err.textContent='';
   document.getElementById('caisse_nom').value='';
   document.getElementById('caisse_solde_init').value='0';
-  renderCaisse();
+  await renderCaisse();
   notify('Caisse "'+nom+'" créée ✓','gold');
 }
 
 async function supprimerCaisse(id){
   if(!confirm('Archiver cette caisse ?'))return;
   await SB.from('gp_caisses').update({actif:false}).eq('id',id);
-  renderCaisse();
+  await renderCaisse();
 }
 
 // ── MOUVEMENTS ────────────────────────────────────
@@ -232,7 +232,7 @@ async function saveMouvement(){
     enregistre_par_nom:GP_USER.email?.split('@')[0]
   });
   document.getElementById('modal-mvt-caisse').style.display='none';
-  renderCaisse();
+  await renderCaisse();
   notify('Mouvement enregistré ✓','gold');
 }
 
@@ -258,7 +258,7 @@ async function saveTransfertAvecValidation_OLD(){
   });
   err.textContent='';
   document.getElementById('modal-transfert').style.display='none';
-  renderCaisse();
+  await renderCaisse();
   notify('Transfert effectué ✓','gold');
 }
 
@@ -332,7 +332,7 @@ async function validerTransfert(id){
     statut_transfert:'valide',
     valide_par:GP_USER.id
   }).eq('id',id);
-  renderCaisse();
+  await renderCaisse();
   notify('Transfert validé ✓','gold');
 }
 
@@ -342,6 +342,6 @@ async function refuserTransfert(id){
     statut_transfert:'refuse',
     description:(raison?'Refusé: '+raison:'Refusé')
   }).eq('id',id);
-  renderCaisse();
+  await renderCaisse();
   notify('Transfert refusé','r');
 }

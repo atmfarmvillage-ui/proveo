@@ -182,7 +182,7 @@ async function saveMPPage(){
   document.getElementById('mpp_seuil').value='200';
   await loadIngredients();
   populateSelects();
-  renderMatieresPremieresPage();
+  await renderMatieresPremieresPage();
   notify('"'+nom+'" ajouté ✓','gold');
 }
 
@@ -192,7 +192,7 @@ async function deleteMPPage(id,nom){
   await SB.from('gp_ingredients').delete().eq('id',id);
   await loadIngredients();
   populateSelects();
-  renderMatieresPremieresPage();
+  await renderMatieresPremieresPage();
   notify('Matière première supprimée','r');
 }
 
@@ -227,7 +227,7 @@ async function sauverSeuilRapide(){
   err.textContent='';
   document.getElementById('mpp_seuil_actuel').textContent=
     `✓ Seuil mis à jour : ${fmt(val)} kg`;
-  renderMatieresPremieresPage();
+  await renderMatieresPremieresPage();
   notify('Seuil critique mis à jour ✓','gold');
 }
 
@@ -312,6 +312,6 @@ async function appliquerTousSeuilsSuggeres(suggestions){
     }
   }
   document.getElementById('modal-seuil-dynamique').style.display='none';
-  renderMatieresPremieresPage();
+  await renderMatieresPremieresPage();
   notify('Tous les seuils mis à jour ✓','gold');
 }

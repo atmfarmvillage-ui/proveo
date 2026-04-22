@@ -143,7 +143,7 @@ async function deleteMembre(id){
 async function deleteMembre(id){
   if(!confirm('Retirer ce membre ?'))return;
   await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();notify('Membre retiré','r');
+  await renderPDV();notify('Membre retiré','r');
 }
 
 // ── CONFIG ─────────────────────────────────────────
@@ -358,7 +358,7 @@ async function deletePDV(id,nom){
   // Retirer le point_vente des membres
   await SB.from('gp_membres').update({point_vente:null}).eq('admin_id',GP_ADMIN_ID).eq('point_vente',nom);
   await SB.from('gp_points_vente').delete().eq('id',id);
-  renderPDV();
+  await renderPDV();
   notify('Point de vente supprimé','r');
 }
 
@@ -680,13 +680,13 @@ async function saveEquipe(){
 
   ok.innerHTML=`
     <div style="color:var(--green);margin-bottom:8px">✓ <strong>${nom}</strong> ajouté(e) — ${roleLabel}${pv?' · '+pv:''}</div>
-    <a href="https://wa.me/228${telClean}?text=${msg}" target="_blank"
+    <a href="https://wa.me/${paysInfo.numero_whatsapp}?text=${msg}" target="_blank"
       class="btn btn-g btn-sm" style="display:inline-flex;text-decoration:none;width:100%;justify-content:center">
       📲 Envoyer l'invitation WhatsApp à ${nom}
     </a>`;
 
   notify(`${nom} ajouté(e) ✓`,'gold');
-  renderEquipe();
+  await renderPDV();
 }
 
 async function deleteMembre(id){
@@ -695,23 +695,11 @@ async function deleteMembre(id){
   renderEquipe();
   notify('Membre supprimé','r');
 }
-async function renderEquipe(){
-  const{data}=await SB.from('gp_membres').select('*').eq('admin_id',GP_ADMIN_ID);
-  const M=data||[];
-  document.getElementById('equipe-liste').innerHTML=M.length?M.map(m=>`
-    <div style="padding:10px;background:var(--g2);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-weight:700">${m.nom||'—'}</div>
-        <div style="font-size:10px;color:var(--textm);margin-top:2px">${m.email||'—'}</div>
-        <span class="badge ${m.role==='admin'?'bdg-gold':'bdg-b'}" style="font-size:9px;margin-top:4px">${m.role}</span>
-      </div>
-      <button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>
-    </div>`).join(''):'<div style="color:var(--textm);font-size:12px">Aucun membre. Ajoutez un secrétaire.</div>';
-}
 async function deleteMembre(id){
   if(!confirm('Retirer ce membre ?'))return;
   await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();notify('Membre retiré','r');
+  await renderPDV();
+  notify('Membre retiré ✓','r');
 }
 
 // ── CONFIG ─────────────────────────────────────────
@@ -941,7 +929,7 @@ function membreCard(m){
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
-        ${m.telephone?`<a href="https://wa.me/228${telClean}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
+        ${m.telephone?`<a href="https://wa.me/${paysInfo2.numero_whatsapp}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMembre('${m.id}')">✕</button>`:''}
       </div>
     </div>
@@ -990,7 +978,7 @@ async function deletePDV(id,nom){
   // Retirer le point_vente des membres
   await SB.from('gp_membres').update({point_vente:null}).eq('admin_id',GP_ADMIN_ID).eq('point_vente',nom);
   await SB.from('gp_points_vente').delete().eq('id',id);
-  renderPDV();
+  await renderPDV();
   notify('Point de vente supprimé','r');
 }
 

@@ -204,7 +204,7 @@ async function saveDep(){
   err.textContent='';
   ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>document.getElementById(id).value='');
   notify('Dépense enregistrée ✓','gold');
-  renderDep();
+  await renderDep();
 }
 async function renderDep(){
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();

@@ -412,10 +412,24 @@
       <div class="fr"><label>Client</label>
         <select id="vt_client" onchange="onClientChange()"><option value="">— Choisir ou nouveau client —</option><option value="__nouveau__">➕ Nouveau client</option></select>
       </div>
-      <div id="vt-nouveau-client" style="display:none;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:10px">
+      <div id="vt-nouveau-client" style="display:none;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">➕ Nouveau client — sera enregistré automatiquement</div>
         <div class="fg2">
-          <div class="fr"><label>Nom du client</label><input type="text" id="vt_cl_nom" placeholder="Ferme Adekou"></div>
-          <div class="fr"><label>Téléphone</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00"></div>
+          <div class="fr"><label>Nom *</label><input type="text" id="vt_cl_nom" placeholder="Koffi"></div>
+          <div class="fr"><label>Prénom</label><input type="text" id="vt_cl_prenom" placeholder="Marie"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Nom de la ferme</label><input type="text" id="vt_cl_ferme" placeholder="Ferme Adekou"></div>
+          <div class="fr"><label>Localité</label><input type="text" id="vt_cl_localite" placeholder="Sanguera, Lomé..."></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Téléphone *</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00"></div>
+          <div class="fr"><label>Type client</label>
+            <select id="vt_cl_type">
+              <option value="detail">Détaillant</option>
+              <option value="gros">Grossiste</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="fr"><label>Formule / Aliment</label>

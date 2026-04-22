@@ -74,5 +74,5 @@ async function saveRemboursement(){
   err.textContent='';
   document.getElementById('dette-montant').value='';
   notify(`Remboursement de ${fmt(montant)} F enregistré ✓`,'gold');
-  renderDettes();
+  await renderDettes();
 }

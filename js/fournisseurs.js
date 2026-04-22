@@ -92,14 +92,14 @@ async function saveFournisseur(){
     const el=document.getElementById(id);if(el)el.value='';
   });
   populateFournisseurSelect();
-  renderFournisseurs();
+  await renderFournisseurs();
   notify('Fournisseur ajouté ✓','gold');
 }
 
 async function deleteFourn(id){
   if(!confirm('Archiver ce fournisseur ?'))return;
   await SB.from('gp_fournisseurs').update({actif:false}).eq('id',id);
-  renderFournisseurs();
+  await renderFournisseurs();
   notify('Fournisseur archivé','r');
 }
 
@@ -216,6 +216,6 @@ async function savePaiementFourn(){
   }
 
   document.getElementById('modal-paiement-fourn').style.display='none';
-  renderFournisseurs();
+  await renderFournisseurs();
   notify('Paiement enregistré ✓','gold');
 }

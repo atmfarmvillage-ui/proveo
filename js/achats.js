@@ -169,14 +169,14 @@ async function saveAchat(){
   renderLignesAchat();
   err.textContent='';
   ['achat_note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  renderAchats();
+  await renderAchats();
   notify(`Bon de commande ${ref} créé ✓`,'gold');
 }
 
 // ── CONFIRMER ─────────────────────────────────────
 async function confirmerAchat(id){
   await SB.from('gp_achats').update({statut:'confirme'}).eq('id',id);
-  renderAchats();
+  await renderAchats();
   notify('Commande confirmée ✓','gold');
 }
 
@@ -252,7 +252,7 @@ async function validerAchatDAF(achatId,approuve){
       valide_par:GP_USER.id,valide_par_nom:GP_USER.email
     }).eq('id',achatId);
     notify('Achat annulé par le DAF','r');
-    renderAchats();
+    await renderAchats();
     return;
   }
 

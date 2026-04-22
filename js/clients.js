@@ -153,7 +153,7 @@ async function saveAppel(){
   document.getElementById('app_resultat').value='interesse';
   document.getElementById('autre-resultat-champ').style.display='none';
   notify('Appel enregistré ✓','gold');
-  renderSuivi();
+  await renderSuivi();
 }
 
 // ── CLASSEMENT ─────────────────────────────────────

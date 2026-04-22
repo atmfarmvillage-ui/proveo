@@ -115,7 +115,7 @@ async function saveLot(){
   notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
   // Afficher bouton impression immédiatement
   afficherBoutonImpressionLot(nom, ref, qte, date);
-  renderLots();
+  await renderLots();
 }
 
 function afficherBoutonImpressionLot(formuleNom, numLot, qteProduite, dateLot){

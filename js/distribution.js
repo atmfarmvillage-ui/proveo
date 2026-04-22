@@ -142,7 +142,7 @@ async function saveLivraison(){
   err.textContent='';
   ['dist_qte','dist_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   notify(`Livraison ${formule} → ${dest?.nom} enregistrée ✓`,'gold');
-  renderDistribution();
+  await renderDistribution();
 }
 
 // ── CONFIRMATION RÉCEPTION ────────────────────────
@@ -204,7 +204,7 @@ async function confirmerReceptionLivraison(){
   }
 
   document.getElementById('modal-confirm-reception').style.display='none';
-  renderDistribution();
+  await renderDistribution();
 }
 
 // ── PAIEMENT LIVRAISON ────────────────────────────
@@ -246,7 +246,7 @@ async function savePaiementLivraison(){
   }
 
   document.getElementById('modal-paiement-livraison').style.display='none';
-  renderDistribution();
+  await renderDistribution();
 }
 
 // ── STOCK PRODUITS FINIS PAR PDV ─────────────────

@@ -149,7 +149,7 @@ async function sauvegarderInventairePhysique(mois){
   );
 
   notify('Inventaire soumis — en attente de validation ✓','gold');
-  renderInventairePhysique();
+  await renderInventairePhysique();
 }
 
 // ── AFFICHER INVENTAIRE EXISTANT ─────────────────
@@ -241,20 +241,20 @@ async function validerInventaire(invId){
   }).eq('id',invId);
 
   notify('Inventaire validé et stock ajusté ✓','gold');
-  renderInventairePhysique();
+  await renderInventairePhysique();
 }
 
 async function refuserInventaire(invId){
   await SB.from('gp_inventaires').update({statut:'refuse'}).eq('id',invId);
   notify('Inventaire refusé — à refaire','r');
-  renderInventairePhysique();
+  await renderInventairePhysique();
 }
 
 async function supprimerInventaire(invId){
   if(!confirm('Supprimer cet inventaire et le refaire ?'))return;
   await SB.from('gp_inventaires_lignes').delete().eq('inventaire_id',invId);
   await SB.from('gp_inventaires').delete().eq('id',invId);
-  renderInventairePhysique();
+  await renderInventairePhysique();
 }
 
 // ── IMPRESSION FICHE D'INVENTAIRE ─────────────────
