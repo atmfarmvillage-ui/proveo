@@ -158,6 +158,9 @@ async function renderDashboard(){
     if(ventesJourEl)ventesJourEl.textContent=fmt(ventesAujPDV.reduce((s,v)=>s+Number(v.montant_total||0),0))+' F';
   }
 
+  // Vérifier feuilles incomplètes
+  if(typeof verifierFeuillesIncompletes==='function')verifierFeuillesIncompletes();
+
   document.getElementById('dash-body').innerHTML=`
     <div>
       <div class="card">

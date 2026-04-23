@@ -127,7 +127,7 @@
 
   <!-- ÉTAPE 3 : PRODUCTION -->
   <div class="nav-sect">🏭 Production</div>
-  <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production</div>
+  <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production <span id="nav-badge-prod" class="nav-badge" style="display:none">0</span></div>
   <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
 
   <!-- ÉTAPE 4 : DISTRIBUTION -->
@@ -177,6 +177,7 @@
 <div class="page" id="page-production">
   <div class="page-title">Production</div>
   <div class="page-sub">Enregistrer les lots — le stock MP se met à jour automatiquement</div>
+  <div id="prod-alertes-fab" style="display:none"></div>
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>🏭 Nouveau lot</span></div></div>

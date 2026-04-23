@@ -175,7 +175,7 @@ function afficherBoutonImpressionLot(formuleNom, numLot, qteProduite, dateLot){
 async function renderLots(){
   const filtMois=document.getElementById('lot-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false});
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',_finMois(filtMois));
   const{data}=await q;
   const L=data||[];
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
@@ -337,3 +337,62 @@ async function renderRapport(){
   document.getElementById('rapport-content').innerHTML=html;
 }
 function exportRapportExcel(){notify('Export Excel en développement','gold');}
+// ── ALERTES FEUILLES INCOMPLÈTES ─────────────────
+async function verifierFeuillesIncompletes(){
+  if(!GP_ADMIN_ID)return;
+  const{data}=await SB.from('gp_fabrication_checks').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('statut','incomplet')
+    .order('created_at',{ascending:false});
+  const F=data||[];
+
+  // Alerte dans la page Production
+  const alertZone=document.getElementById('prod-alertes-fab');
+  if(alertZone){
+    if(F.length>0){
+      alertZone.innerHTML=`
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px 16px;margin-bottom:14px">
+          <div style="font-weight:700;color:var(--red);font-size:13px;margin-bottom:8px">
+            ⚠ ${F.length} feuille${F.length>1?'s':''} de fabrication incomplète${F.length>1?'s':''}
+          </div>
+          ${F.map(f=>{
+            const ingrs=f.ingredients||[];
+            const manquants=ingrs.filter(i=>!i.coche);
+            return`<div style="padding:8px;background:rgba(239,68,68,.05);border-radius:8px;margin-bottom:6px;font-size:11px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <strong>${f.lot_ref||'—'}</strong> · ${f.formule_nom}
+                  <span style="color:var(--textm)"> · ${f.date_fab||'—'} · par ${f.operateur||'—'}</span>
+                </div>
+                <span class="badge bdg-r">${manquants.length} manquant${manquants.length>1?'s':''}</span>
+              </div>
+              <div style="color:var(--red);margin-top:4px">
+                Non cochés : ${manquants.map(i=>i.nom).join(', ')}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      alertZone.style.display='block';
+    } else {
+      alertZone.innerHTML='';
+      alertZone.style.display='none';
+    }
+  }
+
+  // Alerte dans le dashboard
+  const dashAlert=document.getElementById('dash-fab-alerte');
+  if(dashAlert){
+    dashAlert.style.display=F.length>0?'block':'none';
+    if(F.length>0)dashAlert.innerHTML=`
+      <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 14px;cursor:pointer" onclick="showGP('production')">
+        ⚠ <strong>${F.length} feuille${F.length>1?'s':''} de fabrication incomplète${F.length>1?'s':''}</strong>
+        <span style="font-size:10px;color:var(--textm)"> — Cliquer pour voir →</span>
+      </div>`;
+  }
+
+  // Badge dans nav
+  const navBadge=document.getElementById('nav-badge-prod');
+  if(navBadge){
+    navBadge.style.display=F.length>0?'inline':'none';
+    navBadge.textContent=F.length;
+  }
+}
