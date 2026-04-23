@@ -1,3 +1,97 @@
+
+// ── SÉLECTION MP DYNAMIQUE ────────────────────────
+function filtrerMPStock(){
+  const q=document.getElementById('mp_ingr_search')?.value.toLowerCase().trim()||'';
+  const results=document.getElementById('mp_ingr_results');
+  if(!results)return;
+
+  // Calculer les niveaux de stock actuels
+  const niveaux=calcNiveaux(window._stockNiveaux||[]);
+
+  // Trier : rupture d'abord, puis les plus utilisés (par nb occurrences en formule)
+  let liste=[...GP_INGREDIENTS];
+
+  // Score de chaque ingrédient
+  liste=liste.map(ingr=>{
+    const nv=niveaux[ingr.nom]||0;
+    const seuil=ingr.seuil_alerte||200;
+    const enRupture=nv<=0;
+    const faible=nv<seuil;
+    // Compter usage dans les formules SADARI
+    const nbFormules=FORMULES_SADARI.filter(f=>f.ingredients?.some(i=>i.nom===ingr.nom)).length;
+    return{...ingr,nv,enRupture,faible,nbFormules};
+  }).sort((a,b)=>{
+    // 1. Rupture d'abord
+    if(a.enRupture!==b.enRupture)return a.enRupture?-1:1;
+    // 2. Stock faible ensuite
+    if(a.faible!==b.faible)return a.faible?-1:1;
+    // 3. Plus utilisés
+    return b.nbFormules-a.nbFormules;
+  });
+
+  // Filtrer par recherche
+  if(q)liste=liste.filter(i=>i.nom.toLowerCase().includes(q));
+
+  if(!liste.length){
+    results.innerHTML='<div style="padding:12px;color:var(--textm);font-size:12px;text-align:center">Aucune MP trouvée</div>';
+    results.style.display='block';
+    return;
+  }
+
+  results.innerHTML=liste.slice(0,12).map(ingr=>{
+    const nv=ingr.nv;
+    const seuil=ingr.seuil_alerte||200;
+    let badge='';
+    let bgColor='';
+    if(nv<=0){badge='<span style="background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3);padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">⚠ RUPTURE</span>';bgColor='rgba(239,68,68,.04)';}
+    else if(nv<seuil){badge='<span style="background:rgba(245,158,11,.12);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">⬇ FAIBLE</span>';bgColor='rgba(245,158,11,.04)';}
+    else{badge='<span style="background:rgba(22,163,74,.12);color:var(--green);padding:1px 6px;border-radius:10px;font-size:9px">✓ OK</span>';}
+    
+    return`<div onclick="selectionnerMPStock('${ingr.id}','${ingr.nom.replace(/'/g,"\'")}',${ingr.prix_actuel||0})"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);background:${bgColor};transition:background .15s"
+      onmouseover="this.style.background='rgba(22,163,74,.08)'" onmouseout="this.style.background='${bgColor}'">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div>
+          <div style="font-size:12px;font-weight:600">${ingr.nom}</div>
+          <div style="font-size:10px;color:var(--textm)">${fmtKg(nv)} kg en stock · ${fmt(ingr.prix_actuel||0)} F/kg</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">${badge}</div>
+      </div>
+    </div>`;
+  }).join('');
+  results.style.display='block';
+}
+
+function selectionnerMPStock(id,nom,prix){
+  document.getElementById('mp_ingr').value=id;
+  document.getElementById('mp_ingr_search').value=nom;
+  document.getElementById('mp_prix').value=prix;
+  const selDiv=document.getElementById('mp_ingr_selected');
+  const nomEl=document.getElementById('mp_ingr_nom');
+  if(selDiv){selDiv.style.display='flex';}
+  if(nomEl)nomEl.textContent=nom;
+  document.getElementById('mp_ingr_results').style.display='none';
+  document.getElementById('mp_qte')?.focus();
+}
+
+function effacerSelectionMP(){
+  document.getElementById('mp_ingr').value='';
+  document.getElementById('mp_ingr_search').value='';
+  document.getElementById('mp_prix').value='';
+  const selDiv=document.getElementById('mp_ingr_selected');
+  if(selDiv)selDiv.style.display='none';
+  document.getElementById('mp_ingr_search')?.focus();
+}
+
+// Fermer les résultats si clic ailleurs
+document.addEventListener('click',e=>{
+  const results=document.getElementById('mp_ingr_results');
+  const search=document.getElementById('mp_ingr_search');
+  if(results&&!results.contains(e.target)&&e.target!==search){
+    results.style.display='none';
+  }
+});
+
 // ── STOCK MP ───────────────────────────────────────
 function calcNiveaux(mouvements){
   const niveaux={};
@@ -10,6 +104,7 @@ function calcNiveaux(mouvements){
 }
 async function renderStockNiveaux(){
   const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  window._stockNiveaux=S;
   const niveaux=calcNiveaux(S);
   // Stock value
   const valeur=Object.entries(niveaux).reduce((s,[nom,qte])=>{
@@ -22,7 +117,21 @@ async function renderStockNiveaux(){
     <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${GP_ROLE==='admin'?fmt(valeur)+' F':'—'}</div><div class="econo-lbl">Valeur stock</div></div>
     <div class="econo-box"><div class="econo-val" style="color:${alertes>0?'var(--red)':'var(--green)'}">${alertes}</div><div class="econo-lbl">Alertes</div></div>
     <div class="econo-box"><div class="econo-val">${(S||[]).length}</div><div class="econo-lbl">Mouvements</div></div>`;
-  const sorted=Object.entries(niveaux).sort((a,b)=>a[0].localeCompare(b[0]));
+  const sorted=Object.entries(niveaux).sort((a,b)=>{
+    const [nomA,nvA]=a; const [nomB,nvB]=b;
+    const ingrA=GP_INGREDIENTS.find(i=>i.nom===nomA);
+    const ingrB=GP_INGREDIENTS.find(i=>i.nom===nomB);
+    const seuilA=ingrA?.seuil_alerte||200;
+    const seuilB=ingrB?.seuil_alerte||200;
+    // 1. Épuisés (stock=0) en premier
+    const epuiseA=nvA<=0; const epuiseB=nvB<=0;
+    if(epuiseA!==epuiseB)return epuiseA?-1:1;
+    // 2. Stock faible (< seuil) ensuite
+    const faibleA=nvA<seuilA; const faibleB=nvB<seuilB;
+    if(faibleA!==faibleB)return faibleA?-1:1;
+    // 3. Tri alphabétique pour le reste
+    return nomA.localeCompare(nomB);
+  });
   document.getElementById('stock-niveaux').innerHTML=sorted.length?`<table class="tbl"><thead><tr>
       <th>Ingrédient</th>
       <th class="num">Stock (kg)</th>
@@ -39,18 +148,7 @@ async function renderStockNiveaux(){
       return `<tr class="stock-row" data-nom="${nom.toLowerCase()}">
         <td style="font-weight:600">${nom}</td>
         <td class="num ${cls}">${fmtKg(n)}</td>
-        ${GP_ROLE==='admin'?`<td class="num">
-          <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
-            <span id="sp-val-${ingrId}">${fmt(prixActuel)} F</span>
-            <input type="number" id="sp-inp-${ingrId}" value="${prixActuel}"
-              style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
-              onkeydown="if(event.key==='Enter')sauverPrixStock('${ingrId}');if(event.key==='Escape')annulerPrixStock('${ingrId}')">
-            <button class="btn btn-out btn-sm" onclick="editerPrixStock('${ingrId}')"
-              id="sp-edit-${ingrId}" style="padding:2px 5px;font-size:10px" title="Modifier le prix">✏️</button>
-            <button class="btn btn-g btn-sm" onclick="sauverPrixStock('${ingrId}')"
-              id="sp-save-${ingrId}" style="padding:2px 5px;font-size:10px;display:none">✓</button>
-          </div>
-        </td>`:''}
+        <td class="num">${fmt(prixActuel)} F</td>
         <td><span class="badge ${n<seuil?n<=0?'bdg-r':'bdg-gold':'bdg-g'}">${statut}</span></td>
       </tr>`;}).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun stock enregistré. Réceptionnez des MP.</div>';
@@ -100,8 +198,7 @@ async function renderMouvements(){
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucun mouvement.</div>';
 }
 function onMPChange(){
-  const sel=document.getElementById('mp_ingr').selectedOptions[0];
-  if(sel?.dataset.prix)document.getElementById('mp_prix').value=sel.dataset.prix;
+  // Géré par selectionnerMPStock() désormais
 }
 async function saveMPEntree(){
   const ingrId=document.getElementById('mp_ingr').value;
@@ -123,6 +220,7 @@ async function saveMPEntree(){
   if(prix>0)await SB.from('gp_ingredients').update({prix_actuel:prix}).eq('id',ingrId);
   err.textContent='';
   ['mp_qte','mp_prix','mp_fourn','mp_ref'].forEach(id=>document.getElementById(id).value='');
+  effacerSelectionMP();
   notify('Réception enregistrée ✓ — Stock mis à jour','gold');
   renderStockNiveaux();renderMouvements();
 }
@@ -198,6 +296,7 @@ function filtrerStock(){
 async function verifierAlerteStock(){
   const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
   if(!S)return;
+  window._stockNiveaux=S;
   const niveaux=calcNiveaux(S);
   const alertes=[];
   Object.entries(niveaux).forEach(([nom,qte])=>{

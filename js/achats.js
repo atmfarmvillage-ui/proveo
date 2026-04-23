@@ -330,39 +330,14 @@ async function voirDetailAchat(id){
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
     ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}
-    ${['credit','tranches'].includes(a.condition_paiement)?`
-    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">
-        💳 Enregistrer un paiement
-        <span style="color:var(--red);font-weight:400;margin-left:8px">
-          Reste dû : ${fmt(Number(a.montant_total||0)-Number(a.montant_paye||0))} F
-        </span>
+    ${['credit','tranches','avance'].includes(a.condition_paiement)&&Number(a.montant_total||0)>Number(a.montant_paye||0)?`
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;text-align:center">
+      <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:10px">
+        ⏳ Reste dû : ${fmt(Number(a.montant_total||0)-Number(a.montant_paye||0))} F
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div class="fr"><label>Montant (F)</label>
-          <input type="number" id="pmt_montant" placeholder="${Number(a.montant_total||0)-Number(a.montant_paye||0)}"
-            style="font-size:14px;font-weight:700">
-        </div>
-        <div class="fr"><label>Mode</label>
-          <select id="pmt_mode">
-            <option value="especes">Espèces</option>
-            <option value="mobile_money">Mobile Money</option>
-            <option value="virement">Virement</option>
-            <option value="cheque">Chèque</option>
-          </select>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div class="fr"><label>Date</label>
-          <input type="date" id="pmt_date" value="${today()}">
-        </div>
-        <div class="fr"><label>Référence (optionnel)</label>
-          <input type="text" id="pmt_ref" placeholder="N° reçu, transaction...">
-        </div>
-      </div>
-      <div class="a-err" id="pmt_err"></div>
-      <button class="btn btn-g" onclick="savePaiementAchat('${a.id}',${a.montant_total||0},${a.montant_paye||0})" style="width:100%;justify-content:center">
-        ✓ Enregistrer ce paiement
+      <button class="btn btn-g" onclick="document.getElementById('modal-detail-achat').style.display='none';showGP('paiements_mp');"
+        style="width:100%;justify-content:center;font-size:14px;min-height:44px">
+        💳 Aller à la page Paiements MP
       </button>
     </div>`:''}`;
   modal.style.display='flex';

@@ -205,6 +205,17 @@
             <span>Transport : <strong id="lot_trans_label">0 F</strong></span>
           </label>
           <span>MO : <strong id="lot_mo_label">0 F</strong></span>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
+            <div class="fr"><label style="text-transform:none;font-size:9px">Emb (F/kg)</label>
+              <input type="number" id="lot_cout_emb" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
+            </div>
+            <div class="fr"><label style="text-transform:none;font-size:9px">Transport (F/lot)</label>
+              <input type="number" id="lot_cout_trans" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
+            </div>
+            <div class="fr"><label style="text-transform:none;font-size:9px">MO (F/tonne)</label>
+              <input type="number" id="lot_cout_mo" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
+            </div>
+          </div>
         </div>
         <input type="hidden" id="lot_mo" value="0">
         <input type="hidden" id="lot_emb" value="0">
@@ -242,10 +253,26 @@
         <div class="fr"><label>Date réception</label><input type="date" id="mp_date"></div>
         <div class="fr">
           <label>Matière première</label>
-          <div style="display:flex;gap:6px">
-            <select id="mp_ingr" onchange="onMPChange()" style="flex:1"></select>
-            <button class="btn btn-out btn-sm" onclick="toggleNouvelleMP()" title="Ajouter une nouvelle MP" style="flex-shrink:0;white-space:nowrap">➕ Nouveau</button>
+          <div style="position:relative">
+            <div style="display:flex;gap:6px;margin-bottom:4px">
+              <div style="flex:1;position:relative">
+                <input type="text" id="mp_ingr_search" placeholder="🔍 Rechercher une MP..." 
+                  oninput="filtrerMPStock()" onfocus="filtrerMPStock()"
+                  autocomplete="off"
+                  style="width:100%;padding-right:32px">
+                <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--textm);font-size:13px;pointer-events:none">🔍</span>
+              </div>
+              <button class="btn btn-out btn-sm" onclick="toggleNouvelleMP()" title="Ajouter une nouvelle MP" style="flex-shrink:0;white-space:nowrap">➕</button>
+            </div>
+            <!-- MP sélectionnée -->
+            <div id="mp_ingr_selected" style="display:none;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600;color:var(--g6);display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span id="mp_ingr_nom">—</span>
+              <button onclick="effacerSelectionMP()" style="background:none;border:none;color:var(--textm);cursor:pointer;font-size:14px">✕</button>
+            </div>
+            <!-- Résultats dynamiques -->
+            <div id="mp_ingr_results" style="display:none;position:absolute;left:0;right:0;z-index:500;background:var(--g2);border:1px solid var(--border2);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>
           </div>
+          <input type="hidden" id="mp_ingr">
         </div>
         <!-- Formulaire nouvelle MP (caché par défaut) -->
         <div id="nouvelle-mp-form" style="display:none;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
@@ -268,7 +295,7 @@
         </div>
         <div class="fg2">
           <div class="fr"><label>Quantité reçue (kg)</label><input type="number" id="mp_qte" placeholder="500" step="0.1"></div>
-          <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="mp_prix" placeholder="200"></div>
+          <div class="fr"><label>Prix/kg (FCFA) <span style="font-size:9px;color:var(--textm);font-weight:400;text-transform:none">🔒 depuis fiche MP</span></label><input type="number" id="mp_prix" placeholder="200" readonly style="background:rgba(30,45,74,.3);color:var(--textm);cursor:not-allowed"></div>
         </div>
         <div class="fg2">
           <div class="fr"><label>Fournisseur</label><input type="text" id="mp_fourn" placeholder="Nom fournisseur"></div>

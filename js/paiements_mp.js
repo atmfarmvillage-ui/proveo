@@ -10,7 +10,7 @@ async function renderPaiementsMP(){
   if(!GP_ADMIN_ID)return;
   const{data:achats}=await SB.from('gp_achats').select('*')
     .eq('admin_id',GP_ADMIN_ID)
-    .in('condition_paiement',['credit','tranches','avance'])
+    .gt('montant_total', 0)  // Tous les achats avec un montant
     .order('date_commande',{ascending:false});
   const{data:paiements}=await SB.from('gp_achats_paiements').select('*')
     .eq('admin_id',GP_ADMIN_ID).order('date_paiement',{ascending:false});
@@ -55,7 +55,7 @@ async function renderPaiementsMP(){
         </div>
       </div>
     </div>`;
-  }).join(''):'<div style="color:var(--textm);text-align:center;padding:20px">Aucun achat à crédit ou en tranches.</div>';
+  }).join(''):'<div style="color:var(--textm);text-align:center;padding:20px">Aucun achat enregistré.</div>';
 
   // Historique global
   document.getElementById('pmt-histo').innerHTML=P.length?`

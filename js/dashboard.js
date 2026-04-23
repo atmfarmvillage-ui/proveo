@@ -26,30 +26,31 @@ async function renderDashboard(){
     safe(SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
     safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
   ]);
-  const[ventesMois,toutesVentes,depensesMois,paiementsAchatsMois,salairesMois,lotsMois,derniersLots,stock]=
-    [r1,r2,r3,r4,r5,r6,r7,r8].map(r=>({data:r?.data||[]}));
-
-  const VM=ventesMois||[];
-  const VJ=toutesVentes||[];
-  const D=depensesMois||[];
-  const PA=paiementsAchatsMois||[];
-  const SAL=salairesMois||[];
-  const LM=lotsMois||[];
-  const DL=derniersLots||[];
-  const S=stock||[];
+  // Extraire les tableaux — garantir que c'est toujours un Array
+  const toArr=r=>Array.isArray(r?.data)?r.data:(r?.data?Object.values(r.data):[]);
+  const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD]=
+    [r1,r2,r3,r4,r5,r6,r7,r8].map(toArr);
+  const VMois=ventesMoisD;
+  const VJ=toutesVentesD;
+  const D=depensesD;
+  const PA=paiementsMP;
+  const SAL=salairesD;
+  const LM=lotsMoisD;
+  const DL=derniersLotsD;
+  const S=stockD;
 
   // ── CALCULS CORRECTS ─────────────────────────────
   // CA du mois = somme des montants_total des ventes du mois
-  const caMois=VM.reduce((s,v)=>s+Number(v.montant_total||0),0);
+  const caMois=VMois.reduce((s,v)=>s+Number(v.montant_total||0),0);
 
   // Impayés du mois = ventes du mois non soldées uniquement
-  const impayeMois=VM.reduce((s,v)=>{
+  const impayeMois=VMois.reduce((s,v)=>{
     const reste=Number(v.montant_total||0)-Number(v.montant_paye||0);
     return s+(reste>0?reste:0);
   },0);
 
   // Encaissé du mois = somme des montants_paye
-  const encaisseMois=VM.reduce((s,v)=>s+Number(v.montant_paye||0),0);
+  const encaisseMois=VMois.reduce((s,v)=>s+Number(v.montant_paye||0),0);
 
   // Dépenses courantes (fonctionnement)
   const depCourantes=D.reduce((s,d)=>s+Number(d.montant||0),0);

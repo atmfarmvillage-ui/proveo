@@ -168,24 +168,22 @@ async function bootApp(user){
   // (role restrictions déjà appliquées ci-dessus)
   // Load base data
   await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix()]);
-  // Vérifier le statut du trial/licence
-  verifierLicence();
-  // Auto-check stock alerts via CallMeBot
-  setTimeout(autoVerifierStockAlerte, 5000);
   // Set defaults
-  ['lot_date','mp_date','vt_date','dep_date','bj_date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today();});
-  ['lot-filtre-mois','mp-filtre-mois','dep-filtre-mois','inv-mois','rpt-mois','inv-phys-mois'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=thisMonth();});
-  document.getElementById('vt-filtre-date').value=today();
-  populateSelects();
-  renderDashboard();
-  // Vérifier si une mise à jour est disponible
-  verifierMiseAJour();
-  // Initialiser présence en ligne
-  mettreAJourPresence(true);
-  // Check pending remises
-  checkPendingRemises();
-  // Auto lot ref
-  document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
+  const todayStr=new Date().toISOString().slice(0,10);
+  const monthStr=new Date().toISOString().slice(0,7);
+  ['lot_date','mp_date','vt_date','dep_date','bj_date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=todayStr;});
+  ['lot-filtre-mois','mp-filtre-mois','dep-filtre-mois','inv-mois','rpt-mois','inv-phys-mois'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=monthStr;});
+  const vtDate=document.getElementById('vt-filtre-date');if(vtDate)vtDate.value=todayStr;
+  try{populateSelects();}catch(e){console.warn('populateSelects:',e);}
+  try{renderDashboard();}catch(e){console.error('renderDashboard:',e);}
+  // Fonctions optionnelles — ne bloquent pas le boot
+  try{verifierLicence();}catch(e){}
+  try{verifierMiseAJour();}catch(e){}
+  try{mettreAJourPresence(true);}catch(e){}
+  try{checkPendingRemises();}catch(e){}
+  try{autoVerifierStockAlerte();}catch(e){}
+  const lotRef=document.getElementById('lot_ref');
+  if(lotRef)lotRef.value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   // Auto refresh toutes les 30s
   setInterval(()=>{
     const active=document.querySelector('.page.active')?.id?.replace('page-','');

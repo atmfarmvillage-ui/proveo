@@ -8,39 +8,31 @@ function onFormuleChange(){
     // No prix input in production form — just show
   }
 }
+// Formule précédente pour pré-cocher une seule fois
+let _lastFormule='';
+
 function previewLot(){
   const nom=document.getElementById('lot_formule')?.value;
   const qte=+document.getElementById('lot_qte')?.value||0;
   const f=getFormule(nom)||FORMULES_SADARI.find(x=>x.nom===nom)||null;
-
-  // Mettre à jour labels coûts
-  if(f&&qte>0){
-    const avecEmb=document.getElementById('lot_avec_emb')?.checked;
-    const avecTrans=document.getElementById('lot_avec_trans')?.checked;
-    const mo=f.cout_mo_tonne?(f.cout_mo_tonne*(qte/1000)):0;
-    const emb=avecEmb&&f.cout_emballage_kg?(f.cout_emballage_kg*qte):0;
-    const trans=avecTrans&&f.cout_transport_lot?f.cout_transport_lot:0;
-    const moLabel=document.getElementById('lot_mo_label');
-    const embLabel=document.getElementById('lot_emb_label');
-    const transLabel=document.getElementById('lot_trans_label');
-    if(moLabel)moLabel.textContent=fmt(mo)+' F';
-    if(embLabel)embLabel.textContent=fmt(emb)+' F';
-    if(transLabel)transLabel.textContent=fmt(trans)+' F';
-    const moInput=document.getElementById('lot_mo');
-    if(moInput)moInput.value=mo;
-  }
-
   const coutZone=document.getElementById('lot-couts-auto');
 
-  if(f&&nom){
-    if(coutZone)coutZone.style.display='block';
-    // Pré-cocher cases selon formule
+  if(!f||!nom){
+    if(coutZone)coutZone.style.display='none';
+    document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
+    document.getElementById('lot-mp-preview').style.display='none';
+    return;
+  }
+
+  if(coutZone)coutZone.style.display='block';
+
+  // Pré-cocher cases SEULEMENT quand la formule change (pas à chaque frappe de quantité)
+  if(nom!==_lastFormule){
+    _lastFormule=nom;
     const avecEmbCheck=document.getElementById('lot_avec_emb');
     const avecTransCheck=document.getElementById('lot_avec_trans');
-    if(avecEmbCheck) avecEmbCheck.checked=f.avec_emballage!==false;
-    if(avecTransCheck) avecTransCheck.checked=f.avec_transport===true;
-  } else {
-    if(coutZone)coutZone.style.display='none';
+    if(avecEmbCheck)avecEmbCheck.checked=true; // coché par défaut
+    if(avecTransCheck)avecTransCheck.checked=false; // décoché par défaut
   }
 
   if(!nom||!qte){
@@ -51,9 +43,15 @@ function previewLot(){
 
   const avecEmb=document.getElementById('lot_avec_emb')?.checked||false;
   const avecTrans=document.getElementById('lot_avec_trans')?.checked||false;
-  const moVal=f?.cout_mo_tonne?(f.cout_mo_tonne*(qte/1000)):0;
-  const embVal=avecEmb&&f?.cout_emballage_kg?(f.cout_emballage_kg*qte):0;
-  const transVal=avecTrans&&f?.cout_transport_lot?f.cout_transport_lot:0;
+
+  // Coûts : depuis la formule si disponible, sinon depuis les champs manuels
+  const coutMoParTonne=f?.cout_mo_tonne||+document.getElementById('lot_cout_mo')?.value||0;
+  const coutEmbParKg=f?.cout_emballage_kg||+document.getElementById('lot_cout_emb')?.value||0;
+  const coutTransPort=f?.cout_transport_lot||+document.getElementById('lot_cout_trans')?.value||0;
+
+  const moVal=coutMoParTonne*(qte/1000);
+  const embVal=avecEmb?coutEmbParKg*qte:0;
+  const transVal=avecTrans?coutTransPort:0;
 
   // Mettre à jour labels et hidden inputs
   const moLabel=document.getElementById('lot_mo_label');
@@ -88,9 +86,9 @@ async function saveLot(){
   const emb=+document.getElementById('lot_emb')?.value||0;
   const fData=getFormule(nom);
   const avecTrans=document.getElementById('lot_avec_trans')?.checked;
-  const transport=avecTrans&&fData?.cout_transport_lot?fData.cout_transport_lot:0;
+  const transport=avecTrans?(fData?.cout_transport_lot||+document.getElementById('lot_cout_trans')?.value||0):0;
   const obs=document.getElementById('lot_obs').value.trim();
-  const pv=document.getElementById('lot_pv').value.trim();
+  const pv=GP_POINT_VENTE||'';
   const err=document.getElementById('lot_err');
   if(!nom||!date||!qte){err.textContent='Formule, date et quantité requis.';return;}
   err.textContent='Enregistrement...';
@@ -125,7 +123,7 @@ async function saveLot(){
     }
   }
   err.textContent='';
-  ['lot_qte','lot_mo','lot_emb','lot_obs','lot_pv'].forEach(id=>document.getElementById(id).value='');
+  ['lot_qte','lot_mo','lot_emb','lot_obs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';}); 
   document.getElementById('lot_mo').value='0';document.getElementById('lot_emb').value='0';
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
