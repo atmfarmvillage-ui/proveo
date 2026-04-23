@@ -253,6 +253,7 @@ var PAGE_RENDERERS = {
   distribution:  renderDistribution,
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
+  stock_pf:      renderStockPF,
   salaires:      function(){
     const sm=document.getElementById('sal-mois');
     const ss=document.getElementById('sal_mois_saisie');

@@ -109,7 +109,11 @@ async function saveLot(){
   const{data:lot,error}=await SB.from('gp_lots').insert({
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
     qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
-    cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:true
+    cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:true,
+    poids_sac:+document.getElementById('lot_poids_sac')?.value||25,
+    nb_sacs:+document.getElementById('lot_nb_sacs')?.value||0,
+    kg_pertes:Math.max(0,qte-(+document.getElementById('lot_nb_sacs')?.value||0)*(+document.getElementById('lot_poids_sac')?.value||25)),
+    pdv_production:document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||null
   }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Auto-create stock sorties
