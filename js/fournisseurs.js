@@ -110,8 +110,10 @@ async function populateFournisseurSelect(){
   ['achat_fournisseur'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
+    const valeurActuelle=el.value; // Sauvegarder la sélection
     el.innerHTML='<option value="">— Sélectionner —</option>'+
       F.map(f=>`<option value="${f.id}">${f.nom}</option>`).join('');
+    if(valeurActuelle)el.value=valeurActuelle; // Restaurer la sélection
   });
 }
 
