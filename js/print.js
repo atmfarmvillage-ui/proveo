@@ -348,3 +348,74 @@ function printFicheTechniqueLot(formule, numLot, qteProduite, dateLot){
   w.document.write(html);
   w.document.close();
 }
+
+// ── REÇU THERMIQUE 80mm ───────────────────────────
+function imprimerRecuThermique(vente){
+  const cfg=GP_CONFIG||{};
+  const prov=cfg.nom_provenderie||'PROVENDERIE SADARI';
+  const lignes=vente.lignes||[];
+  const total=Number(vente.montant_total||0);
+  const paye=Number(vente.montant_paye||0);
+  const reste=Math.max(0,total-paye);
+  const statut=reste<=0?'✅ PAYÉ':reste<total?'⚠ PARTIEL':'❌ IMPAYÉ';
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Reçu ${vente.id?.slice(0,8)||''}</title>
+<style>
+@page{size:80mm auto;margin:2mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;font-size:11px;width:76mm;color:#000;background:#fff}
+.center{text-align:center}
+.right{text-align:right}
+.bold{font-weight:bold}
+.line{border-top:1px dashed #000;margin:4px 0}
+.row{display:flex;justify-content:space-between}
+h1{font-size:14px;font-weight:bold;text-align:center}
+h2{font-size:12px;text-align:center;font-weight:normal}
+.statut{font-size:13px;font-weight:bold;text-align:center;margin:4px 0}
+</style></head><body>
+<div class="center">
+  <h1>${prov}</h1>
+  ${cfg.adresse?`<div>${cfg.adresse}</div>`:''}
+  ${cfg.telephone?`<div>Tél: ${cfg.telephone}</div>`:''}
+</div>
+<div class="line"></div>
+<div class="center bold">REÇU DE VENTE</div>
+<div class="line"></div>
+<div class="row"><span>N° :</span><span>${vente.ref||vente.id?.slice(0,8)||'—'}</span></div>
+<div class="row"><span>Date :</span><span>${vente.date||''}</span></div>
+<div class="row"><span>Client :</span><span>${vente.client_nom||'Comptant'}</span></div>
+${vente.point_vente?`<div class="row"><span>PDV :</span><span>${vente.point_vente}</span></div>`:''}
+<div class="line"></div>
+<div class="row bold"><span>Produit</span><span>Qté</span><span>Prix</span><span>Total</span></div>
+<div class="line"></div>
+${lignes.map(l=>`<div>
+  <div class="bold" style="font-size:10px">${l.formule_nom}</div>
+  <div class="row" style="font-size:10px">
+    <span>${Number(l.quantite||0)} kg</span>
+    <span>× ${fmt(l.prix_unitaire)} F</span>
+    <span class="right">${fmt(l.montant_ligne)} F</span>
+  </div>
+</div>`).join('<div class="line" style="border-style:dotted"></div>')}
+<div class="line"></div>
+<div class="row bold"><span>TOTAL</span><span>${fmt(total)} F</span></div>
+<div class="row"><span>Payé</span><span>${fmt(paye)} F</span></div>
+${reste>0?`<div class="row bold"><span>Reste dû</span><span>${fmt(reste)} F</span></div>`:''}
+<div class="line"></div>
+<div class="statut">${statut}</div>
+<div class="line"></div>
+<div class="center" style="font-size:10px">
+  Merci pour votre confiance !<br>
+  Bonne journée 🌾
+</div>
+<div class="line"></div>
+<div class="center" style="font-size:9px">${new Date().toLocaleString('fr-FR')}</div>
+</body></html>`;
+
+  const win=window.open('','_blank','width=400,height=600');
+  if(!win){notify('Popup bloqué — autorisez les popups','r');return;}
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{win.print();setTimeout(()=>win.close(),500);},300);
+}

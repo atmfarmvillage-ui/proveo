@@ -136,14 +136,18 @@ async function renderBilanAnnuel(){
     const moisStr=`${annee}-${m}`;
     const[v,d,s]=await Promise.all([
       SB.from('gp_ventes').select('montant_paye').eq('admin_id',GP_ADMIN_ID)
-        .gte('date',moisStr+'-01').lte('date',moisStrfinMois(mois)),
+        .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
       SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
-        .gte('date',moisStr+'-01').lte('date',moisStrfinMois(mois)),
+        .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
       SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',moisStr)
     ]);
     const recettes=(v.data||[]).reduce((s,x)=>s+Number(x.montant_paye||0),0);
+    // Charges = dépenses courantes + salaires + achats MP payés ce mois
+    const{data:pmtsMP}=await SB.from('gp_achats_paiements').select('montant')
+      .eq('admin_id',GP_ADMIN_ID).gte('date_paiement',moisStr+'-01').lte('date_paiement',_finMois(moisStr));
     const charges=(d.data||[]).reduce((s,x)=>s+Number(x.montant||0),0)+
-                  (s.data||[]).reduce((s,x)=>s+Number(x.montant||0),0);
+                  (s.data||[]).reduce((s,x)=>s+Number(x.montant||0),0)+
+                  (pmtsMP||[]).reduce((s,x)=>s+Number(x.montant||0),0);
     return{mois:nomsMois[+m-1],recettes,charges,benefice:recettes-charges};
   }));
 
@@ -176,12 +180,12 @@ async function renderBilanAnnuel(){
           </td>
           <td style="font-size:14px">${trend}</td>
         </tr>`;}).join('')}
-      <tr style="font-weight:700;background:rgba(22,163,74,.05)">
-        <td>TOTAL</td>
+      <tr style="font-weight:700;background:rgba(22,163,74,.08);border-top:2px solid rgba(22,163,74,.3)">
+        <td>📅 TOTAL ${annee}</td>
         <td class="num" style="color:var(--green)">${fmt(totalRec)} F</td>
-        <td class="num" style="color:var(--red)">${fmt(totalCha)} F</td>
-        <td class="num" style="color:${totalBen>=0?'var(--gold)':'var(--red)'}">${fmt(totalBen)} F</td>
-        <td></td>
+        <td class="num" style="color:var(--red)">− ${fmt(totalCha)} F</td>
+        <td class="num" style="font-size:14px;color:${totalBen>=0?'var(--gold)':'var(--red)'}">${fmt(totalBen)} F</td>
+        <td style="font-size:12px">${totalBen>=0?'✅ Bénéficiaire':'❌ Déficitaire'}</td>
       </tr>
       </tbody>
     </table></div>

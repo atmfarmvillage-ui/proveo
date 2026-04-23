@@ -3,7 +3,7 @@
 // Cache intelligent + offline fallback
 // ══════════════════════════════════════════════════
 
-const CACHE_NAME = 'provenda-v1.6.0';
+const CACHE_NAME = 'provenda-v1.9.0';
 const CACHE_STATIC = [
   '/',
   '/index.html',
@@ -12,6 +12,7 @@ const CACHE_STATIC = [
   '/js/admin.js',
   '/js/auth.js',
   '/js/bilanss.js',
+  '/js/benefices.js',
   '/js/messages_pdv.js',
   '/js/caisse.js',
   '/js/chat.js',

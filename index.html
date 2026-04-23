@@ -205,17 +205,12 @@
             <input type="checkbox" id="lot_avec_trans" onchange="previewLot()">
             <span>Transport : <strong id="lot_trans_label">0 F</strong></span>
           </label>
-          <span>MO : <strong id="lot_mo_label">0 F</strong></span>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
-            <div class="fr"><label style="text-transform:none;font-size:9px">Emb (F/kg)</label>
-              <input type="number" id="lot_cout_emb" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
-            </div>
-            <div class="fr"><label style="text-transform:none;font-size:9px">Transport (F/lot)</label>
-              <input type="number" id="lot_cout_trans" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
-            </div>
-            <div class="fr"><label style="text-transform:none;font-size:9px">MO (F/tonne)</label>
-              <input type="number" id="lot_cout_mo" placeholder="0" oninput="previewLot()" style="padding:4px 6px;font-size:11px">
-            </div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="lot_avec_mo" onchange="previewLot()" checked>
+            <span>MO : <strong id="lot_mo_label">0 F</strong></span>
+          </label>
+          <div style="font-size:10px;color:var(--textm);margin-top:4px">
+            💡 Coûts chargés automatiquement depuis la fiche formule
           </div>
         </div>
         <input type="hidden" id="lot_mo" value="0">
@@ -488,6 +483,9 @@
         </div>
       </div>
       <div class="fr"><label>Formule / Aliment</label>
+        <input type="text" id="vt_formule_search" placeholder="🔍 Taper pour filtrer (ex: lapin, ponte...)" 
+          oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')" 
+          style="margin-bottom:4px;font-size:12px">
         <select id="vt_formule" onchange="onVenteFormuleChange()"><option value="">— Sélectionner —</option></select>
       </div>
       <div class="fg2">
@@ -498,7 +496,7 @@
         </div>
       </div>
       <div class="fg2">
-        <div class="fr"><label>Remise (FCFA)</label><input type="number" id="vt_remise" value="0" oninput="calcVente()"></div>
+
         <div class="fr"><label>Montant payé (FCFA)</label><input type="number" id="vt_paye" placeholder="0" oninput="calcVente()"></div>
       </div>
       <div class="fr">
@@ -602,6 +600,15 @@
       </div>
     </div>
   </div>
+</div>
+
+
+<!-- BÉNÉFICES & RENTABILITÉ -->
+<div class="page" id="page-benefices">
+  <div class="page-title">Bénéfices & Rentabilité</div>
+  <div class="page-sub">Analyse financière · Option B — MP consommées</div>
+  <div class="g3" id="benef-kpis" style="margin-bottom:16px"></div>
+  <div id="benef-detail"></div>
 </div>
 
 <!-- BILAN JOURNALIER (admin only) -->
@@ -732,9 +739,14 @@
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📞 Enregistrer un appel</span></div></div>
       <div class="fr"><label>Client</label>
-        <select id="app_client"><option value="">— Sélectionner —</option></select>
+        <select id="app_client" onchange="onClientAppelChange()"><option value="">— Sélectionner —</option></select>
       </div>
-      <div class="fr"><label>Téléphone (si différent)</label><input type="tel" id="app_tel" placeholder="+228 90 00 00 00"></div>
+      <div class="fr"><label>Téléphone <span style="font-size:9px;color:var(--textm)">🔒 auto depuis fiche client</span></label>
+        <input type="tel" id="app_tel" placeholder="Sélectionner un client d'abord" readonly style="background:rgba(30,45,74,.3);color:var(--textm)">
+      </div>
+      <div class="fr"><label>Appelé(e) par</label>
+        <input type="text" id="app_appelant" placeholder="Votre nom" style="background:rgba(30,45,74,.3);color:var(--textm)" readonly>
+      </div>
       <div class="fr"><label>Résultat de l'appel</label>
         <select id="app_resultat" onchange="toggleAutreResultat()">
           <option value="interesse">✅ Intéressé — va commander</option>
@@ -1428,7 +1440,10 @@
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📤 Nouvelle livraison</span></div></div>
       <div class="fg2">
-        <div class="fr"><label>De (PDV Source)</label><select id="dist_source"></select></div>
+        <div class="fr"><label>De (PDV Source) <span style="font-size:9px;color:var(--textm)">🔒 votre PDV</span></label>
+          <div style="padding:8px 12px;border-radius:7px;border:1px solid rgba(22,163,74,.3);background:rgba(22,163,74,.08);font-size:12px;font-weight:600;color:var(--g6)" id="dist_source_label">—</div>
+          <input type="hidden" id="dist_source">
+        </div>
         <div class="fr"><label>Vers (PDV Destination)</label><select id="dist_dest"></select></div>
       </div>
       <div class="fg2">
@@ -1745,31 +1760,32 @@
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=1.6.0"></script>
-<script src="js/print.js?v=1.6.0"></script>
-<script src="js/dashboard.js?v=1.6.0"></script>
-<script src="js/stock.js?v=1.6.0"></script>
-<script src="js/matieres.js?v=1.6.0"></script>
-<script src="js/production.js?v=1.6.0"></script>
-<script src="js/ventes.js?v=1.6.0"></script>
-<script src="js/clients.js?v=1.6.0"></script>
-<script src="js/admin.js?v=1.6.0"></script>
-<script src="js/fournisseurs.js?v=1.6.0"></script>
-<script src="js/achats.js?v=1.6.0"></script>
-<script src="js/caisse.js?v=1.6.0"></script>
-<script src="js/inventaire_physique.js?v=1.6.0"></script>
-<script src="js/distribution.js?v=1.6.0"></script>
-<script src="js/salaires.js?v=1.6.0"></script>
-<script src="js/rapports.js?v=1.6.0"></script>
-<script src="js/dettes.js?v=1.6.0"></script>
-<script src="js/chat.js?v=1.6.0"></script>
-<script src="js/reversements.js?v=1.6.0"></script>
-<script src="js/paiements_mp.js?v=1.6.0"></script>
-<script src="js/stock_pf.js?v=1.6.0"></script>
-<script src="js/bilanss.js?v=1.6.0"></script>
-<script src="js/messages_pdv.js?v=1.6.0"></script>
+<script src="js/config.js?v=1.9.0"></script>
+<script src="js/print.js?v=1.9.0"></script>
+<script src="js/dashboard.js?v=1.9.0"></script>
+<script src="js/stock.js?v=1.9.0"></script>
+<script src="js/matieres.js?v=1.9.0"></script>
+<script src="js/production.js?v=1.9.0"></script>
+<script src="js/ventes.js?v=1.9.0"></script>
+<script src="js/clients.js?v=1.9.0"></script>
+<script src="js/admin.js?v=1.9.0"></script>
+<script src="js/fournisseurs.js?v=1.9.0"></script>
+<script src="js/achats.js?v=1.9.0"></script>
+<script src="js/caisse.js?v=1.9.0"></script>
+<script src="js/inventaire_physique.js?v=1.9.0"></script>
+<script src="js/distribution.js?v=1.9.0"></script>
+<script src="js/salaires.js?v=1.9.0"></script>
+<script src="js/rapports.js?v=1.9.0"></script>
+<script src="js/dettes.js?v=1.9.0"></script>
+<script src="js/chat.js?v=1.9.0"></script>
+<script src="js/reversements.js?v=1.9.0"></script>
+<script src="js/paiements_mp.js?v=1.9.0"></script>
+<script src="js/stock_pf.js?v=1.9.0"></script>
+<script src="js/bilanss.js?v=1.9.0"></script>
+<script src="js/benefices.js?v=1.9.0"></script>
+<script src="js/messages_pdv.js?v=1.9.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=1.6.0"></script>
+<script src="js/auth.js?v=1.9.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
@@ -1868,6 +1884,28 @@ function installPWA(){
       💡 Cliquez sur <strong style="color:#25D366">Envoyer</strong> pour chaque PDV. Si le numéro n'est pas enregistré, saisissez-le manuellement.
     </div>
     <div id="msg-pdv-liste"></div>
+  </div>
+</div>
+
+<!-- MODAL TOP 3 CLIENTS -->
+<div id="modal-top3-clients" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerTop3()">
+  <div style="background:var(--g1);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;color:var(--gold)">🏆 Messages Top 3 Clients</div>
+      <button onclick="fermerTop3()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div id="top3-liste"></div>
+  </div>
+</div>
+
+<!-- MODAL BILAN EMPLOYÉ -->
+<div id="modal-bilan-employe" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerBilanEmploye()">
+  <div style="background:var(--g1);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;color:var(--gold)">📊 Bilan employé</div>
+      <button onclick="fermerBilanEmploye()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div id="bilan-employe-contenu"></div>
   </div>
 </div>
 </body>

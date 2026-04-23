@@ -25,11 +25,10 @@ function onVenteFormuleChange(){
   calcVente();
 }
 function calcVente(){
-  const qte=+document.getElementById('vt_qte').value||0;
-  const prix=+document.getElementById('vt_prix').value||0;
-  const remise=+document.getElementById('vt_remise').value||0;
-  const statut=document.getElementById('vt_statut').value;
-  const total=qte*prix-remise;
+  const qte=+document.getElementById('vt_qte')?.value||0;
+  const prix=+document.getElementById('vt_prix')?.value||0;
+  const paye=+document.getElementById('vt_paye')?.value||0;
+  const total=qte*prix;
   const remisePct=qte*prix>0?remise/(qte*prix)*100:0;
   // statut calculé automatiquement
   const warn=document.getElementById('vt-remise-warning');
@@ -150,6 +149,24 @@ async function saveVente(){
   err.textContent='';
   if(paye>0) imprimerRecu(vente.id);
   notify('Vente enregistrée ✓','gold');
+  // Bouton reçu thermique
+  if(typeof imprimerRecuThermique==='function'){
+    const btnRecu=document.createElement('button');
+    btnRecu.className='btn btn-print';
+    btnRecu.style.cssText='width:100%;justify-content:center;margin-top:8px';
+    btnRecu.innerHTML='🖨️ Imprimer le reçu thermique';
+    btnRecu.onclick=()=>{
+      imprimerRecuThermique({
+        ...vente,
+        lignes:VT_LIGNES,
+        ref:vente.id?.slice(0,8)
+      });
+      btnRecu.remove();
+    };
+    const errEl=document.getElementById('vt_err');
+    if(errEl)errEl.parentNode.insertBefore(btnRecu,errEl.nextSibling);
+    setTimeout(()=>btnRecu.remove(),30000);
+  }
   renderVentes();
 }
 

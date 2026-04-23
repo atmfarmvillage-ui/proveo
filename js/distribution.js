@@ -13,10 +13,16 @@ async function renderDistribution(){
   // Remplir selects PDV
   const pdvOptions='<option value="">— Sélectionner —</option>'+
     GP_PDV_LIST.map(p=>`<option value="${p.id}">${p.nom} (${p.type_pdv||'secondaire'})</option>`).join('');
-  ['dist_source','dist_dest'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el)el.innerHTML=pdvOptions;
-  });
+  // Source = PDV du membre connecté (automatique)
+  const srcLabel=document.getElementById('dist_source_label');
+  const srcInput=document.getElementById('dist_source');
+  const srcPDV=GP_POINT_VENTE||'Production';
+  if(srcLabel)srcLabel.textContent=srcPDV;
+  if(srcInput)srcInput.value=srcPDV;
+
+  // Destination : tous les PDV sauf la source
+  const destEl=document.getElementById('dist_dest');
+  if(destEl)destEl.innerHTML=pdvOptions;
 
   // Remplir select formule (depuis FORMULES_SADARI + GP_INGREDIENTS)
   const distFormule=document.getElementById('dist_formule');
@@ -105,7 +111,7 @@ function actionsLivraison(l){
 
 // ── CRÉER UNE LIVRAISON ───────────────────────────
 async function saveLivraison(){
-  const sourceId=document.getElementById('dist_source')?.value;
+  const sourceId=document.getElementById('dist_source')?.value||GP_POINT_VENTE||'Production';
   const destId=document.getElementById('dist_dest')?.value;
   const formule=document.getElementById('dist_formule')?.value;
   const qte=+document.getElementById('dist_qte')?.value||0;

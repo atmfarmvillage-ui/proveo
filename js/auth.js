@@ -234,7 +234,11 @@ var PAGE_RENDERERS = {
     renderPrixFormules();
     loadIngredients().then(()=>{renderIngrAdmin();populateSelects();});
   },
-  ventes:        renderVentes,
+  ventes: async function(){
+    if(!GP_CLIENTS.length)await loadClients();
+    populateSelects();
+    await renderVentes();
+  },
   depenses:      renderDep,
   bilan_jour:    renderBilanJour,
   bilan_avance:  function(){
@@ -245,7 +249,10 @@ var PAGE_RENDERERS = {
     renderBilanAvance();
   },
   remises:       renderRemises,
-  clients:       renderClients,
+  clients: async function(){
+    if(!GP_CLIENTS.length)await loadClients();
+    await renderClients();
+  },
   suivi:         renderSuivi,
   classement:    renderClassement,
   fournisseurs:  renderFournisseurs,
@@ -255,6 +262,7 @@ var PAGE_RENDERERS = {
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
   stock_pf:      renderStockPF,
+  benefices:     renderBenefices,
   ventes_bilan:  renderBilanVentes,
   salaires:      function(){
     const sm=document.getElementById('sal-mois');
@@ -632,3 +640,29 @@ function refreshPage(){
     }
   },{passive:true});
 })();
+
+// ── RECHERCHE FORMULE DANS LES SELECTS ───────────
+function filtrerFormuleSelect(selectId, searchId){
+  const search=document.getElementById(searchId)?.value.toLowerCase().trim()||'';
+  const sel=document.getElementById(selectId);
+  if(!sel)return;
+  const allF=getAllFormules();
+  const groups={};
+  allF.forEach(f=>{
+    if(!search||f.nom.toLowerCase().includes(search)||f.espece.toLowerCase().includes(search)){
+      if(!groups[f.espece])groups[f.espece]=[];
+      groups[f.espece].push(f);
+    }
+  });
+  let html='<option value="">— Sélectionner une formule —</option>';
+  const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  Object.entries(groups).forEach(([esp,fs])=>{
+    html+=`<optgroup label="${icons[esp]||'🌾'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
+    fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});
+    html+='</optgroup>';
+  });
+  sel.innerHTML=html;
+  if(search&&Object.values(groups).flat().length===1){
+    sel.value=Object.values(groups).flat()[0].nom;
+  }
+}

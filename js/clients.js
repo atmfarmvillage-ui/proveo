@@ -77,7 +77,35 @@ function renderSuivi(){
 
 function preFillAppel(clientId){
   document.getElementById('app_client').value=clientId;
+  onClientAppelChange();
   document.getElementById('app_client').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function onClientAppelChange(){
+  const clientId=document.getElementById('app_client')?.value;
+  // Auto-remplir téléphone
+  const telEl=document.getElementById('app_tel');
+  if(clientId&&clientId!==''){
+    const client=GP_CLIENTS.find(c=>c.id===clientId);
+    if(client&&telEl){
+      telEl.value=client.telephone||client.whatsapp||'';
+      telEl.setAttribute('readonly','true');
+      telEl.style.background='rgba(30,45,74,.3)';
+      telEl.style.color='var(--textm)';
+    }
+  } else {
+    if(telEl){
+      telEl.value='';
+      telEl.removeAttribute('readonly');
+      telEl.style.background='';
+      telEl.style.color='';
+    }
+  }
+  // Auto-remplir nom de l'appelante
+  const appelantEl=document.getElementById('app_appelant');
+  if(appelantEl&&!appelantEl.value){
+    appelantEl.value=GP_USER?.email?.split('@')[0]||'';
+  }
 }
 
 
@@ -140,6 +168,7 @@ async function saveAppel(){
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
     client_id:clientId,client_nom:client?.nom||'',
     client_tel:tel||client?.telephone||'',
+    appele_par:document.getElementById('app_appelant')?.value||GP_USER?.email?.split('@')[0]||'',
     resultat, note,
     note_observation:observation||null
   });
@@ -174,7 +203,8 @@ async function renderClassement(){
     stats[k].totalKg+=Number(v.qte_vendue||0);
     stats[k].totalCA+=Number(v.montant_total||0);
   });
-  const sorted=Object.values(stats).sort((a,b)=>b.totalKg-a.totalKg);
+  // Trier par CA du mois (selon période sélectionnée)
+  const sorted=Object.values(stats).sort((a,b)=>b.totalCA-a.totalCA);
   const totKg=sorted.reduce((s,c)=>s+c.totalKg,0);
   const totCA=sorted.reduce((s,c)=>s+c.totalCA,0);
   document.getElementById('class-kpis').innerHTML=`
@@ -182,6 +212,10 @@ async function renderClassement(){
     <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(totKg)}</div><div class="econo-lbl">Kg total vendus</div></div>
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totCA)}</div><div class="econo-lbl">CA total (F)</div></div>`:'<div></div>'}
     <div class="econo-box"><div class="econo-val">${totKg>0&&sorted.length>0?fmt(Math.round(totKg/sorted.length)):0}</div><div class="econo-lbl">Moy kg/client</div></div>`;
+  // Afficher bouton envoi top 3
+  const btnTop3=document.getElementById('btn-wa-top3');
+  if(btnTop3)btnTop3.style.display=sorted.length>=3?'flex':'none';
+
   document.getElementById('classement-liste').innerHTML=sorted.length?`<table class="tbl"><thead><tr><th>#</th><th>Client</th><th>Téléphone</th><th class="num">Achats</th><th class="num">Kg total</th>${GP_ROLE==='admin'?'<th class="num">CA (F)</th>':''}<th>Segment</th></tr></thead><tbody>
     ${sorted.map((c,i)=>{
       const pos=i+1;
@@ -406,4 +440,88 @@ function toggleAutreResultat(){
   const val = document.getElementById('app_resultat').value;
   const champ = document.getElementById('autre-resultat-champ');
   champ.style.display = val === 'autre' ? 'block' : 'none';
+}
+
+// ── MESSAGES TOP 3 CLIENTS ───────────────────────
+const TEMPLATES_TOP3=[
+  (d)=>`Bonjour ${d.client} 👋\n\nNous tenons à vous exprimer notre profonde gratitude pour votre fidélité et votre confiance envers *${d.provendef}*.\n\n🏆 *Vous faites partie de nos ${d.rang <= 1 ? 'meilleur' : d.rang <= 2 ? '2ème meilleur' : '3ème meilleur'} client ce mois !*\n\n📊 Vos achats ce mois :\n   • CA : *${d.ca} F*\n   • Commandes : *${d.nbAchats}*\n\nVotre partenariat est une source d'inspiration pour toute notre équipe. Merci infiniment !\n\nCordialement,\n_${d.provendef}_ 🌾`,
+
+  (d)=>`Bonsoir ${d.client} ✨\n\n*${d.provendef}* tient à vous témoigner toute sa reconnaissance.\n\n${d.rang===1?'🥇 *MEILLEUR CLIENT DU MOIS !* \nVotre engagement exceptionnel fait de vous notre partenaire N°1 !':d.rang===2?'🥈 *2ème CLIENT DU MOIS !*\nVotre fidélité est un trésor pour nous.':'🥉 *3ème CLIENT DU MOIS !*\nVotre loyauté nous touche profondément.'}\n\nCA ce mois : *${d.ca} F*\n\nNous nous engageons à continuer à vous offrir des produits de la meilleure qualité. 💪\n\nAvec toute notre gratitude,\n_${d.provendef}_`,
+
+  (d)=>`${d.client}, bonsoir ! 🌟\n\nUn mois de plus ensemble — et quel mois !\n\n${d.rang===1?`👑 Vous êtes notre *CHAMPION* ce mois avec *${d.ca} F* d'achats !`:` Vous êtes classé *${d.rang}ème* ce mois avec *${d.ca} F* — Une performance remarquable !`}\n\n🎯 Votre partenariat avec *${d.provendef}* est notre fierté. Nous mettons tout en œuvre pour mériter votre confiance chaque jour.\n\nMerci d'être là. Merci de croire en nous. 🙏\n\n_L'équipe ${d.provendef}_`
+];
+
+async function envoyerMessagesTop3(){
+  const mois=new Date().toISOString().slice(0,7);
+  const{data:V}=await SB.from('gp_ventes').select('client_id,client_nom,montant_total,date')
+    .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois));
+
+  const stats={};
+  (V||[]).forEach(v=>{
+    const k=v.client_id||v.client_nom||'';
+    if(!k)return;
+    if(!stats[k])stats[k]={nom:v.client_nom||'Client',id:v.client_id,ca:0,nb:0};
+    stats[k].ca+=Number(v.montant_total||0);
+    stats[k].nb++;
+  });
+  const top3=Object.values(stats).sort((a,b)=>b.ca-a.ca).slice(0,3);
+  if(!top3.length){notify('Aucun client ce mois','r');return;}
+
+  const provendef=GP_CONFIG?.nom_provenderie||'PROVENDA';
+  const messages=top3.map((c,i)=>{
+    const rang=i+1;
+    const tpl=TEMPLATES_TOP3[Math.floor(Math.random()*TEMPLATES_TOP3.length)];
+    const msg=tpl({client:c.nom,rang,ca:fmt(c.ca),nbAchats:c.nb,provendef});
+    // Chercher téléphone
+    const cl=GP_CLIENTS.find(x=>x.id===c.id);
+    const tel=cl?.whatsapp||cl?.telephone||'';
+    const paysInfo=tel?detecterPays(tel):{numero_whatsapp:''};
+    return{nom:c.nom,rang,ca:c.ca,tel:paysInfo.numero_whatsapp,msg,id:c.id};
+  });
+
+  afficherModalTop3(messages);
+}
+
+function afficherModalTop3(messages){
+  const modal=document.getElementById('modal-top3-clients');
+  if(!modal)return;
+  document.getElementById('top3-liste').innerHTML=messages.map((m,i)=>{
+    const medals=['🥇','🥈','🥉'];
+    return`<div style="background:rgba(14,20,40,.6);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <span style="font-weight:700;font-size:13px">${medals[i]} ${m.nom}</span>
+          <div style="font-size:11px;color:var(--gold)">CA : ${fmt(m.ca)} F</div>
+        </div>
+        ${m.tel
+          ? `<a href="https://wa.me/${m.tel}?text=${encodeURIComponent(m.msg)}" target="_blank" rel="noopener"
+              style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">
+              📲 Envoyer
+            </a>`
+          : `<div><input type="tel" id="top3-tel-${i}" placeholder="+228..." style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:130px;margin-bottom:4px">
+              <button onclick="envoyerTop3Manuel(${i},'${encodeURIComponent(m.msg)}')" style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;width:100%">📲 Envoyer</button>
+            </div>`
+        }
+      </div>
+      <details style="font-size:10px;color:var(--textm)">
+        <summary style="cursor:pointer;color:var(--g6)">Voir le message</summary>
+        <pre style="white-space:pre-wrap;font-size:10px;margin-top:6px;padding:8px;background:rgba(22,163,74,.05);border-radius:6px">${m.msg}</pre>
+      </details>
+    </div>`;
+  }).join('');
+  modal.style.display='flex';
+}
+
+function fermerTop3(){
+  document.getElementById('modal-top3-clients').style.display='none';
+}
+
+function envoyerTop3Manuel(idx,msgEncoded){
+  const inp=document.getElementById('top3-tel-'+idx);
+  const tel=inp?.value.trim();
+  if(!tel){if(inp)inp.style.borderColor='var(--red)';return;}
+  const paysInfo=detecterPays(tel);
+  if(paysInfo.numero_whatsapp){
+    window.open('https://wa.me/'+paysInfo.numero_whatsapp+'?text='+msgEncoded,'_blank');
+  }
 }

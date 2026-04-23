@@ -2,7 +2,8 @@
 function onFormuleChange(){
   const nom=document.getElementById('lot_formule').value;
   const qte=+document.getElementById('lot_qte').value||0;
-  previewLot();
+  if(nom)chargerCoutsFormule(nom).then(()=>previewLot());
+  else previewLot();
   if(nom){
     const prix=getPrix(nom);
     // No prix input in production form — just show
@@ -10,6 +11,27 @@ function onFormuleChange(){
 }
 // Formule précédente pour pré-cocher une seule fois
 let _lastFormule='';
+
+// Coûts chargés depuis gp_formules
+let _formuleCoûts={};
+
+async function chargerCoutsFormule(nom){
+  // Chercher dans gp_prix_formules (où les coûts sont définis via le bouton ⚙️)
+  const[{data:pf},{data:gf}]=await Promise.all([
+    SB.from('gp_prix_formules').select('cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
+      .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',nom).maybeSingle(),
+    SB.from('gp_formules').select('cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
+      .eq('admin_id',GP_ADMIN_ID).eq('nom',nom).maybeSingle()
+  ]);
+  const d=pf||gf;
+  if(d&&(d.cout_mo_tonne||d.cout_emballage_kg||d.cout_transport_lot)){
+    _formuleCoûts={mo:d.cout_mo_tonne||0,emb:d.cout_emballage_kg||0,trans:d.cout_transport_lot||0};
+  } else {
+    // Fallback FORMULES_SADARI
+    const fs=FORMULES_SADARI.find(x=>x.nom===nom);
+    _formuleCoûts={mo:fs?.cout_mo_tonne||0,emb:fs?.cout_emballage_kg||0,trans:fs?.cout_transport_lot||0};
+  }
+}
 
 function previewLot(){
   const nom=document.getElementById('lot_formule')?.value;
@@ -43,13 +65,14 @@ function previewLot(){
 
   const avecEmb=document.getElementById('lot_avec_emb')?.checked||false;
   const avecTrans=document.getElementById('lot_avec_trans')?.checked||false;
+  const avecMO=document.getElementById('lot_avec_mo')?.checked!==false;
 
   // Coûts : depuis la formule si disponible, sinon depuis les champs manuels
-  const coutMoParTonne=f?.cout_mo_tonne||+document.getElementById('lot_cout_mo')?.value||0;
-  const coutEmbParKg=f?.cout_emballage_kg||+document.getElementById('lot_cout_emb')?.value||0;
-  const coutTransPort=f?.cout_transport_lot||+document.getElementById('lot_cout_trans')?.value||0;
+  const coutMoParTonne=_formuleCoûts.mo||f?.cout_mo_tonne||0;
+  const coutEmbParKg=_formuleCoûts.emb||f?.cout_emballage_kg||0;
+  const coutTransPort=_formuleCoûts.trans||f?.cout_transport_lot||0;
 
-  const moVal=coutMoParTonne*(qte/1000);
+  const moVal=avecMO?coutMoParTonne*(qte/1000):0;
   const embVal=avecEmb?coutEmbParKg*qte:0;
   const transVal=avecTrans?coutTransPort:0;
 
@@ -86,7 +109,7 @@ async function saveLot(){
   const emb=+document.getElementById('lot_emb')?.value||0;
   const fData=getFormule(nom);
   const avecTrans=document.getElementById('lot_avec_trans')?.checked;
-  const transport=avecTrans?(fData?.cout_transport_lot||+document.getElementById('lot_cout_trans')?.value||0):0;
+  const transport=avecTrans?(_formuleCoûts.trans||fData?.cout_transport_lot||0):0;
   const obs=document.getElementById('lot_obs').value.trim();
   const pv=GP_POINT_VENTE||'';
   const err=document.getElementById('lot_err');
