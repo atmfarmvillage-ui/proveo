@@ -9,27 +9,37 @@ async function renderDashboard(){
     {data:ventesMois},
     {data:toutesVentes},
     {data:depensesMois},
+    {data:paiementsAchatsMois},
+    {data:salairesMois},
     {data:lotsMois},
     {data:derniersLots},
     {data:stock}
   ]=await Promise.all([
-    // Ventes du mois (pour CA + impayés)
+    // Ventes du mois
     SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue')
       .eq('admin_id',GP_ADMIN_ID)
       .gte('date',mDebut).lte('date',mFin),
-    // Ventes du jour (séparée pour performance)
+    // Ventes du jour
     SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date')
       .eq('admin_id',GP_ADMIN_ID)
       .eq('date',today()),
-    // Dépenses du mois
+    // Dépenses courantes du mois
     SB.from('gp_depenses').select('montant,date')
       .eq('admin_id',GP_ADMIN_ID)
       .gte('date',mDebut).lte('date',mFin),
-    // Lots du mois (pour kg produits)
+    // Paiements achats MP du mois
+    SB.from('gp_achats_paiements').select('montant,date_paiement')
+      .eq('admin_id',GP_ADMIN_ID)
+      .gte('date_paiement',mDebut).lte('date_paiement',mFin),
+    // Salaires du mois
+    SB.from('gp_salaires').select('montant')
+      .eq('admin_id',GP_ADMIN_ID)
+      .eq('mois',m),
+    // Lots du mois
     SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
       .eq('admin_id',GP_ADMIN_ID)
       .gte('date',mDebut).lte('date',mFin),
-    // Derniers lots (pour affichage)
+    // Derniers lots
     SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
       .eq('admin_id',GP_ADMIN_ID)
       .order('date',{ascending:false})
@@ -41,6 +51,8 @@ async function renderDashboard(){
   const VM=ventesMois||[];
   const VJ=toutesVentes||[];
   const D=depensesMois||[];
+  const PA=paiementsAchatsMois||[];
+  const SAL=salairesMois||[];
   const LM=lotsMois||[];
   const DL=derniersLots||[];
   const S=stock||[];
@@ -58,8 +70,14 @@ async function renderDashboard(){
   // Encaissé du mois = somme des montants_paye
   const encaisseMois=VM.reduce((s,v)=>s+Number(v.montant_paye||0),0);
 
-  // Dépenses du mois
-  const depMois=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  // Dépenses courantes (fonctionnement)
+  const depCourantes=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  // Paiements achats MP du mois
+  const depAchatsMP=PA.reduce((s,p)=>s+Number(p.montant||0),0);
+  // Salaires du mois
+  const depSalaires=SAL.reduce((s,s2)=>s+Number(s2.montant||0),0);
+  // Total dépenses réelles du mois
+  const depMois=depCourantes+depAchatsMP+depSalaires;
 
   // Kg produits ce mois = tous les lots du mois
   const prodMois=LM.reduce((s,l)=>s+Number(l.quantite_kg||0),0);
@@ -189,8 +207,20 @@ async function renderDashboard(){
             <span style="color:var(--green);font-family:'DM Mono',monospace">${fmt(encaisseMois)} F</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
-            <span style="color:var(--textm)">Dépenses</span>
-            <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depMois)} F</span>
+            <span style="color:var(--textm)">Achats MP payés</span>
+            <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depAchatsMP)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">Dépenses courantes</span>
+            <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depCourantes)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">Salaires</span>
+            <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depSalaires)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm);font-weight:600">Total dépenses</span>
+            <span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">− ${fmt(depMois)} F</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0">
             <span style="font-weight:700">Bénéfice net</span>
