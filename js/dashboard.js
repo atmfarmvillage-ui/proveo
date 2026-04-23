@@ -1,8 +1,15 @@
 // ── DASHBOARD ──────────────────────────────────────
+// Fonctions date autonomes — pas de dépendance externe
+function _finMois(mois){
+  const[y,mo]=(mois||new Date().toISOString().slice(0,7)).split('-').map(Number);
+  return mois+'-'+String(new Date(y,mo,0).getDate()).padStart(2,'0');
+}
+
+// ── DASHBOARD ──────────────────────────────────────
 async function renderDashboard(){
-  const m=thisMonth();
+  const m=(typeof thisMonth==='function'?thisMonth():new Date().toISOString().slice(0,7));
   const mDebut=m+'-01';
-  const mFin=finMois(m);
+  const mFin=_finMois(m);
 
   // Charger uniquement les données du mois en cours depuis Supabase
   // Requêtes parallèles avec gestion d'erreur individuelle
@@ -11,7 +18,7 @@ async function renderDashboard(){
     r1,r2,r3,r4,r5,r6,r7,r8
   ]=await Promise.all([
     safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
-    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date').eq('admin_id',GP_ADMIN_ID).eq('date',today())),
+    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date').eq('admin_id',GP_ADMIN_ID).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
     safe(SB.from('gp_depenses').select('montant,date').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_achats_paiements').select('montant,date_paiement').eq('admin_id',GP_ADMIN_ID).gte('date_paiement',mDebut).lte('date_paiement',mFin)),
     safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
