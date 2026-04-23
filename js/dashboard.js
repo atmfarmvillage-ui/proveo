@@ -5,48 +5,22 @@ async function renderDashboard(){
   const mFin=finMois(m);
 
   // Charger uniquement les données du mois en cours depuis Supabase
+  // Requêtes parallèles avec gestion d'erreur individuelle
+  const safe=async(q)=>{try{const r=await q;return r;}catch(e){return {data:[]};}}
   const[
-    {data:ventesMois},
-    {data:toutesVentes},
-    {data:depensesMois},
-    {data:paiementsAchatsMois},
-    {data:salairesMois},
-    {data:lotsMois},
-    {data:derniersLots},
-    {data:stock}
+    r1,r2,r3,r4,r5,r6,r7,r8
   ]=await Promise.all([
-    // Ventes du mois
-    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue')
-      .eq('admin_id',GP_ADMIN_ID)
-      .gte('date',mDebut).lte('date',mFin),
-    // Ventes du jour
-    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date')
-      .eq('admin_id',GP_ADMIN_ID)
-      .eq('date',today()),
-    // Dépenses courantes du mois
-    SB.from('gp_depenses').select('montant,date')
-      .eq('admin_id',GP_ADMIN_ID)
-      .gte('date',mDebut).lte('date',mFin),
-    // Paiements achats MP du mois
-    SB.from('gp_achats_paiements').select('montant,date_paiement')
-      .eq('admin_id',GP_ADMIN_ID)
-      .gte('date_paiement',mDebut).lte('date_paiement',mFin),
-    // Salaires du mois
-    SB.from('gp_salaires').select('montant')
-      .eq('admin_id',GP_ADMIN_ID)
-      .eq('mois',m),
-    // Lots du mois
-    SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
-      .eq('admin_id',GP_ADMIN_ID)
-      .gte('date',mDebut).lte('date',mFin),
-    // Derniers lots
-    SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
-      .eq('admin_id',GP_ADMIN_ID)
-      .order('date',{ascending:false})
-      .limit(4),
-    // Stock MP
-    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID),
+    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
+    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date').eq('admin_id',GP_ADMIN_ID).eq('date',today())),
+    safe(SB.from('gp_depenses').select('montant,date').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
+    safe(SB.from('gp_achats_paiements').select('montant,date_paiement').eq('admin_id',GP_ADMIN_ID).gte('date_paiement',mDebut).lte('date_paiement',mFin)),
+    safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
+    safe(SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
+    safe(SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
+    safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
   ]);
+  const[ventesMois,toutesVentes,depensesMois,paiementsAchatsMois,salairesMois,lotsMois,derniersLots,stock]=
+    [r1,r2,r3,r4,r5,r6,r7,r8].map(r=>({data:r?.data||[]}));
 
   const VM=ventesMois||[];
   const VJ=toutesVentes||[];
