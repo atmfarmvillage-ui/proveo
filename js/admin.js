@@ -318,8 +318,10 @@ async function savePDV(){
   if(!nom){err.textContent='Nom requis.';return;}
   const typePdv=document.getElementById('pv_type')?.value||'secondaire';
   const secSalariee=document.getElementById('pv_sec_type')?.value==='true';
+  const whatsapp=document.getElementById('pv_whatsapp')?.value.trim()||null;
+  const responsable=document.getElementById('pv_responsable')?.value.trim()||null;
   const{error}=await SB.from('gp_points_vente').insert({
-    admin_id:GP_ADMIN_ID,nom,telephone:tel,adresse,
+    admin_id:GP_ADMIN_ID,nom,telephone:tel,whatsapp,responsable,adresse,
     latitude:lat,longitude:lng,
     type_pdv:typePdv,
     secretaire_salariee:secSalariee
@@ -336,7 +338,7 @@ async function savePDV(){
     couleur:pvPalette(nom).border,
     actif:true
   });
-  ['pv_nom','pv_tel','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
+  ['pv_nom','pv_tel','pv_whatsapp','pv_responsable','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   err.textContent='';
@@ -959,8 +961,10 @@ async function savePDV(){
   if(!nom){err.textContent='Nom requis.';return;}
   const typePdv=document.getElementById('pv_type')?.value||'secondaire';
   const secSalariee=document.getElementById('pv_sec_type')?.value==='true';
+  const whatsapp=document.getElementById('pv_whatsapp')?.value.trim()||null;
+  const responsable=document.getElementById('pv_responsable')?.value.trim()||null;
   const{error}=await SB.from('gp_points_vente').insert({
-    admin_id:GP_ADMIN_ID,nom,telephone:tel,adresse,
+    admin_id:GP_ADMIN_ID,nom,telephone:tel,whatsapp,responsable,adresse,
     latitude:lat,longitude:lng,
     type_pdv:typePdv,
     secretaire_salariee:secSalariee
@@ -977,7 +981,7 @@ async function savePDV(){
     couleur:pvPalette(nom).border,
     actif:true
   });
-  ['pv_nom','pv_tel','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
+  ['pv_nom','pv_tel','pv_whatsapp','pv_responsable','pv_adresse','pv_lat','pv_lng'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   err.textContent='';

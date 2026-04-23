@@ -179,7 +179,7 @@ async function preparerMessagesEnvoi(typeHebdo, typeMensuel){
   const now=new Date();
   const mois=now.toISOString().slice(0,7);
   const[{data:V},{data:VL},{data:PDVs}]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye,point_vente,client_nom,formule_nom')
+    SB.from('gp_ventes').select('id,montant_total,montant_paye,point_vente,client_nom,formule_nom')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
     SB.from('gp_ventes_lignes').select('formule_nom,quantite,vente_id')
       .eq('admin_id',GP_ADMIN_ID),
@@ -281,6 +281,8 @@ function afficherModalMessages(messages){
   document.getElementById('msg-pdv-titre').textContent=
     messages[0]?.type==='hebdo'?'📱 Messages hebdomadaires PDV':'📱 Messages mensuels PDV';
 
+  // Stocker les messages globalement pour accès via data-attributes
+  window._msgsPDV=messages;
   document.getElementById('msg-pdv-liste').innerHTML=messages.map((m,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
     return`<div id="msg-pdv-card-${i}" style="background:rgba(14,20,40,.6);border:1px solid ${m.tel?'rgba(37,211,102,.3)':'rgba(239,68,68,.3)'};border-radius:10px;padding:12px;margin-bottom:8px">
@@ -292,15 +294,15 @@ function afficherModalMessages(messages){
         </div>
         <div style="text-align:right">
           ${m.tel
-            ? `<a href="https://wa.me/${m.tel}?text=${encodeURIComponent(m.msg)}" target="_blank" rel="noopener"
-                onclick="marquerEnvoye(${i},'${m.pdv}',${m.rang},'${m.type}','${m.periode}',${m.ca||0},'${m.msg.replace(/'/g,"\\'")}'); return true;"
-                style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:5px">
+            ? `<a class="msg-wa-link" data-idx="${i}" data-tel="${m.tel}" data-pdv="${m.pdv}" data-rang="${m.rang}" data-type="${m.type}" data-periode="${m.periode}" data-ca="${m.ca||0}"
+                href="#"
+                style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
                 📲 Envoyer
               </a>`
             : `<div>
-                <input type="tel" id="msg-tel-${i}" placeholder="+228 90 00 00 00"
+                <input type="tel" class="msg-tel-input" data-idx="${i}" placeholder="+228 90 00 00 00"
                   style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:140px;margin-bottom:4px">
-                <button onclick="envoyerAvecNumero(${i},'${m.msg.replace(/'/g,"\\'")}','${m.pdv}',${m.rang},'${m.type}','${m.periode}',${m.ca||0})"
+                <button class="msg-send-btn" data-idx="${i}" data-pdv="${m.pdv}" data-rang="${m.rang}" data-type="${m.type}" data-periode="${m.periode}" data-ca="${m.ca||0}"
                   style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;width:100%">
                   📲 Envoyer
                 </button>
@@ -316,6 +318,27 @@ function afficherModalMessages(messages){
   }).join('');
 
   modal.style.display='flex';
+
+  // Délégation événements — évite problèmes de guillemets dans onclick
+  document.querySelectorAll('.msg-wa-link').forEach(el=>{
+    el.onclick=(e)=>{
+      e.preventDefault();
+      const i=+el.dataset.idx;
+      const m=window._msgsPDV[i];
+      if(!m)return;
+      window.open('https://wa.me/'+el.dataset.tel+'?text='+encodeURIComponent(m.msg),'_blank');
+      marquerEnvoye(i,m.pdv,m.rang,m.type,m.periode,m.ca,m.msg);
+    };
+  });
+  document.querySelectorAll('.msg-send-btn').forEach(btn=>{
+    btn.onclick=()=>{
+      const i=+btn.dataset.idx;
+      const inp=document.querySelector('.msg-tel-input[data-idx="'+i+'"]');
+      const m=window._msgsPDV[i];
+      if(!m)return;
+      envoyerAvecNumeroData(i,m,inp?.value.trim()||'');
+    };
+  });
 }
 
 function fermerModalMessages(){
@@ -353,4 +376,18 @@ async function envoyerMessagesManuel(type){
   } else {
     await preparerMessagesEnvoi(null,'mensuel');
   }
+}
+
+async function envoyerAvecNumeroData(idx,m,tel){
+  if(!tel){
+    const inp=document.querySelector('.msg-tel-input[data-idx="'+idx+'"]');
+    if(inp)inp.style.borderColor='var(--red)';
+    return;
+  }
+  const paysInfo=detecterPays(tel);
+  if(!paysInfo.numero_whatsapp)return;
+  window.open('https://wa.me/'+paysInfo.numero_whatsapp+'?text='+encodeURIComponent(m.msg),'_blank');
+  await marquerEnvoye(idx,m.pdv,m.rang,m.type,m.periode,m.ca,m.msg);
+  const card=document.getElementById('msg-pdv-card-'+idx);
+  if(card)card.style.borderColor='rgba(22,163,74,.5)';
 }
