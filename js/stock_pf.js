@@ -218,101 +218,180 @@ async function upsertStockPF(pdv, formule, poids, delta){
 }
 
 // ── FEUILLE DE FABRICATION ────────────────────────
+let _fabLotId = null;
+let _fabLotRef = null;
+let _fabFormule = null;
+let _fabNbIngr = 0;
+let _fabDate = null;
+
 function afficherFeuilleFabrication(lot){
-  const{nom,qte,poidsSac,nbSacs,ref,date,pdv}=lot;
+  const{nom,qte,poidsSac,nbSacs,ref,date,pdv,lotId}=lot;
   const f=FORMULES_SADARI.find(x=>x.nom===nom);
-  if(!f){notify('Formule non trouvée','r');return;}
+  if(!f){notify('Formule non trouvée dans SADARI','r');return;}
+
+  _fabLotId=lotId||null;
+  _fabLotRef=ref;
+  _fabFormule=nom;
+  _fabNbIngr=(f.ingredients||[]).length;
+  _fabDate=date;
+  window._fabInfosLot={nom,qte,poidsSac,nbSacs,ref,date,pdv};
 
   const modal=document.getElementById('modal-fabrication');
   document.getElementById('fab-ref').textContent=`Réf : ${ref||'—'} · ${date}`;
 
   const kgNets=nbSacs*poidsSac;
-  const kgBruts=qte;
-  const pertes=Math.max(0,kgBruts-kgNets);
+  const pertes=Math.max(0,qte-kgNets);
 
   document.getElementById('fab-header').innerHTML=`
     <div><span style="color:var(--textm)">Formule</span><br><strong>${nom}</strong></div>
     <div><span style="color:var(--textm)">PDV Production</span><br><strong>${pdv||'—'}</strong></div>
-    <div><span style="color:var(--textm)">Quantité brute</span><br><strong style="color:var(--gold)">${fmt(kgBruts)} kg</strong></div>
-    <div><span style="color:var(--textm)">Sacs emballés</span><br><strong style="color:var(--green)">${nbSacs} sacs × ${poidsSac} kg = ${fmt(kgNets)} kg</strong></div>
-    <div><span style="color:var(--textm)">Pertes</span><br><strong style="color:${pertes>0?'var(--red)':'var(--green)'}">${fmt(pertes)} kg (${kgBruts>0?((pertes/kgBruts)*100).toFixed(1):0}%)</strong></div>
-    <div><span style="color:var(--textm)">Technicien</span><br><input type="text" id="fab-tech" placeholder="Nom du technicien" style="font-size:11px;padding:3px 6px"></div>`;
+    <div><span style="color:var(--textm)">Quantité brute</span><br><strong style="color:var(--gold)">${fmt(qte)} kg</strong></div>
+    <div><span style="color:var(--textm)">Sacs emballés</span><br><strong style="color:var(--green)">${nbSacs} × ${poidsSac}kg = ${fmt(kgNets)} kg</strong></div>
+    <div><span style="color:var(--textm)">Pertes</span><br><strong style="color:${pertes>0?'var(--red)':'var(--green)'}">${fmt(pertes)} kg (${qte>0?((pertes/qte)*100).toFixed(1):0}%)</strong></div>
+    <div><span style="color:var(--textm)">Opérateur</span><br>
+      <input type="text" id="fab-tech" placeholder="Nom technicien" value="${GP_USER?.email?.split('@')[0]||''}"
+        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:100%">
+    </div>`;
 
   // Ingrédients avec cases à cocher
   const ingrs=f.ingredients||[];
   document.getElementById('fab-ingredients').innerHTML=ingrs.map((ing,i)=>{
-    const kg=(ing.pct/100)*kgBruts;
+    const kg=(ing.pct/100)*qte;
     return`<div id="fab-ing-${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:4px;background:rgba(14,20,40,.4);border:1px solid rgba(30,45,74,.3);transition:all .2s">
-      <input type="checkbox" id="fab-chk-${i}" onchange="onFabCheck(${i},${ingrs.length})"
-        style="width:20px;height:20px;cursor:pointer;accent-color:var(--g4);flex-shrink:0">
-      <div style="flex:1">
+      <input type="checkbox" id="fab-chk-${i}" onchange="onFabCheck(${i})"
+        style="width:22px;height:22px;cursor:pointer;accent-color:var(--g4);flex-shrink:0">
+      <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">${ing.nom}</div>
-        <div style="font-size:10px;color:var(--textm)">${ing.pct}% de la formule</div>
+        <div style="font-size:10px;color:var(--textm);">${ing.pct}% · ${fmtKg(kg)} kg exact</div>
       </div>
-      <div style="text-align:right">
-        <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:var(--gold)">${fmtKg(kg)} kg</div>
-        <div style="font-size:10px;color:var(--textm)">${Math.ceil(kg)} kg arrondi</div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'DM Mono',monospace;font-size:17px;font-weight:700;color:var(--gold)">${Math.round(kg*10)/10} kg</div>
+        <div id="fab-time-${i}" style="font-size:9px;color:var(--green);min-height:12px"></div>
       </div>
     </div>`;
   }).join('');
 
-  mettreAJourProgression(ingrs.length);
+  mettreAJourProgression();
   document.getElementById('fab-alerte-fin').style.display='none';
   modal.style.display='block';
 }
 
-function onFabCheck(idx, total){
+function onFabCheck(idx){
   const chk=document.getElementById('fab-chk-'+idx);
   const row=document.getElementById('fab-ing-'+idx);
+  const timeEl=document.getElementById('fab-time-'+idx);
   if(chk?.checked){
     row.style.background='rgba(22,163,74,.12)';
     row.style.borderColor='rgba(22,163,74,.4)';
+    if(timeEl)timeEl.textContent='✓ '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   } else {
     row.style.background='rgba(14,20,40,.4)';
     row.style.borderColor='rgba(30,45,74,.3)';
+    if(timeEl)timeEl.textContent='';
   }
-  mettreAJourProgression(total);
+  mettreAJourProgression();
 }
 
-function mettreAJourProgression(total){
+function mettreAJourProgression(){
   let coches=0;
-  for(let i=0;i<total;i++){if(document.getElementById('fab-chk-'+i)?.checked)coches++;}
-  const pct=total>0?Math.round(coches/total*100):0;
+  for(let i=0;i<_fabNbIngr;i++){if(document.getElementById('fab-chk-'+i)?.checked)coches++;}
+  const pct=_fabNbIngr>0?Math.round(coches/_fabNbIngr*100):0;
   const bar=document.getElementById('fab-progress-bar');
   const prog=document.getElementById('fab-progression');
-  if(bar)bar.style.width=pct+'%';
-  if(prog)prog.textContent=`${coches} / ${total} ingrédients ajoutés (${pct}%)`;
+  if(bar){bar.style.width=pct+'%';bar.style.background=pct===100?'linear-gradient(90deg,var(--green),var(--g6))':'linear-gradient(90deg,var(--g4),var(--g6))';}
+  if(prog)prog.textContent=`${coches} / ${_fabNbIngr} ingrédients ajoutés (${pct}%)`;
   const alerte=document.getElementById('fab-alerte-fin');
-  if(alerte)alerte.style.display=coches===total&&total>0?'block':'none';
+  if(alerte)alerte.style.display=coches===_fabNbIngr&&_fabNbIngr>0?'block':'none';
 }
 
 function toutCocher(){
-  let i=0;
-  while(document.getElementById('fab-chk-'+i)){
+  for(let i=0;i<_fabNbIngr;i++){
     const chk=document.getElementById('fab-chk-'+i);
     const row=document.getElementById('fab-ing-'+i);
-    chk.checked=true;
-    row.style.background='rgba(22,163,74,.12)';
-    row.style.borderColor='rgba(22,163,74,.4)';
-    i++;
+    const timeEl=document.getElementById('fab-time-'+i);
+    if(chk&&!chk.checked){
+      chk.checked=true;
+      row.style.background='rgba(22,163,74,.12)';
+      row.style.borderColor='rgba(22,163,74,.4)';
+      if(timeEl)timeEl.textContent='✓ '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    }
   }
-  mettreAJourProgression(i);
+  mettreAJourProgression();
 }
 
 function reinitCoches(){
-  let i=0;
-  while(document.getElementById('fab-chk-'+i)){
+  for(let i=0;i<_fabNbIngr;i++){
     const chk=document.getElementById('fab-chk-'+i);
     const row=document.getElementById('fab-ing-'+i);
-    chk.checked=false;
-    row.style.background='rgba(14,20,40,.4)';
-    row.style.borderColor='rgba(30,45,74,.3)';
-    i++;
+    const timeEl=document.getElementById('fab-time-'+i);
+    if(chk)chk.checked=false;
+    if(row){row.style.background='rgba(14,20,40,.4)';row.style.borderColor='rgba(30,45,74,.3)';}
+    if(timeEl)timeEl.textContent='';
   }
-  mettreAJourProgression(i);
+  mettreAJourProgression();
   document.getElementById('fab-alerte-fin').style.display='none';
 }
 
-function fermerFabrication(){
+async function sauvegarderEtFermerFab(){
+  await _sauvegarderFeuille();
+  fermerFabrication();
+}
+
+async function _sauvegarderFeuille(){
+  if(!GP_ADMIN_ID)return;
+  const f=FORMULES_SADARI.find(x=>x.nom===_fabFormule);
+  if(!f)return;
+  const qteEl=document.getElementById('lot_qte');
+  const qte=0; // lot déjà sauvegardé
+  const operateur=document.getElementById('fab-tech')?.value||GP_USER?.email?.split('@')[0]||'';
+  
+  let coches=0;
+  const ingredients=(f.ingredients||[]).map((ing,i)=>{
+    const chk=document.getElementById('fab-chk-'+i);
+    const timeEl=document.getElementById('fab-time-'+i);
+    const estCoche=chk?.checked||false;
+    if(estCoche)coches++;
+    return{nom:ing.nom,kg_requis:0,coche:estCoche,coche_a:timeEl?.textContent||null};
+  });
+  
+  const statut=coches===_fabNbIngr?'complet':'incomplet';
+  
+  await SB.from('gp_fabrication_checks').insert({
+    admin_id:GP_ADMIN_ID,
+    lot_id:_fabLotId,
+    lot_ref:_fabLotRef,
+    formule_nom:_fabFormule,
+    date_fab:_fabDate,
+    ingredients,
+    statut,
+    operateur
+  });
+
+  if(statut==='incomplet'){
+    const manquants=_fabNbIngr-coches;
+    notify(`⚠ Feuille sauvegardée avec ${manquants} ingrédient(s) non confirmés`,'gold');
+  } else {
+    notify('✅ Feuille de fabrication complète sauvegardée','gold');
+  }
+}
+
+async function fermerFabrication(){
+  const coches=Array.from({length:_fabNbIngr},(_,i)=>document.getElementById('fab-chk-'+i)?.checked||false).filter(Boolean).length;
+  
+  if(coches<_fabNbIngr && _fabNbIngr>0){
+    const manquants=_fabNbIngr-coches;
+    const confirmer=confirm(`⚠️ Attention !\n\n${manquants} ingrédient(s) non encore cochés.\n\nLa feuille sera sauvegardée comme INCOMPLÈTE et l'administrateur sera alerté.\n\nFermer quand même ?`);
+    if(!confirmer)return;
+  }
+  
+  await _sauvegarderFeuille();
   document.getElementById('modal-fabrication').style.display='none';
+}
+
+function imprimerDepuisFab(){
+  const infos=window._fabInfosLot||{};
+  if(!infos.nom)return;
+  if(typeof imprimerEtiquettesLot==='function'){
+    imprimerEtiquettesLot(infos.nom,infos.ref,infos.qte,infos.date);
+  }
 }

@@ -127,11 +127,26 @@ async function saveLot(){
     }
   }
   err.textContent='';
-  ['lot_qte','lot_mo','lot_emb','lot_obs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';}); 
+
+  // Récupérer les valeurs sacs AVANT le reset
+  const nbSacsSaves=+document.getElementById('lot_nb_sacs')?.value||0;
+  const poidsSacSaves=+document.getElementById('lot_poids_sac')?.value||25;
+  const pdvProdSaves=document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||'Production';
+
+  ['lot_qte','lot_mo','lot_emb','lot_obs','lot_nb_sacs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('lot_mo').value='0';document.getElementById('lot_emb').value='0';
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
   document.getElementById('lot-mp-preview').style.display='none';
+
+  // Alimenter le stock produits finis
+  if(nbSacsSaves>0&&pdvProdSaves&&typeof upsertStockPF==='function'){
+    await upsertStockPF(pdvProdSaves,nom,poidsSacSaves,nbSacsSaves);
+  }
+
+  // Afficher la feuille de fabrication
+  afficherFeuilleFabrication({nom,qte,poidsSac:poidsSacSaves,nbSacs:nbSacsSaves,ref,date,pdv:pdvProdSaves,lotId:lot?.id});
+
   notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
   // Afficher bouton impression immédiatement
   afficherBoutonImpressionLot(nom, ref, qte, date);
