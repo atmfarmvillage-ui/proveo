@@ -2,95 +2,202 @@
 async function renderDashboard(){
   const m=thisMonth();
   const mDebut=m+'-01';
-  const[{data:ventes},{data:depenses},{data:lots},{data:stock}]=await Promise.all([
-    SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID),
-    SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID),
-    SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(5),
+  const mFin=finMois(m);
+
+  // Charger uniquement les données du mois en cours depuis Supabase
+  const[
+    {data:ventesMois},
+    {data:toutesVentes},
+    {data:depensesMois},
+    {data:lotsMois},
+    {data:derniersLots},
+    {data:stock}
+  ]=await Promise.all([
+    // Ventes du mois (pour CA + impayés)
+    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue')
+      .eq('admin_id',GP_ADMIN_ID)
+      .gte('date',mDebut).lte('date',mFin),
+    // Ventes du jour (séparée pour performance)
+    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date')
+      .eq('admin_id',GP_ADMIN_ID)
+      .eq('date',today()),
+    // Dépenses du mois
+    SB.from('gp_depenses').select('montant,date')
+      .eq('admin_id',GP_ADMIN_ID)
+      .gte('date',mDebut).lte('date',mFin),
+    // Lots du mois (pour kg produits)
+    SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
+      .eq('admin_id',GP_ADMIN_ID)
+      .gte('date',mDebut).lte('date',mFin),
+    // Derniers lots (pour affichage)
+    SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece')
+      .eq('admin_id',GP_ADMIN_ID)
+      .order('date',{ascending:false})
+      .limit(4),
+    // Stock MP
     SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID),
   ]);
-  const V=ventes||[];const D=depenses||[];const L=lots||[];const S=stock||[];
-  const caMois=V.filter(v=>v.date>=mDebut).reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const impaye=V.reduce((s,v)=>s+(Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
-  const depMois=D.filter(d=>d.date>=mDebut).reduce((s,d)=>s+Number(d.montant||0),0);
-  const prodMois=L.filter(l=>l.date>=mDebut).reduce((s,l)=>s+Number(l.quantite_kg||0),0);
-  // Stock alerts
+
+  const VM=ventesMois||[];
+  const VJ=toutesVentes||[];
+  const D=depensesMois||[];
+  const LM=lotsMois||[];
+  const DL=derniersLots||[];
+  const S=stock||[];
+
+  // ── CALCULS CORRECTS ─────────────────────────────
+  // CA du mois = somme des montants_total des ventes du mois
+  const caMois=VM.reduce((s,v)=>s+Number(v.montant_total||0),0);
+
+  // Impayés du mois = ventes du mois non soldées uniquement
+  const impayeMois=VM.reduce((s,v)=>{
+    const reste=Number(v.montant_total||0)-Number(v.montant_paye||0);
+    return s+(reste>0?reste:0);
+  },0);
+
+  // Encaissé du mois = somme des montants_paye
+  const encaisseMois=VM.reduce((s,v)=>s+Number(v.montant_paye||0),0);
+
+  // Dépenses du mois
+  const depMois=D.reduce((s,d)=>s+Number(d.montant||0),0);
+
+  // Kg produits ce mois = tous les lots du mois
+  const prodMois=LM.reduce((s,l)=>s+Number(l.quantite_kg||0),0);
+
+  // Bénéfice = encaissé - dépenses (pas CA car impayés non reçus)
+  const beneficeMois=encaisseMois-depMois;
+
+  // Alertes stock
   const niveaux=calcNiveaux(S);
   const alertes=Object.entries(niveaux).filter(([nom,n])=>{
     const ingr=GP_INGREDIENTS.find(i=>i.nom===nom);
     return n<(ingr?.seuil_alerte||200);
   });
-  document.getElementById('dash-date-sub').textContent=`${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — Données temps réel`;
+
+  // ── AFFICHAGE ────────────────────────────────────
+  document.getElementById('dash-date-sub').textContent=
+    `${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — Données temps réel`;
+
   const isAdmin=GP_ROLE==='admin';
+
   document.getElementById('dash-kpis').innerHTML=`
-    ${isAdmin?`<div class="stat-box"><div class="stat-val" style="color:var(--gold)">${fmt(caMois)}</div><div class="stat-lbl">CA ce mois (FCFA)</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${fmt(impaye)}</div><div class="stat-lbl">Impayés (FCFA)</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:${depMois>caMois?'var(--red)':'var(--textm)'}">${fmt(depMois)}</div><div class="stat-lbl">Dépenses ce mois</div></div>`:''}
-    <div class="stat-box"><div class="stat-val">${fmt(prodMois)}</div><div class="stat-lbl">Kg produits ce mois</div></div>
-    ${!isAdmin?`<div class="stat-box"><div class="stat-val" style="color:${alertes.length>0?'var(--red)':'var(--green)'}">${alertes.length}</div><div class="stat-lbl">Alertes stock bas</div></div>`:''}`;
-  // Body
-  const derniersLots=L.slice(0,4).map(l=>`
+    ${isAdmin?`
+    <div class="stat-box">
+      <div class="stat-val" style="color:var(--gold)">${fmt(caMois)}</div>
+      <div class="stat-lbl">CA ce mois (FCFA)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" style="color:var(--green)">${fmt(encaisseMois)}</div>
+      <div class="stat-lbl">Encaissé ce mois</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" style="color:${impayeMois>0?'var(--red)':'var(--green)'}">${fmt(impayeMois)}</div>
+      <div class="stat-lbl">Impayés du mois</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" style="color:${depMois>encaisseMois?'var(--red)':'var(--textm)'}">${fmt(depMois)}</div>
+      <div class="stat-lbl">Dépenses ce mois</div>
+    </div>`:''}
+    <div class="stat-box">
+      <div class="stat-val">${fmt(prodMois)} kg</div>
+      <div class="stat-lbl">Produits ce mois</div>
+    </div>
+    ${!isAdmin?`<div class="stat-box">
+      <div class="stat-val" style="color:${alertes.length>0?'var(--red)':'var(--green)'}">${alertes.length}</div>
+      <div class="stat-lbl">Alertes stock</div>
+    </div>`:''}`;
+
+  // Derniers lots
+  const derniersLotsHtml=DL.map(l=>`
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
-      <div><div style="font-weight:600">${ESPECE_ICON[l.espece]||''} ${l.formule_nom}</div><div style="color:var(--textm)">${l.date} · ${l.ref||''}</div></div>
-      <div style="text-align:right;font-family:'DM Mono',monospace;color:var(--g6)">${fmt(l.quantite_kg)} kg</div>
+      <div>
+        <div style="font-weight:600">${ESPECE_ICON[l.espece]||'🌾'} ${l.formule_nom}</div>
+        <div style="color:var(--textm)">${l.date} · ${l.ref||''}</div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;color:var(--g6)">${fmt(l.quantite_kg)} kg</div>
     </div>`).join('');
-  const alerteH=alertes.slice(0,5).map(([nom,n])=>`
+
+  // Alertes stock
+  const alerteHtml=alertes.slice(0,5).map(([nom,n])=>`
     <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;border-bottom:1px solid rgba(239,68,68,.1)">
       <span style="color:var(--red)">⚠ ${nom}</span>
       <span style="font-family:'DM Mono',monospace;color:var(--red)">${fmtKg(n)} kg</span>
     </div>`).join('');
-  const ventesH=V.filter(v=>v.date===today()).slice(0,5).map(v=>`
+
+  // Ventes du jour
+  const ventesJourHtml=VJ.map(v=>`
     <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
-      <div><div style="font-weight:600">${v.client_nom||'—'}</div><div style="color:var(--textm)">${v.formule_nom||'—'} · ${fmtKg(v.qte_vendue)} kg</div></div>
-      ${isAdmin?`<div style="text-align:right"><div style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(v.montant_total)} F</div><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${v.statut_paiement}</span></div>`:'<div></div>'}
+      <div>
+        <div style="font-weight:600">${v.client_nom||'Client comptant'}</div>
+        <div style="color:var(--textm)">${v.formule_nom||'—'}</div>
+      </div>
+      ${isAdmin?`<div style="text-align:right">
+        <div style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(v.montant_total)} F</div>
+        <span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${v.statut_paiement}</span>
+      </div>`:''}
     </div>`).join('');
-  // Dashboard PDV pour secrétaire
+
+  // Dashboard PDV secrétaire
   if(GP_POINT_VENTE){
     const banner=document.getElementById('dash-pdv-banner');
     if(banner)banner.style.display='block';
     const nomEl=document.getElementById('dash-pdv-nom');
     if(nomEl)nomEl.textContent=GP_POINT_VENTE;
-    // Stock PDV
     const{data:stockPDV}=await SB.from('gp_stock_produits_pdv').select('*')
       .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE);
     const SP=stockPDV||[];
-    const ok=SP.filter(s=>s.qte_disponible>s.seuil_critique).length;
-    const alerte=SP.filter(s=>s.qte_disponible<=s.seuil_critique).length;
-    const ventesJourEl=document.getElementById('dash-pdv-ventes-jour');
+    const ok=SP.filter(s=>Number(s.qte_disponible||0)>Number(s.seuil_critique||0)).length;
+    const alerte=SP.filter(s=>Number(s.qte_disponible||0)<=Number(s.seuil_critique||0)).length;
     const stockOkEl=document.getElementById('dash-pdv-stock-ok');
     const stockAlEl=document.getElementById('dash-pdv-stock-alert');
     if(stockOkEl)stockOkEl.textContent=ok;
     if(stockAlEl){stockAlEl.textContent=alerte;stockAlEl.style.color=alerte>0?'var(--red)':'var(--green)';}
-    const ventesAuj=V.filter(v=>v.date===today()&&v.point_vente===GP_POINT_VENTE);
-    if(ventesJourEl)ventesJourEl.textContent=fmt(ventesAuj.reduce((s,v)=>s+Number(v.montant_total||0),0))+' F';
+    // Ventes du jour de ce PDV
+    const ventesAujPDV=VJ.filter(v=>v.point_vente===GP_POINT_VENTE);
+    const ventesJourEl=document.getElementById('dash-pdv-ventes-jour');
+    if(ventesJourEl)ventesJourEl.textContent=fmt(ventesAujPDV.reduce((s,v)=>s+Number(v.montant_total||0),0))+' F';
   }
 
   document.getElementById('dash-body').innerHTML=`
     <div>
       <div class="card">
         <div class="card-title"><div class="ct-left"><span>🏭 Dernière production</span></div></div>
-        ${derniersLots||'<div style="color:var(--textm);font-size:12px">Aucune production. <span style="color:var(--g6);cursor:pointer" onclick="showGP(\'production\')">→ Enregistrer</span></div>'}
+        ${derniersLotsHtml||'<div style="color:var(--textm);font-size:12px">Aucune production. <span style="color:var(--g6);cursor:pointer" onclick="showGP(\'production\')">→ Enregistrer</span></div>'}
         <button class="btn btn-g btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('production')">+ Nouveau lot</button>
       </div>
       <div class="card">
-        <div class="card-title"><div class="ct-left"><span>⚠ Alertes stock</span></div></div>
-        ${alerteH||'<div style="color:var(--green);font-size:12px">✓ Tous les stocks sont suffisants.</div>'}
+        <div class="card-title"><div class="ct-left"><span>⚠ Alertes stock MP</span></div></div>
+        ${alerteHtml||'<div style="color:var(--green);font-size:12px">✓ Tous les stocks sont suffisants.</div>'}
         <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('stock')">Gérer le stock →</button>
       </div>
     </div>
     <div>
       <div class="card">
         <div class="card-title"><div class="ct-left"><span>💰 Ventes du jour</span></div></div>
-        ${ventesH||'<div style="color:var(--textm);font-size:12px">Aucune vente aujourd\'hui.</div>'}
+        ${ventesJourHtml||'<div style="color:var(--textm);font-size:12px">Aucune vente aujourd\'hui.</div>'}
         <button class="btn btn-g btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('ventes')">+ Nouvelle vente</button>
       </div>
       ${isAdmin?`<div class="card">
-        <div class="card-title"><div class="ct-left"><span>📊 Bilan rapide ce mois</span></div></div>
+        <div class="card-title"><div class="ct-left"><span>📊 Bilan ${m}</span></div></div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="color:var(--textm)">CA ventes</span><span style="color:var(--green);font-family:'DM Mono',monospace">${fmt(caMois)} F</span></div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="color:var(--textm)">Dépenses</span><span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depMois)} F</span></div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="font-weight:700">Bénéfice estimé</span><span style="color:${caMois-depMois>=0?'var(--gold)':'var(--red)'};font-family:'DM Mono',monospace;font-size:14px;font-weight:700">${fmt(caMois-depMois)} F</span></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">CA total</span>
+            <span style="color:var(--gold);font-family:'DM Mono',monospace">${fmt(caMois)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">Encaissé</span>
+            <span style="color:var(--green);font-family:'DM Mono',monospace">${fmt(encaisseMois)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">Dépenses</span>
+            <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depMois)} F</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0">
+            <span style="font-weight:700">Bénéfice net</span>
+            <span style="color:${beneficeMois>=0?'var(--gold)':'var(--red)'};font-family:'DM Mono',monospace;font-size:14px;font-weight:700">${fmt(beneficeMois)} F</span>
+          </div>
         </div>
-        <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('bilan_jour')">Bilan journalier →</button>
+        <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('bilan_avance')">Bilan complet →</button>
       </div>`:''}
     </div>`;
 }
