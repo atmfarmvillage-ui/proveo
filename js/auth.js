@@ -189,10 +189,11 @@ async function bootApp(user){
   // Auto refresh toutes les 30s
   setInterval(()=>{
     const active=document.querySelector('.page.active')?.id?.replace('page-','');
-    const pagesExclues2=['achats','ventes','fournisseurs','clients','production'];
+    const pagesJamaisRefresh2=['achats','production'];
+    const pagesExclues2=['ventes','fournisseurs','clients'];
     const formulaireActif2=document.activeElement&&
       ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
-    if(active&&!(formulaireActif2&&pagesExclues2.includes(active)))showGP(active);
+    if(active&&!pagesJamaisRefresh2.includes(active)&&!(formulaireActif2&&pagesExclues2.includes(active)))showGP(active);
     checkPendingRemises();
   },30000);
 
