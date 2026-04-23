@@ -231,13 +231,22 @@
       <div class="a-err" id="lot_err"></div>
       <div id="lot-print-zone" style="display:none"></div>
     </div>
-    <div class="card">
-      <div class="card-title"><div class="ct-left"><span>📋 Historique production</span></div>
-        <div style="display:flex;gap:6px">
-          <input type="month" id="lot-filtre-mois" onchange="renderLots()" style="font-size:10px;padding:3px 6px;width:auto">
+    <div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📋 Historique production</span></div>
+          <div style="display:flex;gap:6px">
+            <input type="month" id="lot-filtre-mois" onchange="renderLots()" style="font-size:10px;padding:3px 6px;width:auto">
+          </div>
         </div>
+        <div id="lots-liste"></div>
       </div>
-      <div id="lots-liste"></div>
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>📊 Bilan du mois</span></div>
+          <button class="btn btn-out btn-sm" onclick="renderBilanProduction()">🔄</button>
+        </div>
+        <div id="prod-bilan-mois"></div>
+      </div>
     </div>
   </div>
 </div>

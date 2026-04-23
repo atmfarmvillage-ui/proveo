@@ -22,8 +22,8 @@ async function renderDashboard(){
     safe(SB.from('gp_depenses').select('montant,date').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_achats_paiements').select('montant,date_paiement').eq('admin_id',GP_ADMIN_ID).gte('date_paiement',mDebut).lte('date_paiement',mFin)),
     safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
-    safe(SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
-    safe(SB.from('gp_lots').select('quantite_kg,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
+    safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
+    safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
     safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
   ]);
   // Extraire les tableaux — garantir que c'est toujours un Array
@@ -62,7 +62,12 @@ async function renderDashboard(){
   const depMois=depCourantes+depAchatsMP+depSalaires;
 
   // Kg produits ce mois = tous les lots du mois
-  const prodMois=LM.reduce((s,l)=>s+Number(l.quantite_kg||0),0);
+  // kg nets emballés = nb_sacs × poids_sac (plus précis que qte brute)
+  const prodMois=LM.reduce((s,l)=>{
+    const nets=Number(l.nb_sacs||0)*Number(l.poids_sac||25);
+    return s+(nets>0?nets:Number(l.qte_produite||0));
+  },0);
+  const nbSacsMois=LM.reduce((s,l)=>s+Number(l.nb_sacs||0),0);
 
   // Bénéfice = encaissé - dépenses (pas CA car impayés non reçus)
   const beneficeMois=encaisseMois-depMois;
@@ -100,7 +105,7 @@ async function renderDashboard(){
     </div>`:''}
     <div class="stat-box">
       <div class="stat-val">${fmt(prodMois)} kg</div>
-      <div class="stat-lbl">Produits ce mois</div>
+      <div class="stat-lbl">Produits ce mois${nbSacsMois>0?` · ${nbSacsMois} sacs`:''}</div>
     </div>
     ${!isAdmin?`<div class="stat-box">
       <div class="stat-val" style="color:${alertes.length>0?'var(--red)':'var(--green)'}">${alertes.length}</div>
@@ -114,7 +119,7 @@ async function renderDashboard(){
         <div style="font-weight:600">${ESPECE_ICON[l.espece]||'🌾'} ${l.formule_nom}</div>
         <div style="color:var(--textm)">${l.date} · ${l.ref||''}</div>
       </div>
-      <div style="font-family:'DM Mono',monospace;color:var(--g6)">${fmt(l.quantite_kg)} kg</div>
+      <div style="font-family:'DM Mono',monospace;color:var(--g6)">${fmt(Number(l.nb_sacs||0)*Number(l.poids_sac||25)||l.qte_produite||0)} kg</div>
     </div>`).join('');
 
   // Alertes stock

@@ -178,6 +178,7 @@ async function renderLots(){
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',_finMois(filtMois));
   const{data}=await q;
   const L=data||[];
+  renderBilanProduction(L);
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
   document.getElementById('lots-liste').innerHTML=`
     <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Ce mois : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
@@ -395,4 +396,125 @@ async function verifierFeuillesIncompletes(){
     navBadge.style.display=F.length>0?'inline':'none';
     navBadge.textContent=F.length;
   }
+}
+
+// ── BILAN PRODUCTION DU MOIS ─────────────────────
+async function renderBilanProduction(lotsData){
+  const mois=document.getElementById('lot-filtre-mois')?.value||
+    (typeof _thisMonth==='function'?_thisMonth():new Date().toISOString().slice(0,7));
+
+  // Charger si pas fourni en paramètre
+  let L=lotsData;
+  if(!L){
+    const mDebut=mois+'-01';
+    const mFin=_finMois(mois);
+    const{data}=await SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,kg_pertes,formule_nom,espece,date')
+      .eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin);
+    L=data||[];
+  }
+
+  const el=document.getElementById('prod-bilan-mois');
+  if(!el)return;
+  if(!L.length){el.innerHTML='<div style="color:var(--textm);font-size:12px">Aucune production ce mois.</div>';return;}
+
+  // Totaux globaux
+  const totalKgNets=L.reduce((s,l)=>{
+    const nets=Number(l.nb_sacs||0)*Number(l.poids_sac||25);
+    return s+(nets>0?nets:Number(l.qte_produite||0));
+  },0);
+  const totalKgBruts=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const totalSacs=L.reduce((s,l)=>s+Number(l.nb_sacs||0),0);
+  const totalPertes=L.reduce((s,l)=>s+Number(l.kg_pertes||0),0);
+  const pctPertes=totalKgBruts>0?((totalPertes/totalKgBruts)*100).toFixed(2):0;
+
+  // Regrouper par espèce
+  const parEspece={};
+  L.forEach(l=>{
+    const esp=l.espece||'autre';
+    if(!parEspece[esp])parEspece[esp]={kg:0,sacs:0,lots:0};
+    const kg=Number(l.nb_sacs||0)*Number(l.poids_sac||25)||Number(l.qte_produite||0);
+    parEspece[esp].kg+=kg;
+    parEspece[esp].sacs+=Number(l.nb_sacs||0);
+    parEspece[esp].lots++;
+  });
+
+  // Regrouper par formule
+  const parFormule={};
+  L.forEach(l=>{
+    const f=l.formule_nom||'—';
+    if(!parFormule[f])parFormule[f]={kg:0,sacs:0,lots:0,espece:l.espece};
+    const kg=Number(l.nb_sacs||0)*Number(l.poids_sac||25)||Number(l.qte_produite||0);
+    parFormule[f].kg+=kg;
+    parFormule[f].sacs+=Number(l.nb_sacs||0);
+    parFormule[f].lots++;
+  });
+
+  const especeIcon={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟',autre:'🌾'};
+  const especeLabel={pondeuse:'Volaille Ponte',chair:'Volaille Chair',lapin:'Lapin',porc:'Porc',canard:'Canard Musqué',tilapia:'Tilapia',goliath:'Goliath',autre:'Autre'};
+
+  // Trier espèces par kg décroissant
+  const especesSorted=Object.entries(parEspece).sort((a,b)=>b[1].kg-a[1].kg);
+  // Trier formules par kg décroissant
+  const formulesSorted=Object.entries(parFormule).sort((a,b)=>b[1].kg-a[1].kg);
+
+  el.innerHTML=`
+    <!-- KPIs globaux -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-family:'Crimson Pro',serif;font-size:24px;font-weight:700;color:var(--g6)">${fmt(Math.round(totalKgNets/1000*10)/10)} t</div>
+        <div style="font-size:10px;color:var(--textm);text-transform:uppercase">Production nette</div>
+        <div style="font-size:10px;color:var(--textm)">${fmt(totalKgNets)} kg</div>
+      </div>
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-family:'Crimson Pro',serif;font-size:24px;font-weight:700;color:var(--gold)">${fmt(totalSacs)}</div>
+        <div style="font-size:10px;color:var(--textm);text-transform:uppercase">Sacs emballés</div>
+        <div style="font-size:10px;color:var(--textm)">${L.length} lots produits</div>
+      </div>
+      <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:14px;font-weight:700;color:${pctPertes>5?'var(--red)':pctPertes>2?'var(--gold)':'var(--green)'}">${fmt(totalPertes)} kg</div>
+        <div style="font-size:10px;color:var(--textm)">Pertes (${pctPertes}%)</div>
+      </div>
+      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:14px;font-weight:700">${fmt(totalKgBruts)} kg</div>
+        <div style="font-size:10px;color:var(--textm)">Bruts produits</div>
+      </div>
+    </div>
+
+    <!-- Par espèce -->
+    <div style="font-size:10px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Par espèce</div>
+    ${especesSorted.map(([esp,val])=>{
+      const pct=totalKgNets>0?Math.round(val.kg/totalKgNets*100):0;
+      return`<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="font-weight:600">${especeIcon[esp]||'🌾'} ${especeLabel[esp]||esp}</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(Math.round(val.kg/1000*10)/10)} t <span style="color:var(--textm);font-size:10px">(${pct}%)</span></span>
+        </div>
+        <div style="background:rgba(30,45,74,.8);border-radius:20px;height:5px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--g4),var(--g6));border-radius:20px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--textm);margin-top:1px">${val.sacs} sacs · ${val.lots} lot${val.lots>1?'s':''}</div>
+      </div>`;
+    }).join('')}
+
+    <!-- Par formule -->
+    <div style="font-size:10px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:1px;margin:12px 0 8px">Par formule</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr>
+        <th style="text-align:left;color:var(--textm);font-weight:600;padding:4px 0;border-bottom:1px solid var(--border)">Formule</th>
+        <th style="text-align:right;color:var(--textm);font-weight:600;padding:4px 0;border-bottom:1px solid var(--border)">Sacs</th>
+        <th style="text-align:right;color:var(--textm);font-weight:600;padding:4px 0;border-bottom:1px solid var(--border)">Kg nets</th>
+      </tr></thead>
+      <tbody>
+        ${formulesSorted.map(([f,val])=>`<tr>
+          <td style="padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3)">${especeIcon[val.espece]||'🌾'} <span style="font-weight:600">${f}</span></td>
+          <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);font-family:'DM Mono',monospace">${val.sacs}</td>
+          <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);color:var(--g6);font-family:'DM Mono',monospace">${fmt(val.kg)} kg</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700">
+          <td style="padding:6px 0;border-top:1px solid rgba(22,163,74,.3)">TOTAL</td>
+          <td style="text-align:right;padding:6px 0;border-top:1px solid rgba(22,163,74,.3);color:var(--gold)">${fmt(totalSacs)}</td>
+          <td style="text-align:right;padding:6px 0;border-top:1px solid rgba(22,163,74,.3);color:var(--g6)">${fmt(totalKgNets)} kg</td>
+        </tr>
+      </tbody>
+    </table>`;
 }
