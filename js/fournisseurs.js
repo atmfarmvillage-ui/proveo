@@ -4,9 +4,9 @@
 
 // ── LISTE FOURNISSEURS ────────────────────────────
 async function renderFournisseurs(){
-  const{data}=await SB.from('gp_fournisseurs').select('*')
+  const res=await SB.from('gp_fournisseurs').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
-  const F=data||[];
+  const F=Array.isArray(res?.data)?res.data:[];
   document.getElementById('fourn-kpis').innerHTML=`
     <div class="econo-box"><div class="econo-val">${F.length}</div><div class="econo-lbl">Fournisseurs</div></div>
     <div class="econo-box"><div class="econo-val" id="fourn-total-achats">—</div><div class="econo-lbl">Total achats</div></div>

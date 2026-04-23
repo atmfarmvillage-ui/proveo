@@ -46,3 +46,21 @@ const FORMULES_SADARI = [
 ];
 const ESPECE_ICON={lapin:'🐰',pondeuse:'🥚',chair:'🐔',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐸'};
 const CAT_LABELS={matiere_premiere:'🌾 MP',salaire:'👤 Salaire',transport:'🚚 Transport',emballage:'📦 Emballage',energie:'⚡ Énergie',maintenance:'🔧 Maintenance',autre:'📝 Autre'};
+// ── FONCTIONS DATE ────────────────────────────────
+function today(){
+  return new Date().toISOString().slice(0,10);
+}
+function thisMonth(){
+  return new Date().toISOString().slice(0,7);
+}
+function finMois(mois){
+  const[y,m]=(mois||thisMonth()).split('-').map(Number);
+  const lastDay=new Date(y,m,0).getDate();
+  return `${mois}-${String(lastDay).padStart(2,'0')}`;
+}
+function fmt(n){
+  return Number(n||0).toLocaleString('fr-FR');
+}
+function fmtKg(n){
+  return Number(n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
+}
