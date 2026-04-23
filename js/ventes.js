@@ -202,6 +202,8 @@ async function renderVentes(){
         <button class="btn btn-red btn-sm" onclick="deleteVente('${v.id}')">✕</button>
       </td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
+  if(typeof renderBilanVentes==='function')renderBilanVentes();
+  if(typeof renderClassementPDV==='function')renderClassementPDV();
 }
 async function deleteVente(id){
   if(!confirm('Supprimer cette vente ?'))return;
@@ -232,10 +234,11 @@ async function saveDep(){
 async function renderDep(){
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',_finMois(filtMois));
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  if(typeof renderBilanDepenses==='function')renderBilanDepenses(D);
   document.getElementById('dep-liste').innerHTML=`
     ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
     <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>

@@ -178,6 +178,7 @@ async function bootApp(user){
   try{renderDashboard();}catch(e){console.error('renderDashboard:',e);}
   // Fonctions optionnelles — ne bloquent pas le boot
   try{verifierLicence();}catch(e){}
+  try{verifierEtEnvoyerMessages();}catch(e){}
   try{verifierMiseAJour();}catch(e){}
   try{mettreAJourPresence(true);}catch(e){}
   try{checkPendingRemises();}catch(e){}
@@ -254,6 +255,7 @@ var PAGE_RENDERERS = {
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
   stock_pf:      renderStockPF,
+  ventes_bilan:  renderBilanVentes,
   salaires:      function(){
     const sm=document.getElementById('sal-mois');
     const ss=document.getElementById('sal_mois_saisie');

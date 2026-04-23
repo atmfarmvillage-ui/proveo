@@ -352,22 +352,32 @@ async function verifierFeuillesIncompletes(){
     if(F.length>0){
       alertZone.innerHTML=`
         <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px 16px;margin-bottom:14px">
-          <div style="font-weight:700;color:var(--red);font-size:13px;margin-bottom:8px">
-            ⚠ ${F.length} feuille${F.length>1?'s':''} de fabrication incomplète${F.length>1?'s':''}
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--red);font-size:13px">
+              ⚠ ${F.length} feuille${F.length>1?'s':''} de fabrication incomplète${F.length>1?'s':''}
+            </div>
+            <button onclick="marquerToutesVues()" 
+              style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--red);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
+              ✓ Tout marquer comme vu
+            </button>
           </div>
           ${F.map(f=>{
             const ingrs=f.ingredients||[];
             const manquants=ingrs.filter(i=>!i.coche);
             return`<div style="padding:8px;background:rgba(239,68,68,.05);border-radius:8px;margin-bottom:6px;font-size:11px">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <div style="flex:1;min-width:0">
                   <strong>${f.lot_ref||'—'}</strong> · ${f.formule_nom}
                   <span style="color:var(--textm)"> · ${f.date_fab||'—'} · par ${f.operateur||'—'}</span>
+                  <div style="color:var(--red);margin-top:3px">Non cochés : ${manquants.map(i=>i.nom).join(', ')}</div>
                 </div>
-                <span class="badge bdg-r">${manquants.length} manquant${manquants.length>1?'s':''}</span>
-              </div>
-              <div style="color:var(--red);margin-top:4px">
-                Non cochés : ${manquants.map(i=>i.nom).join(', ')}
+                <div style="display:flex;gap:4px;flex-shrink:0">
+                  <span class="badge bdg-r">${manquants.length} manquant${manquants.length>1?'s':''}</span>
+                  <button onclick="marquerVue('${f.id}')"
+                    style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:var(--green);padding:3px 8px;border-radius:5px;cursor:pointer;font-size:10px" title="Marquer comme vu">
+                    ✓ Vu
+                  </button>
+                </div>
               </div>
             </div>`;
           }).join('')}
@@ -517,4 +527,22 @@ async function renderBilanProduction(lotsData){
         </tr>
       </tbody>
     </table>`;
+}
+
+// ── GESTION ALERTES FEUILLES ─────────────────────
+async function marquerVue(fabId){
+  // Marquer la feuille comme "vue" en la passant à un statut neutre
+  await SB.from('gp_fabrication_checks').update({statut:'incomplet_vu'}).eq('id',fabId);
+  notify('Alerte masquée ✓','gold');
+  verifierFeuillesIncompletes();
+}
+
+async function marquerToutesVues(){
+  if(!GP_ADMIN_ID)return;
+  await SB.from('gp_fabrication_checks')
+    .update({statut:'incomplet_vu'})
+    .eq('admin_id',GP_ADMIN_ID)
+    .eq('statut','incomplet');
+  notify('Toutes les alertes masquées ✓','gold');
+  verifierFeuillesIncompletes();
 }

@@ -166,6 +166,18 @@ async function renderDashboard(){
   // Vérifier feuilles incomplètes
   if(typeof verifierFeuillesIncompletes==='function')verifierFeuillesIncompletes();
 
+  // Bilan production du mois dans le dashboard
+  setTimeout(()=>{
+    if(typeof renderBilanProduction==='function'){
+      renderBilanProduction(LM).then(()=>{
+        // Déplacer le contenu du bilan production vers le dashboard
+        const src=document.getElementById('prod-bilan-mois');
+        const dest=document.getElementById('dash-bilan-prod');
+        if(src&&dest)dest.innerHTML=src.innerHTML;
+      }).catch(()=>{});
+    }
+  },100);
+
   document.getElementById('dash-body').innerHTML=`
     <div>
       <div class="card">
@@ -219,5 +231,34 @@ async function renderDashboard(){
         </div>
         <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('bilan_avance')">Bilan complet →</button>
       </div>`:''}
-    </div>`;
+    </div>
+    ${isAdmin?`<div class="card" style="grid-column:1/-1">
+      <div class="card-title">
+        <div class="ct-left"><span>🏭 Production ${m}</span></div>
+        <button class="btn btn-out btn-sm" onclick="showGP('production')" style="font-size:10px">Voir détail →</button>
+      </div>
+      <div id="dash-bilan-prod"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
+    </div>`:''}`;
+
+  // Injecter le bilan production
+  if(isAdmin&&typeof renderBilanProduction==='function'){
+    setTimeout(async()=>{
+      const src=document.getElementById('prod-bilan-mois');
+      // Déclencher le calcul sur une div temporaire si besoin
+      if(!src){
+        const tmp=document.createElement('div');
+        tmp.id='prod-bilan-mois';
+        tmp.style.display='none';
+        document.body.appendChild(tmp);
+        await renderBilanProduction(LM);
+        const dest=document.getElementById('dash-bilan-prod');
+        if(dest)dest.innerHTML=tmp.innerHTML;
+        tmp.remove();
+      } else {
+        await renderBilanProduction(LM);
+        const dest=document.getElementById('dash-bilan-prod');
+        if(dest)dest.innerHTML=src.innerHTML;
+      }
+    },50);
+  }
 }
