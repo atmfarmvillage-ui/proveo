@@ -110,7 +110,8 @@ function calcVente(){
   // Montant total
   const totalEl=document.getElementById('vt-montant-total');
   const resteEl=document.getElementById('vt-reste-du');
-  if(totalEl)totalEl.textContent=fmt(total)+' F';
+  mettreAJourLigneVente();
+  if(totalEl)totalEl.textContent=fmt(VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0))+' F';
   if(resteEl){resteEl.textContent=fmt(reste)+' F';resteEl.style.color=reste>0?'var(--red)':'var(--green)';}
 
   // Statut automatique
@@ -128,18 +129,31 @@ function calcVente(){
 }
 
 async function onVenteFormuleChange(){
-  const nom=document.getElementById('vt_formule').value;
-  if(nom){
-    const prix=getPrix(nom);
-    // Secrétaire voit le prix mais ne peut pas modifier
-    const prixEl=document.getElementById('vt_prix');
-    if(prixEl&&prix){
-      prixEl.value=prix;
-      prixEl.readOnly=GP_ROLE!=='admin';
+  const nom=document.getElementById('vt_formule')?.value;
+  if(!nom)return;
+
+  // Charger le prix depuis gp_prix_formules ou GP_PRIX
+  const clientId=document.getElementById('vt_client')?.value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const typeClient=client?.type_client||'detail';
+
+  let prix=typeClient==='gros'?(GP_PRIX_GROS?.[nom]||GP_PRIX?.[nom]||0):(GP_PRIX?.[nom]||0);
+
+  if(!prix){
+    const{data:pf}=await SB.from('gp_prix_formules').select('prix_detail,prix_gros,cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
+      .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',nom).maybeSingle();
+    if(pf)prix=typeClient==='gros'?(pf.prix_gros||pf.prix_detail||0):(pf.prix_detail||0);
+    // Afficher coût de revient estimé
+    if(pf){
+      const cr=(pf.cout_mo_tonne||0)/1000+(pf.cout_emballage_kg||0)+(pf.cout_transport_lot||0)/1000;
+      const el=document.getElementById('vt-cout-info');
+      if(el&&cr>0)el.textContent=`Coût estimé : ~${fmt(Math.round(cr))} F/kg`;
     }
-    const lockEl=document.getElementById('vt-prix-lock');
-    if(lockEl)lockEl.style.display=GP_ROLE==='admin'?'none':'inline';
   }
+
+  const prixEl=document.getElementById('vt_prix');
+  if(prixEl&&prix)prixEl.value=prix;
+
   calcVente();
 }
 
@@ -351,45 +365,28 @@ async function deleteDep(id){
   renderDep();notify('Dépense supprimée','r');
 }
 
-function ajouterLigneVente(){
+// Appelé automatiquement quand quantité ou prix changent
+function mettreAJourLigneVente(){
   const formule=document.getElementById('vt_formule')?.value;
-  const err=document.getElementById('vt_err');
-  if(!formule){err.textContent='Sélectionnez une formule.';return;}
-
-  // Calculer la quantité selon le conditionnement
+  if(!formule)return;
   const cond=document.getElementById('vt_poids_sac')?.value||'kg';
   const nbSacs=cond!=='kg'?+document.getElementById('vt_nb_sacs')?.value||0:0;
   let qte=+document.getElementById('vt_qte')?.value||0;
-  if(cond!=='kg'&&nbSacs>0&&qte===0)qte=nbSacs*+cond;
-
-  if(!qte||qte<=0){err.textContent='Entrez une quantité.';return;}
-
-  // Prix : lire depuis le champ (déjà auto-rempli) sinon GP_PRIX
-  let prixUnit=+document.getElementById('vt_prix')?.value||0;
-  if(!prixUnit){
-    const clientId=document.getElementById('vt_client')?.value;
-    const client=GP_CLIENTS.find(c=>c.id===clientId);
-    const typeClient=client?.type_client||'detail';
-    const prixGros=GP_PRIX_GROS?.[formule]||0;
-    const prixDetail=GP_PRIX?.[formule]||0;
-    prixUnit=(typeClient==='gros'&&prixGros>0)?prixGros:prixDetail;
-  }
-  if(!prixUnit){err.textContent='Renseignez le prix/kg.';return;}
-
-  VT_LIGNES.push({
-    formule_nom:formule,quantite:qte,
-    prix_unitaire:prixUnit,montant_ligne:Math.round(qte*prixUnit),
-    type_prix:'detail',conditionnement:cond,nb_sacs:nbSacs
-  });
-
-  // Reset champs produit uniquement
-  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('vt_formule').value='';
-  const fs=document.getElementById('vt_formule_search');if(fs)fs.value='';
-  err.textContent='';
+  if(cond!=='kg'&&nbSacs>0)qte=nbSacs*+cond;
+  const prixUnit=+document.getElementById('vt_prix')?.value||0;
+  if(!qte||!prixUnit)return;
+  // Mettre à jour ou ajouter la ligne de cette formule
+  const idx=VT_LIGNES.findIndex(l=>l.formule_nom===formule);
+  const ligne={formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,
+    montant_ligne:Math.round(qte*prixUnit),conditionnement:cond,nb_sacs:nbSacs};
+  if(idx>=0)VT_LIGNES[idx]=ligne;
+  else VT_LIGNES.push(ligne);
   calcVente();
   renderLignesVente();
 }
+
+// Garder ajouterLigneVente pour compatibilité mais appeler mettreAJourLigneVente
+function ajouterLigneVente(){mettreAJourLigneVente();}
 
 async function supprimerLigneVente(idx){
   VT_LIGNES.splice(idx,1);
