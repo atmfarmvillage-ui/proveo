@@ -90,7 +90,7 @@ function ouvrirNouveauClient(){
 function calcVenteFromSacs(){
   const nb=+document.getElementById('vt_nb_sacs')?.value||0;
   const poids=+document.getElementById('vt_poids_sac')?.value||25;
-  if(nb>0){
+  if(nb>0&&poids!=='kg'){
     const qteEl=document.getElementById('vt_qte');
     if(qteEl)qteEl.value=nb*poids;
   }
@@ -137,7 +137,8 @@ async function onVenteFormuleChange(){
       prixEl.value=prix;
       prixEl.readOnly=GP_ROLE!=='admin';
     }
-    document.getElementById('vt-prix-lock').style.display=GP_ROLE==='admin'?'none':'inline';
+    const lockEl=document.getElementById('vt-prix-lock');
+    if(lockEl)lockEl.style.display=GP_ROLE==='admin'?'none':'inline';
   }
   calcVente();
 }
@@ -352,37 +353,41 @@ async function deleteDep(id){
 
 function ajouterLigneVente(){
   const formule=document.getElementById('vt_formule')?.value;
-  const qte=+document.getElementById('vt_qte')?.value||0;
-  const clientId=document.getElementById('vt_client')?.value;
-  const client=GP_CLIENTS.find(c=>c.id===clientId);
-  const typeClient=client?.type_client||'detail';
   const err=document.getElementById('vt_err');
+  if(!formule){err.textContent='Sélectionnez une formule.';return;}
 
-  if(!formule||!qte){err.textContent='Sélectionnez un produit et une quantité.';return;}
+  // Calculer la quantité selon le conditionnement
+  const cond=document.getElementById('vt_poids_sac')?.value||'kg';
+  const nbSacs=cond!=='kg'?+document.getElementById('vt_nb_sacs')?.value||0:0;
+  let qte=+document.getElementById('vt_qte')?.value||0;
+  if(cond!=='kg'&&nbSacs>0&&qte===0)qte=nbSacs*+cond;
 
-  // Déterminer le prix selon type client
-  const prixGros=GP_PRIX_GROS?.[formule]||0;
-  const prixDetail=GP_PRIX?.[formule]||0;
-  // Si pas de prix gros défini, utiliser prix détail comme fallback
-  const typePrix=(typeClient==='gros'&&prixGros>0)?'gros':'detail';
-  const prixUnit=typePrix==='gros'?prixGros:prixDetail;
+  if(!qte||qte<=0){err.textContent='Entrez une quantité.';return;}
 
-  // Alerte si quantité grosse mais type détail
-  const seuilGros=10; // à rendre configurable
-  if(qte>=seuilGros&&typePrix==='detail'&&prixGros>0){
-    if(!confirm(`Ce client achète ${qte} sacs. Voulez-vous appliquer le prix gros (${fmt(prixGros)} F) ?`)){
-      // garder détail
-    } else {
-      VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixGros,montant_ligne:qte*prixGros,type_prix:'gros'});
-      document.getElementById('vt_qte').value='';
-      renderLignesVente();
-      return;
-    }
+  // Prix : lire depuis le champ (déjà auto-rempli) sinon GP_PRIX
+  let prixUnit=+document.getElementById('vt_prix')?.value||0;
+  if(!prixUnit){
+    const clientId=document.getElementById('vt_client')?.value;
+    const client=GP_CLIENTS.find(c=>c.id===clientId);
+    const typeClient=client?.type_client||'detail';
+    const prixGros=GP_PRIX_GROS?.[formule]||0;
+    const prixDetail=GP_PRIX?.[formule]||0;
+    prixUnit=(typeClient==='gros'&&prixGros>0)?prixGros:prixDetail;
   }
+  if(!prixUnit){err.textContent='Renseignez le prix/kg.';return;}
 
-  VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,montant_ligne:qte*prixUnit,type_prix:typePrix});
-  document.getElementById('vt_qte').value='';
+  VT_LIGNES.push({
+    formule_nom:formule,quantite:qte,
+    prix_unitaire:prixUnit,montant_ligne:Math.round(qte*prixUnit),
+    type_prix:'detail',conditionnement:cond,nb_sacs:nbSacs
+  });
+
+  // Reset champs produit uniquement
+  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('vt_formule').value='';
+  const fs=document.getElementById('vt_formule_search');if(fs)fs.value='';
   err.textContent='';
+  calcVente();
   renderLignesVente();
 }
 
@@ -396,7 +401,7 @@ async function renderLignesVente(){
   const container=document.getElementById('vt-lignes-preview');
   if(!container)return;
   container.innerHTML=VT_LIGNES.length?`<table class="tbl" style="font-size:11px;margin-top:8px">
-      <thead><tr><th>Produit</th><th class="num">Qté</th><th class="num">Prix unit.</th><th class="num">Montant</th><th></th></tr></thead>
+      <thead><tr><th>Produit</th><th>Cond.</th><th class="num">Qté</th><th class="num">Prix/kg</th><th class="num">Montant</th><th></th></tr></thead>
       <tbody>
       ${VT_LIGNES.map((l,i)=>`<tr>
         <td style="font-weight:600">${l.formule_nom}
@@ -548,3 +553,25 @@ function imprimerRapportJour(date, dateAff, ca, dep, impaye, prod, bilan){
   w.document.close();
 }
 
+
+function onConditionnementChange(){
+  const val=document.getElementById('vt_poids_sac')?.value;
+  const nbWrap=document.getElementById('vt-nb-sacs-wrap');
+  const qteLabel=document.getElementById('vt-qte-label');
+  const nbInput=document.getElementById('vt_nb_sacs');
+  const qteInput=document.getElementById('vt_qte');
+
+  if(val==='kg'){
+    // Mode vrac — saisir directement les kg
+    if(nbWrap)nbWrap.style.display='none';
+    if(qteLabel)qteLabel.textContent='Quantité (kg)';
+    if(nbInput)nbInput.value='';
+    if(qteInput){qteInput.value='';qteInput.placeholder='Ex: 5';}
+  } else {
+    // Mode sacs
+    if(nbWrap)nbWrap.style.display='block';
+    if(qteLabel)qteLabel.textContent='Kg total (auto)';
+    if(qteInput){qteInput.value='';qteInput.placeholder='';}
+  }
+  calcVente();
+}
