@@ -267,7 +267,7 @@ async function saveVente(){
   ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('vt_client').value='';
   err.textContent='';
-  if(paye>0) imprimerRecu(vente.id);
+  if(paye>0) imprimerRecuThermique(vente.id);
   notify('Vente enregistrée ✓','gold');
   // Bouton reçu thermique
   if(typeof imprimerRecuThermique==='function'){

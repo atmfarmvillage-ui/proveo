@@ -240,7 +240,7 @@ var PAGE_RENDERERS = {
     await renderVentes();
   },
   depenses:      renderDep,
-  bilan_jour:    renderBilanJour,
+  bilan_jour:    typeof renderBilanAvance==="function"&&renderBilanAvance,
   bilan_avance:  function(){
     const bm=document.getElementById('bilan-mois');
     const rm=document.getElementById('rapport-mois');
