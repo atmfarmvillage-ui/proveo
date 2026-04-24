@@ -16,18 +16,63 @@ async function saveClient(){
   await loadClients();populateSelects();renderClients();
   notify('Client ajouté ✓');
 }
-function renderClients(){
+async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   const filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
-  document.getElementById('clients-liste').innerHTML=filtered.length?`<table class="tbl"><thead><tr><th>Nom</th><th>Téléphone</th><th>Type</th><th class="num">Achats</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th></th></tr></thead><tbody>
-    ${filtered.map(c=>`<tr>
-      <td><div style="font-weight:600">${c.nom}</div><div style="font-size:10px;color:var(--textm)">${c.localisation||''}</div></td>
-      <td>${c.telephone||'—'}</td>
-      <td><span class="badge bdg-b" style="font-size:9px">${c.type_elevage||'—'}</span></td>
-      <td class="num">${c.nb_achats||0}</td>
-      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(c.total_achats||0)} F</td>`:''}
-      <td><button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
+
+  // Charger les ventes impayées/partielles pour calculer les dettes
+  const mois=new Date().toISOString().slice(0,7);
+  const{data:vImpayees}=await SB.from('gp_ventes').select('client_id,montant_total,montant_paye,statut_paiement,date,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).in('statut_paiement',['impaye','partiel']);
+
+  // Calculer dette par client
+  const dettes={};
+  (vImpayees||[]).forEach(v=>{
+    if(!v.client_id)return;
+    if(!dettes[v.client_id])dettes[v.client_id]={total:0,ventes:[]};
+    const reste=Number(v.montant_total||0)-Number(v.montant_paye||0);
+    dettes[v.client_id].total+=reste;
+    dettes[v.client_id].ventes.push(v);
+  });
+
+  document.getElementById('clients-liste').innerHTML=filtered.length?`
+    <table class="tbl"><thead><tr>
+      <th>Nom & Contact</th><th>Type</th>
+      <th class="num">CA total</th>
+      <th class="num" style="color:var(--red)">Dette</th>
+      <th></th>
+    </tr></thead><tbody>
+    ${filtered.map(c=>{
+      const dette=dettes[c.id];
+      const montantDu=dette?.total||0;
+      return`<tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-weight:700">${c.nom}</span>
+            ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
+          </div>
+          <div style="font-size:10px;color:var(--textm)">
+            ${c.telephone?'📞 '+c.telephone:''}
+            ${c.nom_ferme?' · 🏠 '+c.nom_ferme:''}
+            ${c.localite?' · 📍 '+c.localite:''}
+          </div>
+        </td>
+        <td><span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span></td>
+        <td class="num" style="color:var(--gold)">${fmt(c.total_achats||0)} F</td>
+        <td class="num" style="color:${montantDu>0?'var(--red)':'var(--green)'}">
+          ${montantDu>0?fmt(montantDu)+' F':'✅'}
+        </td>
+        <td style="white-space:nowrap">
+          ${montantDu>0?`
+            <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\'")}',${montantDu})" title="Solder la dette">💳</button>
+            <button class="btn btn-out btn-sm" onclick="envoyerRappelDette('${c.id}')" title="Envoyer rappel WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>
+          `:''}
+          <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`
+  :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
 }
 async function deleteClient(id){
   if(!confirm('Supprimer ce client ?'))return;
@@ -523,5 +568,93 @@ function envoyerTop3Manuel(idx,msgEncoded){
   const paysInfo=detecterPays(tel);
   if(paysInfo.numero_whatsapp){
     window.open('https://wa.me/'+paysInfo.numero_whatsapp+'?text='+msgEncoded,'_blank');
+  }
+}
+
+// ── GESTION DETTES CLIENTS ────────────────────────
+function ouvrirPayerDette(clientId, nom, montantDu){
+  const modal=document.getElementById('modal-payer-dette');
+  if(!modal)return;
+  document.getElementById('dette-client-nom').textContent=nom;
+  document.getElementById('dette-montant-du').textContent=fmt(montantDu)+' F';
+  document.getElementById('dette-montant-input').value=montantDu;
+  document.getElementById('dette-client-id').value=clientId;
+  document.getElementById('dette-montant-total').value=montantDu;
+  modal.style.display='flex';
+}
+
+function fermerPayerDette(){
+  document.getElementById('modal-payer-dette').style.display='none';
+}
+
+async function savePayerDette(){
+  const clientId=document.getElementById('dette-client-id').value;
+  const montantTotal=+document.getElementById('dette-montant-total').value;
+  const montant=+document.getElementById('dette-montant-input').value||0;
+  const err=document.getElementById('dette-err');
+
+  if(!montant||montant<=0){err.textContent='Entrez un montant.';return;}
+
+  // Trouver les ventes impayées et partielles de ce client
+  const{data:ventes}=await SB.from('gp_ventes').select('id,montant_total,montant_paye')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId)
+    .in('statut_paiement',['impaye','partiel']).order('date');
+
+  let restePayer=montant;
+  for(const v of(ventes||[])){
+    if(restePayer<=0)break;
+    const resteVente=Number(v.montant_total)-Number(v.montant_paye);
+    const aPayer=Math.min(restePayer,resteVente);
+    const nouveauPaye=Number(v.montant_paye)+aPayer;
+    const statut=nouveauPaye>=Number(v.montant_total)?'paye':'partiel';
+    await SB.from('gp_ventes').update({montant_paye:nouveauPaye,statut_paiement:statut}).eq('id',v.id);
+    restePayer-=aPayer;
+  }
+
+  notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
+  fermerPayerDette();
+  await loadClients();
+  renderClients();
+}
+
+async function envoyerRappelDette(clientId){
+  const c=GP_CLIENTS.find(x=>x.id===clientId);
+  if(!c)return;
+
+  const{data:ventes}=await SB.from('gp_ventes').select('montant_total,montant_paye,date,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId)
+    .in('statut_paiement',['impaye','partiel']).order('date');
+
+  const V=ventes||[];
+  if(!V.length){notify('Aucune dette trouvée','r');return;}
+
+  const totalDu=V.reduce((s,v)=>s+Number(v.montant_total||0)-Number(v.montant_paye||0),0);
+  const prov=GP_CONFIG?.nom_provenderie||'PROVENDA';
+
+  const detailLignes=V.map(v=>{
+    const reste=Number(v.montant_total||0)-Number(v.montant_paye||0);
+    return`   • ${v.date} · ${v.formule_nom||'—'} · Reste : ${fmt(reste)} F`;
+  }).join('\n');
+
+  const templates=[
+    ()=>`Bonjour ${c.nom} 👋\n\nNous espérons que vous allez bien !\n\nNous nous permettons de vous rappeler qu'un solde est en attente de règlement auprès de *${prov}*.\n\n📋 *Détail de vos achats en attente :*\n${detailLignes}\n\n💰 *Total dû : ${fmt(totalDu)} F*\n\nNous sommes convaincus qu'il s'agit d'un oubli et comptons sur vous pour régulariser cette situation dans les meilleurs délais. 🙏\n\nMerci pour votre fidélité et votre compréhension.\n\n_${prov}_`,
+
+    ()=>`${c.nom}, bonjour ! 😊\n\nEn tant que partenaire fidèle de *${prov}*, vous avez toujours notre confiance.\n\nNous tenons à vous informer qu'un montant de *${fmt(totalDu)} F* est en attente de paiement.\n\n📋 *Historique des achats concernés :*\n${detailLignes}\n\nNous restons disponibles pour toute question ou arrangement concernant ce règlement. N'hésitez pas à nous contacter.\n\nCordialement,\n_${prov}_ 🌾`,
+  ];
+
+  const msg=templates[Math.floor(Math.random()*templates.length)]();
+  const tel=c.whatsapp||c.telephone||'';
+  if(tel){
+    const paysInfo=detecterPays(tel);
+    if(paysInfo.numero_whatsapp){
+      window.open('https://wa.me/'+paysInfo.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');
+      return;
+    }
+  }
+  // Pas de numéro
+  const num=prompt(`Numéro WhatsApp de ${c.nom} :`);
+  if(num){
+    const paysInfo=detecterPays(num.trim());
+    if(paysInfo.numero_whatsapp)window.open('https://wa.me/'+paysInfo.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');
   }
 }

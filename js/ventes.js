@@ -1,4 +1,147 @@
 
+// ── RECHERCHE CLIENT DYNAMIQUE ────────────────────
+function rechercherClientTel(){
+  const q=document.getElementById('vt_tel_search')?.value.toLowerCase().trim()||'';
+  const results=document.getElementById('vt_client_results');
+  if(!results)return;
+
+  // Si champ vide : afficher tous les clients récents
+  const liste=q
+    ? GP_CLIENTS.filter(c=>c.nom?.toLowerCase().includes(q)||c.telephone?.includes(q)||c.nom_ferme?.toLowerCase().includes(q))
+    : GP_CLIENTS.slice(0,10);
+
+  if(!liste.length){
+    results.innerHTML='<div style="padding:10px;color:var(--textm);font-size:12px">Aucun client trouvé</div>';
+    results.style.display='block';
+    return;
+  }
+
+  results.innerHTML=liste.map(c=>{
+    const detteBadge=Number(c.solde_impaye||0)>0?`<span style="color:var(--red);font-size:9px"> · Dette: ${fmt(c.solde_impaye)} F</span>`:'';
+    return`<div onclick="selectionnerClientVente('${c.id}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);transition:background .15s"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;font-size:12px">${c.nom}${detteBadge}</div>
+      <div style="font-size:10px;color:var(--textm)">${c.telephone||'—'} · ${c.nom_ferme||''} ${c.localite?'· '+c.localite:''} · <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-b'}" style="font-size:8px">${c.type_client==='gros'?'GROS':'DÉTAIL'}</span></div>
+    </div>`;
+  }).join('');
+  results.style.display='block';
+}
+
+function selectionnerClientVente(clientId){
+  const c=GP_CLIENTS.find(x=>x.id===clientId);
+  if(!c)return;
+  document.getElementById('vt_client').value=clientId;
+  document.getElementById('vt_tel_search').value=c.nom;
+  document.getElementById('vt_client_results').style.display='none';
+
+  // Badge client avec toutes les coordonnées
+  const badge=document.getElementById('vt-client-badge');
+  const nomEl=document.getElementById('vt-client-nom');
+  const infoEl=document.getElementById('vt-client-info');
+  if(badge)badge.style.display='flex';
+  if(nomEl)nomEl.textContent=c.nom;
+
+  // Afficher toutes les infos disponibles
+  const infos=[];
+  if(c.telephone)infos.push('📞 '+c.telephone);
+  if(c.nom_ferme)infos.push('🏠 '+c.nom_ferme);
+  if(c.localite)infos.push('📍 '+c.localite);
+  if(c.type_client)infos.push(c.type_client==='gros'?'💼 Grossiste':'🛒 Détaillant');
+  // Badge dette si client a des impayés
+  const detteClt=Number(c.montant_du||0);
+  if(detteClt>0)infos.push(`⚠ Dette : ${fmt(detteClt)} F`);
+  if(infoEl)infoEl.innerHTML=infos.join(' · ');
+
+  // Masquer nouveau client
+  const nv=document.getElementById('vt-nouveau-client');
+  if(nv)nv.style.display='none';
+
+  // Charger le prix selon type client et formule + coût de prod
+  onVenteFormuleChange();
+  calcVente();
+}
+
+function effacerClientVente(){
+  document.getElementById('vt_client').value='';
+  document.getElementById('vt_tel_search').value='';
+  const badge=document.getElementById('vt-client-badge');
+  if(badge)badge.style.display='none';
+  document.getElementById('vt_client_results').style.display='none';
+}
+
+function ouvrirNouveauClient(){
+  const div=document.getElementById('vt-nouveau-client');
+  if(!div)return;
+  div.style.display=div.style.display==='none'?'block':'none';
+  if(div.style.display==='block'){
+    document.getElementById('vt_client').value='__nouveau__';
+    document.getElementById('vt-client-badge').style.display='none';
+    setTimeout(()=>document.getElementById('vt_cl_nom')?.focus(),100);
+  } else {
+    document.getElementById('vt_client').value='';
+  }
+}
+
+// Fermer résultats si clic ailleurs
+document.addEventListener('click',e=>{
+  const res=document.getElementById('vt_client_results');
+  const search=document.getElementById('vt_tel_search');
+  if(res&&!res.contains(e.target)&&e.target!==search){
+    res.style.display='none';
+  }
+});
+
+// ── CALCUL VENTE ─────────────────────────────────
+function calcVenteFromSacs(){
+  const nb=+document.getElementById('vt_nb_sacs')?.value||0;
+  const poids=+document.getElementById('vt_poids_sac')?.value||25;
+  if(nb>0){
+    const qteEl=document.getElementById('vt_qte');
+    if(qteEl)qteEl.value=nb*poids;
+  }
+  calcVente();
+}
+
+function calcVente(){
+  const nb=+document.getElementById('vt_nb_sacs')?.value||0;
+  const poids=+document.getElementById('vt_poids_sac')?.value||25;
+  let qte=+document.getElementById('vt_qte')?.value||0;
+  if(nb>0&&qte===0)qte=nb*poids;
+  const prix=+document.getElementById('vt_prix')?.value||0;
+  const paye=+document.getElementById('vt_paye')?.value||0;
+  const total=Math.round(qte*prix);
+  const reste=Math.max(0,total-paye);
+
+  // Montant total
+  const totalEl=document.getElementById('vt-montant-total');
+  const resteEl=document.getElementById('vt-reste-du');
+  if(totalEl)totalEl.textContent=fmt(total)+' F';
+  if(resteEl){resteEl.textContent=fmt(reste)+' F';resteEl.style.color=reste>0?'var(--red)':'var(--green)';}
+
+  // Statut automatique
+  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+  const badge=document.getElementById('vt-statut-badge');
+  if(badge){
+    const map={
+      impaye:['rgba(239,68,68,.1)','var(--red)','rgba(239,68,68,.2)','⏳ Impayé'],
+      partiel:['rgba(245,158,11,.1)','var(--gold)','rgba(245,158,11,.2)',`⚠ Paiement partiel — Reste : ${fmt(reste)} F`],
+      paye:['rgba(22,163,74,.1)','var(--green)','rgba(22,163,74,.2)','✅ Payé intégralement']
+    };
+    const[bg,color,border,label]=map[statut];
+    badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border;badge.textContent=label;
+  }
+}
+
+function onClientChange(){
+  const val=document.getElementById('vt_client')?.value;
+  const div=document.getElementById('vt-nouveau-client');
+  if(div)div.style.display=val==='__nouveau__'?'block':'none';
+  onVenteFormuleChange();
+  calcVente();
+}
+
+
 function calcMontantDep(){
   const pu=+document.getElementById('dep_prix_unit')?.value||0;
   const qt=+document.getElementById('dep_qte')?.value||1;

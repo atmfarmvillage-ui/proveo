@@ -446,24 +446,43 @@
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>💰 Nouvelle vente</span></div></div>
-      <div class="fg2">
+
+      <!-- DATE + PDV -->
+      <div class="fg2" style="margin-bottom:10px">
         <div class="fr"><label>Date</label><input type="date" id="vt_date"></div>
-        <div id="vt-pv-info" style="font-size:11px;color:var(--g6);padding:6px 0">
-        📍 Point de vente : <strong id="vt-pv-nom">—</strong>
-        <input type="hidden" id="vt_pv">
+        <div style="font-size:11px;color:var(--g6);padding:6px 0;display:flex;align-items:center;gap:6px">
+          📍 <strong id="vt-pv-nom">—</strong>
+          <input type="hidden" id="vt_pv">
+        </div>
       </div>
+
+      <!-- RECHERCHE CLIENT -->
+      <div class="fr" style="position:relative;margin-bottom:6px">
+        <label>🔍 Rechercher un client</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="vt_tel_search" placeholder="Tapez nom ou téléphone..." 
+            oninput="rechercherClientTel()" onfocus="rechercherClientTel()" 
+            autocomplete="off" style="flex:1">
+          <button onclick="ouvrirNouveauClient()" class="btn btn-g btn-sm" style="white-space:nowrap;flex-shrink:0">
+            ➕ Nouveau client
+          </button>
+        </div>
+        <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:#0D1120;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.7)"></div>
       </div>
-      <div class="fr" style="position:relative">
-        <label>🔍 Rechercher client (nom ou téléphone)</label>
-        <input type="text" id="vt_tel_search" placeholder="Tapez le nom ou numéro..." oninput="rechercherClientTel()" autocomplete="off">
-        <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9999;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:200px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.6)"></div>
-        <input type="hidden" id="vt_client">
+
+      <!-- CLIENT SÉLECTIONNÉ -->
+      <div id="vt-client-badge" style="display:none;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.25);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div id="vt-client-nom" style="font-weight:700;font-size:13px"></div>
+          <div id="vt-client-info" style="font-size:10px;color:var(--textm)"></div>
+        </div>
+        <button onclick="effacerClientVente()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">✕</button>
       </div>
-      <div class="fr"><label>Client</label>
-        <select id="vt_client" onchange="onClientChange()"><option value="">— Choisir ou nouveau client —</option><option value="__nouveau__">➕ Nouveau client</option></select>
-      </div>
+      <input type="hidden" id="vt_client">
+
+      <!-- NOUVEAU CLIENT (caché par défaut) -->
       <div id="vt-nouveau-client" style="display:none;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">➕ Nouveau client — sera enregistré automatiquement</div>
+        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">➕ Informations nouveau client</div>
         <div class="fg2">
           <div class="fr"><label>Nom *</label><input type="text" id="vt_cl_nom" placeholder="Koffi"></div>
           <div class="fr"><label>Prénom</label><input type="text" id="vt_cl_prenom" placeholder="Marie"></div>
@@ -482,31 +501,63 @@
           </div>
         </div>
       </div>
-      <div class="fr"><label>Formule / Aliment</label>
+
+      <!-- FORMULE -->
+      <div class="fr" style="margin-bottom:8px">
+        <label>Formule / Aliment</label>
         <input type="text" id="vt_formule_search" placeholder="🔍 Taper pour filtrer (ex: lapin, ponte...)" 
           oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')" 
           style="margin-bottom:4px;font-size:12px">
         <select id="vt_formule" onchange="onVenteFormuleChange()"><option value="">— Sélectionner —</option></select>
       </div>
-      <div class="fg2">
-        <div class="fr"><label>Quantité (kg)</label><input type="number" id="vt_qte" placeholder="100" oninput="calcVente()"></div>
-        <div class="fr" id="vt-prix-wrap">
-          <label>Prix/kg (FCFA) <span id="vt-prix-lock" style="font-size:9px;color:var(--textm)">🔒 Admin</span></label>
-          <input type="number" id="vt_prix" placeholder="350" oninput="calcVente()" id="vt_prix">
+
+      <!-- CONDITIONNEMENT + QUANTITÉ -->
+      <div class="fg2" style="margin-bottom:6px">
+        <div class="fr"><label>Conditionnement</label>
+          <select id="vt_poids_sac" onchange="calcVente()">
+            <option value="25">Sac 25 kg</option>
+            <option value="50">Sac 50 kg</option>
+          </select>
+        </div>
+        <div class="fr"><label>Nombre de sacs</label>
+          <input type="number" id="vt_nb_sacs" placeholder="10" min="1" oninput="calcVenteFromSacs()">
         </div>
       </div>
-      <div class="fg2">
+      <div class="fg2" style="margin-bottom:6px">
+        <div class="fr"><label>Quantité (kg) <span style="font-size:9px;color:var(--textm)">auto si sacs renseignés</span></label>
+          <input type="number" id="vt_qte" placeholder="250" oninput="calcVente()">
+        </div>
+        <div class="fr">
+          <label>Prix/kg (FCFA)</label>
+          <input type="number" id="vt_prix" placeholder="350" oninput="calcVente()">
+          <div id="vt-cout-info" style="font-size:9px;color:var(--textm);margin-top:2px"></div>
+        </div>
+      </div>
 
-        <div class="fr"><label>Montant payé (FCFA)</label><input type="number" id="vt_paye" placeholder="0" oninput="calcVente()"></div>
+      <!-- TOTAUX -->
+      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--textm)">Montant total</span>
+          <span id="vt-montant-total" style="font-weight:700;font-size:15px;color:var(--gold)">0 F</span>
+        </div>
+        <div class="fr" style="margin-bottom:6px">
+          <label>Montant payé (FCFA)</label>
+          <input type="number" id="vt_paye" placeholder="0" oninput="calcVente()" style="font-size:15px;font-weight:700">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--textm)">Reste dû</span>
+          <span id="vt-reste-du" style="font-weight:700;color:var(--red)">0 F</span>
+        </div>
       </div>
-      <div class="fr">
-        <label>Statut (automatique)</label>
-        <div id="vt-statut-badge" style="padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)">⏳ Impayé</div>
-      </div>
-      <div id="vt-preview" style="background:rgba(22,163,74,.07);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px">Saisissez les informations pour voir le total.</div>
-      <div id="vt-remise-warning" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:8px;font-size:11px;color:var(--gold);margin-bottom:8px">⚠ Remise > 5% : validation admin requise</div>
-      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveVente()">✓ Enregistrer la vente</button>
+
+      <!-- STATUT AUTOMATIQUE -->
+      <div id="vt-statut-badge" style="padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;text-align:center;margin-bottom:10px;background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)">⏳ Impayé</div>
+
+      <div class="fr"><label>Note (optionnel)</label><input type="text" id="vt_note" placeholder="Commande spéciale, livraison..."></div>
       <div class="a-err" id="vt_err"></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center;font-size:14px;min-height:46px" onclick="saveVente()">
+        ✓ Enregistrer la vente
+      </button>
     </div>
     <div>
       <div class="card">
@@ -1760,32 +1811,32 @@
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=1.9.0"></script>
-<script src="js/print.js?v=1.9.0"></script>
-<script src="js/dashboard.js?v=1.9.0"></script>
-<script src="js/stock.js?v=1.9.0"></script>
-<script src="js/matieres.js?v=1.9.0"></script>
-<script src="js/production.js?v=1.9.0"></script>
-<script src="js/ventes.js?v=1.9.0"></script>
-<script src="js/clients.js?v=1.9.0"></script>
-<script src="js/admin.js?v=1.9.0"></script>
-<script src="js/fournisseurs.js?v=1.9.0"></script>
-<script src="js/achats.js?v=1.9.0"></script>
-<script src="js/caisse.js?v=1.9.0"></script>
-<script src="js/inventaire_physique.js?v=1.9.0"></script>
-<script src="js/distribution.js?v=1.9.0"></script>
-<script src="js/salaires.js?v=1.9.0"></script>
-<script src="js/rapports.js?v=1.9.0"></script>
-<script src="js/dettes.js?v=1.9.0"></script>
-<script src="js/chat.js?v=1.9.0"></script>
-<script src="js/reversements.js?v=1.9.0"></script>
-<script src="js/paiements_mp.js?v=1.9.0"></script>
-<script src="js/stock_pf.js?v=1.9.0"></script>
-<script src="js/bilanss.js?v=1.9.0"></script>
-<script src="js/benefices.js?v=1.9.0"></script>
-<script src="js/messages_pdv.js?v=1.9.0"></script>
+<script src="js/config.js?v=2.0.0"></script>
+<script src="js/print.js?v=2.0.0"></script>
+<script src="js/dashboard.js?v=2.0.0"></script>
+<script src="js/stock.js?v=2.0.0"></script>
+<script src="js/matieres.js?v=2.0.0"></script>
+<script src="js/production.js?v=2.0.0"></script>
+<script src="js/ventes.js?v=2.0.0"></script>
+<script src="js/clients.js?v=2.0.0"></script>
+<script src="js/admin.js?v=2.0.0"></script>
+<script src="js/fournisseurs.js?v=2.0.0"></script>
+<script src="js/achats.js?v=2.0.0"></script>
+<script src="js/caisse.js?v=2.0.0"></script>
+<script src="js/inventaire_physique.js?v=2.0.0"></script>
+<script src="js/distribution.js?v=2.0.0"></script>
+<script src="js/salaires.js?v=2.0.0"></script>
+<script src="js/rapports.js?v=2.0.0"></script>
+<script src="js/dettes.js?v=2.0.0"></script>
+<script src="js/chat.js?v=2.0.0"></script>
+<script src="js/reversements.js?v=2.0.0"></script>
+<script src="js/paiements_mp.js?v=2.0.0"></script>
+<script src="js/stock_pf.js?v=2.0.0"></script>
+<script src="js/bilanss.js?v=2.0.0"></script>
+<script src="js/benefices.js?v=2.0.0"></script>
+<script src="js/messages_pdv.js?v=2.0.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=1.9.0"></script>
+<script src="js/auth.js?v=2.0.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
@@ -1906,6 +1957,25 @@ function installPWA(){
       <button onclick="fermerBilanEmploye()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
     </div>
     <div id="bilan-employe-contenu"></div>
+  </div>
+</div>
+
+<!-- MODAL PAYER DETTE CLIENT -->
+<div id="modal-payer-dette" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerPayerDette()">
+  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:400px;padding:24px">
+    <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;margin-bottom:4px">💳 Payer une dette</div>
+    <div style="font-size:14px;font-weight:600;color:var(--g6);margin-bottom:4px" id="dette-client-nom"></div>
+    <div style="font-size:12px;color:var(--red);margin-bottom:14px">Total dû : <strong id="dette-montant-du"></strong></div>
+    <input type="hidden" id="dette-client-id">
+    <input type="hidden" id="dette-montant-total">
+    <div class="fr"><label>Montant à payer (FCFA)</label>
+      <input type="number" id="dette-montant-input" placeholder="0" style="font-size:16px;font-weight:700">
+    </div>
+    <div class="a-err" id="dette-err"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="savePayerDette()" class="btn btn-g" style="flex:1;justify-content:center;min-height:44px">✓ Confirmer le paiement</button>
+      <button onclick="fermerPayerDette()" class="btn btn-out" style="padding:0 16px">Annuler</button>
+    </div>
   </div>
 </div>
 </body>
