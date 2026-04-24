@@ -101,10 +101,13 @@ function calcVente(){
   const nb=+document.getElementById('vt_nb_sacs')?.value||0;
   const poids=+document.getElementById('vt_poids_sac')?.value||25;
   let qte=+document.getElementById('vt_qte')?.value||0;
-  if(nb>0&&qte===0)qte=nb*poids;
+  if(nb>0&&poids!=='kg'&&qte===0)qte=nb*+poids;
   const prix=+document.getElementById('vt_prix')?.value||0;
   const paye=+document.getElementById('vt_paye')?.value||0;
-  const total=Math.round(qte*prix);
+  // Total depuis les lignes déjà ajoutées + ligne en cours
+  const totalLignes=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
+  const ligneEnCours=Math.round(qte*prix);
+  const total=totalLignes||(ligneEnCours);
   const reste=Math.max(0,total-paye);
 
   // Montant total

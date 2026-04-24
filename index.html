@@ -1819,32 +1819,32 @@
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.5.0"></script>
-<script src="js/print.js?v=2.5.0"></script>
-<script src="js/dashboard.js?v=2.5.0"></script>
-<script src="js/stock.js?v=2.5.0"></script>
-<script src="js/matieres.js?v=2.5.0"></script>
-<script src="js/production.js?v=2.5.0"></script>
-<script src="js/ventes.js?v=2.5.0"></script>
-<script src="js/clients.js?v=2.5.0"></script>
-<script src="js/admin.js?v=2.5.0"></script>
-<script src="js/fournisseurs.js?v=2.5.0"></script>
-<script src="js/achats.js?v=2.5.0"></script>
-<script src="js/caisse.js?v=2.5.0"></script>
-<script src="js/inventaire_physique.js?v=2.5.0"></script>
-<script src="js/distribution.js?v=2.5.0"></script>
-<script src="js/salaires.js?v=2.5.0"></script>
-<script src="js/rapports.js?v=2.5.0"></script>
-<script src="js/dettes.js?v=2.5.0"></script>
-<script src="js/chat.js?v=2.5.0"></script>
-<script src="js/reversements.js?v=2.5.0"></script>
-<script src="js/paiements_mp.js?v=2.5.0"></script>
-<script src="js/stock_pf.js?v=2.5.0"></script>
-<script src="js/bilanss.js?v=2.5.0"></script>
-<script src="js/benefices.js?v=2.5.0"></script>
-<script src="js/messages_pdv.js?v=2.5.0"></script>
+<script src="js/config.js?v=2.6.0"></script>
+<script src="js/print.js?v=2.6.0"></script>
+<script src="js/dashboard.js?v=2.6.0"></script>
+<script src="js/stock.js?v=2.6.0"></script>
+<script src="js/matieres.js?v=2.6.0"></script>
+<script src="js/production.js?v=2.6.0"></script>
+<script src="js/ventes.js?v=2.6.0"></script>
+<script src="js/clients.js?v=2.6.0"></script>
+<script src="js/admin.js?v=2.6.0"></script>
+<script src="js/fournisseurs.js?v=2.6.0"></script>
+<script src="js/achats.js?v=2.6.0"></script>
+<script src="js/caisse.js?v=2.6.0"></script>
+<script src="js/inventaire_physique.js?v=2.6.0"></script>
+<script src="js/distribution.js?v=2.6.0"></script>
+<script src="js/salaires.js?v=2.6.0"></script>
+<script src="js/rapports.js?v=2.6.0"></script>
+<script src="js/dettes.js?v=2.6.0"></script>
+<script src="js/chat.js?v=2.6.0"></script>
+<script src="js/reversements.js?v=2.6.0"></script>
+<script src="js/paiements_mp.js?v=2.6.0"></script>
+<script src="js/stock_pf.js?v=2.6.0"></script>
+<script src="js/bilanss.js?v=2.6.0"></script>
+<script src="js/benefices.js?v=2.6.0"></script>
+<script src="js/messages_pdv.js?v=2.6.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.5.0"></script>
+<script src="js/auth.js?v=2.6.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
@@ -1983,6 +1983,25 @@ function installPWA(){
     <div style="display:flex;gap:8px;margin-top:10px">
       <button onclick="savePayerDette()" class="btn btn-g" style="flex:1;justify-content:center;min-height:44px">✓ Confirmer le paiement</button>
       <button onclick="fermerPayerDette()" class="btn btn-out" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODIFIER VENTE -->
+<div id="modal-modifier-vente" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModifierVente()">
+  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px">
+    <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;margin-bottom:4px">✏️ Modifier la vente</div>
+    <div style="font-size:13px;font-weight:600;color:var(--g6);margin-bottom:4px" id="mv-client"></div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Total : <strong id="mv-total"></strong></div>
+    <input type="hidden" id="mv-id">
+    <div class="fr"><label>Date</label><input type="date" id="mv-date"></div>
+    <div class="fr"><label>Montant payé (FCFA)</label>
+      <input type="number" id="mv-paye" placeholder="0" style="font-size:16px;font-weight:700">
+    </div>
+    <div class="fr"><label>Note</label><input type="text" id="mv-note" placeholder="Note..."></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="saveModifierVente()" class="btn btn-g" style="flex:1;justify-content:center;min-height:44px">✓ Enregistrer</button>
+      <button onclick="fermerModifierVente()" class="btn btn-out" style="padding:0 16px">Annuler</button>
     </div>
   </div>
 </div>

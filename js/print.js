@@ -354,68 +354,92 @@ function imprimerRecuThermique(vente){
   const cfg=GP_CONFIG||{};
   const prov=cfg.nom_provenderie||'PROVENDERIE SADARI';
   const lignes=vente.lignes||[];
-  const total=Number(vente.montant_total||0);
+  const total=lignes.length?lignes.reduce((s,l)=>s+Number(l.montant_ligne||0),0):Number(vente.montant_total||0);
   const paye=Number(vente.montant_paye||0);
   const reste=Math.max(0,total-paye);
-  const statut=reste<=0?'✅ PAYÉ':reste<total?'⚠ PARTIEL':'❌ IMPAYÉ';
+  const statut=reste<=0?'✅ PAYÉ':paye>0?'⚠ PARTIEL':'❌ IMPAYÉ';
 
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Reçu ${vente.id?.slice(0,8)||''}</title>
-<style>
-@page{size:80mm auto;margin:2mm}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Courier New',monospace;font-size:11px;width:76mm;color:#000;background:#fff}
-.center{text-align:center}
-.right{text-align:right}
-.bold{font-weight:bold}
-.line{border-top:1px dashed #000;margin:4px 0}
-.row{display:flex;justify-content:space-between}
-h1{font-size:14px;font-weight:bold;text-align:center}
-h2{font-size:12px;text-align:center;font-weight:normal}
-.statut{font-size:13px;font-weight:bold;text-align:center;margin:4px 0}
-</style></head><body>
+  // Messages de fidélité dynamiques
+  const msgs=[
+    'Merci pour votre confiance ! 🌾 Votre fidélité est notre force.',
+    'Merci de choisir '+prov+' ! Ensemble, faisons prospérer nos élevages.',
+    'Votre satisfaction est notre priorité. À bientôt ! 🐔🐰',
+    'Merci et bonne production ! Que vos animaux prospèrent. 🌱',
+  ];
+  const merci=msgs[Math.floor(Math.random()*msgs.length)];
+
+  const css=`
+    @page{size:80mm auto;margin:2mm 3mm}
+    @media print{
+      body{margin:0;padding:0}
+      .no-print{display:none!important}
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Courier New',Courier,monospace;font-size:11px;width:76mm;color:#000;background:#fff}
+    .center{text-align:center}
+    .right{text-align:right}
+    .bold{font-weight:bold}
+    .line{border-top:1px dashed #000;margin:4px 0}
+    .row{display:flex;justify-content:space-between;padding:1px 0}
+    h1{font-size:14px;font-weight:bold;text-align:center;margin-bottom:2px}
+    h2{font-size:11px;text-align:center;font-weight:normal;margin-bottom:2px}
+    .statut{font-size:12px;font-weight:bold;text-align:center;margin:4px 0;padding:3px}
+    .merci{font-size:10px;text-align:center;margin-top:6px;font-style:italic}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    th{text-align:left;font-weight:bold;border-bottom:1px solid #000;padding:1px 2px}
+    td{padding:1px 2px}
+    .num{text-align:right}`;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reçu</title>
+<style>${css}</style></head><body>
 <div class="center">
   <h1>${prov}</h1>
-  ${cfg.adresse?`<div>${cfg.adresse}</div>`:''}
-  ${cfg.telephone?`<div>Tél: ${cfg.telephone}</div>`:''}
+  ${cfg.adresse?`<h2>${cfg.adresse}</h2>`:''}
+  ${cfg.telephone?`<h2>Tél: ${cfg.telephone}</h2>`:''}
 </div>
 <div class="line"></div>
-<div class="center bold">REÇU DE VENTE</div>
+<div class="center bold" style="font-size:12px">REÇU DE VENTE</div>
 <div class="line"></div>
 <div class="row"><span>N° :</span><span>${vente.ref||vente.id?.slice(0,8)||'—'}</span></div>
-<div class="row"><span>Date :</span><span>${vente.date||''}</span></div>
+<div class="row"><span>Date :</span><span>${vente.date||new Date().toLocaleDateString('fr-FR')}</span></div>
 <div class="row"><span>Client :</span><span>${vente.client_nom||'Comptant'}</span></div>
 ${vente.point_vente?`<div class="row"><span>PDV :</span><span>${vente.point_vente}</span></div>`:''}
 <div class="line"></div>
-<div class="row bold"><span>Produit</span><span>Qté</span><span>Prix</span><span>Total</span></div>
-<div class="line"></div>
-${lignes.map(l=>`<div>
-  <div class="bold" style="font-size:10px">${l.formule_nom}</div>
-  <div class="row" style="font-size:10px">
-    <span>${Number(l.quantite||0)} kg</span>
-    <span>× ${fmt(l.prix_unitaire)} F</span>
-    <span class="right">${fmt(l.montant_ligne)} F</span>
-  </div>
-</div>`).join('<div class="line" style="border-style:dotted"></div>')}
-<div class="line"></div>
+${lignes.length?`
+<table>
+  <thead><tr><th>Produit</th><th class="num">Kg</th><th class="num">P.U</th><th class="num">Mnt</th></tr></thead>
+  <tbody>
+  ${lignes.map(l=>`<tr>
+    <td style="max-width:28mm;overflow:hidden">${l.formule_nom||'—'}</td>
+    <td class="num">${Number(l.quantite||0)}</td>
+    <td class="num">${fmt(l.prix_unitaire||0)}</td>
+    <td class="num">${fmt(l.montant_ligne||0)}</td>
+  </tr>`).join('')}
+  </tbody>
+</table>
+<div class="line"></div>`:''}
 <div class="row bold"><span>TOTAL</span><span>${fmt(total)} F</span></div>
 <div class="row"><span>Payé</span><span>${fmt(paye)} F</span></div>
 ${reste>0?`<div class="row bold"><span>Reste dû</span><span>${fmt(reste)} F</span></div>`:''}
 <div class="line"></div>
 <div class="statut">${statut}</div>
 <div class="line"></div>
-<div class="center" style="font-size:10px">
-  Merci pour votre confiance !<br>
-  Bonne journée 🌾
-</div>
-<div class="line"></div>
-<div class="center" style="font-size:9px">${new Date().toLocaleString('fr-FR')}</div>
+<div class="merci">${merci}</div>
+<div class="center" style="font-size:9px;margin-top:4px">${new Date().toLocaleString('fr-FR')}</div>
 </body></html>`;
 
-  const win=window.open('','_blank','width=400,height=600');
-  if(!win){notify('Popup bloqué — autorisez les popups','r');return;}
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(()=>{win.print();setTimeout(()=>win.close(),500);},300);
+  // Créer iframe caché pour impression directe sans popup
+  const iframe=document.createElement('iframe');
+  iframe.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(iframe);
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+  iframe.onload=()=>{
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(()=>iframe.remove(),2000);
+  };
 }
+
+
