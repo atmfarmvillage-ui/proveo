@@ -207,10 +207,12 @@ async function saveVente(){
     type_client:typeClient,
     nb_produits:VT_LIGNES.length,
     point_vente:pv,
-    note,
+    note:note||null,
     date:today(),
     saisi_par:GP_USER?.id,
-    formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', ')
+    formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', '),
+    qte_vendue:VT_LIGNES.reduce((s,l)=>s+Number(l.quantite||0),0)||0,
+    prix_unitaire:VT_LIGNES.length?VT_LIGNES[0].prix_unitaire||0:0
   }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
