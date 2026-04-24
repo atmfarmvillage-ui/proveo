@@ -179,7 +179,7 @@ async function bootApp(user){
   // Fonctions optionnelles — ne bloquent pas le boot
   try{verifierLicence();}catch(e){}
   try{verifierEtEnvoyerMessages();}catch(e){}
-  try{verifierMiseAJour();}catch(e){}
+  // Mise à jour automatique via SW réseau-first
   try{mettreAJourPresence(true);}catch(e){}
   try{checkPendingRemises();}catch(e){}
   try{autoVerifierStockAlerte();}catch(e){}
@@ -562,35 +562,9 @@ function initRealtimeSync(){
 }
 
 // ── MISE À JOUR AUTOMATIQUE ──────────────────
-async function verifierMiseAJour(){
-  try{
-    // Charger la version depuis le serveur (fichier config.js rechargé)
-    const r=await fetch('/js/config.js?t='+Date.now());
-    const txt=await r.text();
-    const match=txt.match(/PROVENDA_VERSION\s*=\s*'([^']+)'/);
-    if(!match)return;
-    const versionServeur=match[1];
-    if(versionServeur!==PROVENDA_VERSION){
-      afficherBanniereMAJ(versionServeur);
-    }
-  } catch(e){}
-}
 
-function afficherBanniereMAJ(nouvelleVersion){
-  const banniere=document.createElement('div');
-  banniere.id='maj-banniere';
-  banniere.style.cssText='position:fixed;top:var(--topbar);left:0;right:0;z-index:998;background:linear-gradient(90deg,rgba(22,163,74,.95),rgba(21,128,61,.95));padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:white;box-shadow:0 2px 12px rgba(0,0,0,.4)';
-  banniere.innerHTML=`
-    <span>🔄 Nouvelle version <strong>v${nouvelleVersion}</strong> disponible — Vos données sont sauvegardées automatiquement</span>
-    <div style="display:flex;gap:8px">
-      <button onclick="window.location.reload()" style="background:white;color:#15803D;border:none;padding:6px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px">Mettre à jour maintenant</button>
-      <button onclick="this.closest('#maj-banniere').remove()" style="background:rgba(255,255,255,.2);color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">Plus tard</button>
-    </div>`;
-  document.body.appendChild(banniere);
-}
 
-// Vérifier toutes les 5 minutes
-setInterval(verifierMiseAJour, 5*60*1000);
+
 
 // ── ACTUALISATION PAGE ───────────────────────────
 function refreshPage(){
