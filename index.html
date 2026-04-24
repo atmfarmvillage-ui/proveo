@@ -459,14 +459,12 @@
       <!-- RECHERCHE CLIENT -->
       <div class="fr" style="position:relative;margin-bottom:6px">
         <label>🔍 Rechercher un client</label>
-        <div style="display:flex;gap:6px">
-          <input type="text" id="vt_tel_search" placeholder="Tapez nom ou téléphone..." 
-            oninput="rechercherClientTel()" onfocus="rechercherClientTel()" 
-            autocomplete="off" style="flex:1">
-          <button onclick="ouvrirNouveauClient()" class="btn btn-g btn-sm" style="white-space:nowrap;flex-shrink:0">
-            ➕ Nouveau client
-          </button>
-        </div>
+        <input type="text" id="vt_tel_search" placeholder="Tapez nom ou téléphone..." 
+          oninput="rechercherClientTel()" onfocus="rechercherClientTel()" 
+          autocomplete="off" style="width:100%;margin-bottom:6px">
+        <button onclick="ouvrirNouveauClient()" class="btn btn-g btn-sm" style="width:100%;justify-content:center">
+          ➕ Nouveau client
+        </button>
         <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:#0D1120;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.7)"></div>
       </div>
 
