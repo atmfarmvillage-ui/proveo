@@ -1,5 +1,9 @@
+// ══════════════════════════════════════════════════
+// PROVENDA — MODULE VENTES
+// ══════════════════════════════════════════════════
 
-// ── RECHERCHE CLIENT DYNAMIQUE ────────────────────
+let VT_LIGNES=[];
+
 function rechercherClientTel(){
   const q=document.getElementById('vt_tel_search')?.value.toLowerCase().trim()||'';
   const results=document.getElementById('vt_client_results');
@@ -83,16 +87,6 @@ function ouvrirNouveauClient(){
   }
 }
 
-// Fermer résultats si clic ailleurs
-document.addEventListener('click',e=>{
-  const res=document.getElementById('vt_client_results');
-  const search=document.getElementById('vt_tel_search');
-  if(res&&!res.contains(e.target)&&e.target!==search){
-    res.style.display='none';
-  }
-});
-
-// ── CALCUL VENTE ─────────────────────────────────
 function calcVenteFromSacs(){
   const nb=+document.getElementById('vt_nb_sacs')?.value||0;
   const poids=+document.getElementById('vt_poids_sac')?.value||25;
@@ -133,27 +127,7 @@ function calcVente(){
   }
 }
 
-function onClientChange(){
-  const val=document.getElementById('vt_client')?.value;
-  const div=document.getElementById('vt-nouveau-client');
-  if(div)div.style.display=val==='__nouveau__'?'block':'none';
-  onVenteFormuleChange();
-  calcVente();
-}
-
-
-function calcMontantDep(){
-  const pu=+document.getElementById('dep_prix_unit')?.value||0;
-  const qt=+document.getElementById('dep_qte')?.value||1;
-  const montantEl=document.getElementById('dep_montant');
-  if(montantEl&&pu>0)montantEl.value=(pu*qt).toFixed(0);
-}
-// ── VENTES ─────────────────────────────────────────
-function onClientChange(){
-  const val=document.getElementById('vt_client').value;
-  document.getElementById('vt-nouveau-client').style.display=val==='__nouveau__'?'block':'none';
-}
-function onVenteFormuleChange(){
+async function onVenteFormuleChange(){
   const nom=document.getElementById('vt_formule').value;
   if(nom){
     const prix=getPrix(nom);
@@ -167,21 +141,7 @@ function onVenteFormuleChange(){
   }
   calcVente();
 }
-function calcVente(){
-  const qte=+document.getElementById('vt_qte')?.value||0;
-  const prix=+document.getElementById('vt_prix')?.value||0;
-  const paye=+document.getElementById('vt_paye')?.value||0;
-  const total=qte*prix;
-  const remisePct=qte*prix>0?remise/(qte*prix)*100:0;
-  // statut calculé automatiquement
-  const warn=document.getElementById('vt-remise-warning');
-  warn.style.display=remisePct>GP_REMISE_MAX?'block':'none';
-  document.getElementById('vt-preview').innerHTML=qte&&prix?`
-    <div style="display:flex;justify-content:space-between;font-size:12px">
-      <span style="color:var(--textm)">${fmt(qte)} kg × ${fmt(prix)} F ${remise?'− '+fmt(remise)+' F remise':''}</span>
-      <strong style="color:var(--gold);font-family:'DM Mono',monospace">${fmt(total)} FCFA</strong>
-    </div>`:'Saisissez les informations pour voir le total.';
-}
+
 async function saveVente(){
   let clientId=document.getElementById('vt_client')?.value;
   const note=document.getElementById('vt_note')?.value.trim()||null;
@@ -294,53 +254,21 @@ async function saveVente(){
   notify('Vente enregistrée ✓','gold');
   // Bouton reçu thermique
   if(typeof imprimerRecuThermique==='function'){
-    const btnRecu=document.createElement('button');
-    btnRecu.className='btn btn-print';
-    btnRecu.style.cssText='width:100%;justify-content:center;margin-top:8px';
-    btnRecu.innerHTML='🖨️ Imprimer le reçu thermique';
-    btnRecu.onclick=()=>{
-      imprimerRecuThermique({
-        ...vente,
-        lignes:VT_LIGNES,
-        ref:vente.id?.slice(0,8)
-      });
-      btnRecu.remove();
+    const btnR=document.createElement('button');
+    btnR.className='btn btn-print';
+    btnR.style.cssText='width:100%;justify-content:center;margin-top:8px';
+    btnR.innerHTML='🖨️ Imprimer le reçu thermique';
+    btnR.onclick=()=>{
+      imprimerRecuThermique({...venteData,lignes:VT_LIGNES,ref:venteData.id?.slice(0,8)});
+      btnR.remove();
     };
-    const errEl=document.getElementById('vt_err');
-    if(errEl)errEl.parentNode.insertBefore(btnRecu,errEl.nextSibling);
-    setTimeout(()=>btnRecu.remove(),30000);
+    const e=document.getElementById('vt_err');
+    if(e)e.parentNode.insertBefore(btnR,e.nextSibling);
+    setTimeout(()=>btnR.remove(),30000);
   }
   renderVentes();
 }
 
-async function envoyerAlerteSeuil(pdvNom,formule,qteActuelle,seuil){
-  const cfg=GP_CONFIG||{};
-  const apikey=cfg.callmebot_apikey||'';
-  const tel=(cfg.tel_alerte_stock||cfg.telephone||'').replace(/[\s\-\+]/g,'').replace(/^228/,'');
-  if(!apikey||!tel)return;
-  const msg=encodeURIComponent(
-    `⚠️ Stock critique PDV\n`+
-    `📍 ${pdvNom}\n`+
-    `🌾 ${formule}\n`+
-    `Quantité restante : ${qteActuelle} sacs\n`+
-    `Seuil : ${seuil} sacs\n\n`+
-    `Veuillez réapprovisionner.`
-  );
-  fetch(`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`).catch(()=>{});
-}
-
-
-async function updateVentesKPIs(){
-  const{data:V}=await SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
-  const vd=V||[];
-  const ca=vd.reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const impaye=vd.reduce((s,v)=>s+(Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
-  document.getElementById('ventes-kpis').innerHTML=`
-    <div class="econo-box"><div class="econo-val">${vd.length}</div><div class="econo-lbl">Ventes du jour</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${GP_ROLE==='admin'?fmt(ca)+' F':'—'}</div><div class="econo-lbl">CA du jour</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${GP_ROLE==='admin'?fmt(impaye)+' F':'—'}</div><div class="econo-lbl">Impayés du jour</div></div>
-    <div class="econo-box"><div class="econo-val">${vd.reduce((s,v)=>s+Number(v.qte_vendue||0),0).toFixed(0)}</div><div class="econo-lbl">Kg vendus</div></div>`;
-}
 async function renderVentes(){
   const filtDate=document.getElementById('vt-filtre-date')?.value||'';
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
@@ -362,16 +290,40 @@ async function renderVentes(){
         <button class="btn btn-red btn-sm" onclick="deleteVente('${v.id}')">✕</button>
       </td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
-  if(typeof renderBilanVentes==='function')renderBilanVentes();
-  if(typeof renderClassementPDV==='function')renderClassementPDV();
-}
-async function deleteVente(id){
-  if(!confirm('Supprimer cette vente ?'))return;
-  await SB.from('gp_ventes').delete().eq('id',id);
-  renderVentes();updateVentesKPIs();notify('Vente supprimée','r');
 }
 
-// ── DÉPENSES ───────────────────────────────────────
+async function updateVentesKPIs(){
+  const{data:V}=await SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
+  const vd=V||[];
+  const ca=vd.reduce((s,v)=>s+Number(v.montant_total||0),0);
+  const impaye=vd.reduce((s,v)=>s+(Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
+  document.getElementById('ventes-kpis').innerHTML=`
+    <div class="econo-box"><div class="econo-val">${vd.length}</div><div class="econo-lbl">Ventes du jour</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${GP_ROLE==='admin'?fmt(ca)+' F':'—'}</div><div class="econo-lbl">CA du jour</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${GP_ROLE==='admin'?fmt(impaye)+' F':'—'}</div><div class="econo-lbl">Impayés du jour</div></div>
+    <div class="econo-box"><div class="econo-val">${vd.reduce((s,v)=>s+Number(v.qte_vendue||0),0).toFixed(0)}</div><div class="econo-lbl">Kg vendus</div></div>`;
+}
+
+async function renderDep(){
+  const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
+  let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
+  const{data}=await q;
+  const D=data||[];
+  const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  document.getElementById('dep-liste').innerHTML=`
+    ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
+    <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
+    ${D.map(d=>`<tr>
+      <td style="font-size:10px">${d.date}</td>
+      <td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[d.categorie]||d.categorie}</span></td>
+      <td>${d.description}</td>
+      <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
+      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
+      <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
+}
+
 async function saveDep(){
   const desc=document.getElementById('dep_desc').value.trim();
   const montant=+document.getElementById('dep_montant').value||0;
@@ -391,105 +343,120 @@ async function saveDep(){
   notify('Dépense enregistrée ✓','gold');
   await renderDep();
 }
-async function renderDep(){
-  const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
-  let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',_finMois(filtMois));
-  const{data}=await q;
-  const D=data||[];
-  const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
-  if(typeof renderBilanDepenses==='function')renderBilanDepenses(D);
-  document.getElementById('dep-liste').innerHTML=`
-    ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
-    <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
-    ${D.map(d=>`<tr>
-      <td style="font-size:10px">${d.date}</td>
-      <td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[d.categorie]||d.categorie}</span></td>
-      <td>${d.description}</td>
-      <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
-      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
-      <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
-}
+
 async function deleteDep(id){
   if(!confirm('Supprimer cette dépense ?'))return;
   await SB.from('gp_depenses').delete().eq('id',id);
   renderDep();notify('Dépense supprimée','r');
 }
 
-// ── BILAN JOURNALIER ───────────────────────────────
-async function renderBilanJour(){
-  if(GP_ROLE!=='admin'){document.getElementById('bj-bilan').innerHTML='<div style="color:var(--textm)">Réservé aux administrateurs.</div>';return;}
-  const date=document.getElementById('bj_date').value;
-  const[{data:V},{data:D},{data:L},{data:S}]=await Promise.all([
-    SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date),
-    SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date),
-    SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date),
-    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date).eq('type','entree'),
-  ]);
-  const v=V||[];const d=D||[];const l=L||[];const s=S||[];
-  const caJour=v.reduce((s,x)=>s+Number(x.montant_total||0),0);
-  const depJour=d.reduce((s,x)=>s+Number(x.montant||0),0);
-  const impaye=v.reduce((s,x)=>s+(Number(x.montant_total||0)-Number(x.montant_paye||0)),0);
-  const prodJour=l.reduce((s,x)=>s+Number(x.qte_produite||0),0);
-  const achatJour=s.reduce((s,x)=>s+Number(x.quantite||0)*Number(x.prix_unit||0),0);
-  const bilan=caJour-depJour;
-  const dateAff=date?new Date(date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}):'—';
-  const cfg=GP_CONFIG||{};
+function ajouterLigneVente(){
+  const formule=document.getElementById('vt_formule')?.value;
+  const qte=+document.getElementById('vt_qte')?.value||0;
+  const clientId=document.getElementById('vt_client')?.value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const typeClient=client?.type_client||'detail';
+  const err=document.getElementById('vt_err');
 
-  document.getElementById('bj-kpis').innerHTML=`
-    <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(caJour)}</div><div class="econo-lbl">Recettes (F)</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(depJour)}</div><div class="econo-lbl">Dépenses (F)</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${fmt(impaye)}</div><div class="econo-lbl">Impayés (F)</div></div>
-    <div class="econo-box"><div class="econo-val">${fmt(prodJour)}</div><div class="econo-lbl">Kg produits</div></div>`;
+  if(!formule||!qte){err.textContent='Sélectionnez un produit et une quantité.';return;}
 
-  document.getElementById('bj-ventes').innerHTML=v.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th><th class="num">Total (F)</th><th>Statut</th></tr></thead><tbody>
-    ${v.map(x=>`<tr>
-      <td>${x.client_nom||'—'}</td>
-      <td style="font-size:10px">${x.formule_nom||'—'}</td>
-      <td class="num">${fmtKg(x.qte_vendue)}</td>
-      <td class="num" style="color:var(--gold)">${fmt(x.montant_total)}</td>
-      <td><span class="badge ${x.statut_paiement==='paye'?'bdg-g':x.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${x.statut_paiement}</span></td>
-    </tr>`).join('')}
-    <tr style="font-weight:700;background:rgba(22,163,74,.05)"><td colspan="3">TOTAL</td><td class="num" style="color:var(--gold)">${fmt(caJour)}</td><td></td></tr>
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune vente ce jour.</div>';
+  // Déterminer le prix selon type client
+  const prixGros=GP_PRIX_GROS?.[formule]||0;
+  const prixDetail=GP_PRIX?.[formule]||0;
+  // Si pas de prix gros défini, utiliser prix détail comme fallback
+  const typePrix=(typeClient==='gros'&&prixGros>0)?'gros':'detail';
+  const prixUnit=typePrix==='gros'?prixGros:prixDetail;
 
-  document.getElementById('bj-depenses').innerHTML=d.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Catégorie</th><th>Description</th><th class="num">Montant (F)</th></tr></thead><tbody>
-    ${d.map(x=>`<tr><td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[x.categorie]||x.categorie}</span></td><td>${x.description}</td><td class="num" style="color:var(--red)">${fmt(x.montant)}</td></tr>`).join('')}
-    <tr style="font-weight:700;background:rgba(239,68,68,.05)"><td colspan="2">TOTAL</td><td class="num" style="color:var(--red)">${fmt(depJour)}</td></tr>
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune dépense ce jour.</div>';
+  // Alerte si quantité grosse mais type détail
+  const seuilGros=10; // à rendre configurable
+  if(qte>=seuilGros&&typePrix==='detail'&&prixGros>0){
+    if(!confirm(`Ce client achète ${qte} sacs. Voulez-vous appliquer le prix gros (${fmt(prixGros)} F) ?`)){
+      // garder détail
+    } else {
+      VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixGros,montant_ligne:qte*prixGros,type_prix:'gros'});
+      document.getElementById('vt_qte').value='';
+      renderLignesVente();
+      return;
+    }
+  }
 
-  document.getElementById('bj-bilan').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-      <div style="padding:12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px">
-        <div style="color:var(--textm);font-size:10px;text-transform:uppercase;margin-bottom:4px">Total recettes</div>
-        <div style="font-family:'DM Mono',monospace;font-size:20px;color:var(--green)">${fmt(caJour)} F</div>
-      </div>
-      <div style="padding:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px">
-        <div style="color:var(--textm);font-size:10px;text-transform:uppercase;margin-bottom:4px">Total dépenses</div>
-        <div style="font-family:'DM Mono',monospace;font-size:20px;color:var(--red)">${fmt(depJour)} F</div>
-      </div>
-      <div style="padding:12px;background:${bilan>=0?'rgba(22,163,74,.08)':'rgba(239,68,68,.08)'};border:1px solid ${bilan>=0?'rgba(22,163,74,.3)':'rgba(239,68,68,.3)'};border-radius:8px;grid-column:1/-1">
-        <div style="color:var(--textm);font-size:10px;text-transform:uppercase;margin-bottom:4px">${bilan>=0?'Bénéfice net du jour':'Perte du jour'}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:700;color:${bilan>=0?'var(--gold)':'var(--red)'}">${fmt(bilan)} FCFA</div>
-        ${impaye>0?`<div style="font-size:11px;color:var(--red);margin-top:6px">⚠ ${fmt(impaye)} F impayés non compris</div>`:''}
-      </div>
-      ${l.length?`<div style="padding:12px;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.15);border-radius:8px;grid-column:1/-1">
-        <div style="color:var(--textm);font-size:10px;text-transform:uppercase;margin-bottom:8px">🏭 Lots produits (${l.length})</div>
-        ${l.map(x=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)">
-          <span>${ESPECE_ICON[x.espece]||''} ${x.formule_nom}</span>
-          <span style="color:var(--g6);font-weight:700">${fmt(x.qte_produite)} kg</span>
-        </div>`).join('')}
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;font-weight:700">
-          <span>TOTAL PRODUIT</span><span style="color:var(--g6)">${fmt(prodJour)} kg</span>
+  VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,montant_ligne:qte*prixUnit,type_prix:typePrix});
+  document.getElementById('vt_qte').value='';
+  err.textContent='';
+  renderLignesVente();
+}
+
+async function supprimerLigneVente(idx){
+  VT_LIGNES.splice(idx,1);
+  renderLignesVente();
+}
+
+async function renderLignesVente(){
+  const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  const container=document.getElementById('vt-lignes-preview');
+  if(!container)return;
+  container.innerHTML=VT_LIGNES.length?`<table class="tbl" style="font-size:11px;margin-top:8px">
+      <thead><tr><th>Produit</th><th class="num">Qté</th><th class="num">Prix unit.</th><th class="num">Montant</th><th></th></tr></thead>
+      <tbody>
+      ${VT_LIGNES.map((l,i)=>`<tr>
+        <td style="font-weight:600">${l.formule_nom}
+          <span class="badge ${l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_prix}</span>
+        </td>
+        <td class="num">${l.quantite}</td>
+        <td class="num">${fmt(l.prix_unitaire)} F</td>
+        <td class="num" style="color:var(--gold)">${fmt(l.montant_ligne)} F</td>
+        <td><button class="btn btn-red btn-sm" onclick="supprimerLigneVente(${i})">✕</button></td>
+      </tr>`).join('')}
+      <tr style="font-weight:700">
+        <td colspan="3">TOTAL</td>
+        <td class="num" style="color:var(--gold)">${fmt(total)} F</td>
+        <td></td>
+      </tr>
+      </tbody>
+    </table>`:'';
+}
+
+async function onClientChange(){
+  const val=document.getElementById('vt_client').value;
+  document.getElementById('vt-nouveau-client').style.display=val==='__nouveau__'?'block':'none';
+}
+
+async function checkPendingRemises(){
+  if(GP_ROLE!=='admin')return;
+  const{data}=await SB.from('gp_remises_attente').select('*').eq('admin_id',GP_ADMIN_ID).eq('statut','attente');
+  const n=(data||[]).length;
+  const badge=document.getElementById('notif-remises');
+  if(n>0){badge.classList.remove('hidden');badge.textContent=n;}
+  else badge.classList.add('hidden');
+}
+
+async function renderRemises(){
+  const{data}=await SB.from('gp_remises_attente').select('*').eq('admin_id',GP_ADMIN_ID).eq('statut','attente').order('created_at',{ascending:false});
+  const R=data||[];
+  document.getElementById('remises-liste').innerHTML=R.length?R.map(r=>`
+    <div class="card" style="border-left:3px solid var(--gold)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-weight:700;font-size:13px">${r.client_nom||'—'}</div>
+          <div style="font-size:11px;color:var(--textm);margin-top:2px">${r.formule_nom||'—'} · ${fmtKg(r.qte)} kg</div>
+          <div style="margin-top:6px;font-size:12px">
+            Prix : <strong>${fmt(r.prix_base)} F/kg</strong> · Remise : <strong style="color:var(--red)">${fmt(r.remise)} F</strong>
+            (${r.qte*r.prix_base>0?(r.remise/(r.qte*r.prix_base)*100).toFixed(1):0}%)
+          </div>
+          <div style="font-size:11px;color:var(--textm)">Total demandé : ${fmt(r.qte*r.prix_base-r.remise)} F</div>
         </div>
-      </div>`:''}
-    </div>
-    <div style="margin-top:12px">
-      <button class="btn btn-print no-print" onclick="imprimerRapportJour('${date}','${dateAff}',${caJour},${depJour},${impaye},${prodJour},${bilan})" style="width:100%;justify-content:center">
-        🖨️ Imprimer le rapport du jour
-      </button>
-    </div>`;
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g btn-sm" onclick="validerRemise('${r.id}','validee')">✅ Valider</button>
+          <button class="btn btn-red btn-sm" onclick="validerRemise('${r.id}','refusee')">❌ Refuser</button>
+        </div>
+      </div>
+    </div>`).join(''):'<div class="card" style="text-align:center;color:var(--textm);font-size:13px;padding:20px">✅ Aucune remise en attente.</div>';
+}
+
+async function validerRemise(id,statut){
+  await SB.from('gp_remises_attente').update({statut}).eq('id',id);
+  notify(statut==='validee'?'Remise validée ✓':'Remise refusée',statut==='validee'?'gold':'r');
+  renderRemises();checkPendingRemises();
 }
 
 function imprimerRapportJour(date, dateAff, ca, dep, impaye, prod, bilan){
@@ -581,147 +548,3 @@ function imprimerRapportJour(date, dateAff, ca, dep, impaye, prod, bilan){
   w.document.close();
 }
 
-// ── REMISES ────────────────────────────────────────
-async function checkPendingRemises(){
-  if(GP_ROLE!=='admin')return;
-  const{data}=await SB.from('gp_remises_attente').select('*').eq('admin_id',GP_ADMIN_ID).eq('statut','attente');
-  const n=(data||[]).length;
-  const badge=document.getElementById('notif-remises');
-  if(n>0){badge.classList.remove('hidden');badge.textContent=n;}
-  else badge.classList.add('hidden');
-}
-async function renderRemises(){
-  const{data}=await SB.from('gp_remises_attente').select('*').eq('admin_id',GP_ADMIN_ID).eq('statut','attente').order('created_at',{ascending:false});
-  const R=data||[];
-  document.getElementById('remises-liste').innerHTML=R.length?R.map(r=>`
-    <div class="card" style="border-left:3px solid var(--gold)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-weight:700;font-size:13px">${r.client_nom||'—'}</div>
-          <div style="font-size:11px;color:var(--textm);margin-top:2px">${r.formule_nom||'—'} · ${fmtKg(r.qte)} kg</div>
-          <div style="margin-top:6px;font-size:12px">
-            Prix : <strong>${fmt(r.prix_base)} F/kg</strong> · Remise : <strong style="color:var(--red)">${fmt(r.remise)} F</strong>
-            (${r.qte*r.prix_base>0?(r.remise/(r.qte*r.prix_base)*100).toFixed(1):0}%)
-          </div>
-          <div style="font-size:11px;color:var(--textm)">Total demandé : ${fmt(r.qte*r.prix_base-r.remise)} F</div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-g btn-sm" onclick="validerRemise('${r.id}','validee')">✅ Valider</button>
-          <button class="btn btn-red btn-sm" onclick="validerRemise('${r.id}','refusee')">❌ Refuser</button>
-        </div>
-      </div>
-    </div>`).join(''):'<div class="card" style="text-align:center;color:var(--textm);font-size:13px;padding:20px">✅ Aucune remise en attente.</div>';
-}
-async function validerRemise(id,statut){
-  await SB.from('gp_remises_attente').update({statut}).eq('id',id);
-  notify(statut==='validee'?'Remise validée ✓':'Remise refusée',statut==='validee'?'gold':'r');
-  renderRemises();checkPendingRemises();
-}
-// ── LIGNES DE VENTE ───────────────────────────────
-let VT_LIGNES = [];
-
-function ajouterLigneVente(){
-  const formule=document.getElementById('vt_formule')?.value;
-  const qte=+document.getElementById('vt_qte')?.value||0;
-  const clientId=document.getElementById('vt_client')?.value;
-  const client=GP_CLIENTS.find(c=>c.id===clientId);
-  const typeClient=client?.type_client||'detail';
-  const err=document.getElementById('vt_err');
-
-  if(!formule||!qte){err.textContent='Sélectionnez un produit et une quantité.';return;}
-
-  // Déterminer le prix selon type client
-  const prixGros=GP_PRIX_GROS?.[formule]||0;
-  const prixDetail=GP_PRIX?.[formule]||0;
-  // Si pas de prix gros défini, utiliser prix détail comme fallback
-  const typePrix=(typeClient==='gros'&&prixGros>0)?'gros':'detail';
-  const prixUnit=typePrix==='gros'?prixGros:prixDetail;
-
-  // Alerte si quantité grosse mais type détail
-  const seuilGros=10; // à rendre configurable
-  if(qte>=seuilGros&&typePrix==='detail'&&prixGros>0){
-    if(!confirm(`Ce client achète ${qte} sacs. Voulez-vous appliquer le prix gros (${fmt(prixGros)} F) ?`)){
-      // garder détail
-    } else {
-      VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixGros,montant_ligne:qte*prixGros,type_prix:'gros'});
-      document.getElementById('vt_qte').value='';
-      renderLignesVente();
-      return;
-    }
-  }
-
-  VT_LIGNES.push({formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,montant_ligne:qte*prixUnit,type_prix:typePrix});
-  document.getElementById('vt_qte').value='';
-  err.textContent='';
-  renderLignesVente();
-}
-
-function supprimerLigneVente(idx){
-  VT_LIGNES.splice(idx,1);
-  renderLignesVente();
-}
-
-function renderLignesVente(){
-  const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
-  const container=document.getElementById('vt-lignes-preview');
-  if(!container)return;
-  container.innerHTML=VT_LIGNES.length?`<table class="tbl" style="font-size:11px;margin-top:8px">
-      <thead><tr><th>Produit</th><th class="num">Qté</th><th class="num">Prix unit.</th><th class="num">Montant</th><th></th></tr></thead>
-      <tbody>
-      ${VT_LIGNES.map((l,i)=>`<tr>
-        <td style="font-weight:600">${l.formule_nom}
-          <span class="badge ${l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_prix}</span>
-        </td>
-        <td class="num">${l.quantite}</td>
-        <td class="num">${fmt(l.prix_unitaire)} F</td>
-        <td class="num" style="color:var(--gold)">${fmt(l.montant_ligne)} F</td>
-        <td><button class="btn btn-red btn-sm" onclick="supprimerLigneVente(${i})">✕</button></td>
-      </tr>`).join('')}
-      <tr style="font-weight:700">
-        <td colspan="3">TOTAL</td>
-        <td class="num" style="color:var(--gold)">${fmt(total)} F</td>
-        <td></td>
-      </tr>
-      </tbody>
-    </table>`:'';
-}
-
-// Recherche client par téléphone
-function rechercherClientTel(){
-  const search=(document.getElementById('vt_tel_search')?.value||'').toLowerCase();
-  const results=document.getElementById('vt_client_results');
-  if(!results)return;
-  if(search.length<2){results.style.display='none';return;}
-  const found=GP_CLIENTS.filter(c=>
-    (c.telephone||'').toLowerCase().includes(search)||
-    (c.nom||'').toLowerCase().includes(search)
-  ).slice(0,6);
-  if(!found.length){results.style.display='none';return;}
-  results.style.display='block';
-  results.innerHTML=found.map(c=>`
-    <div onclick="selectionnerClientVente('${c.id}')"
-      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
-      onmouseover="this.style.background='rgba(22,163,74,.1)'"
-      onmouseout="this.style.background=''">
-      <div style="font-weight:600">${c.nom}
-        <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${c.type_client==='gros'?'GROSSISTE':'DÉTAILLANT'}</span>
-      </div>
-      <div style="font-size:10px;color:var(--textm)">${c.telephone||'—'}</div>
-    </div>`).join('');
-}
-
-function selectionnerClientVente(id){
-  const c=GP_CLIENTS.find(x=>x.id===id);
-  if(!c)return;
-  document.getElementById('vt_client').value=id;
-  document.getElementById('vt_tel_search').value=c.nom+(c.telephone?' — '+c.telephone:'');
-  document.getElementById('vt_client_results').style.display='none';
-  // Appliquer prix selon badge client
-  notify(c.type_client==='gros'?'Client GROSSISTE — prix gros appliqué':'Client DÉTAILLANT — prix détail appliqué','gold');
-}
-
-document.addEventListener('click',function(e){
-  const res=document.getElementById('vt_client_results');
-  const inp=document.getElementById('vt_tel_search');
-  if(res&&inp&&!res.contains(e.target)&&!inp.contains(e.target)) res.style.display='none';
-});
