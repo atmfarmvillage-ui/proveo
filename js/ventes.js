@@ -365,28 +365,41 @@ async function deleteDep(id){
   renderDep();notify('Dépense supprimée','r');
 }
 
-// Appelé automatiquement quand quantité ou prix changent
-function mettreAJourLigneVente(){
+function mettreAJourLigneVente(){} // stub — mise à jour manuelle uniquement
+
+function ajouterLigneVente(){
   const formule=document.getElementById('vt_formule')?.value;
-  if(!formule)return;
+  const err=document.getElementById('vt_err');
+  if(!formule){err.textContent='Sélectionnez une formule.';return;}
+
   const cond=document.getElementById('vt_poids_sac')?.value||'kg';
   const nbSacs=cond!=='kg'?+document.getElementById('vt_nb_sacs')?.value||0:0;
   let qte=+document.getElementById('vt_qte')?.value||0;
-  if(cond!=='kg'&&nbSacs>0)qte=nbSacs*+cond;
-  const prixUnit=+document.getElementById('vt_prix')?.value||0;
-  if(!qte||!prixUnit)return;
-  // Mettre à jour ou ajouter la ligne de cette formule
+  if(cond!=='kg'&&nbSacs>0&&qte===0)qte=nbSacs*+cond;
+  if(!qte||qte<=0){err.textContent='Entrez une quantité.';return;}
+
+  let prixUnit=+document.getElementById('vt_prix')?.value||0;
+  if(!prixUnit){err.textContent='Le prix/kg est requis.';return;}
+
+  // Si la même formule existe déjà — mise à jour
   const idx=VT_LIGNES.findIndex(l=>l.formule_nom===formule);
   const ligne={formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,
     montant_ligne:Math.round(qte*prixUnit),conditionnement:cond,nb_sacs:nbSacs};
-  if(idx>=0)VT_LIGNES[idx]=ligne;
-  else VT_LIGNES.push(ligne);
+  if(idx>=0){
+    VT_LIGNES[idx]=ligne;
+    notify('Ligne mise à jour ✓','gold');
+  } else {
+    VT_LIGNES.push(ligne);
+  }
+
+  // Reset champs produit pour ajouter un autre
+  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('vt_formule').value='';
+  const fs=document.getElementById('vt_formule_search');if(fs)fs.value='';
+  err.textContent='';
   calcVente();
   renderLignesVente();
 }
-
-// Garder ajouterLigneVente pour compatibilité mais appeler mettreAJourLigneVente
-function ajouterLigneVente(){mettreAJourLigneVente();}
 
 async function supprimerLigneVente(idx){
   VT_LIGNES.splice(idx,1);
