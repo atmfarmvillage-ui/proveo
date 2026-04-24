@@ -590,3 +590,69 @@ function onConditionnementChange(){
   }
   calcVente();
 }
+
+// ── VENTES — ACTIONS ────────────────────────────
+async function supprimerVente(id){
+  if(!confirm('Supprimer cette vente ? Cette action est irréversible.'))return;
+  const{error}=await SB.from('gp_ventes').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){notify('Erreur suppression: '+error.message,'r');return;}
+  await SB.from('gp_ventes_lignes').delete().eq('vente_id',id);
+  renderVentes();notify('Vente supprimée ✓','r');
+}
+
+async function ouvrirModifierVente(id){
+  const{data:v}=await SB.from('gp_ventes').select('*').eq('id',id).maybeSingle();
+  if(!v)return;
+  const modal=document.getElementById('modal-modifier-vente');
+  if(!modal)return;
+  document.getElementById('mv-id').value=id;
+  document.getElementById('mv-client').textContent=v.client_nom||'Client comptant';
+  document.getElementById('mv-total').textContent=fmt(v.montant_total||0)+' F';
+  document.getElementById('mv-paye').value=v.montant_paye||0;
+  document.getElementById('mv-note').value=v.note||'';
+  document.getElementById('mv-date').value=v.date||'';
+  modal.style.display='flex';
+}
+
+function fermerModifierVente(){
+  document.getElementById('modal-modifier-vente').style.display='none';
+}
+
+async function saveModifierVente(){
+  const id=document.getElementById('mv-id').value;
+  const paye=+document.getElementById('mv-paye').value||0;
+  const note=document.getElementById('mv-note').value.trim()||null;
+  const date=document.getElementById('mv-date').value;
+  const{data:v}=await SB.from('gp_ventes').select('montant_total').eq('id',id).maybeSingle();
+  const total=Number(v?.montant_total||0);
+  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+  const{error}=await SB.from('gp_ventes').update({
+    montant_paye:paye,statut_paiement:statut,note,date
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){notify('Erreur: '+error.message,'r');return;}
+  fermerModifierVente();renderVentes();
+  notify('Vente modifiée ✓','gold');
+}
+
+async function envoyerWAVente(id){
+  const{data:v}=await SB.from('gp_ventes').select('*').eq('id',id).maybeSingle();
+  if(!v)return;
+  const{data:lignes}=await SB.from('gp_ventes_lignes').select('*').eq('vente_id',id);
+  const client=GP_CLIENTS.find(c=>c.id===v.client_id);
+  const tel=client?.whatsapp||client?.telephone||'';
+  const total=Number(v.montant_total||0);
+  const paye=Number(v.montant_paye||0);
+  const reste=Math.max(0,total-paye);
+  const prov=GP_CONFIG?.nom_provenderie||'PROVENDA';
+  const produitsLine=(lignes||[]).map(l=>`   • ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = ${fmt(l.montant_ligne)} F`).join('\n');
+  const msg=reste>0
+    ? `Bonjour ${v.client_nom||'cher client'} 👋\n\nNous vous rappelons qu'un solde est en attente pour votre achat du *${v.date}* auprès de *${prov}*.\n\n🛒 *Commande :*\n${produitsLine}\n\n💰 Total : ${fmt(total)} F\n✅ Payé : ${fmt(paye)} F\n⏳ *Reste dû : ${fmt(reste)} F*\n\nMerci pour votre fidélité ! 🙏\n\n_${prov}_`
+    : `Bonjour ${v.client_nom||'cher client'} 😊\n\nMerci pour votre achat du *${v.date}* auprès de *${prov}*.\n\n🛒 *Commande soldée :*\n${produitsLine}\n\n✅ *Total payé : ${fmt(total)} F*\n\nVotre confiance est notre plus belle récompense. À très bientôt ! 🌾\n\n_${prov}_`;
+
+  if(tel){
+    const p=detecterPays(tel);
+    if(p.numero_whatsapp){window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');return;}
+  }
+  const num=prompt('Numéro WhatsApp du client :');
+  if(num){const p=detecterPays(num.trim());if(p.numero_whatsapp)window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');}
+}
