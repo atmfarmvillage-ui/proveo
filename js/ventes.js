@@ -272,6 +272,10 @@ async function saveVente(){
   err.textContent='';
   if(paye>0) imprimerRecuThermique(vente.id);
   notify('Vente enregistrée ✓','gold');
+  // Push automatique si client a tout payé
+  if(statut==='paye'&&clientId&&clientId!=='__nouveau__'){
+    setTimeout(()=>envoyerWAVenteAuto(vente.id,client,lignes_a_insert,total,total),1000);
+  }
   // Bouton reçu thermique
   if(typeof imprimerRecuThermique==='function'){
     const btnR=document.createElement('button');
@@ -305,9 +309,13 @@ async function renderVentes(){
       <td class="num">${fmtKg(v.qte_vendue)}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(v.montant_total)} F</td>`:''}
       <td><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}">${v.statut_paiement==='paye'?'✅':'⚠'}</span></td>
-      <td style="display:flex;gap:4px">
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-out btn-sm" onclick="envoyerWAVente('${v.id}')" title="WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3);padding:4px 7px">📲</button>
         <button class="btn btn-print btn-sm" onclick="imprimerVente('${encodeURIComponent(JSON.stringify(v))}')">🖨️</button>
-        <button class="btn btn-red btn-sm" onclick="deleteVente('${v.id}')">✕</button>
+        ${GP_ROLE==='admin'?`
+          <button class="btn btn-out btn-sm" onclick="ouvrirModifierVente('${v.id}')" title="Modifier" style="padding:4px 7px">✏️</button>
+          <button class="btn btn-red btn-sm" onclick="supprimerVente('${v.id}')" style="padding:4px 7px">✕</button>
+        `:''}
       </td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
 }
@@ -638,16 +646,38 @@ async function envoyerWAVente(id){
   const{data:v}=await SB.from('gp_ventes').select('*').eq('id',id).maybeSingle();
   if(!v)return;
   const{data:lignes}=await SB.from('gp_ventes_lignes').select('*').eq('vente_id',id);
+  // Historique client pour personnalisation
+  const{data:historique}=await SB.from('gp_ventes').select('montant_total,date,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',v.client_id||'').order('date',{ascending:false}).limit(10);
+
   const client=GP_CLIENTS.find(c=>c.id===v.client_id);
   const tel=client?.whatsapp||client?.telephone||'';
   const total=Number(v.montant_total||0);
   const paye=Number(v.montant_paye||0);
   const reste=Math.max(0,total-paye);
   const prov=GP_CONFIG?.nom_provenderie||'PROVENDA';
-  const produitsLine=(lignes||[]).map(l=>`   • ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = ${fmt(l.montant_ligne)} F`).join('\n');
+  const H=historique||[];
+  const nbAchats=H.length;
+  const totalHistorique=H.reduce((s,x)=>s+Number(x.montant_total||0),0);
+  const localite=client?.localite||'';
+
+  // Détails produits
+  const L=lignes||[];
+  const produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+
+  // Espèce principale achetée pour personnaliser
+  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const formuleStr=L.map(l=>l.formule_nom).join(', ');
+  const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
+
+  // Segment client
+  const estFidele=nbAchats>=5;
+  const estGrosClient=totalHistorique>=500000;
+  const estNouveauClient=nbAchats<=1;
+
   const msg=reste>0
-    ? `Bonjour ${v.client_nom||'cher client'} 👋\n\nNous vous rappelons qu'un solde est en attente pour votre achat du *${v.date}* auprès de *${prov}*.\n\n🛒 *Commande :*\n${produitsLine}\n\n💰 Total : ${fmt(total)} F\n✅ Payé : ${fmt(paye)} F\n⏳ *Reste dû : ${fmt(reste)} F*\n\nMerci pour votre fidélité ! 🙏\n\n_${prov}_`
-    : `Bonjour ${v.client_nom||'cher client'} 😊\n\nMerci pour votre achat du *${v.date}* auprès de *${prov}*.\n\n🛒 *Commande soldée :*\n${produitsLine}\n\n✅ *Total payé : ${fmt(total)} F*\n\nVotre confiance est notre plus belle récompense. À très bientôt ! 🌾\n\n_${prov}_`;
+    ? construireMessageRappelDette(v,produitsLine,total,paye,reste,prov,localite,nbAchats,especeIcon,estFidele)
+    : construireMessageRemerciement(v,produitsLine,total,prov,localite,nbAchats,totalHistorique,especeIcon,estFidele,estGrosClient,estNouveauClient);
 
   if(tel){
     const p=detecterPays(tel);
@@ -655,4 +685,92 @@ async function envoyerWAVente(id){
   }
   const num=prompt('Numéro WhatsApp du client :');
   if(num){const p=detecterPays(num.trim());if(p.numero_whatsapp)window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');}
+}
+
+function construireMessageRappelDette(v,produitsLine,total,paye,reste,prov,localite,nbAchats,especeIcon,estFidele){
+  const nom=v.client_nom||'cher client';
+  const r=Math.floor(Math.random()*10);
+  const templates=[
+    ()=>`Bonjour ${nom} 👋\n\nNous espérons que vous allez bien${localite?' à '+localite:''}. Nous nous permettons de vous rappeler avec tout le respect que nous vous devons qu'un solde est en attente pour votre commande du *${v.date}*.\n\n🛒 *Commande :*\n${produitsLine}\n\n💰 Total : ${fmt(total)} F\n✅ Payé : ${fmt(paye)} F\n⏳ *Reste dû : ${fmt(reste)} F*\n\nNous restons disponibles pour tout arrangement. Votre confiance compte beaucoup pour nous. 🙏\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom}, bonjour ! 🌟\n\nEn tant que client${estFidele?' fidèle':''} de *${prov}*, vous avez toujours notre entière confiance. Nous vous informons simplement qu'un règlement est en attente depuis le *${v.date}*.\n\n🛒 *Détail :*\n${produitsLine}\n\n💰 Total : ${fmt(total)} F | ✅ Payé : ${fmt(paye)} F | ⏳ Reste : *${fmt(reste)} F*\n\nNous sommes convaincus qu'il s'agit d'un oubli. Merci de régulariser à votre prochaine opportunité. 💪\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`Cher(e) partenaire ${nom} 😊\n\nNous espérons que vos ${especeIcon} se portent à merveille${localite?' à '+localite:''}. Un petit rappel amical : votre commande du *${v.date}* présente encore un solde en attente.\n\n🛒 *Récapitulatif :*\n${produitsLine}\n\n⏳ *Solde restant : ${fmt(reste)} F* (sur ${fmt(total)} F)\n\nN'hésitez pas à nous contacter pour convenir d'un arrangement. Nous sommes là pour vous ! 🤝\n\n_${prov}_ 🌾`,
+
+    ()=>`Bonsoir ${nom} ✨\n\nNous prenons le temps de vous écrire pour un rappel de paiement concernant votre achat du *${v.date}* chez *${prov}*.\n\n📦 *Produits concernés :*\n${produitsLine}\n\n💵 Montant total : ${fmt(total)} F\n✅ Déjà réglé : ${fmt(paye)} F\n🔴 *Balance : ${fmt(reste)} F*\n\nMerci de votre diligence. Votre sérieux est ce qui fait la force de notre partenariat. 🙏\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom}, bonjour 👋\n\nNotre équipe${localite?' de '+localite:''} vous adresse ce message pour vous rappeler un solde en attente du *${v.date}*.\n\n🛒 *Votre commande :*\n${produitsLine}\n\n💰 Reste à payer : *${fmt(reste)} F*\n(Total : ${fmt(total)} F — Payé : ${fmt(paye)} F)\n\nNous vous remercions d'avance pour votre prompte réponse. Votre fidélité à *${prov}* est très appréciée ! 🌱\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`Bonjour ${nom} ! 🌾\n\nC'est avec toute la bienveillance qui nous caractérise que nous vous rappelons le règlement en attente pour votre achat du *${v.date}*.\n\n📋 *Détails de la commande :*\n${produitsLine}\n\n⏳ *Solde dû : ${fmt(reste)} F*\n\n${estFidele?`Après ${nbAchats} commandes ensemble, nous savons que vous êtes quelqu'un de sérieux. Nous comptons sur vous !`:'Nous vous faisons confiance pour régulariser rapidement. Merci !'} 💪\n\n_${prov}_ 🌾`,
+
+    ()=>`Cher ${nom} 😊\n\nNous espérons que tout va bien${localite?' à '+localite:''}. Un petit mot pour vous informer qu'un solde de *${fmt(reste)} F* reste en attente depuis votre commande du *${v.date}* chez *${prov}*.\n\n🛒 *Ce que vous avez pris :*\n${produitsLine}\n\nToute notre équipe reste à votre disposition pour faciliter ce règlement. Merci pour votre compréhension et votre fidélité ! 🤝\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom} 👋 Bonjour !\n\nVoici un rappel amical de votre solde en attente du *${v.date}* :\n\n${produitsLine}\n\n💰 *${fmt(reste)} F restant à régler* sur un total de ${fmt(total)} F.\n\nNous apprécions vraiment notre collaboration${localite?' à '+localite:''}. Votre prochain passage sera l'occasion idéale pour solder. À très bientôt ! 🌟\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`Bonjour à vous, ${nom} ! ☀️\n\nNous revenons vers vous concernant votre commande du *${v.date}* pour laquelle un montant de *${fmt(reste)} F* est encore attendu.\n\n📦 *Produits :*\n${produitsLine}\n\nNous vous faisons entièrement confiance pour régulariser cette situation. Notre porte est toujours ouverte pour vous. 🏠\n\n_${prov}_ 🌱`,
+
+    ()=>`${nom}, bonsoir ! 🌙\n\nPetit rappel de notre part : votre achat du *${v.date}* chez *${prov}* présente un solde de *${fmt(reste)} F*.\n\n🛒 *Commande concernée :*\n${produitsLine}\n\n${estFidele?`Avec toutes vos commandes chez nous, vous avez toujours été exemplaire. Nous savons que vous régulariserez très prochainement.`:'Nous vous remercions par avance et attendons votre retour.'} 🙏\n\n_${prov}_ ${especeIcon}`,
+  ];
+  return templates[r]();
+}
+
+function construireMessageRemerciement(v,produitsLine,total,prov,localite,nbAchats,totalHistorique,especeIcon,estFidele,estGrosClient,estNouveauClient){
+  const nom=v.client_nom||'cher client';
+  const r=Math.floor(Math.random()*10);
+
+  const statut=estNouveauClient
+    ? `Nous sommes ravis de vous compter parmi nos clients pour la première fois${localite?' à '+localite:''}. C'est le début d'une belle collaboration ! 🎉`
+    : estFidele&&estGrosClient
+    ? `Avec *${nbAchats} commandes* et *${fmt(totalHistorique)} F* d'achats cumulés, vous êtes l'un de nos partenaires les plus précieux. Votre fidélité est une source de motivation pour toute notre équipe ! 🏆`
+    : estFidele
+    ? `Avec *${nbAchats} commandes* passées chez *${prov}*, vous faites partie de nos clients fidèles${localite?' à '+localite:''}. Votre loyauté nous touche profondément ! 💚`
+    : `C'est toujours un plaisir de vous servir${localite?' à '+localite:''}. Merci pour la confiance que vous placez en *${prov}* ! 🙏`;
+
+  const produitNote=especeIcon!=='🌾'
+    ? `Nous souhaitons à vos animaux ${especeIcon} une excellente croissance et de belles performances !`
+    : `Nous espérons que nos produits vous donnent entière satisfaction et contribuent à la réussite de votre élevage !`;
+
+  const templates=[
+    ()=>`Bonjour ${nom} 😊\n\nNous vous confirmons la bonne réception de votre paiement pour la commande du *${v.date}*.\n\n🛒 *Commande intégralement réglée :*\n${produitsLine}\n\n✅ *Total payé : ${fmt(total)} F*\n\n${statut}\n\n${produitNote}\n\nÀ très bientôt ! 🌾\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom}, merci à vous ! 🌟\n\nVotre paiement du *${v.date}* a bien été enregistré dans nos livres.\n\n🛒 *Récapitulatif :*\n${produitsLine}\n\n✅ *${fmt(total)} F — SOLDÉ*\n\n${statut}\n\n${produitNote}\n\nNous sommes toujours là pour vous servir. 💪\n\n_${prov}_ 🌱`,
+
+    ()=>`Cher(e) ${nom} 💚\n\nQuelle belle journée ! Votre commande du *${v.date}* est désormais entièrement soldée. 🎉\n\n📦 *Produits livrés et payés :*\n${produitsLine}\n\n✅ *${fmt(total)} F — MERCI !*\n\n${statut}\n\n${produitNote}\n\nQue vos élevages prospèrent ! ${especeIcon}\n\n_${prov}_ 🌾`,
+
+    ()=>`Bonsoir ${nom} ! ✨\n\nNous avons bien reçu votre règlement de *${fmt(total)} F* pour la commande du *${v.date}*. Merci !\n\n🛒 *Votre commande :*\n${produitsLine}\n\n${statut}\n\n${produitNote}\n\nN'hésitez pas à nous contacter pour vos prochains besoins. À bientôt ! 😊\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom} 👋 Bonjour !\n\nC'est avec beaucoup de plaisir que nous accusons réception de votre paiement du *${v.date}*.\n\n🛒 *Ce que vous avez acquis :*\n${produitsLine}\n\n💰 *${fmt(total)} F — INTÉGRALEMENT PAYÉ* ✅\n\n${statut}\n\n${produitNote}\n\nVotre confiance est notre meilleure récompense. Merci ! 🙏\n\n_${prov}_ 🌱`,
+
+    ()=>`Bonjour ${nom} ! ☀️\n\nMerci pour votre prompte régularisation de la commande du *${v.date}* !\n\n📋 *Détails :*\n${produitsLine}\n\n✅ *Total réglé : ${fmt(total)} F*\n\n${statut}\n\n${produitNote}\n\nNous espérons vous revoir très bientôt avec de nouvelles commandes. 💚\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom}, bonsoir ! 🌙\n\nNotre équipe vous remercie chaleureusement pour le règlement de *${fmt(total)} F* correspondant à votre commande du *${v.date}*.\n\n🛒 *Produits :*\n${produitsLine}\n\n${statut}\n\n${produitNote}\n\nC'est un honneur de vous compter parmi nos clients. À la prochaine ! 🌟\n\n_${prov}_ 🌾`,
+
+    ()=>`Cher ${nom} 🌺\n\nNous prenons le temps de vous remercier personnellement pour votre paiement du *${v.date}*.\n\n🛒 *Commande soldée :*\n${produitsLine}\n\n✅ *${fmt(total)} F payés — MERCI !*\n\n${statut}\n\n${produitNote}\n\nVotre partenariat avec *${prov}* est précieux. À très bientôt ! 💛\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`Bonjour ${nom} ! 🎊\n\nExcellente nouvelle : votre commande du *${v.date}* est entièrement soldée !\n\n📦 *Récapitulatif :*\n${produitsLine}\n\n✅ *Total payé : ${fmt(total)} F*\n\n${statut}\n\n${produitNote}\n\nNous vous souhaitons une excellente continuation. Revenez nous voir bientôt ! 🌾\n\n_${prov}_ ${especeIcon}`,
+
+    ()=>`${nom} 🌟 Bonjour !\n\nUn grand MERCI pour votre fidélité et votre sérieux. Votre règlement de *${fmt(total)} F* du *${v.date}* a bien été enregistré.\n\n🛒 *Ce que vous avez acheté :*\n${produitsLine}\n\n${statut}\n\n${produitNote}\n\nNous sommes fiers de vous compter parmi les partenaires de *${prov}*. À bientôt ! 💪\n\n_${prov}_ ${especeIcon}`,
+  ];
+  return templates[r]();
+}
+
+// ── PUSH AUTO APRÈS VENTE SOLDÉE ─────────────────
+async function envoyerWAVenteAuto(venteId,client,lignes,total,paye){
+  if(!client)return;
+  const tel=client.whatsapp||client.telephone||'';
+  if(!tel)return; // Pas de numéro → pas d'envoi auto
+  const{data:lignesDB}=await SB.from('gp_ventes_lignes').select('*').eq('vente_id',venteId);
+  const L=lignesDB||lignes||[];
+  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const formuleStr=L.map(l=>l.formule_nom).join(', ');
+  const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
+  const produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  const{data:histo}=await SB.from('gp_ventes').select('montant_total').eq('admin_id',GP_ADMIN_ID).eq('client_id',client.id);
+  const nbAchats=(histo||[]).length;
+  const totalHisto=(histo||[]).reduce((s,x)=>s+Number(x.montant_total||0),0);
+  const v={client_nom:client.nom,date:today()};
+  const msg=construireMessageRemerciement(v,produitsLine,total,GP_CONFIG?.nom_provenderie||'PROVENDA',
+    client.localite||'',nbAchats,totalHisto,especeIcon,nbAchats>=5,totalHisto>=500000,nbAchats<=1);
+  const p=detecterPays(tel);
+  if(p.numero_whatsapp)window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');
 }
