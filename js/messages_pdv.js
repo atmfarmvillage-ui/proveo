@@ -210,7 +210,7 @@ async function preparerMessagesEnvoi(typeHebdo, typeMensuel){
       produit_star:pdv.produit_star||'',
       top_client:pdv.top_client||'',
       progression:pdv.progression||0,
-      mois_label:moisLabel, periode:'',
+      mois_label:moisLabel, periode:mois,
       ecart_leader:rang>1?fmt(statsPDV[0].ca-pdv.ca):'0',
       provenderie:GP_CONFIG?.nom_provenderie||'PROVENDA'
     };
@@ -220,12 +220,23 @@ async function preparerMessagesEnvoi(typeHebdo, typeMensuel){
     if(typeHebdo){
       const numSemaine=getNumSemaine(new Date());
       data.periode=`${new Date().getFullYear()}-W${String(numSemaine).padStart(2,'0')}`;
-      const tpl=TEMPLATES_HEBDO[Math.floor(Math.random()*TEMPLATES_HEBDO.length)];
-      msgText=tpl(data);
+      try{
+        const tpl=TEMPLATES_HEBDO[Math.floor(Math.random()*TEMPLATES_HEBDO.length)];
+        msgText=tpl(data);
+      }catch(e){
+        const resp=data.responsable||'cher responsable';
+        msgText=`Bonjour ${resp} 👋\n\n*Bilan semaine ${data.periode} — ${data.pdv}*\n\n📊 Rang : *${data.rang}/${data.total_pdv}*\n💰 CA : *${data.ca} F*\n📦 ${data.nb_ventes} ventes\n\nMerci ! 🙏\n\n_${data.provenderie}_`;
+      }
     } else {
       data.periode=mois;
-      const tpl=TEMPLATES_MENSUEL[Math.floor(Math.random()*TEMPLATES_MENSUEL.length)];
-      msgText=tpl(data);
+      try{
+        const tpl=TEMPLATES_MENSUEL[Math.floor(Math.random()*TEMPLATES_MENSUEL.length)];
+        msgText=tpl(data);
+      }catch(e){
+        // Fallback si template plante
+        const resp=data.responsable||'cher responsable';
+        msgText=`Bonjour ${resp} 👋\n\n*Bilan mensuel ${data.mois_label} — ${data.pdv}*\n\n🏆 Rang : *${data.rang}/${data.total_pdv}*\n💰 CA : *${data.ca} F*\n📦 ${data.nb_ventes} ventes\n✅ Encaissement : ${data.tx_enc}%\n\nMerci pour votre engagement ! 🙏\n\n_${data.provenderie}_`;
+      }
     }
 
     return{
