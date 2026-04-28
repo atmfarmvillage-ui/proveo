@@ -158,8 +158,11 @@ async function verifierEtEnvoyerMessages(){
       .eq('type_message','mensuel').eq('periode',mois).limit(1)
   ]);
 
-  const doitEnvoyerHebdo=(jourSemaine===5||jourSemaine===6)&&(!msgHebdo||msgHebdo.length===0);
-  const doitEnvoyerMensuel=(jourMois>=28)&&(!msgMensuel||msgMensuel.length===0);
+  // Ne pas afficher si déjà préparé ou envoyé cette période
+  const dejaTraiteHebdo=msgHebdo&&msgHebdo.length>0;
+  const dejaTraiteMensuel=msgMensuel&&msgMensuel.length>0;
+  const doitEnvoyerHebdo=(jourSemaine===5||jourSemaine===6)&&!dejaTraiteHebdo;
+  const doitEnvoyerMensuel=(jourMois>=28)&&!dejaTraiteMensuel;
 
   if(doitEnvoyerHebdo||doitEnvoyerMensuel){
     await preparerMessagesEnvoi(doitEnvoyerHebdo?'hebdo':null, doitEnvoyerMensuel?'mensuel':null);
@@ -283,6 +286,19 @@ function afficherModalMessages(messages){
 
   // Stocker les messages globalement pour accès via data-attributes
   window._msgsPDV=messages;
+  // Marquer comme "préparé" pour cette période dès l'affichage
+  // Évite de réafficher à chaque boot
+  if(messages.length>0){
+    const m0=messages[0];
+    SB.from('gp_messages_pdv').insert({
+      admin_id:GP_ADMIN_ID,
+      pdv_nom:'__systeme__',
+      type_message:m0.type,
+      periode:m0.periode,
+      statut:'prepare',
+      envoye_par:GP_USER?.id
+    }).catch(()=>{});
+  }
   document.getElementById('msg-pdv-liste').innerHTML=messages.map((m,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
     return`<div id="msg-pdv-card-${i}" style="background:rgba(14,20,40,.6);border:1px solid ${m.tel?'rgba(37,211,102,.3)':'rgba(239,68,68,.3)'};border-radius:10px;padding:12px;margin-bottom:8px">
@@ -390,4 +406,15 @@ async function envoyerAvecNumeroData(idx,m,tel){
   await marquerEnvoye(idx,m.pdv,m.rang,m.type,m.periode,m.ca,m.msg);
   const card=document.getElementById('msg-pdv-card-'+idx);
   if(card)card.style.borderColor='rgba(22,163,74,.5)';
+}
+
+// Ajouter colonne statut si manquante
+// (appelé automatiquement)
+async function _initMessagesTable(){
+  try{
+    await SB.from('gp_messages_pdv').select('statut').limit(1);
+  }catch(e){
+    // Colonne manquante — ajouter via SQL
+    console.warn('gp_messages_pdv.statut manquant — à ajouter via SQL');
+  }
 }

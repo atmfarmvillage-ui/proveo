@@ -1,3 +1,22 @@
+# Système
 .DS_Store
+Thumbs.db
 *.log
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (si utilisé plus tard)
 node_modules/
+npm-debug.log
+
+# Variables d'environnement sensibles
+.env
+.env.local
+
+# Fichiers temporaires
+*.tmp
+*.bak

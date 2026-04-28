@@ -67,13 +67,13 @@ async function doSignup(){
         .eq('id',membre.id);
       ok.textContent='✓ Compte créé ! Vous êtes membre de l\'équipe. Connectez-vous.';
     } else {
-      // Nouvel admin — initialiser le trial de 15 jours
+      // Nouvel admin — initialiser le trial de 30 jours
       await SB.from('gp_config').upsert({
         user_id:data.user.id,
         plan:'TRIAL',
         trial_debut:new Date().toISOString(),
         trial_utilise:true,
-        plan_expire_le:new Date(Date.now()+15*24*60*60*1000).toISOString()
+        plan_expire_le:new Date(Date.now()+30*24*60*60*1000).toISOString()
       },{onConflict:'user_id'});
     }
   }
@@ -370,7 +370,7 @@ function verifierLicence(){
   const joursRestants = expiry ? Math.ceil((expiry - now) / 86400000) : 0;
 
   if(joursRestants > 0){
-    // Licence active — afficher bannière si trial et < 5 jours
+    // Licence active — afficher bannière si trial et < 7 jours
     if(plan === 'TRIAL' && joursRestants <= 5){
       afficherBanniereTrial(joursRestants);
     }
@@ -402,7 +402,7 @@ function afficherModalExpire(plan){
       </div>
       <p style="color:#94A3B8;font-size:14px;margin-bottom:24px;line-height:1.6">
         ${estTrial
-          ? 'Vos 15 jours d\'essai gratuit sont écoulés. Abonnez-vous pour continuer à utiliser PROVENDA.'
+          ? 'Vos 30 jours d\'essai gratuit sont écoulés. Contactez-nous pour continuer à utiliser PROVENDA.'
           : 'Votre abonnement PROVENDA est expiré. Renouvelez pour accéder à vos données.'}
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
