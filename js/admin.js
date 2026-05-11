@@ -131,20 +131,7 @@ async function deleteIngredient(id){
 function openNewFormule(){notify('Nouvelle formule — fonctionnalité en développement','gold');}
 
 // ── ÉQUIPE ─────────────────────────────────────────
-
-
-async function deleteMembre(id){
-  if(!confirm('Supprimer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();
-  notify('Membre supprimé','r');
-}
-
-async function deleteMembre(id){
-  if(!confirm('Retirer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  await renderPDV();notify('Membre retiré','r');
-}
+// (deleteMembre est défini plus bas — version unique et complète)
 
 // ── CONFIG ─────────────────────────────────────────
 function applyColor(c){
@@ -278,22 +265,7 @@ function pvBadgeHtml(nom, size='sm'){
   return `<span style="background:${p.bg};color:${p.text};border:1px solid ${p.border};padding:${pad};border-radius:20px;font-size:${fs};font-weight:700;white-space:nowrap">${p.emoji} ${nom}</span>`;
 }
 
-function ouvrirModalEq(pvNom){
-  document.getElementById('modal-eq').style.display='flex';
-  document.getElementById('eq_pv_hidden').value=pvNom||'';
-  document.getElementById('modal-eq-pv-label').innerHTML=pvNom?pvBadgeHtml(pvNom,'lg'):'<span style="font-size:13px;color:var(--textm)">🏭 Siège principal</span>';
-  document.getElementById('eq_nom').value='';
-  document.getElementById('eq_email').value='';
-  document.getElementById('eq_tel').value='';
-  document.getElementById('eq_role').value='secretaire';
-  document.getElementById('eq_err').textContent='';
-  document.getElementById('eq_ok').innerHTML='';
-  setTimeout(()=>document.getElementById('eq_nom').focus(),100);
-}
-function fermerModalEq(){
-  document.getElementById('modal-eq').style.display='none';
-}
-
+// (ouvrirModalEq / fermerModalEq sont définis plus bas — version unique)
 
 function localisermoi(){
   if(!navigator.geolocation){notify('GPS non disponible','r');return;}
@@ -628,12 +600,20 @@ async function saveEquipe(){
   const{data:exist}=await SB.from('gp_membres').select('id').eq('email',email).eq('admin_id',GP_ADMIN_ID);
   if(exist&&exist.length>0){err.textContent='Cet email est déjà dans votre équipe.';return;}
 
+  // Si rôle directeur : valider les champs contrat
+  if(role==='directeur'){
+    const dDebut=document.getElementById('eq_ctr_debut')?.value;
+    const sal=+document.getElementById('eq_ctr_salaire')?.value||0;
+    if(!dDebut){err.textContent='Date de début du contrat requise.';return;}
+    if(!sal){err.textContent='Salaire de base requis.';return;}
+  }
+
   // Générer un code d'invitation à 6 chiffres valide 48h
   const code=String(Math.floor(100000+Math.random()*900000));
   const expiration=new Date(Date.now()+48*60*60*1000).toISOString();
 
   // Enregistrer le membre avec le code
-  const{error}=await SB.from('gp_membres').insert({
+  const{data:membreCree,error}=await SB.from('gp_membres').insert({
     admin_id:GP_ADMIN_ID,
     nom,email,role,
     point_vente:pv,
@@ -641,14 +621,59 @@ async function saveEquipe(){
     code_invitation:code,
     code_expire_le:expiration,
     user_id:null
-  });
+  }).select().single();
   if(error){err.textContent='Erreur: '+error.message;return;}
+
+  // Si rôle directeur : créer le contrat lié
+  if(role==='directeur' && membreCree){
+    const dateFin=document.getElementById('eq_ctr_fin')?.value||null;
+    const objectifs=[];
+    if(document.getElementById('eq_ctr_obj_lapin')?.checked){
+      objectifs.push({
+        libelle:'Doubler ventes aliments lapins',
+        cible:20000,unite:'kg',type:'ventes_kg_espece',
+        espece:'lapin',deadline:dateFin
+      });
+    }
+    if(document.getElementById('eq_ctr_obj_lapins_vifs')?.checked){
+      objectifs.push({
+        libelle:'Vendre 100 lapins par mois',
+        cible:100,unite:'lapins',type:'lapins_vivants_mois',deadline:null
+      });
+    }
+    const{error:errCtr}=await SB.from('gp_contrats').insert({
+      admin_id:GP_ADMIN_ID,
+      membre_id:membreCree.id,
+      nom_complet:nom,
+      poste:document.getElementById('eq_ctr_poste')?.value.trim()||'Directeur de la Stratégie Commerciale',
+      type_contrat:dateFin?'CDD':'CDI',
+      date_debut:document.getElementById('eq_ctr_debut').value,
+      date_fin:dateFin,
+      salaire_base:+document.getElementById('eq_ctr_salaire').value||0,
+      regles_commissions:{
+        lapin_par_tonne:+document.getElementById('eq_ctr_lapin')?.value||0,
+        autres_par_tonne:+document.getElementById('eq_ctr_autres')?.value||0,
+        poisson_par_tonne:+document.getElementById('eq_ctr_poisson')?.value||0,
+        lapin_vivant_unite:+document.getElementById('eq_ctr_lapin_vif')?.value||0
+      },
+      objectifs,
+      rapport_quotidien_obligatoire:document.getElementById('eq_ctr_rapport_obli')?.checked||false,
+      penalite_rapport_manquant:+document.getElementById('eq_ctr_penalite')?.value||0,
+      exempt_dimanche:document.getElementById('eq_ctr_dim_exempt')?.checked!==false,
+      actif:true
+    });
+    if(errCtr){
+      // Le membre a été créé mais le contrat a échoué — informer sans tout annuler
+      err.textContent='Membre créé, mais erreur création contrat : '+errCtr.message;
+      // On continue quand même pour envoyer l'invitation
+    }
+  }
 
   // Envoyer invitation WhatsApp avec le code
   const siteUrl=window.location.origin;
   const paysInfo=detecterPays(tel);
   const telClean=paysInfo.numero_whatsapp;
-  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':'Secrétaire';
+  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
     `Vous êtes invité(e) à rejoindre *${GP_CONFIG?.nom_provenderie||'PROVENDA'}* en tant que *${roleLabel}*`+
@@ -682,12 +707,6 @@ async function saveEquipe(){
   await renderPDV();
 }
 
-async function deleteMembre(id){
-  if(!confirm('Supprimer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();
-  notify('Membre supprimé','r');
-}
 async function toggleMembreActif(id, estActif){
   const action=estActif?'désactiver':'réactiver';
   if(!confirm(`Voulez-vous ${action} ce membre ?`))return;
@@ -828,10 +847,17 @@ function ouvrirModalEq(pvNom){
   document.getElementById('eq_role').value='secretaire';
   document.getElementById('eq_err').textContent='';
   document.getElementById('eq_ok').innerHTML='';
+  toggleContratFields(); // masque la section contrat à l'ouverture
   setTimeout(()=>document.getElementById('eq_nom').focus(),100);
 }
 function fermerModalEq(){
   document.getElementById('modal-eq').style.display='none';
+}
+function toggleContratFields(){
+  const role=document.getElementById('eq_role')?.value;
+  const fields=document.getElementById('eq_contrat_fields');
+  if(!fields)return;
+  fields.style.display=role==='directeur'?'block':'none';
 }
 
 async function renderPDV(){
@@ -924,7 +950,7 @@ function membreCard(m){
       :'<span style="font-size:9px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
 
   // Badge rôle
-  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
+  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='directeur'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
 
   return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">

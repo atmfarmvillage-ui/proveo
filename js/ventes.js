@@ -266,6 +266,7 @@ async function saveVente(){
     }
   }
 
+  const lignes_a_insert=VT_LIGNES.slice();
   VT_LIGNES=[];renderLignesVente();
   ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('vt_client').value='';
@@ -335,7 +336,7 @@ async function updateVentesKPIs(){
 async function renderDep(){
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
-  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
+  if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',finMois(filtMois));
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
