@@ -274,6 +274,12 @@ var PAGE_RENDERERS = {
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
   config:        loadConfigForm,
+  directeur:     function(){
+    const el=document.getElementById('dir-mois');
+    if(el&&!el.value)el.value=thisMonth();
+    showDirecteur();
+  },
+  mes_rapports:  showMesRapports,
 };
 
 function showGP(page){

@@ -155,6 +155,11 @@
   <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
 
+  <!-- DIRECTION STRATÉGIQUE -->
+  <div class="nav-sect">🎯 Direction</div>
+  <div class="nav-item" onclick="showGP('directeur')" data-page="directeur" data-roles="admin,daf,directeur"><span class="nav-icon">🎯</span>Directeur Stratégique</div>
+  <div class="nav-item" onclick="showGP('mes_rapports')" data-page="mes_rapports" data-roles="directeur"><span class="nav-icon">📝</span>Mon rapport du jour</div>
+
   <!-- ADMINISTRATION -->
   <div class="nav-sect">⚙️ Administration</div>
   <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
@@ -1030,6 +1035,7 @@
           <option value="secretaire">Secrétaire (saisie uniquement)</option>
           <option value="logistique">Logistique (achats MP)</option>
           <option value="daf">DAF (validation financière)</option>
+          <option value="directeur">Directeur Stratégique Commercial</option>
           <option value="admin">Admin (accès complet)</option>
         </select>
       </div>
@@ -1809,6 +1815,185 @@
   </div>
 </div>
 
+<!-- DIRECTEUR STRATÉGIQUE -->
+<div class="page" id="page-directeur">
+  <div class="page-title">Directeur Stratégique Commercial</div>
+  <div class="page-sub">Contrat · Objectifs · Commissions · Génération salaire automatique</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <div><label class="lbl">Mois</label><input type="month" id="dir-mois" onchange="renderDirecteur()" style="width:auto"></div>
+    <button class="btn btn-out btn-sm" onclick="renderDirecteur()">🔄 Actualiser</button>
+    <button class="btn btn-g btn-sm admin-only" onclick="ouvrirCreerContrat()">➕ Nouveau contrat</button>
+  </div>
+  <div id="dir-content"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
+</div>
+
+<!-- MON RAPPORT QUOTIDIEN (directeur) -->
+<div class="page" id="page-mes_rapports">
+  <div class="page-title">Mon rapport quotidien</div>
+  <div class="page-sub">À soumettre avant 20h chaque jour (sauf dimanche)</div>
+  <div id="rq-content"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
+</div>
+
+<!-- MODAL GÉNÉRATION SALAIRE DIRECTEUR -->
+<div id="modal-gen-salaire" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerGenSalaire()">
+  <div style="background:var(--g1,#0E1428);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div id="gs-titre" style="font-size:17px;font-weight:700;color:var(--gold)">Générer le salaire</div>
+        <div id="gs-nom" style="font-size:12px;color:var(--textm);margin-top:2px"></div>
+      </div>
+      <button onclick="fermerGenSalaire()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+        <span>Salaire de base</span>
+        <strong id="gs-base" style="color:var(--gold)">0 F</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>Commissions aliments</span>
+        <strong id="gs-comm-aliments" style="color:var(--gold)">0 F</strong>
+      </div>
+      <div id="gs-comm-detail" style="font-size:10px;color:var(--textm);margin-left:14px;margin-bottom:6px"></div>
+    </div>
+
+    <div class="fr">
+      <label>🐰 Nombre de lapins vivants vendus ce mois</label>
+      <input type="number" id="gs-lapins" min="0" value="0" oninput="recalcGenSalaire()">
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">Commission lapins vivants : <span id="gs-comm-lapins-vifs">0 F</span></div>
+    </div>
+
+    <div class="fg2">
+      <div class="fr">
+        <label>Primes supplémentaires (F)</label>
+        <input type="number" id="gs-primes" placeholder="0" oninput="recalcGenSalaire()">
+        <div style="font-size:9px;color:var(--textm)">Ex: prime objectifs atteints</div>
+      </div>
+      <div class="fr">
+        <label>Avances/retenues (F)</label>
+        <input type="number" id="gs-avances" placeholder="0" oninput="recalcGenSalaire()">
+        <div style="font-size:9px;color:var(--textm)">S'ajoute aux pénalités auto</div>
+      </div>
+    </div>
+
+    <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px">
+      <div style="display:flex;justify-content:space-between">
+        <span>Pénalités rapports manqués (auto)</span>
+        <strong id="gs-penalite" style="color:var(--red)">0 F</strong>
+      </div>
+      <div id="gs-penalite-detail" style="font-size:10px;color:var(--textm);margin-top:2px"></div>
+    </div>
+
+    <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span style="color:var(--textm)">Total primes</span>
+        <strong id="gs-total-primes" style="color:var(--gold)">0 F</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px">
+        <span style="color:var(--textm)">Total avances</span>
+        <strong id="gs-total-avances" style="color:var(--red)">0 F</strong>
+      </div>
+      <div style="border-top:1px solid rgba(245,158,11,.2);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:700">NET À PAYER</span>
+        <strong id="gs-net" style="font-size:20px;color:var(--green)">0 F</strong>
+      </div>
+    </div>
+
+    <div class="fg2">
+      <div class="fr"><label>Date paiement</label><input type="date" id="gs-date"></div>
+      <div class="fr"><label>Mode</label>
+        <select id="gs-mode">
+          <option value="virement">Virement</option>
+          <option value="mobile_money">Mobile Money</option>
+          <option value="especes">Espèces</option>
+          <option value="cheque">Chèque</option>
+        </select>
+      </div>
+    </div>
+    <div class="fr"><label>Note (optionnel)</label><input type="text" id="gs-note" placeholder="Ex: salaire prorata, ajustement..."></div>
+
+    <div class="a-err" id="gs-err"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-g" onclick="confirmerGenSalaire()" style="flex:1;justify-content:center;min-height:44px">
+        ✓ Confirmer et enregistrer
+      </button>
+      <button class="btn btn-out" onclick="fermerGenSalaire()" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CRÉER CONTRAT -->
+<div id="modal-creer-contrat" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerCreerContrat()">
+  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:17px;font-weight:700">📄 Nouveau contrat</div>
+      <button onclick="fermerCreerContrat()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div class="fr">
+      <label>Lier à un membre de l'équipe (recommandé)</label>
+      <select id="ctr_membre"><option value="">— Aucun —</option></select>
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">Si vide, le contrat sera autonome (rapports non liés à un compte).</div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label>Nom complet (si non rempli, prendra le membre)</label><input type="text" id="ctr_nom" placeholder="Amezian Kossi Missadji"></div>
+      <div class="fr"><label>Poste</label><input type="text" id="ctr_poste" placeholder="Directeur de la Stratégie Commerciale"></div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label>Date début</label><input type="date" id="ctr_date_debut"></div>
+      <div class="fr"><label>Date fin (vide = CDI)</label><input type="date" id="ctr_date_fin"></div>
+    </div>
+    <div class="fr"><label>Salaire de base mensuel (FCFA)</label><input type="number" id="ctr_salaire" placeholder="100000"></div>
+
+    <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">💰 Règles de commissions</div>
+      <div class="fg2">
+        <div class="fr"><label>FCFA / tonne aliment lapin</label><input type="number" id="ctr_lapin" placeholder="3000"></div>
+        <div class="fr"><label>FCFA / tonne autres aliments</label><input type="number" id="ctr_autres" placeholder="2000"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>FCFA / tonne aliment poisson</label><input type="number" id="ctr_poisson" placeholder="0"></div>
+        <div class="fr"><label>FCFA / lapin vivant vendu</label><input type="number" id="ctr_lapin_vif" placeholder="100"></div>
+      </div>
+    </div>
+
+    <div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:8px">📋 Rapports quotidiens</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px">
+        <input type="checkbox" id="ctr_rapport_obli" checked>
+        <span>Rapport quotidien obligatoire</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px">
+        <input type="checkbox" id="ctr_dim_exempt" checked>
+        <span>Exempter les dimanches</span>
+      </label>
+      <div class="fr"><label>Pénalité par rapport manquant (FCFA)</label><input type="number" id="ctr_penalite" placeholder="500"></div>
+    </div>
+
+    <div style="background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">🎯 Objectifs (à inclure)</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
+        <input type="checkbox" id="ctr_obj_lapin" checked>
+        <span>Doubler les ventes aliments lapins (20 t avant date fin)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <input type="checkbox" id="ctr_obj_lapins_vifs" checked>
+        <span>Vendre 100 lapins vivants par mois</span>
+      </label>
+    </div>
+
+    <div class="fr"><label>Notes internes</label><textarea id="ctr_notes" rows="2" placeholder="Détails internes..."></textarea></div>
+
+    <div class="a-err" id="ctr_err"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-g" onclick="saveContrat()" style="flex:1;justify-content:center;min-height:44px">
+        ✓ Créer le contrat
+      </button>
+      <button class="btn btn-out" onclick="fermerCreerContrat()" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
+
 <!-- end main -->
 
 <button class="sb-toggle" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show')">☰</button>
@@ -1841,6 +2026,7 @@
 <script src="js/bilanss.js?v=2.7.0"></script>
 <script src="js/benefices.js?v=2.7.0"></script>
 <script src="js/messages_pdv.js?v=2.7.0"></script>
+<script src="js/directeur.js?v=2.7.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js?v=2.7.0"></script>
 

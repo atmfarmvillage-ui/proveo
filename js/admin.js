@@ -131,20 +131,7 @@ async function deleteIngredient(id){
 function openNewFormule(){notify('Nouvelle formule — fonctionnalité en développement','gold');}
 
 // ── ÉQUIPE ─────────────────────────────────────────
-
-
-async function deleteMembre(id){
-  if(!confirm('Supprimer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();
-  notify('Membre supprimé','r');
-}
-
-async function deleteMembre(id){
-  if(!confirm('Retirer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  await renderPDV();notify('Membre retiré','r');
-}
+// (deleteMembre est défini plus bas — version unique et complète)
 
 // ── CONFIG ─────────────────────────────────────────
 function applyColor(c){
@@ -648,7 +635,7 @@ async function saveEquipe(){
   const siteUrl=window.location.origin;
   const paysInfo=detecterPays(tel);
   const telClean=paysInfo.numero_whatsapp;
-  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':'Secrétaire';
+  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom} 👋\n\n`+
     `Vous êtes invité(e) à rejoindre *${GP_CONFIG?.nom_provenderie||'PROVENDA'}* en tant que *${roleLabel}*`+
@@ -682,12 +669,6 @@ async function saveEquipe(){
   await renderPDV();
 }
 
-async function deleteMembre(id){
-  if(!confirm('Supprimer ce membre ?'))return;
-  await SB.from('gp_membres').delete().eq('id',id);
-  renderEquipe();
-  notify('Membre supprimé','r');
-}
 async function toggleMembreActif(id, estActif){
   const action=estActif?'désactiver':'réactiver';
   if(!confirm(`Voulez-vous ${action} ce membre ?`))return;
@@ -924,7 +905,7 @@ function membreCard(m){
       :'<span style="font-size:9px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
 
   // Badge rôle
-  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
+  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='directeur'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
 
   return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
