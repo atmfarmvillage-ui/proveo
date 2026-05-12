@@ -18,7 +18,7 @@ async function renderDashboard(){
     r1,r2,r3,r4,r5,r6,r7,r8
   ]=await Promise.all([
     safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
-    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date').eq('admin_id',GP_ADMIN_ID).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
+    safe(SB.from('gp_ventes').select('id,client_id,montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date,recu_imprime,wa_envoye,sms_envoye').eq('admin_id',GP_ADMIN_ID).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
     safe(SB.from('gp_depenses').select('montant,date').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_achats_paiements').select('montant,date_paiement').eq('admin_id',GP_ADMIN_ID).gte('date_paiement',mDebut).lte('date_paiement',mFin)),
     safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
@@ -231,6 +231,32 @@ async function renderDashboard(){
         </div>
         <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('bilan_avance')">Bilan complet →</button>
       </div>`:''}
+      ${(() => {
+        const aCommuniquer = VJ.filter(v => !v.recu_imprime || (!v.wa_envoye && !v.sms_envoye));
+        if(!aCommuniquer.length) return '';
+        return `<div class="card" style="border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.04)">
+          <div class="card-title"><div class="ct-left"><span>📋 À communiquer aujourd'hui (${aCommuniquer.length})</span></div></div>
+          <div style="font-size:10px;color:var(--textm);margin-bottom:8px">Ventes du jour sans reçu imprimé ou sans message envoyé</div>
+          ${aCommuniquer.slice(0,8).map(v => {
+            const reste = Number(v.montant_total||0) - Number(v.montant_paye||0);
+            const statutCom = [
+              v.recu_imprime ? '🖨️✓' : '🖨️',
+              v.wa_envoye ? '📲✓' : (v.sms_envoye ? '💬✓' : '📲'),
+            ].join(' ');
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600">${v.client_nom||'Comptant'}</div>
+                <div style="color:var(--textm);font-size:10px">${fmt(v.montant_total)} F · ${statutCom}</div>
+              </div>
+              <div style="display:flex;gap:4px">
+                ${!v.recu_imprime?`<button class="btn btn-out btn-sm" onclick="imprimerDepuisDashboard('${v.id}')" title="Imprimer" style="padding:3px 7px;font-size:11px">🖨️</button>`:''}
+                ${(!v.wa_envoye && !v.sms_envoye)?`<button class="btn btn-out btn-sm" onclick="ouvrirPreviewWA('${v.id}')" title="WhatsApp" style="padding:3px 7px;font-size:11px;color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>`:''}
+              </div>
+            </div>`;
+          }).join('')}
+          ${aCommuniquer.length>8?`<div style="font-size:10px;color:var(--textm);text-align:center;margin-top:6px">… et ${aCommuniquer.length-8} autres</div>`:''}
+        </div>`;
+      })()}
     </div>
     ${isAdmin?`<div class="card" style="grid-column:1/-1">
       <div class="card-title">
