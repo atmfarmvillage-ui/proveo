@@ -782,7 +782,7 @@ async function deleteIngredient(id){
   await SB.from('gp_ingredients').delete().eq('id',id);
   await loadIngredients();populateSelects();renderIngrAdmin();
 }
-function openNewFormule(){notify('Nouvelle formule — fonctionnalité en développement','gold');}
+// (openNewFormule est défini plus haut avec l'éditeur complet — le stub a été supprimé)
 
 // ── ÉQUIPE ─────────────────────────────────────────
 async function saveEquipe(){
