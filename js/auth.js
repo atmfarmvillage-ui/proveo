@@ -166,7 +166,8 @@ async function bootApp(user){
     else pvBadge.style.display='none';
   }
   // (role restrictions déjà appliquées ci-dessus)
-  // Load base data
+  // Load base data — loadFormules d'abord car loadPrix() s'appuie dessus
+  await loadFormules();
   await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix()]);
   // Set defaults
   const todayStr=new Date().toISOString().slice(0,10);
@@ -231,7 +232,11 @@ var PAGE_RENDERERS = {
   production:    renderLots,
   rapport:       renderRapport,
   formules:      function(){
-    renderPrixFormules();
+    loadFormules().then(()=>{
+      renderPrixFormules();
+      if(typeof renderCustomFormules==='function') renderCustomFormules();
+      populateSelects();
+    });
     loadIngredients().then(()=>{renderIngrAdmin();populateSelects();});
   },
   ventes: async function(){
@@ -316,6 +321,30 @@ async function loadConfig(){
     if(data.remise_max!==undefined)GP_REMISE_MAX=data.remise_max||5;
   }
 }
+// Charge les formules depuis la DB et REMPLIT le tableau global FORMULES_SADARI
+// (vidé puis re-rempli pour préserver la référence partagée par tous les modules).
+async function loadFormules(){
+  const{data}=await SB.from('gp_formules').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
+  FORMULES_SADARI.length=0;
+  (data||[]).forEach(f=>{
+    FORMULES_SADARI.push({
+      id:f.id,
+      nom:f.nom,
+      espece:f.espece||'autre',
+      stade:f.stade||'',
+      prix_defaut:Number(f.prix_defaut)||0,
+      ingredients:Array.isArray(f.ingredients)?f.ingredients:(f.ingredients?JSON.parse(f.ingredients):[]),
+      cout_emballage_kg:Number(f.cout_emballage_kg)||0,
+      cout_mo_tonne:Number(f.cout_mo_tonne)||0,
+      cout_transport_lot:Number(f.cout_transport_lot)||0,
+      avec_emballage:f.avec_emballage!==false,
+      avec_transport:f.avec_transport===true,
+      actif:f.actif!==false,
+    });
+  });
+}
+
 async function loadIngredients(){
   const{data}=await SB.from('gp_ingredients').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   GP_INGREDIENTS=data||[];

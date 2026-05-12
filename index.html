@@ -505,13 +505,37 @@
         </div>
       </div>
 
-      <!-- FORMULE -->
+      <!-- TYPE DE PRODUIT -->
       <div class="fr" style="margin-bottom:8px">
+        <label>Type de produit</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="vt_type_formule_btn" onclick="basculerTypeProduitVente('formule')"
+            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)">
+            🧪 Formule
+          </button>
+          <button type="button" id="vt_type_mp_btn" onclick="basculerTypeProduitVente('mp')"
+            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)">
+            🌾 Matière première
+          </button>
+        </div>
+        <input type="hidden" id="vt_type_produit" value="formule">
+      </div>
+
+      <!-- FORMULE -->
+      <div class="fr" id="vt-formule-wrap" style="margin-bottom:8px">
         <label>Formule / Aliment</label>
-        <input type="text" id="vt_formule_search" placeholder="🔍 Taper pour filtrer (ex: lapin, ponte...)" 
-          oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')" 
+        <input type="text" id="vt_formule_search" placeholder="🔍 Taper pour filtrer (ex: lapin, ponte...)"
+          oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')"
           style="margin-bottom:4px;font-size:12px">
         <select id="vt_formule" onchange="onVenteFormuleChange()"><option value="">— Sélectionner —</option></select>
+      </div>
+
+      <!-- MATIÈRE PREMIÈRE -->
+      <div class="fr" id="vt-mp-wrap" style="margin-bottom:8px;display:none">
+        <label>Matière première (avec stock disponible)</label>
+        <select id="vt_mp" onchange="onVenteMPChange()"><option value="">— Sélectionner une MP —</option></select>
+        <input type="hidden" id="vt_mp_id">
+        <div id="vt-mp-stock-info" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
       </div>
 
             <!-- CONDITIONNEMENT + QUANTITÉ -->
@@ -1559,11 +1583,28 @@
             <option value="depot_vente">🤝 Dépôt-vente</option>
           </select>
         </div>
-        <div class="fr"><label>Produit (formule)</label><select id="dist_formule"><option value="">— Sélectionner —</option></select></div>
+        <div class="fr">
+          <label>Type de produit</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="dist_type_formule_btn" onclick="basculerTypeProduitDist('formule')"
+              style="flex:1;padding:6px;border-radius:6px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)">🧪 Formule</button>
+            <button type="button" id="dist_type_mp_btn" onclick="basculerTypeProduitDist('mp')"
+              style="flex:1;padding:6px;border-radius:6px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)">🌾 Matière première</button>
+          </div>
+          <input type="hidden" id="dist_type_produit" value="formule">
+        </div>
+      </div>
+      <div class="fr" id="dist-formule-wrap"><label>Produit (formule)</label>
+        <select id="dist_formule"><option value="">— Sélectionner —</option></select>
+      </div>
+      <div class="fr" id="dist-mp-wrap" style="display:none">
+        <label>Matière première</label>
+        <select id="dist_mp"><option value="">— Sélectionner —</option></select>
+        <input type="hidden" id="dist_mp_id">
       </div>
       <div class="fg2">
-        <div class="fr"><label>Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
-        <div class="fr"><label>Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
+        <div class="fr"><label id="dist-qte-label">Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
+        <div class="fr"><label id="dist-prix-label">Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
       </div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveLivraison()">📤 Créer la livraison</button>
       <div class="a-err" id="dist_err"></div>
@@ -2119,6 +2160,68 @@ function installPWA(){
   });
 }
 </script>
+
+<!-- MODAL ÉDITEUR DE FORMULE -->
+<div id="modal-formule" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerModalFormule()">
+  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:640px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div id="mf-titre" style="font-size:17px;font-weight:700;color:var(--g6)">🧪 Nouvelle formule</div>
+      <button onclick="fermerModalFormule()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="mf_id">
+
+    <div class="fg2">
+      <div class="fr"><label>Nom de la formule *</label><input type="text" id="mf_nom" placeholder="Ex: PROVÉO PONTE PHASE 1"></div>
+      <div class="fr"><label>Espèce *</label>
+        <select id="mf_espece">
+          <option value="lapin">🐰 Lapin</option>
+          <option value="pondeuse">🥚 Pondeuse</option>
+          <option value="chair">🐔 Poulet de chair</option>
+          <option value="porc">🐷 Porc</option>
+          <option value="canard">🦆 Canard</option>
+          <option value="tilapia">🐟 Tilapia</option>
+          <option value="goliath">🐸 Grenouille goliath</option>
+          <option value="autre">📦 Autre</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label>Stade / Catégorie</label><input type="text" id="mf_stade" placeholder="Ex: Croissance 6-17 sem"></div>
+      <div class="fr"><label>Prix de vente par défaut (F/kg)</label><input type="number" id="mf_prix" placeholder="350"></div>
+    </div>
+
+    <div style="background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--g6)">🌾 Composition</div>
+        <div id="mf-total-pct" style="font-size:11px;color:var(--textm)">Total : 0%</div>
+      </div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:10px">
+        Sélectionnez vos matières premières et leur pourcentage. Le total doit faire 100%.
+      </div>
+      <div id="mf-ingredients-liste"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <select id="mf_new_ingr" style="flex:2"><option value="">— Choisir une MP —</option></select>
+        <input type="number" id="mf_new_pct" placeholder="%" step="0.1" style="flex:1;max-width:80px">
+        <button class="btn btn-g btn-sm" onclick="ajouterIngredientFormule()" style="white-space:nowrap">➕ Ajouter</button>
+      </div>
+    </div>
+
+    <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">💰 Coûts de production (optionnel)</div>
+      <div class="fg2">
+        <div class="fr"><label>Emballage (F/kg)</label><input type="number" id="mf_emb" placeholder="0"></div>
+        <div class="fr"><label>Main d'œuvre (F/tonne)</label><input type="number" id="mf_mo" placeholder="0"></div>
+      </div>
+      <div class="fr"><label>Transport (F/lot)</label><input type="number" id="mf_trans" placeholder="0"></div>
+    </div>
+
+    <div class="a-err" id="mf_err"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-g" onclick="saveFormule()" style="flex:1;justify-content:center;min-height:44px">✓ Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerModalFormule()" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL FEUILLE DE FABRICATION -->
 <div id="modal-fabrication" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);overflow-y:auto;padding:20px" onclick="if(event.target===this)fermerFabrication()">
