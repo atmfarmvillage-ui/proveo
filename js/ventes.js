@@ -328,31 +328,226 @@ async function saveVente(){
   ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('vt_client').value='';
   err.textContent='';
-  if(paye>0) imprimerRecuThermique({...vente, lignes: lignes_a_insert});
+
+  // Notification claire (rappel monnaie si applicable)
   if(monnaie > 0){
-    notify(`Vente enregistrée ✓ — 💰 Monnaie à rendre : ${fmt(monnaie)} F`, 'gold');
+    notify(`✅ Vente enregistrée — 💰 Rendre ${fmt(monnaie)} F au client`, 'gold');
   } else {
-    notify('Vente enregistrée ✓', 'gold');
+    notify('✅ Vente enregistrée', 'gold');
   }
-  // Push automatique si client a tout payé
-  if(statut==='paye'&&clientId&&clientId!=='__nouveau__'){
-    setTimeout(()=>envoyerWAVenteAuto(vente.id,client,lignes_a_insert,total,total),1000);
-  }
-  // Bouton reçu thermique
-  if(typeof imprimerRecuThermique==='function'){
-    const btnR=document.createElement('button');
-    btnR.className='btn btn-print';
-    btnR.style.cssText='width:100%;justify-content:center;margin-top:8px';
-    btnR.innerHTML='🖨️ Imprimer le reçu thermique';
-    btnR.onclick=()=>{
-      imprimerRecuThermique({...venteData,lignes:VT_LIGNES,ref:venteData.id?.slice(0,8)});
-      btnR.remove();
-    };
-    const e=document.getElementById('vt_err');
-    if(e)e.parentNode.insertBefore(btnR,e.nextSibling);
-    setTimeout(()=>btnR.remove(),30000);
-  }
+
+  // Afficher bloc d'actions (Imprimer + WhatsApp) sous le formulaire
+  afficherActionsApresVente({...vente, lignes: lignes_a_insert}, client, total, remis, paye, monnaie);
+
   renderVentes();
+}
+
+// ── BLOC D'ACTIONS APRÈS VENTE (Imprimer + WhatsApp + SMS) ──
+function afficherActionsApresVente(venteComplete, client, total, remis, paye, monnaie){
+  const old = document.getElementById('vt-post-vente');
+  if(old) old.remove();
+
+  const tel = client?.whatsapp || client?.telephone || '';
+  const hasContact = !!tel;
+
+  window._lastVenteData = venteComplete;
+  window._lastVenteClient = client;
+
+  const block = document.createElement('div');
+  block.id = 'vt-post-vente';
+  block.style.cssText = `
+    background:linear-gradient(135deg,rgba(22,163,74,.12),rgba(245,158,11,.06));
+    border:1px solid rgba(22,163,74,.4);border-radius:10px;
+    padding:14px;margin-top:12px`;
+
+  const ref = venteComplete.id?.slice(0,8) || '—';
+  const monnaieBlock = monnaie > 0
+    ? `<div style="background:rgba(22,163,74,.18);border:1px solid rgba(22,163,74,.4);border-radius:8px;padding:10px;margin-bottom:10px;text-align:center;font-weight:700;color:var(--green);font-size:14px">
+        💰 Monnaie à rendre au client : ${fmt(monnaie)} F
+      </div>` : '';
+
+  block.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div>
+        <div style="font-weight:700;font-size:13px;color:var(--green)">✅ Vente enregistrée</div>
+        <div style="font-size:11px;color:var(--textm)">N°${ref} · ${client?.nom||'Client comptant'} · ${fmt(total)} F</div>
+      </div>
+      <button onclick="document.getElementById('vt-post-vente').remove()"
+        style="background:none;border:none;color:var(--textm);font-size:18px;cursor:pointer;padding:0;margin-left:8px">✕</button>
+    </div>
+    ${monnaieBlock}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button id="post-vente-print"
+        onclick="actionImprimerVente('${venteComplete.id}')"
+        style="min-height:44px;padding:10px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;background:#1b5e20;color:white;border:none">
+        🖨️ Imprimer reçu
+      </button>
+      <button id="post-vente-wa"
+        onclick="ouvrirPreviewWA('${venteComplete.id}')"
+        style="min-height:44px;padding:10px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;background:#25D366;color:white;border:none">
+        📲 WhatsApp${hasContact?'':' <small style="font-size:9px;opacity:.8">(num. manuel)</small>'}
+      </button>
+      <button id="post-vente-sms"
+        onclick="actionEnvoyerSMS('${venteComplete.id}')"
+        style="grid-column:span 2;min-height:38px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.4)"
+        ${hasContact?'':'disabled'}>
+        💬 Envoyer SMS de secours${hasContact?'':' (numéro client manquant)'}
+      </button>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:8px;text-align:center">
+      ℹ️ Le message WhatsApp s'adapte au profil client (fidèle/nouveau/dette). SMS = secours si WA absent.
+    </div>
+  `;
+
+  const errEl = document.getElementById('vt_err');
+  if(errEl && errEl.parentNode){
+    errEl.parentNode.insertBefore(block, errEl.nextSibling);
+  }
+
+  setTimeout(() => {
+    const b = document.getElementById('vt-post-vente');
+    if(b) b.remove();
+  }, 180000); // 3 minutes
+}
+
+// ── ACTION IMPRIMER (avec marquage en DB) ──
+async function actionImprimerVente(venteId){
+  imprimerRecuThermique(window._lastVenteData);
+  await SB.from('gp_ventes').update({
+    recu_imprime: true,
+    recu_imprime_at: new Date().toISOString()
+  }).eq('id', venteId);
+  const btn = document.getElementById('post-vente-print');
+  if(btn){
+    btn.style.background = 'rgba(22,163,74,.3)';
+    btn.style.opacity = '.7';
+    btn.innerHTML = '✓ Reçu imprimé';
+  }
+}
+
+// ── IMPRESSION DEPUIS DASHBOARD (charge la vente depuis DB) ──
+async function imprimerDepuisDashboard(venteId){
+  const{data:v} = await SB.from('gp_ventes').select('*').eq('id', venteId).maybeSingle();
+  if(!v){ notify('Vente introuvable', 'r'); return; }
+  const{data:lignes} = await SB.from('gp_ventes_lignes').select('*').eq('vente_id', venteId);
+  imprimerRecuThermique({...v, lignes: lignes||[]});
+  await SB.from('gp_ventes').update({
+    recu_imprime: true,
+    recu_imprime_at: new Date().toISOString()
+  }).eq('id', venteId);
+  notify('Reçu envoyé à l\'impression ✓', 'gold');
+  // Re-render dashboard pour refléter
+  if(typeof renderDashboard === 'function') setTimeout(renderDashboard, 1500);
+}
+
+// ── ACTION SMS DE SECOURS ──
+async function actionEnvoyerSMS(venteId){
+  const v = window._lastVenteData;
+  const client = window._lastVenteClient;
+  const tel = client?.whatsapp || client?.telephone;
+  if(!tel){
+    const num = prompt('Numéro de téléphone du client :');
+    if(!num) return;
+  }
+  const total = Number(v.montant_total||0);
+  const paye = Number(v.montant_paye||0);
+  const reste = total - paye;
+  const prov = GP_CONFIG?.nom_provenderie || 'PROVENDA';
+  const ref = v.id.slice(0,8);
+  // Message SMS court (160 car max recommandé)
+  const msg = reste > 0
+    ? `${prov}: Merci pour votre achat n°${ref} du ${v.date}. Total ${fmt(total)}F, payé ${fmt(paye)}F, reste dû ${fmt(reste)}F. Tel: ${GP_CONFIG?.telephone||''}`
+    : `${prov}: Merci pour votre achat n°${ref} du ${v.date}. Total ${fmt(total)}F entièrement réglé. A bientôt!`;
+
+  const num = tel || prompt('Numéro de téléphone :');
+  if(!num) return;
+  const p = detecterPays(num.trim());
+  const numClean = p.numero_complet?.replace('+','') || num;
+
+  // Ouvrir SMS app native
+  window.open(`sms:+${numClean}?body=${encodeURIComponent(msg)}`, '_blank');
+
+  // Marquer
+  await SB.from('gp_ventes').update({
+    sms_envoye: true,
+    sms_envoye_at: new Date().toISOString()
+  }).eq('id', venteId);
+  const btn = document.getElementById('post-vente-sms');
+  if(btn){
+    btn.style.background = 'rgba(59,130,246,.3)';
+    btn.style.opacity = '.7';
+    btn.innerHTML = '✓ SMS envoyé';
+  }
+}
+
+// ── PRÉVISUALISATION + ÉDITION DU MESSAGE WHATSAPP ──
+async function ouvrirPreviewWA(venteId){
+  const{data:v} = await SB.from('gp_ventes').select('*').eq('id',venteId).maybeSingle();
+  if(!v) return;
+  const{data:lignes} = await SB.from('gp_ventes_lignes').select('*').eq('vente_id',venteId);
+  const{data:histo} = await SB.from('gp_ventes').select('montant_total,date,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',v.client_id||'').order('date',{ascending:false}).limit(10);
+
+  const client = GP_CLIENTS.find(c=>c.id===v.client_id);
+  const tel = client?.whatsapp || client?.telephone || '';
+  const total = Number(v.montant_total||0);
+  const paye = Number(v.montant_paye||0);
+  const reste = Math.max(0, total-paye);
+  const prov = GP_CONFIG?.nom_provenderie || 'PROVENDA';
+  const H = histo || [];
+  const nbAchats = H.length;
+  const totalHistorique = H.reduce((s,x)=>s+Number(x.montant_total||0),0);
+  const localite = client?.localite || '';
+  const L = lignes || [];
+  const produitsLine = L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  const especeEmoji = {pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const formuleStr = L.map(l=>l.formule_nom).join(', ');
+  const especeIcon = Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1] || '🌾';
+
+  const msg = reste>0
+    ? construireMessageRappelDette(v, produitsLine, total, paye, reste, prov, localite, nbAchats, especeIcon, nbAchats>=5)
+    : construireMessageRemerciement(v, produitsLine, total, prov, localite, nbAchats, totalHistorique, especeIcon, nbAchats>=5, totalHistorique>=500000, nbAchats<=1);
+
+  // Ouvrir modal
+  const modal = document.getElementById('modal-preview-wa');
+  document.getElementById('pwa-tel').value = tel;
+  document.getElementById('pwa-message').value = msg;
+  document.getElementById('pwa-vente-id').value = venteId;
+  document.getElementById('pwa-client-nom').textContent = client?.nom || 'Client';
+  modal.style.display = 'flex';
+}
+
+function fermerPreviewWA(){
+  document.getElementById('modal-preview-wa').style.display = 'none';
+}
+
+async function envoyerWAPreview(){
+  const tel = document.getElementById('pwa-tel').value.trim();
+  const msg = document.getElementById('pwa-message').value;
+  const venteId = document.getElementById('pwa-vente-id').value;
+  if(!tel){
+    alert('Saisissez un numéro de téléphone');
+    return;
+  }
+  if(!msg.trim()){
+    alert('Le message est vide');
+    return;
+  }
+  const p = detecterPays(tel);
+  const url = 'https://wa.me/' + p.numero_whatsapp + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  // Marquer
+  await SB.from('gp_ventes').update({
+    wa_envoye: true,
+    wa_envoye_at: new Date().toISOString()
+  }).eq('id', venteId);
+  const btn = document.getElementById('post-vente-wa');
+  if(btn){
+    btn.style.background = 'rgba(37,211,102,.3)';
+    btn.style.opacity = '.7';
+    btn.innerHTML = '✓ WhatsApp envoyé';
+  }
+  fermerPreviewWA();
 }
 
 async function renderVentes(){

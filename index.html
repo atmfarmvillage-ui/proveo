@@ -2169,6 +2169,38 @@ function installPWA(){
 }
 </script>
 
+<!-- MODAL PRÉVISUALISATION WHATSAPP AVANT ENVOI -->
+<div id="modal-preview-wa" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerPreviewWA()">
+  <div style="background:var(--g1,#0E1428);border:1px solid #25D366;border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#25D366">📲 Aperçu WhatsApp</div>
+        <div style="font-size:11px;color:var(--textm)">Pour : <strong id="pwa-client-nom" style="color:var(--text)">—</strong></div>
+      </div>
+      <button onclick="fermerPreviewWA()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="pwa-vente-id">
+    <div class="fr">
+      <label>📞 Numéro WhatsApp</label>
+      <input type="tel" id="pwa-tel" placeholder="+228 90 00 00 00">
+    </div>
+    <div class="fr">
+      <label>💬 Message (modifiable)</label>
+      <textarea id="pwa-message" rows="11"
+        style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical;font-family:'Outfit',sans-serif"></textarea>
+      <div style="font-size:10px;color:var(--textm);margin-top:4px">
+        ℹ️ Message généré selon le profil client (fidèle/dette/nouveau). Vous pouvez l'éditer librement.
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="envoyerWAPreview()" style="flex:1;min-height:44px;padding:10px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;background:#25D366;color:white;border:none">
+        📲 Ouvrir WhatsApp
+      </button>
+      <button onclick="fermerPreviewWA()" class="btn btn-out" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ÉDITEUR DE FORMULE -->
 <div id="modal-formule" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerModalFormule()">
   <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:640px;padding:24px;margin:0 auto">

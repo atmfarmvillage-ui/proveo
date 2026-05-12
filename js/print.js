@@ -370,6 +370,11 @@ function imprimerRecuThermique(vente){
   ];
   const merci=msgs[Math.floor(Math.random()*msgs.length)];
 
+  const estPaye = reste <= 0 && paye > 0;
+  const ref = vente.ref || vente.id?.slice(0,8) || '—';
+  const qrData = encodeURIComponent(`${prov}\nRecu ${ref}\nDate ${vente.date}\nTotal ${fmt(total)} F\n${cfg.telephone||''}`);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&margin=2&data=${qrData}`;
+
   const css=`
     @page{size:80mm auto;margin:2mm 3mm}
     @media print{
@@ -377,7 +382,7 @@ function imprimerRecuThermique(vente){
       .no-print{display:none!important}
     }
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Courier New',Courier,monospace;font-size:11px;width:76mm;color:#000;background:#fff}
+    body{font-family:'Courier New',Courier,monospace;font-size:11px;width:76mm;color:#000;background:#fff;position:relative}
     .center{text-align:center}
     .right{text-align:right}
     .bold{font-weight:bold}
@@ -390,10 +395,15 @@ function imprimerRecuThermique(vente){
     table{width:100%;border-collapse:collapse;font-size:10px}
     th{text-align:left;font-weight:bold;border-bottom:1px solid #000;padding:1px 2px}
     td{padding:1px 2px}
-    .num{text-align:right}`;
+    .num{text-align:right}
+    .tampon-paye{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);border:3px solid #16a34a;color:#16a34a;font-size:28px;font-weight:bold;padding:4px 18px;letter-spacing:2px;opacity:.55;pointer-events:none;font-family:Arial,sans-serif;border-radius:6px}
+    .qr-box{text-align:center;margin-top:8px;padding-top:6px;border-top:1px dashed #000}
+    .qr-box img{width:70px;height:70px}
+    .qr-box .qr-cap{font-size:8px;color:#555;margin-top:2px}`;
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reçu</title>
 <style>${css}</style></head><body>
+${estPaye?'<div class="tampon-paye">PAYÉ ✓</div>':''}
 <div class="center">
   <h1>${prov}</h1>
   ${cfg.adresse?`<h2>${cfg.adresse}</h2>`:''}
@@ -429,6 +439,10 @@ ${reste>0?`<div class="row bold"><span>Reste dû</span><span>${fmt(reste)} F</sp
 <div class="statut">${statut}</div>
 <div class="line"></div>
 <div class="merci">${merci}</div>
+<div class="qr-box">
+  <img src="${qrUrl}" alt="QR">
+  <div class="qr-cap">Scannez pour conserver ce reçu</div>
+</div>
 <div class="center" style="font-size:9px;margin-top:4px">${new Date().toLocaleString('fr-FR')}</div>
 </body></html>`;
 
