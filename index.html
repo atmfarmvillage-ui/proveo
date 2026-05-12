@@ -531,10 +531,14 @@
       </div>
 
       <!-- MATIÈRE PREMIÈRE -->
-      <div class="fr" id="vt-mp-wrap" style="margin-bottom:8px;display:none">
-        <label>Matière première (avec stock disponible)</label>
-        <select id="vt_mp" onchange="onVenteMPChange()"><option value="">— Sélectionner une MP —</option></select>
+      <div class="fr" id="vt-mp-wrap" style="margin-bottom:8px;display:none;position:relative">
+        <label>Matière première (recherche)</label>
+        <input type="text" id="vt_mp_search" placeholder="🔍 Tapez pour chercher (maïs, soja…)"
+          oninput="filtrerIngrVente()" onfocus="filtrerIngrVente()" autocomplete="off"
+          style="margin-bottom:4px;font-size:12px">
+        <div id="vt_mp_results" style="display:none;position:absolute;z-index:9999;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:280px;overflow-y:auto;width:100%;top:64px;left:0;box-shadow:0 12px 40px rgba(0,0,0,.8)"></div>
         <input type="hidden" id="vt_mp_id">
+        <div id="vt_mp_selected" style="display:none;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;color:var(--g6);margin-top:4px"></div>
         <div id="vt-mp-stock-info" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
       </div>
 
@@ -569,19 +573,23 @@
       <div id="vt-lignes-preview"></div>
 
       <!-- TOTAUX -->
-<!-- TOTAUX -->
       <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
           <span style="color:var(--textm)">Montant total</span>
           <span id="vt-montant-total" style="font-weight:700;font-size:15px;color:var(--gold)">0 F</span>
         </div>
         <div class="fr" style="margin-bottom:6px">
-          <label>Montant payé (FCFA)</label>
+          <label>💵 Montant remis par le client (FCFA)</label>
           <input type="number" id="vt_paye" placeholder="0" oninput="calcVente()" style="font-size:15px;font-weight:700">
+          <div style="font-size:9px;color:var(--textm);margin-top:2px">Si le client donne plus que le total, la monnaie à rendre est calculée automatiquement.</div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px">
+        <div id="vt-reste-row" style="display:flex;justify-content:space-between;font-size:12px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,.08)">
           <span style="color:var(--textm)">Reste dû</span>
           <span id="vt-reste-du" style="font-weight:700;color:var(--red)">0 F</span>
+        </div>
+        <div id="vt-monnaie-row" style="display:none;justify-content:space-between;font-size:13px;padding:8px 10px;border-radius:6px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.3);margin-top:6px">
+          <span style="color:var(--green)">💰 Monnaie à rendre</span>
+          <span id="vt-monnaie" style="font-weight:700;color:var(--green);font-size:15px">0 F</span>
         </div>
       </div>
 
