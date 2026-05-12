@@ -109,17 +109,96 @@ function actionsLivraison(l){
   return btns;
 }
 
+// ── BASCULE TYPE PRODUIT POUR DISTRIBUTION ───────
+function basculerTypeProduitDist(type){
+  document.getElementById('dist_type_produit').value = type;
+  const btnF = document.getElementById('dist_type_formule_btn');
+  const btnM = document.getElementById('dist_type_mp_btn');
+  const wrapF = document.getElementById('dist-formule-wrap');
+  const wrapM = document.getElementById('dist-mp-wrap');
+  const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
+  const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
+  const qteLabel = document.getElementById('dist-qte-label');
+  const prixLabel = document.getElementById('dist-prix-label');
+  if(type === 'mp'){
+    btnF.style.cssText = btnF.style.cssText.replace(actif,'') + ';' + inactif;
+    btnM.style.cssText = btnM.style.cssText.replace(inactif,'') + ';' + actif;
+    wrapF.style.display = 'none';
+    wrapM.style.display = 'block';
+    if(qteLabel) qteLabel.textContent = 'Quantité (kg)';
+    if(prixLabel) prixLabel.textContent = 'Prix gros/kg (F)';
+    populateSelectMPDist();
+  } else {
+    btnF.style.cssText = btnF.style.cssText.replace(inactif,'') + ';' + actif;
+    btnM.style.cssText = btnM.style.cssText.replace(actif,'') + ';' + inactif;
+    wrapF.style.display = 'block';
+    wrapM.style.display = 'none';
+    if(qteLabel) qteLabel.textContent = 'Quantité (sacs)';
+    if(prixLabel) prixLabel.textContent = 'Prix gros/sac (F)';
+  }
+  ['dist_qte','dist_prix'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+}
+
+async function populateSelectMPDist(){
+  const sel = document.getElementById('dist_mp');
+  if(!sel) return;
+  // Fetch direct pour garantir la fraîcheur
+  const{data:ingrFresh, error:errI} = await SB.from('gp_ingredients').select('*')
+    .eq('admin_id', GP_ADMIN_ID).order('nom');
+  if(errI){
+    sel.innerHTML = `<option value="">⚠ Erreur : ${errI.message}</option>`;
+    return;
+  }
+  if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
+
+  const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID);
+  window._stockNiveaux = S || [];
+  const niveaux = (typeof calcNiveaux === 'function')
+    ? calcNiveaux(window._stockNiveaux) : {};
+
+  const list = ingrFresh || [];
+  if(!list.length){
+    sel.innerHTML = '<option value="">— Aucune MP enregistrée —</option>';
+    return;
+  }
+
+  sel.innerHTML = '<option value="">— Sélectionner une MP —</option>' +
+    list.map(i => {
+      const stock = niveaux[i.nom] || 0;
+      return `<option value="${i.id}" data-nom="${i.nom}" data-prix="${i.prix_actuel||0}">${i.nom} · ${fmtKg(stock)} kg dispo</option>`;
+    }).join('');
+  sel.onchange = () => {
+    const opt = sel.selectedOptions[0];
+    if(!opt || !opt.value){ document.getElementById('dist_mp_id').value=''; return; }
+    document.getElementById('dist_mp_id').value = opt.value;
+    const prixEl = document.getElementById('dist_prix');
+    if(prixEl && !prixEl.value) prixEl.value = opt.dataset.prix || 0;
+  };
+}
+
 // ── CRÉER UNE LIVRAISON ───────────────────────────
 async function saveLivraison(){
   const sourceId=document.getElementById('dist_source')?.value||GP_POINT_VENTE||'Production';
   const destId=document.getElementById('dist_dest')?.value;
-  const formule=document.getElementById('dist_formule')?.value;
+  const typeProduit = document.getElementById('dist_type_produit')?.value || 'formule';
   const qte=+document.getElementById('dist_qte')?.value||0;
   const prixGros=+document.getElementById('dist_prix')?.value||0;
   const typeRel=document.getElementById('dist_type')?.value||'vente_gros';
   const err=document.getElementById('dist_err');
 
-  if(!sourceId||!destId||!formule||!qte||!prixGros){
+  // Récupérer le produit selon le type
+  let produitNom, ingredientId = null;
+  if(typeProduit === 'mp'){
+    ingredientId = document.getElementById('dist_mp_id')?.value;
+    if(!ingredientId){ err.textContent='Sélectionnez une matière première.'; return; }
+    const opt = document.querySelector(`#dist_mp option[value="${ingredientId}"]`);
+    produitNom = opt?.dataset.nom || 'Matière première';
+  } else {
+    produitNom = document.getElementById('dist_formule')?.value;
+    if(!produitNom){ err.textContent='Sélectionnez une formule.'; return; }
+  }
+
+  if(!sourceId||!destId||!qte||!prixGros){
     err.textContent='Tous les champs sont requis.';return;
   }
   if(sourceId===destId){err.textContent='Source et destination doivent être différents.';return;}
@@ -127,12 +206,14 @@ async function saveLivraison(){
   const source=GP_PDV_LIST.find(p=>p.id===sourceId);
   const dest=GP_PDV_LIST.find(p=>p.id===destId);
 
-  const{error}=await SB.from('gp_livraisons_pdv').insert({
+  const{data:liv,error}=await SB.from('gp_livraisons_pdv').insert({
     admin_id:GP_ADMIN_ID,
     pdv_source_id:sourceId,pdv_dest_id:destId,
     pdv_source_nom:source?.nom,pdv_dest_nom:dest?.nom,
     type_relation:typeRel,
-    formule_nom:formule,
+    formule_nom:produitNom,
+    type_produit:typeProduit,
+    ingredient_id:ingredientId,
     qte_envoyee:qte,qte_confirmee:0,
     prix_gros_unitaire:prixGros,
     montant_total:qte*prixGros,
@@ -141,13 +222,28 @@ async function saveLivraison(){
     statut_paiement:'impaye',
     envoye_par:GP_USER.id,
     date_livraison:today()
-  });
+  }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
+  // Si MP : décrémenter le stock central immédiatement (envoi vers PDV)
+  if(typeProduit === 'mp' && ingredientId){
+    await SB.from('gp_stock_mp').insert({
+      admin_id:GP_ADMIN_ID,
+      saisi_par:GP_USER?.id,
+      type:'sortie_distribution',
+      date:today(),
+      ingredient_id:ingredientId,
+      ingredient_nom:produitNom,
+      quantite:qte,
+      prix_unit:prixGros,
+      ref:'Livraison '+(liv?.id||'').slice(0,8)+' → '+dest?.nom
+    });
+  }
+
   err.textContent='';
   ['dist_qte','dist_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  notify(`Livraison ${formule} → ${dest?.nom} enregistrée ✓`,'gold');
+  notify(`Livraison ${produitNom} → ${dest?.nom} enregistrée ✓`,'gold');
   await renderDistribution();
 }
 
@@ -182,6 +278,14 @@ async function confirmerReceptionLivraison(){
     statut,note,
     confirme_par:GP_USER.id
   }).eq('id',livId);
+
+  // Si MP : pas de stock produits finis à mettre à jour (le stock MP central a déjà été décrémenté à l'envoi)
+  if(l.type_produit==='mp'){
+    document.getElementById('modal-confirm-reception').style.display='none';
+    notify('Réception confirmée ✓','gold');
+    await renderDistribution();
+    return;
+  }
 
   // Mettre à jour stock PDV destination
   const{data:stockExist}=await SB.from('gp_stock_produits_pdv').select('*')

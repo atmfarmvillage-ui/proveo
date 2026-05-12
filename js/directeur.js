@@ -93,15 +93,20 @@ async function calculerCommissionsMois(contratId, mois){
   let lignes = [];
   if(venteIds.length){
     const { data: L } = await SB.from('gp_ventes_lignes')
-      .select('formule_nom,quantite,vente_id')
+      .select('formule_nom,quantite,vente_id,type_produit')
       .in('vente_id', venteIds);
     lignes = L || [];
   }
 
   // 5. Agréger les kg par groupe de commission
+  // - Formules : déduction de l'espèce depuis le nom de la formule
+  // - MP (matières premières) : toujours classées en « autres aliments »
+  //   (un nom de MP contenant "lapin" ne signifie pas un aliment lapin)
   const kgParGroupe = { lapin: 0, autres: 0, poisson: 0 };
   for(const l of lignes){
-    const grp = _groupeCommission(_especeDepuisFormule(l.formule_nom));
+    const grp = (l.type_produit === 'mp')
+      ? 'autres'
+      : _groupeCommission(_especeDepuisFormule(l.formule_nom));
     kgParGroupe[grp] += Number(l.quantite || 0);
   }
 

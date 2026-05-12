@@ -128,7 +128,208 @@ async function deleteIngredient(id){
   await SB.from('gp_ingredients').delete().eq('id',id);
   await loadIngredients();populateSelects();renderIngrAdmin();
 }
-function openNewFormule(){notify('Nouvelle formule — fonctionnalité en développement','gold');}
+// ══════════════════════════════════════════════════
+// ÉDITEUR DE FORMULES
+// ══════════════════════════════════════════════════
+let MF_INGREDIENTS = []; // composition en cours d'édition
+
+function openNewFormule(){
+  document.getElementById('mf-titre').textContent='🧪 Nouvelle formule';
+  document.getElementById('mf_id').value='';
+  ['mf_nom','mf_stade','mf_prix','mf_emb','mf_mo','mf_trans','mf_new_pct'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('mf_espece').value='lapin';
+  document.getElementById('mf_err').textContent='';
+  MF_INGREDIENTS = [];
+  _renderMFIngredients();
+  _remplirSelectIngredientsMF();
+  document.getElementById('modal-formule').style.display='flex';
+  setTimeout(()=>document.getElementById('mf_nom').focus(),100);
+}
+
+function fermerModalFormule(){
+  document.getElementById('modal-formule').style.display='none';
+}
+
+function editerFormule(id){
+  const f = FORMULES_SADARI.find(x=>x.id===id);
+  if(!f){ notify('Formule introuvable','r'); return; }
+  document.getElementById('mf-titre').textContent='✏️ Modifier — '+f.nom;
+  document.getElementById('mf_id').value=f.id;
+  document.getElementById('mf_nom').value=f.nom;
+  document.getElementById('mf_espece').value=f.espece||'autre';
+  document.getElementById('mf_stade').value=f.stade||'';
+  document.getElementById('mf_prix').value=f.prix_defaut||0;
+  document.getElementById('mf_emb').value=f.cout_emballage_kg||0;
+  document.getElementById('mf_mo').value=f.cout_mo_tonne||0;
+  document.getElementById('mf_trans').value=f.cout_transport_lot||0;
+  MF_INGREDIENTS = (f.ingredients||[]).map(i=>({nom:i.nom, pct:Number(i.pct)||0}));
+  _renderMFIngredients();
+  _remplirSelectIngredientsMF();
+  document.getElementById('mf_err').textContent='';
+  document.getElementById('modal-formule').style.display='flex';
+}
+
+async function _remplirSelectIngredientsMF(){
+  const sel=document.getElementById('mf_new_ingr');
+  if(!sel) return;
+  // Fetch direct pour garantir la fraîcheur
+  const{data:ingrFresh} = await SB.from('gp_ingredients').select('*')
+    .eq('admin_id', GP_ADMIN_ID).order('nom');
+  if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
+  const list = ingrFresh || GP_INGREDIENTS || [];
+  // Filtrer les MP déjà ajoutées
+  const dejaPris = new Set(MF_INGREDIENTS.map(i=>i.nom));
+  if(!list.length){
+    sel.innerHTML = '<option value="">— Aucune MP en base, créez-en d\'abord —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Choisir une MP —</option>' +
+    list.filter(i=>!dejaPris.has(i.nom))
+      .map(i=>`<option value="${i.nom}">${i.nom}</option>`).join('');
+}
+
+function _renderMFIngredients(){
+  const el=document.getElementById('mf-ingredients-liste');
+  if(!el) return;
+  const total=MF_INGREDIENTS.reduce((s,i)=>s+Number(i.pct||0),0);
+  document.getElementById('mf-total-pct').textContent = `Total : ${total.toFixed(2)}%`;
+  document.getElementById('mf-total-pct').style.color =
+    Math.abs(total-100)<0.01 ? 'var(--green)' : (total>100?'var(--red)':'var(--gold)');
+
+  if(!MF_INGREDIENTS.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucune matière première ajoutée.</div>';
+    return;
+  }
+  el.innerHTML = MF_INGREDIENTS.map((ing, i) => `
+    <div style="display:grid;grid-template-columns:1fr 90px 30px;gap:6px;align-items:center;padding:6px 8px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+      <div style="font-size:12px;font-weight:600">${ing.nom}</div>
+      <input type="number" step="0.1" value="${ing.pct}" onchange="modifierPctIngrFormule(${i}, this.value)"
+        style="font-size:11px;padding:3px 6px;text-align:right">
+      <button onclick="supprimerIngredientFormule(${i})"
+        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
+    </div>`).join('');
+}
+
+function ajouterIngredientFormule(){
+  const nom = document.getElementById('mf_new_ingr').value;
+  const pct = +document.getElementById('mf_new_pct').value || 0;
+  const err = document.getElementById('mf_err');
+  if(!nom){ err.textContent='Choisissez une matière première.'; return; }
+  if(pct<=0){ err.textContent='Pourcentage doit être > 0.'; return; }
+  MF_INGREDIENTS.push({nom, pct});
+  document.getElementById('mf_new_ingr').value='';
+  document.getElementById('mf_new_pct').value='';
+  err.textContent='';
+  _renderMFIngredients();
+  _remplirSelectIngredientsMF();
+}
+
+function modifierPctIngrFormule(idx, val){
+  MF_INGREDIENTS[idx].pct = +val || 0;
+  _renderMFIngredients();
+}
+
+function supprimerIngredientFormule(idx){
+  MF_INGREDIENTS.splice(idx, 1);
+  _renderMFIngredients();
+  _remplirSelectIngredientsMF();
+}
+
+async function saveFormule(){
+  const err=document.getElementById('mf_err');
+  err.textContent='';
+  const id = document.getElementById('mf_id').value || null;
+  const nom = document.getElementById('mf_nom').value.trim();
+  const espece = document.getElementById('mf_espece').value;
+  const stade = document.getElementById('mf_stade').value.trim() || null;
+  const prix = +document.getElementById('mf_prix').value || 0;
+  const emb = +document.getElementById('mf_emb').value || 0;
+  const mo = +document.getElementById('mf_mo').value || 0;
+  const trans = +document.getElementById('mf_trans').value || 0;
+
+  if(!nom){ err.textContent='Nom requis.'; return; }
+  if(!MF_INGREDIENTS.length){ err.textContent='Ajoutez au moins une matière première.'; return; }
+
+  const total = MF_INGREDIENTS.reduce((s,i)=>s+Number(i.pct||0),0);
+  if(Math.abs(total-100) > 0.5){
+    if(!confirm(`Le total est ${total.toFixed(2)}% (pas 100%). Enregistrer quand même ?`)) return;
+  }
+
+  const payload = {
+    admin_id: GP_ADMIN_ID,
+    nom, espece, stade,
+    prix_defaut: prix,
+    ingredients: MF_INGREDIENTS,
+    cout_emballage_kg: emb,
+    cout_mo_tonne: mo,
+    cout_transport_lot: trans,
+    actif: true,
+  };
+
+  if(id){
+    const { error } = await SB.from('gp_formules').update(payload).eq('id', id);
+    if(error){ err.textContent='Erreur: '+error.message; return; }
+  } else {
+    const { error } = await SB.from('gp_formules').insert(payload);
+    if(error){ err.textContent='Erreur: '+error.message; return; }
+  }
+
+  // Aligner le prix de vente dans gp_prix_formules
+  if(prix){
+    await SB.from('gp_prix_formules').upsert(
+      { admin_id: GP_ADMIN_ID, formule_nom: nom, prix },
+      { onConflict: 'admin_id,formule_nom' }
+    );
+    GP_PRIX[nom] = prix;
+  }
+
+  fermerModalFormule();
+  await loadFormules();
+  populateSelects();
+  renderPrixFormules();
+  if(typeof renderCustomFormules === 'function') renderCustomFormules();
+  notify(`Formule "${nom}" ${id?'mise à jour':'créée'} ✓`, 'gold');
+}
+
+async function supprimerFormule(id){
+  const f = FORMULES_SADARI.find(x=>x.id===id);
+  if(!f) return;
+  if(!confirm(`Supprimer la formule "${f.nom}" ?\n\nElle ne sera plus disponible à la production / vente.\nL'historique des lots/ventes existants reste préservé.`)) return;
+  // Soft delete : actif=false, pour ne pas casser les FK
+  const { error } = await SB.from('gp_formules').update({ actif: false }).eq('id', id);
+  if(error){ notify('Erreur: '+error.message, 'r'); return; }
+  await loadFormules();
+  populateSelects();
+  renderPrixFormules();
+  if(typeof renderCustomFormules === 'function') renderCustomFormules();
+  notify(`Formule "${f.nom}" supprimée`, 'r');
+}
+
+function renderCustomFormules(){
+  const el = document.getElementById('custom-formules-liste');
+  if(!el) return;
+  if(!FORMULES_SADARI.length){
+    el.innerHTML = `
+      <div style="font-size:12px;color:var(--textm);padding:14px;text-align:center;background:rgba(14,20,40,.4);border:1px dashed var(--border);border-radius:8px">
+        Aucune formule encore créée.<br>
+        <span style="font-size:10px">Cliquez sur <strong>➕ Nouvelle formule</strong> pour commencer.</span>
+      </div>`;
+    return;
+  }
+  el.innerHTML = FORMULES_SADARI.map(f => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:12px">${ESPECE_ICON[f.espece]||'📦'} ${f.nom}</div>
+        <div style="font-size:10px;color:var(--textm)">${f.stade||'—'} · ${f.ingredients?.length||0} MP · ${fmt(f.prix_defaut)} F/kg</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-out btn-sm" onclick="editerFormule('${f.id}')" style="padding:4px 8px">✏️</button>
+        <button class="btn btn-red btn-sm" onclick="supprimerFormule('${f.id}')" style="padding:4px 8px">✕</button>
+      </div>
+    </div>`).join('');
+}
 
 // ── ÉQUIPE ─────────────────────────────────────────
 // (deleteMembre est défini plus bas — version unique et complète)

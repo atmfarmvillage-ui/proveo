@@ -226,9 +226,28 @@ async function saveVente(){
       vente_id:vente.id,admin_id:GP_ADMIN_ID,
       formule_nom:l.formule_nom,quantite:l.quantite,
       prix_unitaire:l.prix_unitaire,montant_ligne:l.montant_ligne,
-      type_prix:l.type_prix
+      type_prix:l.type_prix,
+      type_produit:l.type_produit||'formule',
+      ingredient_id:l.ingredient_id||null
     }))
   );
+
+  // Décrément stock MP pour les lignes type 'mp'
+  for(const l of VT_LIGNES){
+    if(l.type_produit==='mp' && l.ingredient_id){
+      await SB.from('gp_stock_mp').insert({
+        admin_id:GP_ADMIN_ID,
+        saisi_par:GP_USER?.id,
+        type:'sortie_vente',
+        date:today(),
+        ingredient_id:l.ingredient_id,
+        ingredient_nom:l.formule_nom,
+        quantite:l.quantite,
+        prix_unit:l.prix_unitaire,
+        ref:'Vente '+vente.id.slice(0,8)
+      });
+    }
+  }
 
   // Mouvement caisse automatique
   if(paye>0){
@@ -248,9 +267,10 @@ async function saveVente(){
     }
   }
 
-  // Déduire du stock PDV si applicable
+  // Déduire du stock PDV si applicable (uniquement pour les formules, pas les MP)
   if(GP_POINT_VENTE){
     for(const l of VT_LIGNES){
+      if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
       const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
         .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE)
         .eq('formule_nom',l.formule_nom).maybeSingle();
@@ -381,36 +401,154 @@ async function deleteDep(id){
 
 function mettreAJourLigneVente(){} // stub — mise à jour manuelle uniquement
 
+// ── BASCULE TYPE PRODUIT (formule / matière première) ──
+function basculerTypeProduitVente(type){
+  document.getElementById('vt_type_produit').value = type;
+  const btnF = document.getElementById('vt_type_formule_btn');
+  const btnM = document.getElementById('vt_type_mp_btn');
+  const wrapF = document.getElementById('vt-formule-wrap');
+  const wrapM = document.getElementById('vt-mp-wrap');
+  const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
+  const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
+  if(type === 'mp'){
+    btnF.style.cssText = btnF.style.cssText.replace(actif, '') + ';' + inactif;
+    btnM.style.cssText = btnM.style.cssText.replace(inactif, '') + ';' + actif;
+    wrapF.style.display = 'none';
+    wrapM.style.display = 'block';
+    populateSelectMPVente();
+  } else {
+    btnF.style.cssText = btnF.style.cssText.replace(inactif, '') + ';' + actif;
+    btnM.style.cssText = btnM.style.cssText.replace(actif, '') + ';' + inactif;
+    wrapF.style.display = 'block';
+    wrapM.style.display = 'none';
+  }
+  // Reset champs prix/qté
+  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.getElementById('vt-cout-info').textContent = '';
+}
+
+async function populateSelectMPVente(){
+  const sel = document.getElementById('vt_mp');
+  if(!sel) return;
+  // Toujours fetcher en direct pour garantir la fraîcheur (la variable globale peut être désynchronisée)
+  const{data:ingrFresh, error:errI} = await SB.from('gp_ingredients').select('*')
+    .eq('admin_id', GP_ADMIN_ID).order('nom');
+  if(errI){
+    sel.innerHTML = `<option value="">⚠ Erreur chargement : ${errI.message}</option>`;
+    return;
+  }
+  if(ingrFresh && ingrFresh.length){
+    GP_INGREDIENTS = ingrFresh; // resync la variable globale
+  }
+
+  // Charger les niveaux de stock (toujours frais)
+  const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID);
+  window._stockNiveaux = S || [];
+  const niveaux = (typeof calcNiveaux === 'function')
+    ? calcNiveaux(window._stockNiveaux) : {};
+
+  const list = ingrFresh || [];
+  if(!list.length){
+    sel.innerHTML = '<option value="">— Aucune MP enregistrée — créez-en dans Matières Premières —</option>';
+    document.getElementById('vt-mp-stock-info').innerHTML =
+      '<span style="color:var(--gold)">⚠ Aucune matière première dans votre base.</span>';
+    return;
+  }
+
+  sel.innerHTML = '<option value="">— Sélectionner une MP —</option>' +
+    list.map(i => {
+      const stock = niveaux[i.nom] || 0;
+      const stockTxt = stock > 0 ? ` · ${fmtKg(stock)} kg dispo` : ' · ⚠ rupture';
+      return `<option value="${i.id}" data-nom="${i.nom}" data-prix="${i.prix_actuel||0}" data-stock="${stock}">${i.nom}${stockTxt}</option>`;
+    }).join('');
+}
+
+async function onVenteMPChange(){
+  const sel = document.getElementById('vt_mp');
+  const opt = sel.selectedOptions[0];
+  if(!opt || !opt.value){
+    document.getElementById('vt_mp_id').value = '';
+    document.getElementById('vt-mp-stock-info').textContent = '';
+    return;
+  }
+  const nom = opt.dataset.nom;
+  const prixAchat = +opt.dataset.prix || 0;
+  const stock = +opt.dataset.stock || 0;
+  document.getElementById('vt_mp_id').value = opt.value;
+  document.getElementById('vt-mp-stock-info').innerHTML =
+    `📊 Stock actuel : <strong>${fmtKg(stock)} kg</strong> · Prix d'achat : <strong>${fmt(prixAchat)} F/kg</strong>`;
+  // Pré-remplir le prix de vente avec prix d'achat (modifiable)
+  const prixEl = document.getElementById('vt_prix');
+  if(prixEl && !prixEl.value) prixEl.value = prixAchat;
+  document.getElementById('vt-cout-info').textContent =
+    prixAchat ? `Coût : ${fmt(prixAchat)} F/kg (prix d'achat)` : '';
+  calcVente();
+}
+
 function ajouterLigneVente(){
-  const formule=document.getElementById('vt_formule')?.value;
-  const err=document.getElementById('vt_err');
-  if(!formule){err.textContent='Sélectionnez une formule.';return;}
+  const err = document.getElementById('vt_err');
+  const typeProduit = document.getElementById('vt_type_produit')?.value || 'formule';
 
-  const cond=document.getElementById('vt_poids_sac')?.value||'kg';
-  const nbSacs=cond!=='kg'?+document.getElementById('vt_nb_sacs')?.value||0:0;
-  let qte=+document.getElementById('vt_qte')?.value||0;
-  if(cond!=='kg'&&nbSacs>0&&qte===0)qte=nbSacs*+cond;
-  if(!qte||qte<=0){err.textContent='Entrez une quantité.';return;}
+  // Récupérer le produit selon le type
+  let produitNom, ingredientId = null;
+  if(typeProduit === 'mp'){
+    ingredientId = document.getElementById('vt_mp_id')?.value;
+    if(!ingredientId){ err.textContent = 'Sélectionnez une matière première.'; return; }
+    const opt = document.querySelector(`#vt_mp option[value="${ingredientId}"]`);
+    produitNom = opt?.dataset.nom || 'Matière première';
+  } else {
+    produitNom = document.getElementById('vt_formule')?.value;
+    if(!produitNom){ err.textContent = 'Sélectionnez une formule.'; return; }
+  }
 
-  let prixUnit=+document.getElementById('vt_prix')?.value||0;
-  if(!prixUnit){err.textContent='Le prix/kg est requis.';return;}
+  const cond = document.getElementById('vt_poids_sac')?.value || 'kg';
+  const nbSacs = cond !== 'kg' ? +document.getElementById('vt_nb_sacs')?.value || 0 : 0;
+  let qte = +document.getElementById('vt_qte')?.value || 0;
+  if(cond !== 'kg' && nbSacs > 0 && qte === 0) qte = nbSacs * +cond;
+  if(!qte || qte <= 0){ err.textContent = 'Entrez une quantité.'; return; }
 
-  // Si la même formule existe déjà — mise à jour
-  const idx=VT_LIGNES.findIndex(l=>l.formule_nom===formule);
-  const ligne={formule_nom:formule,quantite:qte,prix_unitaire:prixUnit,
-    montant_ligne:Math.round(qte*prixUnit),conditionnement:cond,nb_sacs:nbSacs};
-  if(idx>=0){
-    VT_LIGNES[idx]=ligne;
-    notify('Ligne mise à jour ✓','gold');
+  const prixUnit = +document.getElementById('vt_prix')?.value || 0;
+  if(!prixUnit){ err.textContent = 'Le prix/kg est requis.'; return; }
+
+  // Construire la ligne (formule_nom sert d'étiquette dans tous les cas)
+  const ligne = {
+    formule_nom: produitNom,
+    quantite: qte,
+    prix_unitaire: prixUnit,
+    montant_ligne: Math.round(qte * prixUnit),
+    conditionnement: cond,
+    nb_sacs: nbSacs,
+    type_produit: typeProduit,         // 'formule' ou 'mp'
+    ingredient_id: ingredientId,        // null si formule
+    type_prix: 'detail',                // par défaut
+  };
+
+  // Si même produit existe déjà — mise à jour
+  const idx = VT_LIGNES.findIndex(l =>
+    l.formule_nom === produitNom && l.type_produit === typeProduit
+  );
+  if(idx >= 0){
+    VT_LIGNES[idx] = ligne;
+    notify('Ligne mise à jour ✓', 'gold');
   } else {
     VT_LIGNES.push(ligne);
   }
 
-  // Reset champs produit pour ajouter un autre
-  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('vt_formule').value='';
-  const fs=document.getElementById('vt_formule_search');if(fs)fs.value='';
-  err.textContent='';
+  // Reset champs
+  ['vt_qte','vt_nb_sacs','vt_prix'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  if(typeProduit === 'formule'){
+    document.getElementById('vt_formule').value = '';
+    const fs = document.getElementById('vt_formule_search'); if(fs) fs.value = '';
+  } else {
+    document.getElementById('vt_mp').value = '';
+    document.getElementById('vt_mp_id').value = '';
+    document.getElementById('vt-mp-stock-info').textContent = '';
+  }
+  err.textContent = '';
   calcVente();
   renderLignesVente();
 }
@@ -428,8 +566,8 @@ async function renderLignesVente(){
       <thead><tr><th>Produit</th><th>Cond.</th><th class="num">Qté</th><th class="num">Prix/kg</th><th class="num">Montant</th><th></th></tr></thead>
       <tbody>
       ${VT_LIGNES.map((l,i)=>`<tr>
-        <td style="font-weight:600">${l.formule_nom}
-          <span class="badge ${l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_prix}</span>
+        <td style="font-weight:600">${l.type_produit==='mp'?'🌾 ':''}${l.formule_nom}
+          <span class="badge ${l.type_produit==='mp'?'bdg-b':l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_produit==='mp'?'MP':l.type_prix||'detail'}</span>
         </td>
         <td class="num">${l.quantite}</td>
         <td class="num">${fmt(l.prix_unitaire)} F</td>
