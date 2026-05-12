@@ -129,21 +129,40 @@ async function deleteIngredient(id){
   await loadIngredients();populateSelects();renderIngrAdmin();
 }
 // ══════════════════════════════════════════════════
-// ÉDITEUR DE FORMULES
+// ÉDITEUR DE FORMULES — VERSION FORMULATION PRO
 // ══════════════════════════════════════════════════
-let MF_INGREDIENTS = []; // composition en cours d'édition
+let MF_INGREDIENTS = []; // [{id, nom, pct}]
+
+const NUTRIMENTS = [
+  {key:'proteines',     label:'Protéines',    unite:'%',     decimals:2, besoinMin:'pb_min',           besoinMax:'pb_max'},
+  {key:'energie',       label:'EM',           unite:'kcal/kg',decimals:0, besoinMin:'em_min',           besoinMax:'em_max'},
+  {key:'lipides',       label:'Lipides',      unite:'%',     decimals:2, besoinMin:'lipides_min',      besoinMax:'lipides_max'},
+  {key:'fibres',        label:'Fibres',       unite:'%',     decimals:2, besoinMin:null,               besoinMax:'fibres_max'},
+  {key:'lysine',        label:'Lysine',       unite:'%',     decimals:3, besoinMin:'lysine_min',       besoinMax:'lysine_max'},
+  {key:'methionine',    label:'Méthionine',   unite:'%',     decimals:3, besoinMin:'methionine_min',   besoinMax:'methionine_max'},
+  {key:'meth_cyst',     label:'Méth+Cyst',    unite:'%',     decimals:3, besoinMin:'meth_cyst_min',    besoinMax:'meth_cyst_max'},
+  {key:'threonine',     label:'Thréonine',    unite:'%',     decimals:3, besoinMin:'threonine_min',    besoinMax:'threonine_max'},
+  {key:'tryptophane',   label:'Tryptophane',  unite:'%',     decimals:3, besoinMin:'tryptophane_min',  besoinMax:'tryptophane_max'},
+  {key:'calcium',       label:'Calcium',      unite:'%',     decimals:2, besoinMin:'calcium_min',      besoinMax:'calcium_max'},
+  {key:'phosphore_disp',label:'P disponible', unite:'%',     decimals:2, besoinMin:'phosphore_disp_min',besoinMax:'phosphore_disp_max'},
+  {key:'sodium',        label:'Sodium',       unite:'%',     decimals:3, besoinMin:'sodium_min',       besoinMax:'sodium_max'},
+  {key:'chlore',        label:'Chlore',       unite:'%',     decimals:3, besoinMin:'chlore_min',       besoinMax:'chlore_max'},
+];
 
 function openNewFormule(){
   document.getElementById('mf-titre').textContent='🧪 Nouvelle formule';
   document.getElementById('mf_id').value='';
-  ['mf_nom','mf_stade','mf_prix','mf_emb','mf_mo','mf_trans','mf_new_pct'].forEach(id=>{
+  ['mf_nom','mf_prix','mf_emb','mf_mo','mf_trans','mf_new_pct','mf_ingr_search','mf_new_ingr_id','mf_new_ingr'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
-  document.getElementById('mf_espece').value='lapin';
   document.getElementById('mf_err').textContent='';
   MF_INGREDIENTS = [];
+  _remplirSelectEspeceMF();
+  const espSel = document.getElementById('mf_espece');
+  if(espSel) espSel.value = (GP_CATEGORIES[0]?.espece) || '';
+  onChangeEspeceMF();
   _renderMFIngredients();
-  _remplirSelectIngredientsMF();
+  _renderAnalyseNutritionnelle();
   document.getElementById('modal-formule').style.display='flex';
   setTimeout(()=>document.getElementById('mf_nom').focus(),100);
 }
@@ -152,89 +171,288 @@ function fermerModalFormule(){
   document.getElementById('modal-formule').style.display='none';
 }
 
-function editerFormule(id){
+async function editerFormule(id){
   const f = FORMULES_SADARI.find(x=>x.id===id);
   if(!f){ notify('Formule introuvable','r'); return; }
   document.getElementById('mf-titre').textContent='✏️ Modifier — '+f.nom;
   document.getElementById('mf_id').value=f.id;
   document.getElementById('mf_nom').value=f.nom;
-  document.getElementById('mf_espece').value=f.espece||'autre';
-  document.getElementById('mf_stade').value=f.stade||'';
   document.getElementById('mf_prix').value=f.prix_defaut||0;
   document.getElementById('mf_emb').value=f.cout_emballage_kg||0;
   document.getElementById('mf_mo').value=f.cout_mo_tonne||0;
   document.getElementById('mf_trans').value=f.cout_transport_lot||0;
-  MF_INGREDIENTS = (f.ingredients||[]).map(i=>({nom:i.nom, pct:Number(i.pct)||0}));
+  _remplirSelectEspeceMF();
+  document.getElementById('mf_espece').value = f.espece || (GP_CATEGORIES[0]?.espece) || '';
+  onChangeEspeceMF();
+  document.getElementById('mf_categorie').value = f.stade || '';
+  onChangeCategorieMF();
+
+  MF_INGREDIENTS = (f.ingredients||[]).map(i => {
+    const ing = (GP_INGREDIENTS||[]).find(x => x.nom === i.nom);
+    return { id: ing?.id || null, nom: i.nom, pct: Number(i.pct) || 0 };
+  });
   _renderMFIngredients();
-  _remplirSelectIngredientsMF();
+  _renderAnalyseNutritionnelle();
   document.getElementById('mf_err').textContent='';
   document.getElementById('modal-formule').style.display='flex';
 }
 
-async function _remplirSelectIngredientsMF(){
-  const sel=document.getElementById('mf_new_ingr');
+// ── DROPDOWNS ESPÈCE/CATÉGORIE DYNAMIQUES ────────────
+function _remplirSelectEspeceMF(){
+  const sel = document.getElementById('mf_espece');
   if(!sel) return;
-  // Fetch direct pour garantir la fraîcheur
-  const{data:ingrFresh} = await SB.from('gp_ingredients').select('*')
-    .eq('admin_id', GP_ADMIN_ID).order('nom');
-  if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
-  const list = ingrFresh || GP_INGREDIENTS || [];
-  // Filtrer les MP déjà ajoutées
-  const dejaPris = new Set(MF_INGREDIENTS.map(i=>i.nom));
-  if(!list.length){
-    sel.innerHTML = '<option value="">— Aucune MP en base, créez-en d\'abord —</option>';
-    return;
-  }
-  sel.innerHTML = '<option value="">— Choisir une MP —</option>' +
-    list.filter(i=>!dejaPris.has(i.nom))
-      .map(i=>`<option value="${i.nom}">${i.nom}</option>`).join('');
+  const especes = [...new Map((GP_CATEGORIES||[]).map(c => [c.espece, c])).values()];
+  sel.innerHTML = especes.map(e =>
+    `<option value="${e.espece}">${e.espece_icon||'📦'} ${e.espece_label||e.espece}</option>`
+  ).join('');
 }
 
-function _renderMFIngredients(){
-  const el=document.getElementById('mf-ingredients-liste');
-  if(!el) return;
-  const total=MF_INGREDIENTS.reduce((s,i)=>s+Number(i.pct||0),0);
-  document.getElementById('mf-total-pct').textContent = `Total : ${total.toFixed(2)}%`;
-  document.getElementById('mf-total-pct').style.color =
-    Math.abs(total-100)<0.01 ? 'var(--green)' : (total>100?'var(--red)':'var(--gold)');
-
-  if(!MF_INGREDIENTS.length){
-    el.innerHTML='<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucune matière première ajoutée.</div>';
-    return;
-  }
-  el.innerHTML = MF_INGREDIENTS.map((ing, i) => `
-    <div style="display:grid;grid-template-columns:1fr 90px 30px;gap:6px;align-items:center;padding:6px 8px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
-      <div style="font-size:12px;font-weight:600">${ing.nom}</div>
-      <input type="number" step="0.1" value="${ing.pct}" onchange="modifierPctIngrFormule(${i}, this.value)"
-        style="font-size:11px;padding:3px 6px;text-align:right">
-      <button onclick="supprimerIngredientFormule(${i})"
-        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
-    </div>`).join('');
+function onChangeEspeceMF(){
+  const espece = document.getElementById('mf_espece').value;
+  const sel = document.getElementById('mf_categorie');
+  if(!sel) return;
+  const cats = (GP_CATEGORIES||[]).filter(c => c.espece === espece).sort((a,b)=>a.ordre-b.ordre);
+  sel.innerHTML = '<option value="">— Choisir catégorie —</option>' +
+    cats.map(c => `<option value="${c.categorie}">${c.categorie_label||c.categorie}</option>`).join('');
+  onChangeCategorieMF();
 }
 
+function onChangeCategorieMF(){
+  const espece = document.getElementById('mf_espece').value;
+  const categorie = document.getElementById('mf_categorie').value;
+  const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
+  const src = document.getElementById('mf-besoin-source');
+  if(src){
+    src.textContent = besoin
+      ? `📚 Cibles : ${besoin.source || 'standard'}`
+      : (categorie ? '⚠ Aucun standard pour cette catégorie' : '');
+  }
+  _renderAnalyseNutritionnelle();
+}
+
+// ── RECHERCHE MP AUTOCOMPLETE ────────────────────────
+async function filtrerIngrFormule(){
+  const q = document.getElementById('mf_ingr_search')?.value.toLowerCase().trim() || '';
+  const results = document.getElementById('mf_ingr_results');
+  if(!results) return;
+  if(!GP_INGREDIENTS || !GP_INGREDIENTS.length){
+    const{data} = await SB.from('gp_ingredients').select('*').eq('admin_id', GP_ADMIN_ID).order('nom');
+    if(data) GP_INGREDIENTS = data;
+  }
+  const dejaPris = new Set(MF_INGREDIENTS.map(i => i.nom));
+  let liste = (GP_INGREDIENTS||[]).filter(i => !dejaPris.has(i.nom));
+  if(q) liste = liste.filter(i => i.nom.toLowerCase().includes(q));
+  liste.sort((a,b) => a.nom.localeCompare(b.nom));
+  liste = liste.slice(0, 12);
+
+  if(!liste.length){
+    results.innerHTML = '<div style="padding:10px;color:var(--textm);font-size:11px;text-align:center">Aucun résultat</div>';
+    results.style.display = 'block';
+    return;
+  }
+
+  results.innerHTML = liste.map(i => {
+    const prot = i.proteines || 0;
+    const em = i.energie || 0;
+    const hasData = prot > 0 || em > 0;
+    return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'")}')"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4);transition:background .15s"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
+      <div style="font-size:12px;font-weight:600">${i.nom}</div>
+      <div style="font-size:10px;color:var(--textm)">
+        ${hasData
+          ? `PB ${prot}% · EM ${em} kcal · ${fmt(i.prix_actuel||0)} F/kg`
+          : `⚠ Valeurs nutri manquantes · ${fmt(i.prix_actuel||0)} F/kg`}
+      </div>
+    </div>`;
+  }).join('');
+  results.style.display = 'block';
+}
+
+function selectionnerIngrFormule(id, nom){
+  document.getElementById('mf_new_ingr_id').value = id;
+  document.getElementById('mf_new_ingr').value = nom;
+  document.getElementById('mf_ingr_search').value = nom;
+  document.getElementById('mf_ingr_results').style.display = 'none';
+  document.getElementById('mf_new_pct').focus();
+}
+
+document.addEventListener('click', e => {
+  const s = document.getElementById('mf_ingr_search');
+  const r = document.getElementById('mf_ingr_results');
+  if(s && r && !s.contains(e.target) && !r.contains(e.target)) r.style.display = 'none';
+});
+
+// ── AJOUT / MODIF / SUPPRESSION INGRÉDIENT ────────────
 function ajouterIngredientFormule(){
-  const nom = document.getElementById('mf_new_ingr').value;
+  const id = document.getElementById('mf_new_ingr_id').value;
+  const nom = document.getElementById('mf_new_ingr').value || document.getElementById('mf_ingr_search').value;
   const pct = +document.getElementById('mf_new_pct').value || 0;
   const err = document.getElementById('mf_err');
-  if(!nom){ err.textContent='Choisissez une matière première.'; return; }
+  if(!id || !nom){ err.textContent='Sélectionnez une MP depuis la liste.'; return; }
   if(pct<=0){ err.textContent='Pourcentage doit être > 0.'; return; }
-  MF_INGREDIENTS.push({nom, pct});
+  MF_INGREDIENTS.push({id, nom, pct});
+  document.getElementById('mf_new_ingr_id').value='';
   document.getElementById('mf_new_ingr').value='';
+  document.getElementById('mf_ingr_search').value='';
   document.getElementById('mf_new_pct').value='';
   err.textContent='';
   _renderMFIngredients();
-  _remplirSelectIngredientsMF();
+  _renderAnalyseNutritionnelle();
 }
 
 function modifierPctIngrFormule(idx, val){
   MF_INGREDIENTS[idx].pct = +val || 0;
   _renderMFIngredients();
+  _renderAnalyseNutritionnelle();
 }
 
 function supprimerIngredientFormule(idx){
   MF_INGREDIENTS.splice(idx, 1);
   _renderMFIngredients();
-  _remplirSelectIngredientsMF();
+  _renderAnalyseNutritionnelle();
+}
+
+function _renderMFIngredients(){
+  const el = document.getElementById('mf-ingredients-liste');
+  if(!el) return;
+  const total = MF_INGREDIENTS.reduce((s,i)=>s+Number(i.pct||0),0);
+  const tot = document.getElementById('mf-total-pct');
+  if(tot){
+    tot.textContent = `Total : ${total.toFixed(2)}%`;
+    tot.style.color = Math.abs(total-100)<0.01 ? 'var(--green)' : (total>100?'var(--red)':'var(--gold)');
+  }
+  if(!MF_INGREDIENTS.length){
+    el.innerHTML = '<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucune MP. Cherchez ci-dessous pour ajouter.</div>';
+    return;
+  }
+  el.innerHTML = MF_INGREDIENTS.map((ing, i) => {
+    const ingData = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
+    const prix = ingData?.prix_actuel || 0;
+    return `<div style="display:grid;grid-template-columns:1fr 80px 80px 28px;gap:6px;align-items:center;padding:6px 8px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ing.nom}">${ing.nom}</div>
+      <input type="number" step="0.01" value="${ing.pct}" onchange="modifierPctIngrFormule(${i}, this.value)"
+        style="font-size:11px;padding:3px 5px;text-align:right">
+      <div style="font-size:10px;color:var(--textm);text-align:right">${fmt(Math.round(ing.pct*10*prix))} F/t</div>
+      <button onclick="supprimerIngredientFormule(${i})"
+        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ── CALCUL NUTRIMENTS LIVE + ANALYSE ──────────────────
+function _calculerNutriments(){
+  const out = {};
+  for(const n of NUTRIMENTS) out[n.key] = 0;
+  let coutMP = 0;
+  for(const ing of MF_INGREDIENTS){
+    const data = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
+    if(!data) continue;
+    const pct = Number(ing.pct) || 0;
+    coutMP += pct * 10 * (data.prix_actuel || 0);
+    for(const n of NUTRIMENTS){
+      const v = Number(data[n.key]) || 0;
+      out[n.key] += (pct / 100) * v;
+    }
+  }
+  return {nutriments: out, coutMP};
+}
+
+function _renderAnalyseNutritionnelle(){
+  const el = document.getElementById('mf-analyse-table');
+  const coutEl = document.getElementById('mf-cout-mp');
+  if(!el) return;
+
+  const espece = document.getElementById('mf_espece')?.value;
+  const categorie = document.getElementById('mf_categorie')?.value;
+  const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
+  const {nutriments, coutMP} = _calculerNutriments();
+
+  el.innerHTML = `<table class="tbl" style="width:100%;font-size:10px"><thead>
+    <tr><th>Nutriment</th><th class="num">Calc.</th><th class="num">Cible</th><th></th></tr>
+  </thead><tbody>${NUTRIMENTS.map(n => {
+    const v = nutriments[n.key];
+    const min = besoin?.[n.besoinMin];
+    const max = besoin?.[n.besoinMax];
+    let statut = '⚪', color = 'var(--textm)';
+    if(min != null || max != null){
+      if(min != null && v < Number(min) * 0.97){ statut = '🔴'; color = 'var(--red)'; }
+      else if(max != null && v > Number(max) * 1.03){ statut = '🟠'; color = 'var(--gold)'; }
+      else { statut = '🟢'; color = 'var(--green)'; }
+    }
+    const cible = (min != null && max != null)
+      ? `${Number(min).toFixed(n.decimals)} – ${Number(max).toFixed(n.decimals)}`
+      : (min != null ? `≥ ${Number(min).toFixed(n.decimals)}`
+         : (max != null ? `≤ ${Number(max).toFixed(n.decimals)}` : '—'));
+    return `<tr>
+      <td style="font-size:10px">${n.label} <span style="color:var(--textm);font-size:9px">${n.unite}</span></td>
+      <td class="num" style="color:${color};font-weight:700">${v.toFixed(n.decimals)}</td>
+      <td class="num" style="color:var(--textm);font-size:9px">${cible}</td>
+      <td>${statut}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+
+  if(coutEl){
+    coutEl.innerHTML = `<div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">💰 Coût MP / tonne</span><strong style="color:var(--gold)">${fmt(Math.round(coutMP))} F</strong></div>`;
+  }
+}
+
+// ── AJOUT ESPÈCE / CATÉGORIE ────────────────────
+function ouvrirAjoutEspece(){
+  ['ae_code','ae_label','ae_icon'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ae_err').textContent = '';
+  document.getElementById('modal-ajout-espece').style.display = 'flex';
+}
+
+async function saveAjoutEspece(){
+  const err = document.getElementById('ae_err');
+  const code = document.getElementById('ae_code').value.trim().toLowerCase().replace(/\s+/g,'_');
+  const label = document.getElementById('ae_label').value.trim();
+  const icon = document.getElementById('ae_icon').value.trim() || '📦';
+  if(!code || !label){ err.textContent = 'Code et nom requis.'; return; }
+  const{error} = await SB.from('gp_categories_aliment').insert({
+    admin_id: GP_ADMIN_ID, espece: code, espece_label: label, espece_icon: icon,
+    categorie: 'standard', categorie_label: 'Standard', ordre: 1
+  });
+  if(error){ err.textContent = 'Erreur : ' + error.message; return; }
+  await loadCategoriesAliment();
+  _remplirSelectEspeceMF();
+  document.getElementById('mf_espece').value = code;
+  onChangeEspeceMF();
+  document.getElementById('modal-ajout-espece').style.display = 'none';
+  notify(`Espèce ${label} ajoutée ✓`, 'gold');
+}
+
+function ouvrirAjoutCategorie(){
+  const espece = document.getElementById('mf_espece').value;
+  if(!espece){ notify('Choisissez une espèce d\'abord', 'r'); return; }
+  const especeData = (GP_CATEGORIES||[]).find(c => c.espece === espece);
+  document.getElementById('ac-espece-label').textContent =
+    `Pour : ${especeData?.espece_icon||''} ${especeData?.espece_label||espece}`;
+  ['ac_code','ac_label'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ac_err').textContent = '';
+  document.getElementById('modal-ajout-categorie').style.display = 'flex';
+}
+
+async function saveAjoutCategorie(){
+  const err = document.getElementById('ac_err');
+  const espece = document.getElementById('mf_espece').value;
+  const code = document.getElementById('ac_code').value.trim().toLowerCase().replace(/\s+/g,'_');
+  const label = document.getElementById('ac_label').value.trim();
+  if(!code || !label || !espece){ err.textContent = 'Code et nom requis.'; return; }
+  const especeData = (GP_CATEGORIES||[]).find(c => c.espece === espece);
+  const ordre = Math.max(0, ...((GP_CATEGORIES||[]).filter(c => c.espece === espece).map(c => c.ordre||0))) + 1;
+  const{error} = await SB.from('gp_categories_aliment').insert({
+    admin_id: GP_ADMIN_ID, espece, espece_label: especeData?.espece_label,
+    espece_icon: especeData?.espece_icon, categorie: code, categorie_label: label, ordre
+  });
+  if(error){ err.textContent = 'Erreur : ' + error.message; return; }
+  await loadCategoriesAliment();
+  onChangeEspeceMF();
+  document.getElementById('mf_categorie').value = code;
+  onChangeCategorieMF();
+  document.getElementById('modal-ajout-categorie').style.display = 'none';
+  notify(`Catégorie ${label} ajoutée ✓`, 'gold');
 }
 
 async function saveFormule(){
@@ -243,7 +461,7 @@ async function saveFormule(){
   const id = document.getElementById('mf_id').value || null;
   const nom = document.getElementById('mf_nom').value.trim();
   const espece = document.getElementById('mf_espece').value;
-  const stade = document.getElementById('mf_stade').value.trim() || null;
+  const stade = document.getElementById('mf_categorie')?.value || null;  // code catégorie
   const prix = +document.getElementById('mf_prix').value || 0;
   const emb = +document.getElementById('mf_emb').value || 0;
   const mo = +document.getElementById('mf_mo').value || 0;
@@ -257,11 +475,13 @@ async function saveFormule(){
     if(!confirm(`Le total est ${total.toFixed(2)}% (pas 100%). Enregistrer quand même ?`)) return;
   }
 
+  // Stocker la composition avec nom + pct (id en bonus si dispo)
+  const composition = MF_INGREDIENTS.map(i => ({ nom: i.nom, pct: i.pct, id: i.id || null }));
   const payload = {
     admin_id: GP_ADMIN_ID,
     nom, espece, stade,
     prix_defaut: prix,
-    ingredients: MF_INGREDIENTS,
+    ingredients: composition,
     cout_emballage_kg: emb,
     cout_mo_tonne: mo,
     cout_transport_lot: trans,

@@ -17,6 +17,8 @@ let GP_REMISE_MAX = 5;
 let GP_CHARTS = {};
 let GP_POINT_VENTE = null;
 let GP_PRIX_GROS = {}; // Prix grossiste par formule // Point de vente du membre connecté
+let GP_CATEGORIES = []; // [{espece, espece_label, espece_icon, categorie, categorie_label, ordre}]
+let GP_BESOINS = [];    // [{espece, categorie, pb_min, pb_max, em_min, ..., source}]
 
 // ── FORMULES (chargées dynamiquement depuis la DB par loadFormules) ─
 // Le tableau est rempli au boot par loadFormules() depuis gp_formules.

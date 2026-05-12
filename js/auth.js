@@ -168,7 +168,7 @@ async function bootApp(user){
   // (role restrictions déjà appliquées ci-dessus)
   // Load base data — loadFormules d'abord car loadPrix() s'appuie dessus
   await loadFormules();
-  await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix()]);
+  await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix(),loadCategoriesAliment(),loadBesoinsNutritionnels()]);
   // Set defaults
   const todayStr=new Date().toISOString().slice(0,10);
   const monthStr=new Date().toISOString().slice(0,7);
@@ -343,6 +343,29 @@ async function loadFormules(){
       actif:f.actif!==false,
     });
   });
+}
+
+// Charge les catégories (standards admin_id NULL + custom admin_id=moi)
+async function loadCategoriesAliment(){
+  const{data} = await SB.from('gp_categories_aliment')
+    .select('*').or(`admin_id.is.null,admin_id.eq.${GP_ADMIN_ID}`)
+    .eq('actif', true).order('espece').order('ordre');
+  GP_CATEGORIES = data || [];
+}
+
+// Charge les besoins nutritionnels (standards + custom)
+async function loadBesoinsNutritionnels(){
+  const{data} = await SB.from('gp_besoins_nutritionnels')
+    .select('*').or(`admin_id.is.null,admin_id.eq.${GP_ADMIN_ID}`)
+    .order('espece').order('categorie');
+  // Custom override standard si même espèce+catégorie
+  const map = new Map();
+  (data||[]).forEach(b => {
+    const k = b.espece + '|' + b.categorie;
+    const prev = map.get(k);
+    if(!prev || (b.admin_id && !prev.admin_id)) map.set(k, b);
+  });
+  GP_BESOINS = Array.from(map.values());
 }
 
 async function loadIngredients(){
