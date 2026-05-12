@@ -103,32 +103,64 @@ function calcVente(){
   let qte=+document.getElementById('vt_qte')?.value||0;
   if(nb>0&&poids!=='kg'&&qte===0)qte=nb*+poids;
   const prix=+document.getElementById('vt_prix')?.value||0;
-  const paye=+document.getElementById('vt_paye')?.value||0;
+  const remis=+document.getElementById('vt_paye')?.value||0;
+
   // Total depuis les lignes déjà ajoutées + ligne en cours
   const totalLignes=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
   const ligneEnCours=Math.round(qte*prix);
   const total=totalLignes||(ligneEnCours);
-  const reste=Math.max(0,total-paye);
+
+  // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
+  // Si remis < total → reste à payer
+  let monnaie=0, reste=0, paye;
+  if(remis >= total && total > 0){
+    paye = total;
+    monnaie = remis - total;
+  } else {
+    paye = remis;
+    reste = total - remis;
+  }
 
   // Montant total
   const totalEl=document.getElementById('vt-montant-total');
+  const resteRow=document.getElementById('vt-reste-row');
   const resteEl=document.getElementById('vt-reste-du');
+  const monnaieRow=document.getElementById('vt-monnaie-row');
+  const monnaieEl=document.getElementById('vt-monnaie');
   mettreAJourLigneVente();
-  if(totalEl)totalEl.textContent=fmt(VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0))+' F';
-  if(resteEl){resteEl.textContent=fmt(reste)+' F';resteEl.style.color=reste>0?'var(--red)':'var(--green)';}
+  if(totalEl)totalEl.textContent=fmt(total)+' F';
 
-  // Statut automatique
-  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+  if(monnaie > 0){
+    if(monnaieRow) monnaieRow.style.display='flex';
+    if(monnaieEl) monnaieEl.textContent='+'+fmt(monnaie)+' F';
+    if(resteRow) resteRow.style.display='none';
+  } else {
+    if(monnaieRow) monnaieRow.style.display='none';
+    if(resteRow) resteRow.style.display='flex';
+    if(resteEl){
+      resteEl.textContent=fmt(reste)+' F';
+      resteEl.style.color=reste>0?'var(--red)':'var(--green)';
+    }
+  }
+
+  // Statut automatique (basé sur paye conservé, pas remis)
+  const statut = paye<=0 ? 'impaye' : paye>=total ? 'paye' : 'partiel';
   const badge=document.getElementById('vt-statut-badge');
   if(badge){
     const map={
       impaye:['rgba(239,68,68,.1)','var(--red)','rgba(239,68,68,.2)','⏳ Impayé'],
       partiel:['rgba(245,158,11,.1)','var(--gold)','rgba(245,158,11,.2)',`⚠ Paiement partiel — Reste : ${fmt(reste)} F`],
-      paye:['rgba(22,163,74,.1)','var(--green)','rgba(22,163,74,.2)','✅ Payé intégralement']
+      paye:['rgba(22,163,74,.1)','var(--green)','rgba(22,163,74,.2)',
+        monnaie>0
+          ? `✅ Payé · 💰 Rendre ${fmt(monnaie)} F`
+          : '✅ Payé intégralement']
     };
     const[bg,color,border,label]=map[statut];
     badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border;badge.textContent=label;
   }
+
+  // Stocker pour saveVente
+  window._vtMonnaie = { total, remis, paye, monnaie, reste };
 }
 
 async function onVenteFormuleChange(){
@@ -163,7 +195,7 @@ async function onVenteFormuleChange(){
 async function saveVente(){
   let clientId=document.getElementById('vt_client')?.value;
   const note=document.getElementById('vt_note')?.value.trim()||null;
-  const paye=+document.getElementById('vt_paye')?.value||0;
+  const remis=+document.getElementById('vt_paye')?.value||0;
   const pv=GP_POINT_VENTE||document.getElementById('vt_pv')?.value.trim()||null;
   const err=document.getElementById('vt_err');
 
@@ -193,8 +225,11 @@ async function saveVente(){
   }
 
   const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  // Calcul monnaie : si remis >= total, payé conservé = total et rendu = remis - total
+  const paye = remis >= total ? total : remis;
+  const monnaie = remis > total ? (remis - total) : 0;
   // Statut paiement automatique
-  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+  const statut = paye<=0 ? 'impaye' : paye>=total ? 'paye' : 'partiel';
 
   // Déterminer type client
   const client=GP_CLIENTS.find(c=>c.id===clientId);
@@ -206,6 +241,8 @@ async function saveVente(){
     client_nom:client?.nom||'Client comptant',
     montant_total:total,
     montant_paye:paye,
+    montant_remis:remis,
+    monnaie_rendue:monnaie,
     statut_paiement:statut,
     type_client:typeClient,
     nb_produits:VT_LIGNES.length,
@@ -291,8 +328,12 @@ async function saveVente(){
   ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('vt_client').value='';
   err.textContent='';
-  if(paye>0) imprimerRecuThermique(vente.id);
-  notify('Vente enregistrée ✓','gold');
+  if(paye>0) imprimerRecuThermique({...vente, lignes: lignes_a_insert});
+  if(monnaie > 0){
+    notify(`Vente enregistrée ✓ — 💰 Monnaie à rendre : ${fmt(monnaie)} F`, 'gold');
+  } else {
+    notify('Vente enregistrée ✓', 'gold');
+  }
   // Push automatique si client a tout payé
   if(statut==='paye'&&clientId&&clientId!=='__nouveau__'){
     setTimeout(()=>envoyerWAVenteAuto(vente.id,client,lignes_a_insert,total,total),1000);
@@ -429,63 +470,137 @@ function basculerTypeProduitVente(type){
   document.getElementById('vt-cout-info').textContent = '';
 }
 
+// Précharge MP + stock en mémoire (appelé au passage en mode "MP")
 async function populateSelectMPVente(){
-  const sel = document.getElementById('vt_mp');
-  if(!sel) return;
-  // Toujours fetcher en direct pour garantir la fraîcheur (la variable globale peut être désynchronisée)
+  // Fetch direct des MP (resync si désynchronisé)
   const{data:ingrFresh, error:errI} = await SB.from('gp_ingredients').select('*')
     .eq('admin_id', GP_ADMIN_ID).order('nom');
   if(errI){
-    sel.innerHTML = `<option value="">⚠ Erreur chargement : ${errI.message}</option>`;
+    document.getElementById('vt-mp-stock-info').innerHTML =
+      `<span style="color:var(--red)">⚠ Erreur : ${errI.message}</span>`;
     return;
   }
-  if(ingrFresh && ingrFresh.length){
-    GP_INGREDIENTS = ingrFresh; // resync la variable globale
-  }
-
-  // Charger les niveaux de stock (toujours frais)
+  if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
+  // Niveaux de stock toujours frais
   const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID);
   window._stockNiveaux = S || [];
-  const niveaux = (typeof calcNiveaux === 'function')
-    ? calcNiveaux(window._stockNiveaux) : {};
-
-  const list = ingrFresh || [];
-  if(!list.length){
-    sel.innerHTML = '<option value="">— Aucune MP enregistrée — créez-en dans Matières Premières —</option>';
+  if(!ingrFresh || !ingrFresh.length){
     document.getElementById('vt-mp-stock-info').innerHTML =
       '<span style="color:var(--gold)">⚠ Aucune matière première dans votre base.</span>';
-    return;
   }
-
-  sel.innerHTML = '<option value="">— Sélectionner une MP —</option>' +
-    list.map(i => {
-      const stock = niveaux[i.nom] || 0;
-      const stockTxt = stock > 0 ? ` · ${fmtKg(stock)} kg dispo` : ' · ⚠ rupture';
-      return `<option value="${i.id}" data-nom="${i.nom}" data-prix="${i.prix_actuel||0}" data-stock="${stock}">${i.nom}${stockTxt}</option>`;
-    }).join('');
+  // Reset champ recherche
+  const search = document.getElementById('vt_mp_search');
+  if(search) search.value = '';
+  document.getElementById('vt_mp_id').value = '';
+  const sel = document.getElementById('vt_mp_selected');
+  if(sel){ sel.style.display = 'none'; sel.innerHTML = ''; }
+  document.getElementById('vt_mp_results').style.display = 'none';
 }
 
-async function onVenteMPChange(){
-  const sel = document.getElementById('vt_mp');
-  const opt = sel.selectedOptions[0];
-  if(!opt || !opt.value){
-    document.getElementById('vt_mp_id').value = '';
-    document.getElementById('vt-mp-stock-info').textContent = '';
+// Filtre dynamique des MP (au tap)
+function filtrerIngrVente(){
+  const q = document.getElementById('vt_mp_search')?.value.toLowerCase().trim() || '';
+  const results = document.getElementById('vt_mp_results');
+  if(!results) return;
+
+  const niveaux = (typeof calcNiveaux === 'function')
+    ? calcNiveaux(window._stockNiveaux || []) : {};
+
+  let liste = [...(GP_INGREDIENTS||[])];
+  if(q) liste = liste.filter(i => i.nom.toLowerCase().includes(q));
+  // Trier : ceux en stock d'abord, puis alpha
+  liste.sort((a,b) => {
+    const sa = niveaux[a.nom] || 0;
+    const sb = niveaux[b.nom] || 0;
+    if((sa>0) !== (sb>0)) return sa>0 ? -1 : 1;
+    return a.nom.localeCompare(b.nom);
+  });
+  liste = liste.slice(0, 12);
+
+  if(!liste.length){
+    results.innerHTML = '<div style="padding:10px;color:var(--textm);font-size:11px;text-align:center">Aucun résultat</div>';
+    results.style.display = 'block';
     return;
   }
-  const nom = opt.dataset.nom;
-  const prixAchat = +opt.dataset.prix || 0;
-  const stock = +opt.dataset.stock || 0;
-  document.getElementById('vt_mp_id').value = opt.value;
+
+  results.innerHTML = liste.map(i => {
+    const stock = niveaux[i.nom] || 0;
+    const enRupture = stock <= 0;
+    const seuil = i.seuil_alerte || 200;
+    const faible = stock > 0 && stock < seuil;
+    let badge, bgColor;
+    if(enRupture){
+      badge = '<span style="background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.4);padding:1px 8px;border-radius:10px;font-size:9px;font-weight:700">🚫 RUPTURE</span>';
+      bgColor = 'rgba(239,68,68,.06)';
+    } else if(faible){
+      badge = `<span style="background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:1px 8px;border-radius:10px;font-size:9px;font-weight:700">⬇ FAIBLE</span>`;
+      bgColor = 'rgba(245,158,11,.04)';
+    } else {
+      badge = '<span style="background:rgba(22,163,74,.15);color:var(--green);padding:1px 8px;border-radius:10px;font-size:9px">✓ OK</span>';
+      bgColor = '';
+    }
+    const cursorStyle = enRupture ? 'cursor:not-allowed;opacity:.5' : 'cursor:pointer';
+    const onclick = enRupture
+      ? `onclick="notify('🚫 ${i.nom.replace(/'/g,"\\'")} en rupture — vente impossible','r')"`
+      : `onclick="selectionnerIngrVente('${i.id}','${i.nom.replace(/'/g,"\\'")}',${i.prix_actuel||0},${stock})"`;
+    return `<div ${onclick}
+      style="padding:9px 12px;${cursorStyle};border-bottom:1px solid rgba(30,45,74,.4);background:${bgColor};transition:background .15s"
+      onmouseover="if(${!enRupture})this.style.background='rgba(22,163,74,.1)'"
+      onmouseout="this.style.background='${bgColor}'">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:${enRupture?'var(--red)':'var(--text)'}">${i.nom}</div>
+          <div style="font-size:10px;color:${enRupture?'var(--red)':'var(--textm)'}">${fmtKg(stock)} kg en stock · ${fmt(i.prix_actuel||0)} F/kg</div>
+        </div>
+        ${badge}
+      </div>
+    </div>`;
+  }).join('');
+  results.style.display = 'block';
+}
+
+function selectionnerIngrVente(id, nom, prix, stock){
+  document.getElementById('vt_mp_id').value = id;
+  document.getElementById('vt_mp_search').value = nom;
+  document.getElementById('vt_mp_results').style.display = 'none';
+  const sel = document.getElementById('vt_mp_selected');
+  if(sel){
+    sel.style.display = 'flex';
+    sel.style.justifyContent = 'space-between';
+    sel.style.alignItems = 'center';
+    sel.innerHTML = `<span>✓ ${nom}</span><button onclick="effacerSelectionMPVente()" style="background:none;border:none;color:var(--textm);cursor:pointer;font-size:14px">✕</button>`;
+  }
   document.getElementById('vt-mp-stock-info').innerHTML =
-    `📊 Stock actuel : <strong>${fmtKg(stock)} kg</strong> · Prix d'achat : <strong>${fmt(prixAchat)} F/kg</strong>`;
-  // Pré-remplir le prix de vente avec prix d'achat (modifiable)
+    `📊 Stock : <strong>${fmtKg(stock)} kg</strong> · Prix d'achat : <strong>${fmt(prix)} F/kg</strong>`;
+  // Pré-remplir le prix de vente
   const prixEl = document.getElementById('vt_prix');
-  if(prixEl && !prixEl.value) prixEl.value = prixAchat;
+  if(prixEl && !prixEl.value) prixEl.value = prix;
   document.getElementById('vt-cout-info').textContent =
-    prixAchat ? `Coût : ${fmt(prixAchat)} F/kg (prix d'achat)` : '';
+    prix ? `Coût : ${fmt(prix)} F/kg` : '';
+  // Stock pour blocage à l'ajout
+  window._vtMPStock = stock;
+  document.getElementById('vt_qte')?.focus();
   calcVente();
 }
+
+function effacerSelectionMPVente(){
+  document.getElementById('vt_mp_id').value = '';
+  document.getElementById('vt_mp_search').value = '';
+  const sel = document.getElementById('vt_mp_selected');
+  if(sel){ sel.style.display = 'none'; sel.innerHTML = ''; }
+  document.getElementById('vt-mp-stock-info').textContent = '';
+  document.getElementById('vt-cout-info').textContent = '';
+  window._vtMPStock = undefined;
+}
+
+// Fermer la liste si clic ailleurs
+document.addEventListener('click', e => {
+  const search = document.getElementById('vt_mp_search');
+  const results = document.getElementById('vt_mp_results');
+  if(search && results && !search.contains(e.target) && !results.contains(e.target)){
+    results.style.display = 'none';
+  }
+});
 
 function ajouterLigneVente(){
   const err = document.getElementById('vt_err');
@@ -496,8 +611,21 @@ function ajouterLigneVente(){
   if(typeProduit === 'mp'){
     ingredientId = document.getElementById('vt_mp_id')?.value;
     if(!ingredientId){ err.textContent = 'Sélectionnez une matière première.'; return; }
-    const opt = document.querySelector(`#vt_mp option[value="${ingredientId}"]`);
-    produitNom = opt?.dataset.nom || 'Matière première';
+    produitNom = document.getElementById('vt_mp_search')?.value || 'Matière première';
+
+    // Blocage rupture
+    const stockDispo = window._vtMPStock || 0;
+    if(stockDispo <= 0){
+      err.textContent = `🚫 ${produitNom} en rupture de stock — vente impossible.`;
+      return;
+    }
+    // Vérifier qté demandée vs stock dispo (warning, pas blocage strict)
+    const qteSaisie = +document.getElementById('vt_qte')?.value || 0;
+    if(qteSaisie > stockDispo){
+      if(!confirm(`⚠ Stock insuffisant : ${fmtKg(stockDispo)} kg dispo, vous voulez vendre ${qteSaisie} kg.\nContinuer quand même (créera un stock négatif) ?`)){
+        return;
+      }
+    }
   } else {
     produitNom = document.getElementById('vt_formule')?.value;
     if(!produitNom){ err.textContent = 'Sélectionnez une formule.'; return; }
@@ -544,9 +672,7 @@ function ajouterLigneVente(){
     document.getElementById('vt_formule').value = '';
     const fs = document.getElementById('vt_formule_search'); if(fs) fs.value = '';
   } else {
-    document.getElementById('vt_mp').value = '';
-    document.getElementById('vt_mp_id').value = '';
-    document.getElementById('vt-mp-stock-info').textContent = '';
+    effacerSelectionMPVente();
   }
   err.textContent = '';
   calcVente();

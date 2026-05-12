@@ -356,6 +356,8 @@ function imprimerRecuThermique(vente){
   const lignes=vente.lignes||[];
   const total=lignes.length?lignes.reduce((s,l)=>s+Number(l.montant_ligne||0),0):Number(vente.montant_total||0);
   const paye=Number(vente.montant_paye||0);
+  const remis=Number(vente.montant_remis||paye);
+  const monnaie=Number(vente.monnaie_rendue||0);
   const reste=Math.max(0,total-paye);
   const statut=reste<=0?'✅ PAYÉ':paye>0?'⚠ PARTIEL':'❌ IMPAYÉ';
 
@@ -419,7 +421,9 @@ ${lignes.length?`
 </table>
 <div class="line"></div>`:''}
 <div class="row bold"><span>TOTAL</span><span>${fmt(total)} F</span></div>
-<div class="row"><span>Payé</span><span>${fmt(paye)} F</span></div>
+${remis!==paye?`<div class="row"><span>Remis client</span><span>${fmt(remis)} F</span></div>`:''}
+<div class="row"><span>Encaissé</span><span>${fmt(paye)} F</span></div>
+${monnaie>0?`<div class="row bold" style="background:#000;color:#fff;padding:2px 4px"><span>💰 Monnaie rendue</span><span>${fmt(monnaie)} F</span></div>`:''}
 ${reste>0?`<div class="row bold"><span>Reste dû</span><span>${fmt(reste)} F</span></div>`:''}
 <div class="line"></div>
 <div class="statut">${statut}</div>
