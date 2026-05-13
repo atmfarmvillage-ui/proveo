@@ -584,6 +584,251 @@ function appliquerSuggestion(mpId, mpNom, pctAjout){
   _renderAnalyseNutritionnelle();
 }
 
+// ══════════════════════════════════════════════════
+// PHASE 3 : OPTIMISATION SIMPLEX (formulation auto)
+// ══════════════════════════════════════════════════
+let OPT_MP_SELECTION = new Set();  // IDs des MP cochées par l'utilisateur
+
+function ouvrirOptimiseur(){
+  const espece = document.getElementById('mf_espece')?.value;
+  const categorie = document.getElementById('mf_categorie')?.value;
+  if(!espece || !categorie){
+    notify('Choisissez d\'abord une espèce et une catégorie','r');
+    return;
+  }
+  const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
+  if(!besoin){
+    notify('Aucun besoin nutritionnel défini pour cette espèce/catégorie','r');
+    return;
+  }
+  const especeData = (GP_CATEGORIES||[]).find(c => c.espece === espece);
+  const catData = (GP_CATEGORIES||[]).find(c => c.espece === espece && c.categorie === categorie);
+  document.getElementById('opt-contexte').textContent =
+    `${especeData?.espece_icon||''} ${especeData?.espece_label||espece} · ${catData?.categorie_label||categorie}`;
+
+  // Pré-sélectionner les MP déjà dans la formule
+  OPT_MP_SELECTION = new Set(MF_INGREDIENTS.map(i => i.id));
+  // Par défaut, si aucune MP saisie, présélectionner les MP basiques courantes
+  if(OPT_MP_SELECTION.size === 0){
+    const patterns = ['mais','tourteau de soja','son de ble','tourteau de palmiste',
+      'foin','luzerne','phosphate','carbonate','coquilles huitres','sel','premix','lysine','methionine'];
+    for(const p of patterns){
+      const mp = (GP_INGREDIENTS||[]).find(i => normalizeSearch(i.nom).includes(p));
+      if(mp) OPT_MP_SELECTION.add(mp.id);
+    }
+  }
+
+  document.getElementById('opt-err').textContent = '';
+  document.getElementById('opt-search').value = '';
+  renderOptMPListe();
+  document.getElementById('modal-optimiseur').style.display = 'flex';
+}
+
+function fermerOptimiseur(){
+  document.getElementById('modal-optimiseur').style.display = 'none';
+}
+
+function renderOptMPListe(){
+  const q = normalizeSearch(document.getElementById('opt-search')?.value || '');
+  const liste = (GP_INGREDIENTS||[])
+    .filter(i => !q || normalizeSearch(i.nom).includes(q))
+    .sort((a,b) => a.nom.localeCompare(b.nom));
+
+  const el = document.getElementById('opt-mp-liste');
+  el.innerHTML = liste.length ? liste.map(i => {
+    const checked = OPT_MP_SELECTION.has(i.id);
+    const prot = i.proteines || 0;
+    const em = i.energie || 0;
+    const hasData = prot > 0 || em > 0;
+    const dataInfo = hasData
+      ? `PB ${prot}% · EM ${em} · ${fmt(i.prix_actuel||0)} F/kg`
+      : `⚠ Valeurs manquantes · ${fmt(i.prix_actuel||0)} F/kg`;
+    return `<label style="display:grid;grid-template-columns:auto 1fr;gap:8px;padding:6px 8px;cursor:pointer;border-radius:5px;${checked?'background:rgba(168,85,247,.1);':''}">
+      <input type="checkbox" ${checked?'checked':''} onchange="optToggleMP('${i.id}',this.checked)">
+      <div>
+        <div style="font-size:11px;font-weight:600">${i.nom}</div>
+        <div style="font-size:9px;color:var(--textm)">${dataInfo}</div>
+      </div>
+    </label>`;
+  }).join('') : '<div style="color:var(--textm);font-size:11px;padding:10px;text-align:center">Aucun résultat</div>';
+
+  document.getElementById('opt-compteur').textContent = OPT_MP_SELECTION.size;
+}
+
+function optToggleMP(id, checked){
+  if(checked) OPT_MP_SELECTION.add(id);
+  else OPT_MP_SELECTION.delete(id);
+  document.getElementById('opt-compteur').textContent = OPT_MP_SELECTION.size;
+}
+
+function optToggleAll(state){
+  const q = normalizeSearch(document.getElementById('opt-search')?.value || '');
+  const liste = (GP_INGREDIENTS||[]).filter(i => !q || normalizeSearch(i.nom).includes(q));
+  for(const i of liste){
+    if(state) OPT_MP_SELECTION.add(i.id);
+    else OPT_MP_SELECTION.delete(i.id);
+  }
+  renderOptMPListe();
+}
+
+// ── CONSTRUCTION DU MODÈLE LP ─────────────────────────
+function _construireModeleLP(espece, categorie, mpSelectionnees){
+  const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
+  if(!besoin) return null;
+
+  const variables = {};
+  const constraints = { total: { equal: 100 } };
+
+  // Contraintes nutritionnelles
+  for(const n of NUTRIMENTS){
+    const minVal = besoin[n.besoinMin];
+    const maxVal = besoin[n.besoinMax];
+    const c = {};
+    if(minVal != null) c.min = Number(minVal);
+    if(maxVal != null) c.max = Number(maxVal);
+    if(Object.keys(c).length) constraints[n.key] = c;
+  }
+
+  // Contraintes MP × espèce (max et min par MP)
+  for(const mp of mpSelectionnees){
+    const contraintes = _contraintesMP(espece, mp.nom);
+    for(const c of contraintes){
+      if(c.pct_max != null) constraints[`mpmax_${mp.id}`] = { max: Number(c.pct_max) };
+      if(c.pct_min != null) constraints[`mpmin_${mp.id}`] = { min: Number(c.pct_min) };
+    }
+  }
+
+  // Variables (1 par MP sélectionnée)
+  for(const mp of mpSelectionnees){
+    const v = {
+      cout: Number(mp.prix_actuel || 0),
+      total: 1,
+    };
+    // Coefficients nutritionnels : nutriment_i / 100 (car x_i en %)
+    for(const n of NUTRIMENTS){
+      const val = Number(mp[n.key]) || 0;
+      v[n.key] = val / 100;
+    }
+    // Coefficients de contraintes MP
+    if(constraints[`mpmax_${mp.id}`]) v[`mpmax_${mp.id}`] = 1;
+    if(constraints[`mpmin_${mp.id}`]) v[`mpmin_${mp.id}`] = 1;
+    variables[mp.id] = v;
+  }
+
+  return {
+    optimize: 'cout',
+    opType: 'min',
+    constraints,
+    variables,
+  };
+}
+
+// ── DIAGNOSTIC D'INFAISABILITÉ ────────────────────────
+function _diagnosticInfaisabilite(espece, categorie, mpSelectionnees){
+  const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
+  const issues = [];
+
+  // 1. Vérifier que les nutriments critiques peuvent être atteints avec les MP sélectionnées
+  for(const n of NUTRIMENTS){
+    const minCible = besoin?.[n.besoinMin];
+    if(minCible == null) continue;
+    // Apport max théorique : max nutriment_i de toutes les MP sélectionnées
+    const maxApport = Math.max(0, ...mpSelectionnees.map(mp => Number(mp[n.key]) || 0));
+    if(maxApport < Number(minCible)){
+      issues.push(`Aucune MP sélectionnée ne contient assez de <strong>${n.label}</strong> (besoin min ${minCible} ${n.unite}, meilleure MP : ${maxApport})`);
+    }
+  }
+
+  // 2. Contraintes MP qui empêchent la formule
+  for(const mp of mpSelectionnees){
+    const c = _contraintesMP(espece, mp.nom);
+    for(const ct of c){
+      if(ct.pct_min != null && Number(ct.pct_min) > 100){
+        issues.push(`Contrainte min de ${mp.nom} > 100% — incohérent`);
+      }
+    }
+  }
+
+  // 3. Vérifier que les seuils ne sont pas mutuellement exclusifs
+  if(besoin){
+    if(besoin.pb_min != null && besoin.pb_max != null && besoin.pb_min > besoin.pb_max){
+      issues.push('PB min > PB max — besoin incohérent');
+    }
+  }
+
+  if(!issues.length){
+    issues.push('Les contraintes combinées sont incompatibles. Essayez de :');
+    issues.push('• Ajouter plus de MP variées (surtout sources de protéines)');
+    issues.push('• Vérifier les besoins de l\'espèce/catégorie');
+    issues.push('• Assouplir les contraintes d\'incorporation');
+  }
+
+  return issues;
+}
+
+// ── LANCEMENT DE L'OPTIMISATION ───────────────────────
+function lancerOptimisation(){
+  const errEl = document.getElementById('opt-err');
+  errEl.innerHTML = '';
+
+  if(typeof solver === 'undefined'){
+    errEl.innerHTML = '<span style="color:var(--red)">⚠ Solveur non chargé. Rechargez la page (Ctrl+Shift+R).</span>';
+    return;
+  }
+
+  if(OPT_MP_SELECTION.size < 3){
+    errEl.innerHTML = '<span style="color:var(--red)">⚠ Sélectionnez au moins 3 matières premières.</span>';
+    return;
+  }
+
+  const espece = document.getElementById('mf_espece')?.value;
+  const categorie = document.getElementById('mf_categorie')?.value;
+  const mpSelectionnees = (GP_INGREDIENTS||[]).filter(mp => OPT_MP_SELECTION.has(mp.id));
+
+  const model = _construireModeleLP(espece, categorie, mpSelectionnees);
+  if(!model){
+    errEl.innerHTML = '<span style="color:var(--red)">⚠ Impossible de construire le modèle.</span>';
+    return;
+  }
+
+  let result;
+  try {
+    result = solver.Solve(model);
+  } catch(e){
+    errEl.innerHTML = '<span style="color:var(--red)">⚠ Erreur solveur : ' + e.message + '</span>';
+    return;
+  }
+
+  if(!result.feasible){
+    const issues = _diagnosticInfaisabilite(espece, categorie, mpSelectionnees);
+    errEl.innerHTML = `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px;font-size:11px">
+      <div style="font-weight:700;color:var(--red);margin-bottom:8px">❌ Aucune solution mathématique trouvée</div>
+      <div style="color:var(--textm);line-height:1.6">${issues.map(i=>`<div>${i}</div>`).join('')}</div>
+    </div>`;
+    return;
+  }
+
+  // Solution trouvée → appliquer
+  const nouveau = [];
+  for(const mp of mpSelectionnees){
+    const pct = result[mp.id] || 0;
+    if(pct > 0.01){
+      nouveau.push({ id: mp.id, nom: mp.nom, pct: Math.round(pct * 100) / 100 });
+    }
+  }
+
+  if(!nouveau.length){
+    errEl.innerHTML = '<span style="color:var(--red)">⚠ Solveur retourne une formule vide.</span>';
+    return;
+  }
+
+  MF_INGREDIENTS = nouveau;
+  _renderMFIngredients();
+  _renderAnalyseNutritionnelle();
+  fermerOptimiseur();
+  notify(`🎯 Formule optimisée — ${nouveau.length} MP, coût ${fmt(Math.round(result.result*10))} F/t`, 'gold');
+}
+
 // Applique une réduction : retire pct d'une MP existante
 function appliquerReduction(mpId, pctRetirer){
   const idx = MF_INGREDIENTS.findIndex(i => i.id === mpId);
