@@ -7,6 +7,7 @@
 <meta name="description" content="Abonnez-vous à PROVENDA. Paiement sécurisé Mobile Money / Carte bancaire via FedaPay.">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
+<script src="js/licences.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -139,6 +140,24 @@ h1 em{color:var(--lime);font-style:italic}
       </ul>
     </div>
   </div>
+
+  <!-- Section "J'ai un code d'activation" -->
+  <details style="background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.25);border-radius:12px;padding:14px;margin-bottom:18px">
+    <summary style="cursor:pointer;font-weight:700;font-size:14px;color:#a855f7">🔑 J'ai un code d'activation</summary>
+    <div style="margin-top:12px">
+      <p style="font-size:12px;color:var(--textm);margin-bottom:10px;line-height:1.5">
+        Si vous avez reçu un code d'activation de la part de l'équipe PROVENDA, saisissez-le ici pour activer votre abonnement gratuitement.
+      </p>
+      <div class="fr">
+        <label>Code d'activation</label>
+        <input type="text" id="cle-input" placeholder="ATM-XXXX-KYxx-XXXX" style="text-transform:uppercase;font-family:'DM Mono',monospace;letter-spacing:2px;font-size:14px">
+      </div>
+      <button id="btn-cle" onclick="activerMaCleSubmit()" style="width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;border:none;border-radius:100px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">
+        ✓ Activer ma clé
+      </button>
+      <div id="cle-msg" style="font-size:12px;text-align:center;margin-top:10px;min-height:18px"></div>
+    </div>
+  </details>
 
   <!-- Formulaire client -->
   <div class="form">
@@ -334,6 +353,47 @@ async function onPaiementReussi(reference, transaction){
   document.getElementById('success-date').textContent =
     nouvelleExpiration.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
   document.getElementById('success-overlay').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════
+// ACTIVATION D'UNE CLÉ D'ABONNEMENT
+// ═══════════════════════════════════════════════════════
+async function activerMaCleSubmit(){
+  const msgEl = document.getElementById('cle-msg');
+  const btn = document.getElementById('btn-cle');
+  msgEl.style.color = 'var(--textm)';
+  msgEl.textContent = '';
+
+  if(!currentUser){
+    msgEl.style.color = '#ef4444';
+    msgEl.textContent = '⚠ Connectez-vous d\'abord à votre compte avant d\'activer une clé.';
+    return;
+  }
+
+  const cle = document.getElementById('cle-input').value.trim();
+  if(!cle){
+    msgEl.style.color = '#ef4444';
+    msgEl.textContent = '⚠ Saisissez votre code.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Validation...';
+
+  const result = await activerCleATM(SB, currentUser.id, cle);
+
+  if(result.success){
+    // Afficher le modal succès
+    document.getElementById('success-plan').textContent = 'Activation par clé (' + result.duree_jours + ' jours)';
+    document.getElementById('success-date').textContent =
+      result.plan_expire_le.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
+    document.getElementById('success-overlay').style.display = 'flex';
+  } else {
+    msgEl.style.color = '#ef4444';
+    msgEl.textContent = '❌ ' + result.message;
+    btn.disabled = false;
+    btn.textContent = '✓ Activer ma clé';
+  }
 }
 
 // Démarrer
