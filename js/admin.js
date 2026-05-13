@@ -326,18 +326,62 @@ function _renderMFIngredients(){
     el.innerHTML = '<div style="font-size:11px;color:var(--textm);padding:8px 0">Aucune MP. Cherchez ci-dessous pour ajouter.</div>';
     return;
   }
+  const espece = document.getElementById('mf_espece')?.value;
   el.innerHTML = MF_INGREDIENTS.map((ing, i) => {
     const ingData = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
     const prix = ingData?.prix_actuel || 0;
-    return `<div style="display:grid;grid-template-columns:1fr 80px 80px 28px;gap:6px;align-items:center;padding:6px 8px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+    const violation = _violationMP(espece, ing.nom, ing.pct);
+    const bg = violation ? 'rgba(239,68,68,.08)' : 'rgba(14,20,40,.4)';
+    const border = violation ? 'rgba(239,68,68,.4)' : 'var(--border)';
+    const warn = violation
+      ? `<div style="grid-column:1/-1;font-size:9px;color:var(--red);margin-top:3px">⚠ ${violation.type==='max'?'Maximum':'Minimum'} : ${violation.limite}%${violation.note?' — '+violation.note:''}</div>`
+      : '';
+    return `<div style="display:grid;grid-template-columns:1fr 80px 80px 28px;gap:6px;align-items:center;padding:6px 8px;background:${bg};border:1px solid ${border};border-radius:6px;margin-bottom:4px">
       <div style="font-size:11px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ing.nom}">${ing.nom}</div>
       <input type="number" step="0.01" value="${ing.pct}" onchange="modifierPctIngrFormule(${i}, this.value)"
-        style="font-size:11px;padding:3px 5px;text-align:right">
+        style="font-size:11px;padding:3px 5px;text-align:right;${violation?'color:var(--red);font-weight:700':''}">
       <div style="font-size:10px;color:var(--textm);text-align:right">${fmt(Math.round(ing.pct*10*prix))} F/t</div>
       <button onclick="supprimerIngredientFormule(${i})"
         style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
+      ${warn}
     </div>`;
   }).join('');
+}
+
+// ── CONTRAINTES D'INCORPORATION MP × ESPÈCE ─────────
+function _contraintesMP(espece, ingrNom){
+  if(!espece || !ingrNom) return [];
+  const nNom = normalizeSearch(ingrNom);
+  return (GP_CONTRAINTES_MP||[]).filter(c =>
+    c.espece === espece &&
+    nNom.includes(normalizeSearch(c.ingredient_pattern))
+  );
+}
+
+// Renvoie {type:'max'|'min', limite, note} ou null
+function _violationMP(espece, ingrNom, pct){
+  const cs = _contraintesMP(espece, ingrNom);
+  for(const c of cs){
+    if(c.pct_max != null && pct > Number(c.pct_max) + 0.001){
+      return {type:'max', limite:Number(c.pct_max), note:c.note};
+    }
+    if(c.pct_min != null && pct < Number(c.pct_min) - 0.001){
+      return {type:'min', limite:Number(c.pct_min), note:c.note};
+    }
+  }
+  return null;
+}
+
+// Plafond max d'une MP (si plusieurs contraintes, le plus restrictif gagne)
+function _plafondMP(espece, ingrNom){
+  const cs = _contraintesMP(espece, ingrNom);
+  let max = null;
+  for(const c of cs){
+    if(c.pct_max != null){
+      max = (max == null) ? Number(c.pct_max) : Math.min(max, Number(c.pct_max));
+    }
+  }
+  return max;
 }
 
 // ── CALCUL NUTRIMENTS LIVE + ANALYSE ──────────────────
@@ -394,6 +438,164 @@ function _renderAnalyseNutritionnelle(){
 
   if(coutEl){
     coutEl.innerHTML = `<div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">💰 Coût MP / tonne</span><strong style="color:var(--gold)">${fmt(Math.round(coutMP))} F</strong></div>`;
+  }
+
+  // Suggestions d'ajustement (Phase 2)
+  _renderSuggestions(besoin, nutriments, espece);
+}
+
+// ── PHASE 2 : SUGGESTIONS INTELLIGENTES D'AJUSTEMENT ──
+function _calculerSuggestions(besoin, nutriments, espece){
+  if(!besoin || !espece) return [];
+  const suggestions = [];
+
+  for(const n of NUTRIMENTS){
+    const v = nutriments[n.key];
+    const min = besoin[n.besoinMin];
+    const max = besoin[n.besoinMax];
+
+    if(min != null && v < Number(min) * 0.97){
+      // MANQUE → trouver MP riches dont on peut augmenter sans dépasser contrainte
+      const ecart = Number(min) - v;
+      const candidats = (GP_INGREDIENTS||[])
+        .map(mp => {
+          const richesse = Number(mp[n.key]) || 0;
+          if(richesse <= 0) return null;
+          const existing = MF_INGREDIENTS.find(i => i.id === mp.id);
+          const pctActuel = existing?.pct || 0;
+          const plafond = _plafondMP(espece, mp.nom);
+          const margePct = plafond != null
+            ? Math.max(0, plafond - pctActuel)
+            : Math.max(0, 50 - pctActuel); // garde-fou
+          // pct à ajouter pour combler l'écart : ecart / (richesse/100)
+          const pctAjout = ecart * 100 / richesse;
+          const pctAjoutPossible = Math.min(pctAjout, margePct);
+          if(pctAjoutPossible <= 0.05) return null;
+          const cout = pctAjoutPossible * 10 * (mp.prix_actuel || 0);
+          return {
+            mp, pctAjout: pctAjoutPossible,
+            apportNutriment: pctAjoutPossible * richesse / 100,
+            cout, plafond
+          };
+        })
+        .filter(Boolean)
+        .sort((a,b) => a.cout - b.cout)
+        .slice(0, 3);
+      if(candidats.length){
+        suggestions.push({type:'manque', nutriment:n, ecart, candidats, decimals:n.decimals, unite:n.unite});
+      }
+    }
+
+    if(max != null && v > Number(max) * 1.03){
+      // EXCÈS → trouver MP riches qu'on pourrait réduire
+      const exces = v - Number(max);
+      const candidats = MF_INGREDIENTS
+        .map(ing => {
+          const mp = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
+          if(!mp) return null;
+          const richesse = Number(mp[n.key]) || 0;
+          if(richesse <= 0) return null;
+          // % à retirer pour redescendre sous le max
+          const pctRetirer = exces * 100 / richesse;
+          const pctRetirerPossible = Math.min(pctRetirer, ing.pct);
+          if(pctRetirerPossible <= 0.05) return null;
+          return {
+            mp, pctActuel: ing.pct,
+            pctRetirer: pctRetirerPossible,
+            economie: pctRetirerPossible * 10 * (mp.prix_actuel || 0)
+          };
+        })
+        .filter(Boolean)
+        .sort((a,b) => b.economie - a.economie)
+        .slice(0, 2);
+      if(candidats.length){
+        suggestions.push({type:'exces', nutriment:n, exces, candidats, decimals:n.decimals, unite:n.unite});
+      }
+    }
+  }
+
+  return suggestions;
+}
+
+function _renderSuggestions(besoin, nutriments, espece){
+  // Insérer après le coût MP (créer le conteneur si absent)
+  const coutEl = document.getElementById('mf-cout-mp');
+  if(!coutEl) return;
+  let sugEl = document.getElementById('mf-suggestions');
+  if(!sugEl){
+    sugEl = document.createElement('div');
+    sugEl.id = 'mf-suggestions';
+    sugEl.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)';
+    coutEl.parentNode.appendChild(sugEl);
+  }
+
+  if(!besoin || !MF_INGREDIENTS.length){
+    sugEl.innerHTML = '';
+    return;
+  }
+
+  const sugs = _calculerSuggestions(besoin, nutriments, espece);
+  if(!sugs.length){
+    sugEl.innerHTML = '<div style="font-size:10px;color:var(--green)">✓ Aucun ajustement majeur nécessaire</div>';
+    return;
+  }
+
+  sugEl.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">💡 Suggestions d'ajustement</div>
+    ${sugs.slice(0,5).map(s => {
+      if(s.type === 'manque'){
+        return `<div style="font-size:10px;background:rgba(239,68,68,.06);border-left:2px solid var(--red);padding:6px 8px;margin-bottom:5px;border-radius:4px">
+          <div style="color:var(--red);font-weight:600">🔴 ${s.nutriment.label} : manque ${s.ecart.toFixed(s.decimals)} ${s.unite}</div>
+          ${s.candidats.map(c => `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
+              <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">+ ${c.mp.nom}</span>
+              <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'")}',${c.pctAjout.toFixed(2)})"
+                style="background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
+                +${c.pctAjout.toFixed(1)}% (~${fmt(Math.round(c.cout))}F)
+              </button>
+            </div>`).join('')}
+        </div>`;
+      } else {
+        return `<div style="font-size:10px;background:rgba(245,158,11,.06);border-left:2px solid var(--gold);padding:6px 8px;margin-bottom:5px;border-radius:4px">
+          <div style="color:var(--gold);font-weight:600">🟠 ${s.nutriment.label} : excès ${s.exces.toFixed(s.decimals)} ${s.unite}</div>
+          ${s.candidats.map(c => `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
+              <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">− ${c.mp.nom}</span>
+              <button onclick="appliquerReduction('${c.mp.id}',${c.pctRetirer.toFixed(2)})"
+                style="background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
+                −${c.pctRetirer.toFixed(1)}% (~${fmt(Math.round(c.economie))}F éco.)
+              </button>
+            </div>`).join('')}
+        </div>`;
+      }
+    }).join('')}
+  `;
+}
+
+// Applique une suggestion : ajoute la MP si absente, ou augmente son pct
+function appliquerSuggestion(mpId, mpNom, pctAjout){
+  const idx = MF_INGREDIENTS.findIndex(i => i.id === mpId);
+  if(idx >= 0){
+    MF_INGREDIENTS[idx].pct = Math.round((MF_INGREDIENTS[idx].pct + Number(pctAjout)) * 100) / 100;
+  } else {
+    MF_INGREDIENTS.push({ id: mpId, nom: mpNom, pct: Number(pctAjout) });
+  }
+  _renderMFIngredients();
+  _renderAnalyseNutritionnelle();
+}
+
+// Applique une réduction : retire pct d'une MP existante
+function appliquerReduction(mpId, pctRetirer){
+  const idx = MF_INGREDIENTS.findIndex(i => i.id === mpId);
+  if(idx >= 0){
+    const nouveau = MF_INGREDIENTS[idx].pct - Number(pctRetirer);
+    if(nouveau <= 0.01){
+      MF_INGREDIENTS.splice(idx, 1);
+    } else {
+      MF_INGREDIENTS[idx].pct = Math.round(nouveau * 100) / 100;
+    }
+    _renderMFIngredients();
+    _renderAnalyseNutritionnelle();
   }
 }
 

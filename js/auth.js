@@ -168,7 +168,7 @@ async function bootApp(user){
   // (role restrictions déjà appliquées ci-dessus)
   // Load base data — loadFormules d'abord car loadPrix() s'appuie dessus
   await loadFormules();
-  await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix(),loadCategoriesAliment(),loadBesoinsNutritionnels()]);
+  await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix(),loadCategoriesAliment(),loadBesoinsNutritionnels(),loadContraintesMP()]);
   // Set defaults
   const todayStr=new Date().toISOString().slice(0,10);
   const monthStr=new Date().toISOString().slice(0,7);
@@ -351,6 +351,13 @@ async function loadCategoriesAliment(){
     .select('*').or(`admin_id.is.null,admin_id.eq.${GP_ADMIN_ID}`)
     .eq('actif', true).order('espece').order('ordre');
   GP_CATEGORIES = data || [];
+}
+
+// Charge les contraintes d'incorporation MP × espèce
+async function loadContraintesMP(){
+  const{data} = await SB.from('gp_contraintes_mp')
+    .select('*').or(`admin_id.is.null,admin_id.eq.${GP_ADMIN_ID}`);
+  GP_CONTRAINTES_MP = data || [];
 }
 
 // Charge les besoins nutritionnels (standards + custom)
