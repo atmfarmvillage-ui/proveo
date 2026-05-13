@@ -2203,6 +2203,18 @@ function installPWA(){
 </div>
 
 <!-- MODAL ÉDITEUR DE FORMULE (formulation pro) -->
+<style>
+  /* Layout responsive du modal de formule */
+  #mf-layout{ display:grid; gap:16px; grid-template-columns:1fr; }
+  @media(min-width:900px){
+    #mf-layout{ grid-template-columns:1fr 360px; }
+  }
+  /* Analyse nutritionnelle : sticky uniquement sur desktop, sinon scroll naturel */
+  #mf-layout > div:last-child > div{ position:relative; }
+  @media(min-width:900px){
+    #mf-layout > div:last-child > div{ position:sticky; top:0; }
+  }
+</style>
 <div id="modal-formule" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerModalFormule()">
   <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:1100px;padding:20px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -2211,8 +2223,8 @@ function installPWA(){
     </div>
     <input type="hidden" id="mf_id">
 
-    <!-- Layout 2 colonnes : gauche = saisie, droite = analyse nutritionnelle -->
-    <div style="display:grid;grid-template-columns:1fr 360px;gap:16px" id="mf-layout">
+    <!-- Layout 2 colonnes : gauche = saisie, droite = analyse nutritionnelle (responsive via CSS) -->
+    <div id="mf-layout">
 
       <!-- ── COLONNE GAUCHE : SAISIE ── -->
       <div>
