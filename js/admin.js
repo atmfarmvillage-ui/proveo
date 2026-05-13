@@ -232,7 +232,7 @@ function onChangeCategorieMF(){
 
 // ── RECHERCHE MP AUTOCOMPLETE ────────────────────────
 async function filtrerIngrFormule(){
-  const q = document.getElementById('mf_ingr_search')?.value.toLowerCase().trim() || '';
+  const q = normalizeSearch(document.getElementById('mf_ingr_search')?.value || '');
   const results = document.getElementById('mf_ingr_results');
   if(!results) return;
   if(!GP_INGREDIENTS || !GP_INGREDIENTS.length){
@@ -241,7 +241,7 @@ async function filtrerIngrFormule(){
   }
   const dejaPris = new Set(MF_INGREDIENTS.map(i => i.nom));
   let liste = (GP_INGREDIENTS||[]).filter(i => !dejaPris.has(i.nom));
-  if(q) liste = liste.filter(i => i.nom.toLowerCase().includes(q));
+  if(q) liste = liste.filter(i => normalizeSearch(i.nom).includes(q));
   liste.sort((a,b) => a.nom.localeCompare(b.nom));
   liste = liste.slice(0, 12);
 
@@ -880,8 +880,8 @@ async function savePrixFormule(){
   renderPrixFormules();
 }
 function renderIngrAdmin(){
-  const search=document.getElementById('ingr-search')?.value?.toLowerCase()||'';
-  const filtered=GP_INGREDIENTS.filter(i=>i.nom.toLowerCase().includes(search));
+  const search=normalizeSearch(document.getElementById('ingr-search')?.value||'');
+  const filtered=GP_INGREDIENTS.filter(i=>!search||normalizeSearch(i.nom).includes(search));
   document.getElementById('ingr-liste-admin').innerHTML=filtered.length?`
     <div style="overflow-x:auto">
     <table class="tbl" style="font-size:11px">

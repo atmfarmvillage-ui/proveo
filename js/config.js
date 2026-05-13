@@ -20,6 +20,15 @@ let GP_PRIX_GROS = {}; // Prix grossiste par formule // Point de vente du membre
 let GP_CATEGORIES = []; // [{espece, espece_label, espece_icon, categorie, categorie_label, ordre}]
 let GP_BESOINS = [];    // [{espece, categorie, pb_min, pb_max, em_min, ..., source}]
 
+// Normalisation pour recherche insensible aux accents et à la casse
+// "Drèche d'Orge" → "dreche d orge" → matche "dreche", "orge", "dreche d orge", etc.
+function normalizeSearch(s){
+  return (s||'').toString().toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu,'')   // retire accents (toutes les marques diacritiques)
+    .replace(/[^a-z0-9 ]/g,' ')                       // autres chars → espace
+    .replace(/\s+/g,' ').trim();
+}
+
 // ── FORMULES (chargées dynamiquement depuis la DB par loadFormules) ─
 // Le tableau est rempli au boot par loadFormules() depuis gp_formules.
 // Toutes les références FORMULES_SADARI dans les autres modules

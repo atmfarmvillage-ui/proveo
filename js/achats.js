@@ -348,13 +348,13 @@ function populateIngredientsAchat(){
 }
 
 function filtrerIngrAchat(){
-  const search=document.getElementById('achat_ingr_search')?.value.toLowerCase().trim()||'';
+  const search=normalizeSearch(document.getElementById('achat_ingr_search')?.value||'');
   const results=document.getElementById('achat_ingr_results');
   if(!results)return;
   if(!search){results.style.display='none';return;}
 
   const filtered=[...GP_INGREDIENTS]
-    .filter(i=>i.nom.toLowerCase().includes(search))
+    .filter(i=>normalizeSearch(i.nom).includes(search))
     .sort((a,b)=>a.nom.localeCompare(b.nom))
     .slice(0,10);
 
