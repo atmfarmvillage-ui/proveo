@@ -692,9 +692,9 @@ async function populateSelectMPVente(){
   document.getElementById('vt_mp_results').style.display = 'none';
 }
 
-// Filtre dynamique des MP (au tap)
+// Filtre dynamique des MP (au tap) — insensible aux accents
 function filtrerIngrVente(){
-  const q = document.getElementById('vt_mp_search')?.value.toLowerCase().trim() || '';
+  const q = normalizeSearch(document.getElementById('vt_mp_search')?.value || '');
   const results = document.getElementById('vt_mp_results');
   if(!results) return;
 
@@ -702,7 +702,7 @@ function filtrerIngrVente(){
     ? calcNiveaux(window._stockNiveaux || []) : {};
 
   let liste = [...(GP_INGREDIENTS||[])];
-  if(q) liste = liste.filter(i => i.nom.toLowerCase().includes(q));
+  if(q) liste = liste.filter(i => normalizeSearch(i.nom).includes(q));
   // Trier : ceux en stock d'abord, puis alpha
   liste.sort((a,b) => {
     const sa = niveaux[a.nom] || 0;

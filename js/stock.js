@@ -1,7 +1,7 @@
 
 // ── SÉLECTION MP DYNAMIQUE ────────────────────────
 function filtrerMPStock(){
-  const q=document.getElementById('mp_ingr_search')?.value.toLowerCase().trim()||'';
+  const q=normalizeSearch(document.getElementById('mp_ingr_search')?.value||'');
   const results=document.getElementById('mp_ingr_results');
   if(!results)return;
 
@@ -30,7 +30,7 @@ function filtrerMPStock(){
   });
 
   // Filtrer par recherche
-  if(q)liste=liste.filter(i=>i.nom.toLowerCase().includes(q));
+  if(q)liste=liste.filter(i=>normalizeSearch(i.nom).includes(q));
 
   if(!liste.length){
     results.innerHTML='<div style="padding:12px;color:var(--textm);font-size:12px;text-align:center">Aucune MP trouvée</div>';

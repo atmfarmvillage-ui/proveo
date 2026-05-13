@@ -3,9 +3,9 @@
 // ══════════════════════════════════════════════════
 
 async function renderMatieresPremieresPage(){
-  const search = (document.getElementById('mp-search-page')?.value||'').toLowerCase();
+  const search = normalizeSearch(document.getElementById('mp-search-page')?.value||'');
   const filtered = GP_INGREDIENTS.filter(i=>
-    !search || i.nom.toLowerCase().includes(search)
+    !search || normalizeSearch(i.nom).includes(search)
   );
 
   // KPIs

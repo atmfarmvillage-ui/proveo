@@ -675,13 +675,13 @@ function refreshPage(){
 
 // ── RECHERCHE FORMULE DANS LES SELECTS ───────────
 function filtrerFormuleSelect(selectId, searchId){
-  const search=document.getElementById(searchId)?.value.toLowerCase().trim()||'';
+  const search=normalizeSearch(document.getElementById(searchId)?.value||'');
   const sel=document.getElementById(selectId);
   if(!sel)return;
   const allF=getAllFormules();
   const groups={};
   allF.forEach(f=>{
-    if(!search||f.nom.toLowerCase().includes(search)||f.espece.toLowerCase().includes(search)){
+    if(!search||normalizeSearch(f.nom).includes(search)||normalizeSearch(f.espece).includes(search)){
       if(!groups[f.espece])groups[f.espece]=[];
       groups[f.espece].push(f);
     }
