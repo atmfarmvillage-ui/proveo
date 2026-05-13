@@ -19,6 +19,7 @@
 <title>PROVENDA — Gestion Provenderie</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -2275,6 +2276,9 @@ function installPWA(){
         </details>
 
         <div class="a-err" id="mf_err"></div>
+        <button onclick="ouvrirOptimiseur()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;border:none">
+          🎯 Optimiser auto (coût minimum)
+        </button>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-g" onclick="saveFormule()" style="flex:1;justify-content:center;min-height:44px">✓ Enregistrer</button>
           <button class="btn btn-out" onclick="fermerModalFormule()" style="padding:0 16px">Annuler</button>
@@ -2293,6 +2297,48 @@ function installPWA(){
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- MODAL OPTIMISEUR (Phase 3) -->
+<div id="modal-optimiseur" style="display:none;position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerOptimiseur()">
+  <div style="background:var(--g1,#0E1428);border:1px solid #a855f7;border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#a855f7">🎯 Optimisation automatique</div>
+        <div id="opt-contexte" style="font-size:11px;color:var(--textm);margin-top:2px"></div>
+      </div>
+      <button onclick="fermerOptimiseur()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.25);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;line-height:1.5">
+      ℹ️ Le solveur va trouver <strong>LA composition optimale au coût minimum</strong> en respectant :
+      <ul style="margin:6px 0 0 16px;padding:0;font-size:10px;color:var(--textm)">
+        <li>Tous les besoins nutritionnels de l'espèce/catégorie sélectionnée</li>
+        <li>Toutes les contraintes d'incorporation MP (ex: palmiste ≤ 25%)</li>
+      </ul>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <input type="text" id="opt-search" placeholder="🔍 Rechercher une MP..." oninput="renderOptMPListe()" style="flex:1;font-size:11px">
+      <button class="btn btn-out btn-sm" onclick="optToggleAll(true)" style="white-space:nowrap;padding:4px 10px">✓ Tout</button>
+      <button class="btn btn-out btn-sm" onclick="optToggleAll(false)" style="white-space:nowrap;padding:4px 10px">✕ Aucun</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--textm);margin-bottom:6px">
+      <span id="opt-compteur">0</span> MP sélectionnée(s)
+    </div>
+
+    <div id="opt-mp-liste" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:12px"></div>
+
+    <div class="a-err" id="opt-err"></div>
+
+    <div style="display:flex;gap:8px">
+      <button onclick="lancerOptimisation()" style="flex:1;min-height:44px;padding:10px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:13px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;border:none">
+        🚀 Lancer l'optimisation
+      </button>
+      <button class="btn btn-out" onclick="fermerOptimiseur()" style="padding:0 16px">Annuler</button>
     </div>
   </div>
 </div>
