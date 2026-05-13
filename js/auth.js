@@ -201,13 +201,19 @@ async function bootApp(user){
   initRealtimeSync();
 }
 function applyRoleRestrictions(){
+  const isOwner = (GP_CONFIG?.plan === 'OWNER');
   document.querySelectorAll('.nav-item').forEach(el=>{
     const roles=el.dataset.roles;
+    // owner-only : visible uniquement pour le plan OWNER (équipe interne ATM)
+    if(el.classList.contains('owner-only')){
+      el.style.display = isOwner ? 'flex' : 'none';
+      return;
+    }
     // data-roles a priorité absolue sur admin-only
     if(roles){
       const allowed=roles.split(',').map(r=>r.trim());
       el.style.display=allowed.includes(GP_ROLE)?'flex':'none';
-      return; // STOP — ne pas tester admin-only ensuite
+      return;
     }
     // Sinon : admin-only standard
     if(el.classList.contains('admin-only')){
