@@ -426,6 +426,9 @@ function verifierLicence(){
   const expiry = cfg.plan_expire_le ? new Date(cfg.plan_expire_le) : null;
   const plan = cfg.plan || 'TRIAL';
 
+  // Plan OWNER (équipe interne) : aucune vérification, accès illimité
+  if(plan === 'OWNER') return;
+
   // Secrétaires — pas de vérification, l'admin gère
   if(GP_ROLE === 'secretaire') return;
 
