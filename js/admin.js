@@ -137,7 +137,7 @@ const NUTRIMENTS = [
   {key:'proteines',     label:'Protéines',    unite:'%',     decimals:2, besoinMin:'pb_min',           besoinMax:'pb_max'},
   {key:'energie',       label:'EM',           unite:'kcal/kg',decimals:0, besoinMin:'em_min',           besoinMax:'em_max'},
   {key:'lipides',       label:'Lipides',      unite:'%',     decimals:2, besoinMin:'lipides_min',      besoinMax:'lipides_max'},
-  {key:'fibres',        label:'Fibres',       unite:'%',     decimals:2, besoinMin:null,               besoinMax:'fibres_max'},
+  {key:'fibres',        label:'Fibres',       unite:'%',     decimals:2, besoinMin:'fibres_min',       besoinMax:'fibres_max'},
   {key:'lysine',        label:'Lysine',       unite:'%',     decimals:3, besoinMin:'lysine_min',       besoinMax:'lysine_max'},
   {key:'methionine',    label:'Méthionine',   unite:'%',     decimals:3, besoinMin:'methionine_min',   besoinMax:'methionine_max'},
   {key:'meth_cyst',     label:'Méth+Cyst',    unite:'%',     decimals:3, besoinMin:'meth_cyst_min',    besoinMax:'meth_cyst_max'},
