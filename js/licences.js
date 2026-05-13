@@ -35,9 +35,23 @@ function _formatCleValide(cle){
 }
 
 // ══════════════════════════════════════════════════
-// PAGE ADMIN — GESTION DES LICENCES
+// PAGE ADMIN — GESTION DES LICENCES (OWNER only)
 // ══════════════════════════════════════════════════
+function _estOwner(){
+  return (typeof GP_CONFIG !== 'undefined') && GP_CONFIG?.plan === 'OWNER';
+}
+
 async function renderPageLicences(){
+  // Protection : seuls les OWNER (équipe interne ATM) peuvent accéder
+  if(!_estOwner()){
+    document.getElementById('lic-kpis').innerHTML = '';
+    document.getElementById('lic-liste').innerHTML = `
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:20px;text-align:center">
+        <div style="font-size:14px;color:var(--red);font-weight:700;margin-bottom:8px">🔒 Accès restreint</div>
+        <div style="font-size:11px;color:var(--textm)">Cette page est réservée à l'équipe interne ATM Farm Village (plan OWNER).</div>
+      </div>`;
+    return;
+  }
   // Filtres
   const filtre = document.getElementById('lic-filtre')?.value || 'all';
   const{data:cles} = await SB.from('gp_cles')
@@ -93,6 +107,7 @@ async function renderPageLicences(){
 async function genererNouvelleCle(){
   const err = document.getElementById('lic-gen-err');
   err.textContent = '';
+  if(!_estOwner()){ err.textContent = '🔒 Accès refusé (plan OWNER requis).'; return; }
   const jours = +document.getElementById('lic-jours').value || 0;
   const note = document.getElementById('lic-note').value.trim() || null;
 
