@@ -201,14 +201,8 @@ async function bootApp(user){
   initRealtimeSync();
 }
 function applyRoleRestrictions(){
-  const isOwner = (GP_CONFIG?.plan === 'OWNER');
   document.querySelectorAll('.nav-item').forEach(el=>{
     const roles=el.dataset.roles;
-    // owner-only : visible uniquement pour le plan OWNER (équipe interne ATM)
-    if(el.classList.contains('owner-only')){
-      el.style.display = isOwner ? 'flex' : 'none';
-      return;
-    }
     // data-roles a priorité absolue sur admin-only
     if(roles){
       const allowed=roles.split(',').map(r=>r.trim());
@@ -284,7 +278,6 @@ var PAGE_RENDERERS = {
   },
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
-  licences:      renderPageLicences,
   config:        loadConfigForm,
   directeur:     function(){
     const el=document.getElementById('dir-mois');

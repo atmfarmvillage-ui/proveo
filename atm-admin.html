@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ATM Admin — Back-office PROVENDA</title>
+<meta name="robots" content="noindex,nofollow">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/licences.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080B07; --bg2:#11160F; --bg3:#1A2016;
+  --jaune:#E8C547; --jaune-v:#F2D94B; --vert:#16A34A; --lime:#B8F566;
+  --texte:#F0EDE6; --textm:#8B8F80; --rouge:#EF4444;
+  --border:rgba(232,197,71,.14);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--texte);min-height:100vh;font-size:14px}
+.mono{font-family:'DM Mono',monospace}
+a{color:var(--jaune)}
+
+/* ── LOGIN ───────────────────────────── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px;max-width:380px;width:100%}
+.login-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px}
+.login-mark{width:42px;height:42px;background:linear-gradient(135deg,var(--vert),var(--jaune));border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.login-title{font-family:'DM Serif Display',serif;font-size:20px}
+.login-sub{text-align:center;color:var(--textm);font-size:12px;margin-bottom:24px}
+.fr{margin-bottom:14px}
+.fr label{display:block;font-size:10px;font-weight:600;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.fr input,.fr select{width:100%;padding:11px 13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:14px}
+.fr input:focus,.fr select:focus{outline:none;border-color:var(--jaune)}
+.btn{padding:11px 18px;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-jaune{background:var(--jaune);color:var(--bg)}
+.btn-jaune:hover{background:var(--jaune-v)}
+.btn-vert{background:var(--vert);color:#fff}
+.btn-vert:hover{filter:brightness(1.15)}
+.btn-out{background:transparent;border:1px solid var(--border);color:var(--texte)}
+.btn-out:hover{border-color:var(--jaune)}
+.btn-red{background:rgba(239,68,68,.15);color:var(--rouge);border:1px solid rgba(239,68,68,.3)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-full{width:100%}
+.msg{font-size:12px;text-align:center;margin-top:10px;min-height:16px}
+.msg.err{color:var(--rouge)}
+.msg.ok{color:var(--lime)}
+
+/* ── APP ─────────────────────────────── */
+#app{display:none}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-logo{display:flex;align-items:center;gap:9px;font-family:'DM Serif Display',serif;font-size:16px}
+.topbar-mark{width:32px;height:32px;background:linear-gradient(135deg,var(--vert),var(--jaune));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.topbar-right{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--textm)}
+.badge-owner{background:linear-gradient(135deg,var(--jaune),var(--lime));color:var(--bg);padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
+
+.tabs{display:flex;gap:4px;padding:14px 20px 0;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:9px 16px;background:transparent;border:none;color:var(--textm);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--texte)}
+.tab.active{color:var(--jaune);border-bottom-color:var(--jaune)}
+
+.content{padding:22px 20px;max-width:1100px;margin:0 auto}
+.panel{display:none}
+.panel.active{display:block}
+h2{font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:4px}
+.panel-sub{color:var(--textm);font-size:12px;margin-bottom:18px}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+.kpi-val{font-family:'DM Serif Display',serif;font-size:28px;line-height:1}
+.kpi-lbl{font-size:11px;color:var(--textm);margin-top:6px;text-transform:uppercase;letter-spacing:.5px}
+
+/* Card */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px}
+.card-title{font-size:13px;font-weight:700;color:var(--jaune);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.row2{grid-template-columns:1fr}}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:11px 12px;color:var(--textm);font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04)}
+tr:last-child td{border-bottom:none}
+.tag{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700}
+.tag-g{background:rgba(22,163,74,.18);color:var(--lime)}
+.tag-j{background:rgba(232,197,71,.18);color:var(--jaune)}
+.tag-r{background:rgba(239,68,68,.18);color:var(--rouge)}
+.tag-m{background:rgba(255,255,255,.08);color:var(--textm)}
+.empty{padding:26px;text-align:center;color:var(--textm);font-size:12px}
+.filtre-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.gen-result{display:none;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:10px;padding:14px;margin-top:14px}
+.gen-cle{font-family:'DM Mono',monospace;font-size:18px;font-weight:600;color:var(--lime);letter-spacing:1px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--jaune);color:var(--texte);padding:11px 20px;border-radius:10px;font-size:13px;z-index:999;display:none}
+</style>
+</head>
+<body>
+
+<!-- ════════ LOGIN ════════ -->
+<div id="login" class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-mark">🌾</div>
+      <div class="login-title">ATM Admin</div>
+    </div>
+    <div class="login-sub">Back-office PROVENDA · accès réservé</div>
+    <div class="fr">
+      <label>Email</label>
+      <input type="email" id="log-email" placeholder="admin@atmfarmvillage.com" autocomplete="username">
+    </div>
+    <div class="fr">
+      <label>Mot de passe</label>
+      <input type="password" id="log-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-jaune btn-full" id="log-btn" onclick="seConnecter()">Se connecter</button>
+    <div id="log-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ════════ APP ════════ -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo"><div class="topbar-mark">🌾</div> ATM Admin</div>
+    <div class="topbar-right">
+      <span class="badge-owner">OWNER</span>
+      <span id="me-email"></span>
+      <button class="btn btn-out btn-sm" onclick="seDeconnecter()">Déconnexion</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="cles" onclick="showTab('cles')">🔑 Clés d'activation</button>
+    <button class="tab" data-tab="clients" onclick="showTab('clients')">👥 Clients</button>
+    <button class="tab" data-tab="paiements" onclick="showTab('paiements')">💳 Paiements</button>
+    <button class="tab" data-tab="stats" onclick="showTab('stats')">📊 Statistiques</button>
+  </div>
+
+  <div class="content">
+
+    <!-- ─── ONGLET CLÉS ─── -->
+    <div class="panel active" id="panel-cles">
+      <h2>Clés d'activation</h2>
+      <div class="panel-sub">Génère des clés à offrir aux clients (amis, partenaires…). Une clé = une activation.</div>
+      <div id="cles-kpis" class="kpis"></div>
+
+      <div class="card">
+        <div class="card-title">➕ Générer une nouvelle clé</div>
+        <div class="row2">
+          <div class="fr">
+            <label>Durée (jours)</label>
+            <input type="number" id="gen-jours" min="1" max="3650" placeholder="30">
+          </div>
+          <div class="fr">
+            <label>Note (optionnel)</label>
+            <input type="text" id="gen-note" placeholder="ex: Kossi — ami éleveur">
+          </div>
+        </div>
+        <button class="btn btn-vert" onclick="genererCle()">Générer la clé</button>
+        <div id="gen-err" class="msg err"></div>
+        <div id="gen-result" class="gen-result">
+          <div class="gen-cle" id="gen-cle-val">—</div>
+          <div style="font-size:11px;color:var(--textm);margin-top:4px" id="gen-cle-info"></div>
+          <button class="btn btn-out btn-sm" style="margin-top:10px" onclick="copier(document.getElementById('gen-cle-val').textContent)">📋 Copier</button>
+        </div>
+      </div>
+
+      <div class="filtre-bar">
+        <select id="cles-filtre" onchange="renderCles()" style="width:auto;padding:7px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:12px">
+          <option value="all">Toutes les clés</option>
+          <option value="dispo">Disponibles</option>
+          <option value="utilisees">Utilisées</option>
+        </select>
+        <button class="btn btn-out btn-sm" onclick="chargerCles()">↻ Rafraîchir</button>
+      </div>
+      <div class="tbl-wrap" id="cles-liste"></div>
+    </div>
+
+    <!-- ─── ONGLET CLIENTS ─── -->
+    <div class="panel" id="panel-clients">
+      <h2>Clients</h2>
+      <div class="panel-sub">Tous les comptes PROVENDA et l'état de leur abonnement.</div>
+      <div id="clients-kpis" class="kpis"></div>
+      <div class="filtre-bar">
+        <select id="clients-filtre" onchange="renderClients()" style="width:auto;padding:7px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:12px">
+          <option value="all">Tous</option>
+          <option value="actifs">Actifs</option>
+          <option value="expires">Expirés</option>
+          <option value="essai">En essai</option>
+        </select>
+        <input type="text" id="clients-search" oninput="renderClients()" placeholder="🔍 Rechercher email…" style="width:auto;flex:1;min-width:160px;padding:7px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:12px">
+        <button class="btn btn-out btn-sm" onclick="chargerClients()">↻ Rafraîchir</button>
+      </div>
+      <div class="tbl-wrap" id="clients-liste"></div>
+    </div>
+
+    <!-- ─── ONGLET PAIEMENTS ─── -->
+    <div class="panel" id="panel-paiements">
+      <h2>Paiements FedaPay</h2>
+      <div class="panel-sub">Historique de toutes les transactions d'abonnement.</div>
+      <div id="paiements-kpis" class="kpis"></div>
+      <div class="filtre-bar">
+        <select id="paiements-filtre" onchange="renderPaiements()" style="width:auto;padding:7px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:12px">
+          <option value="all">Tous les statuts</option>
+          <option value="approved">Approuvés</option>
+          <option value="pending">En attente</option>
+        </select>
+        <button class="btn btn-out btn-sm" onclick="chargerPaiements()">↻ Rafraîchir</button>
+      </div>
+      <div class="tbl-wrap" id="paiements-liste"></div>
+    </div>
+
+    <!-- ─── ONGLET STATS ─── -->
+    <div class="panel" id="panel-stats">
+      <h2>Statistiques globales</h2>
+      <div class="panel-sub">Vue d'ensemble de l'activité PROVENDA.</div>
+      <div id="stats-kpis" class="kpis"></div>
+      <div class="card">
+        <div class="card-title">💰 Revenus</div>
+        <div id="stats-revenus"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════
+const SB_URL = 'https://edvgtxzwpopqflaxbown.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY';
+const SBC = supabase.createClient(SB_URL, SB_KEY);
+
+let ME = null;            // user connecté
+let CLES = [];            // cache clés
+let CLIENTS = [];         // cache clients
+let PAIEMENTS = [];       // cache paiements
+
+// ════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════
+function fmt(n){ return Number(n||0).toLocaleString('fr-FR'); }
+function dDate(s){ return s ? new Date(s).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'; }
+function toast(m){
+  const t = document.getElementById('toast');
+  t.textContent = m; t.style.display = 'block';
+  clearTimeout(t._tm); t._tm = setTimeout(()=>t.style.display='none', 2400);
+}
+function copier(txt){
+  navigator.clipboard.writeText(txt).then(()=>toast('Copié 📋'));
+}
+
+// ════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════
+async function seConnecter(){
+  const msg = document.getElementById('log-msg');
+  const btn = document.getElementById('log-btn');
+  msg.className = 'msg'; msg.textContent = '';
+  const email = document.getElementById('log-email').value.trim();
+  const pass = document.getElementById('log-pass').value;
+  if(!email || !pass){ msg.className='msg err'; msg.textContent='Email et mot de passe requis.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Connexion…';
+  const{ data, error } = await SBC.auth.signInWithPassword({ email, password: pass });
+  if(error){
+    msg.className='msg err'; msg.textContent = 'Échec : ' + error.message;
+    btn.disabled = false; btn.textContent = 'Se connecter';
+    return;
+  }
+  await verifierOwner(data.user, btn, msg);
+}
+
+async function verifierOwner(user, btn, msg){
+  // Garde OWNER : seul un compte plan='OWNER' accède au back-office
+  const{ data:cfg, error } = await SBC.from('gp_config')
+    .select('plan').eq('user_id', user.id).maybeSingle();
+  if(error || !cfg || cfg.plan !== 'OWNER'){
+    await SBC.auth.signOut();
+    if(msg){ msg.className='msg err'; msg.textContent = '🔒 Accès refusé — ce compte n\'est pas administrateur.'; }
+    if(btn){ btn.disabled = false; btn.textContent = 'Se connecter'; }
+    return false;
+  }
+  ME = user;
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('me-email').textContent = user.email;
+  chargerTout();
+  return true;
+}
+
+async function seDeconnecter(){
+  await SBC.auth.signOut();
+  location.reload();
+}
+
+// Reprise de session
+async function initSession(){
+  const{ data:{ session } } = await SBC.auth.getSession();
+  if(session?.user){
+    await verifierOwner(session.user, null, null);
+  }
+}
+
+// ════════════════════════════════════════════
+// NAVIGATION ONGLETS
+// ════════════════════════════════════════════
+function showTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+t));
+}
+
+function chargerTout(){
+  chargerCles();
+  chargerClients();
+  chargerPaiements();
+}
+
+// ════════════════════════════════════════════
+// ONGLET 1 — CLÉS
+// ════════════════════════════════════════════
+async function chargerCles(){
+  const{ data, error } = await SBC.from('gp_cles')
+    .select('*').eq('cree_par', ME.id).order('cree_le', { ascending:false });
+  if(error){ toast('Erreur clés : '+error.message); return; }
+  CLES = data || [];
+  renderCles();
+}
+
+function renderCles(){
+  const filtre = document.getElementById('cles-filtre').value;
+  const dispo = CLES.filter(c=>!c.utilisee_par).length;
+  const utilisees = CLES.length - dispo;
+
+  document.getElementById('cles-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-val">${CLES.length}</div><div class="kpi-lbl">Total clés</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${dispo}</div><div class="kpi-lbl">Disponibles</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--jaune)">${utilisees}</div><div class="kpi-lbl">Utilisées</div></div>`;
+
+  const list = filtre==='dispo' ? CLES.filter(c=>!c.utilisee_par)
+    : filtre==='utilisees' ? CLES.filter(c=>c.utilisee_par)
+    : CLES;
+
+  if(!list.length){
+    document.getElementById('cles-liste').innerHTML = '<div class="empty">Aucune clé. Générez-en une ci-dessus.</div>';
+    return;
+  }
+  document.getElementById('cles-liste').innerHTML = `
+    <table><thead><tr>
+      <th>Clé</th><th>Durée</th><th>Créée le</th><th>Statut</th><th>Note</th><th></th>
+    </tr></thead><tbody>
+    ${list.map(c=>{
+      const used = !!c.utilisee_par;
+      return `<tr style="${used?'opacity:.55':''}">
+        <td class="mono" style="font-size:11px">${c.cle}</td>
+        <td>${c.duree_jours} j</td>
+        <td style="color:var(--textm)">${dDate(c.cree_le)}</td>
+        <td>${used
+          ? `<span class="tag tag-j">UTILISÉE</span> <span style="color:var(--textm);font-size:10px">${dDate(c.utilisee_le)}</span>`
+          : '<span class="tag tag-g">DISPONIBLE</span>'}</td>
+        <td style="color:var(--textm)">${c.note||'—'}</td>
+        <td style="white-space:nowrap">
+          ${!used ? `
+            <button class="btn btn-out btn-sm" onclick="copier('${c.cle}')">📋</button>
+            <button class="btn btn-red btn-sm" onclick="supprimerCle('${c.id}')">✕</button>
+          ` : ''}
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+async function genererCle(){
+  const err = document.getElementById('gen-err');
+  err.textContent = '';
+  const jours = +document.getElementById('gen-jours').value || 0;
+  const note = document.getElementById('gen-note').value.trim() || null;
+  if(jours < 1 || jours > 3650){ err.textContent = 'Durée invalide (1 à 3650 jours).'; return; }
+
+  const tier = jours <= 7 ? 'DEMO' : jours >= 1825 ? 'ENTR' : jours >= 365 ? 'PROV' : 'BASE';
+  const cle = genererCleATM(jours, tier);   // fonction de js/licences.js
+
+  const{ error } = await SBC.from('gp_cles').insert({
+    cle, duree_jours: jours, cree_par: ME.id, note
+  });
+  if(error){ err.textContent = 'Erreur : ' + error.message; return; }
+
+  document.getElementById('gen-result').style.display = 'block';
+  document.getElementById('gen-cle-val').textContent = cle;
+  document.getElementById('gen-cle-info').textContent = `${jours} jours · Tier ${tier}` + (note?` · ${note}`:'');
+  document.getElementById('gen-jours').value = '';
+  document.getElementById('gen-note').value = '';
+  toast('Clé générée ✓');
+  chargerCles();
+}
+
+async function supprimerCle(id){
+  if(!confirm('Supprimer cette clé ? Si elle a été partagée, elle ne fonctionnera plus.')) return;
+  const{ error } = await SBC.from('gp_cles').delete().eq('id', id);
+  if(error){ toast('Erreur : '+error.message); return; }
+  toast('Clé supprimée');
+  chargerCles();
+}
+
+// ════════════════════════════════════════════
+// ONGLET 2 — CLIENTS
+// ════════════════════════════════════════════
+async function chargerClients(){
+  const{ data, error } = await SBC.from('gp_config')
+    .select('user_id, email, plan, plan_expire_le, nom_entreprise')
+    .order('plan_expire_le', { ascending:false, nullsFirst:false });
+  if(error){ toast('Erreur clients : '+error.message); return; }
+  CLIENTS = data || [];
+  renderClients();
+}
+
+function etatClient(c){
+  if(c.plan === 'OWNER') return { tag:'tag-j', txt:'OWNER' };
+  const exp = c.plan_expire_le ? new Date(c.plan_expire_le) : null;
+  const actif = exp && exp > new Date();
+  if(c.plan && c.plan !== 'ESSAI' && c.plan !== 'TRIAL' && actif) return { tag:'tag-g', txt:'ACTIF' };
+  if(actif) return { tag:'tag-m', txt:'ESSAI' };
+  return { tag:'tag-r', txt:'EXPIRÉ' };
+}
+
+function renderClients(){
+  const filtre = document.getElementById('clients-filtre').value;
+  const q = (document.getElementById('clients-search').value||'').toLowerCase().trim();
+
+  const actifs = CLIENTS.filter(c=>{ const e=etatClient(c); return e.txt==='ACTIF'||e.txt==='OWNER'; }).length;
+  const expires = CLIENTS.filter(c=>etatClient(c).txt==='EXPIRÉ').length;
+  const essai = CLIENTS.filter(c=>etatClient(c).txt==='ESSAI').length;
+
+  document.getElementById('clients-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-val">${CLIENTS.length}</div><div class="kpi-lbl">Total comptes</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${actifs}</div><div class="kpi-lbl">Actifs</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--jaune)">${essai}</div><div class="kpi-lbl">En essai</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--rouge)">${expires}</div><div class="kpi-lbl">Expirés</div></div>`;
+
+  let list = CLIENTS;
+  if(filtre==='actifs') list = list.filter(c=>{const e=etatClient(c);return e.txt==='ACTIF'||e.txt==='OWNER';});
+  else if(filtre==='expires') list = list.filter(c=>etatClient(c).txt==='EXPIRÉ');
+  else if(filtre==='essai') list = list.filter(c=>etatClient(c).txt==='ESSAI');
+  if(q) list = list.filter(c=>(c.email||'').toLowerCase().includes(q)||(c.nom_entreprise||'').toLowerCase().includes(q));
+
+  if(!list.length){
+    document.getElementById('clients-liste').innerHTML = '<div class="empty">Aucun client.</div>';
+    return;
+  }
+  document.getElementById('clients-liste').innerHTML = `
+    <table><thead><tr>
+      <th>Email</th><th>Entreprise</th><th>Plan</th><th>Expire le</th><th>État</th>
+    </tr></thead><tbody>
+    ${list.map(c=>{
+      const e = etatClient(c);
+      return `<tr>
+        <td>${c.email||'<span style="color:var(--textm)">—</span>'}</td>
+        <td style="color:var(--textm)">${c.nom_entreprise||'—'}</td>
+        <td>${c.plan||'—'}</td>
+        <td style="color:var(--textm)">${dDate(c.plan_expire_le)}</td>
+        <td><span class="tag ${e.tag}">${e.txt}</span></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+// ════════════════════════════════════════════
+// ONGLET 3 — PAIEMENTS
+// ════════════════════════════════════════════
+async function chargerPaiements(){
+  const{ data, error } = await SBC.from('gp_paiements')
+    .select('*').order('created_at', { ascending:false });
+  if(error){
+    document.getElementById('paiements-liste').innerHTML =
+      '<div class="empty">Erreur : '+error.message+'</div>';
+    PAIEMENTS = [];
+    renderPaiements();
+    return;
+  }
+  PAIEMENTS = data || [];
+  renderPaiements();
+}
+
+function renderPaiements(){
+  const filtre = document.getElementById('paiements-filtre').value;
+  const approuves = PAIEMENTS.filter(p=>p.statut==='approved');
+  const pending = PAIEMENTS.filter(p=>p.statut==='pending').length;
+  const revenu = approuves.reduce((s,p)=>s+Number(p.montant||0),0);
+
+  document.getElementById('paiements-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-val">${PAIEMENTS.length}</div><div class="kpi-lbl">Transactions</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${approuves.length}</div><div class="kpi-lbl">Approuvés</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--jaune)">${pending}</div><div class="kpi-lbl">En attente</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${fmt(revenu)}</div><div class="kpi-lbl">Revenu FCFA</div></div>`;
+
+  let list = PAIEMENTS;
+  if(filtre==='approved') list = list.filter(p=>p.statut==='approved');
+  else if(filtre==='pending') list = list.filter(p=>p.statut==='pending');
+
+  if(!list.length){
+    document.getElementById('paiements-liste').innerHTML = '<div class="empty">Aucune transaction.</div>';
+    return;
+  }
+  document.getElementById('paiements-liste').innerHTML = `
+    <table><thead><tr>
+      <th>Date</th><th>Référence</th><th>Email</th><th>Plan</th><th>Montant</th><th>Statut</th>
+    </tr></thead><tbody>
+    ${list.map(p=>{
+      const tag = p.statut==='approved' ? 'tag-g' : p.statut==='pending' ? 'tag-j' : 'tag-r';
+      return `<tr>
+        <td style="color:var(--textm)">${dDate(p.created_at)}</td>
+        <td class="mono" style="font-size:10px">${p.reference||'—'}</td>
+        <td>${p.email||'—'}</td>
+        <td>${p.plan||'—'}</td>
+        <td>${fmt(p.montant)} F</td>
+        <td><span class="tag ${tag}">${(p.statut||'?').toUpperCase()}</span></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+// ════════════════════════════════════════════
+// ONGLET 4 — STATS
+// ════════════════════════════════════════════
+function renderStats(){
+  const actifs = CLIENTS.filter(c=>etatClient(c).txt==='ACTIF');
+  const mrr = actifs.reduce((s,c)=>{
+    if(c.plan==='ANNUEL') return s + 200000/12;
+    if(c.plan==='MENSUEL') return s + 20000;
+    return s + 20000; // CLE_ACTIVEE et autres : approximation mensuelle
+  },0);
+  const revenuTotal = PAIEMENTS.filter(p=>p.statut==='approved')
+    .reduce((s,p)=>s+Number(p.montant||0),0);
+  const clesUtilisees = CLES.filter(c=>c.utilisee_par).length;
+
+  document.getElementById('stats-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${actifs.length}</div><div class="kpi-lbl">Clients actifs</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--jaune)">${fmt(Math.round(mrr))}</div><div class="kpi-lbl">MRR estimé (FCFA)</div></div>
+    <div class="kpi"><div class="kpi-val">${CLIENTS.length}</div><div class="kpi-lbl">Comptes totaux</div></div>
+    <div class="kpi"><div class="kpi-val">${clesUtilisees}</div><div class="kpi-lbl">Clés activées</div></div>`;
+
+  document.getElementById('stats-revenus').innerHTML = `
+    <table style="width:100%">
+      <tr><td>Revenu total encaissé (FedaPay)</td><td style="text-align:right;color:var(--lime);font-weight:700">${fmt(revenuTotal)} FCFA</td></tr>
+      <tr><td>Transactions approuvées</td><td style="text-align:right">${PAIEMENTS.filter(p=>p.statut==='approved').length}</td></tr>
+      <tr><td>Clients payants actifs (Mensuel + Annuel)</td><td style="text-align:right">${actifs.filter(c=>c.plan==='MENSUEL'||c.plan==='ANNUEL').length}</td></tr>
+      <tr><td>Clients via clé d'activation</td><td style="text-align:right">${actifs.filter(c=>c.plan==='CLE_ACTIVEE').length}</td></tr>
+      <tr><td>MRR estimé</td><td style="text-align:right;color:var(--jaune);font-weight:700">${fmt(Math.round(mrr))} FCFA / mois</td></tr>
+    </table>`;
+}
+
+// Recalcule les stats à chaque ouverture de l'onglet
+const _origShowTab = showTab;
+showTab = function(t){ _origShowTab(t); if(t==='stats') renderStats(); };
+
+// Entrée clavier sur le login
+document.getElementById('log-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') seConnecter(); });
+
+// Démarrage
+initSession();
+</script>
+</body>
+</html>
