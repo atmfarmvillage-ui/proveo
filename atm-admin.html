@@ -156,12 +156,19 @@ tr:last-child td{border-bottom:none}
             <input type="text" id="gen-note" placeholder="ex: Kossi — ami éleveur">
           </div>
         </div>
+        <div class="fr">
+          <label>Numéro WhatsApp du client (optionnel)</label>
+          <input type="tel" id="gen-wa" placeholder="ex: 90 00 00 00 (ou +228 90 00 00 00)">
+        </div>
         <button class="btn btn-vert" onclick="genererCle()">Générer la clé</button>
         <div id="gen-err" class="msg err"></div>
         <div id="gen-result" class="gen-result">
           <div class="gen-cle" id="gen-cle-val">—</div>
           <div style="font-size:11px;color:var(--textm);margin-top:4px" id="gen-cle-info"></div>
-          <button class="btn btn-out btn-sm" style="margin-top:10px" onclick="copier(document.getElementById('gen-cle-val').textContent)">📋 Copier</button>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-out btn-sm" onclick="copier(document.getElementById('gen-cle-val').textContent)">📋 Copier</button>
+            <a id="gen-wa-btn" class="btn btn-vert btn-sm" style="display:none;text-decoration:none" target="_blank">📲 Envoyer sur WhatsApp</a>
+          </div>
         </div>
       </div>
 
@@ -378,6 +385,7 @@ async function genererCle(){
   err.textContent = '';
   const jours = +document.getElementById('gen-jours').value || 0;
   const note = document.getElementById('gen-note').value.trim() || null;
+  const waRaw = document.getElementById('gen-wa').value.trim();
   if(jours < 1 || jours > 3650){ err.textContent = 'Durée invalide (1 à 3650 jours).'; return; }
 
   const tier = jours <= 7 ? 'DEMO' : jours >= 1825 ? 'ENTR' : jours >= 365 ? 'PROV' : 'BASE';
@@ -391,8 +399,22 @@ async function genererCle(){
   document.getElementById('gen-result').style.display = 'block';
   document.getElementById('gen-cle-val').textContent = cle;
   document.getElementById('gen-cle-info').textContent = `${jours} jours · Tier ${tier}` + (note?` · ${note}`:'');
+
+  // Bouton WhatsApp si un numéro est renseigné
+  const waBtn = document.getElementById('gen-wa-btn');
+  let waNum = waRaw.replace(/[^0-9]/g, '');
+  if(waNum && waNum.length <= 8) waNum = '228' + waNum;   // numéro local Togo → préfixe pays
+  if(waNum){
+    const msg = `🔑 Voici votre clé d'activation PROVENDA :\n\n${cle}\n\nValide ${jours} jours.\n\nUtilisez-la sur : ${location.origin}/gp_paiement.html`;
+    waBtn.href = `https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`;
+    waBtn.style.display = 'inline-block';
+  } else {
+    waBtn.style.display = 'none';
+  }
+
   document.getElementById('gen-jours').value = '';
   document.getElementById('gen-note').value = '';
+  document.getElementById('gen-wa').value = '';
   toast('Clé générée ✓');
   chargerCles();
 }
