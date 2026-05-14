@@ -410,7 +410,8 @@ async function genererCle(){
   let waNum = waRaw.replace(/[^0-9]/g, '');
   if(waNum && waNum.length <= 8) waNum = '228' + waNum;   // numéro local Togo → préfixe pays
   if(waNum){
-    const msg = `🔑 Voici votre clé d'activation PROVENDA :\n\n${cle}\n\nValide ${jours} jours.\n\nUtilisez-la sur : ${location.origin}/gp_paiement.html`;
+    // Toujours le lien de PRODUCTION — le client ne doit jamais recevoir l'URL de test DEV
+    const msg = `🔑 Voici votre clé d'activation PROVENDA :\n\n${cle}\n\nValide ${jours} jours.\n\nUtilisez-la sur : https://provenda.netlify.app/gp_paiement.html`;
     waBtn.href = `https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`;
     waBtn.style.display = 'inline-block';
   } else {
