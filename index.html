@@ -164,7 +164,6 @@
   <!-- ADMINISTRATION -->
   <div class="nav-sect">⚙️ Administration</div>
   <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
-  <div class="nav-item owner-only" onclick="showGP('licences')" data-page="licences"><span class="nav-icon">🔑</span>Licences (clés)</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 
 </div>
@@ -1909,64 +1908,6 @@
   </div>
 </div>
 
-<!-- LICENCES (clés d'activation) -->
-<div class="page" id="page-licences">
-  <div class="page-title">Licences (clés d'activation)</div>
-  <div class="page-sub">Générer des clés pour offrir un accès à vos amis / clients · Suivi des utilisations</div>
-
-  <div class="g4" id="lic-kpis" style="margin-bottom:14px"></div>
-
-  <div class="g2" style="align-items:start">
-    <!-- Formulaire de génération -->
-    <div class="card">
-      <div class="card-title"><div class="ct-left"><span>➕ Générer une nouvelle clé</span></div></div>
-      <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
-        Crée une clé d'activation valide pour la durée choisie. La clé est unique et utilisable une seule fois.
-      </div>
-      <div class="fg2">
-        <div class="fr">
-          <label>Durée (jours)</label>
-          <input type="number" id="lic-jours" placeholder="365" min="1" max="3650" value="365">
-          <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
-            <button class="btn btn-out btn-sm" onclick="document.getElementById('lic-jours').value=7" style="padding:2px 8px;font-size:10px">7j</button>
-            <button class="btn btn-out btn-sm" onclick="document.getElementById('lic-jours').value=30" style="padding:2px 8px;font-size:10px">30j</button>
-            <button class="btn btn-out btn-sm" onclick="document.getElementById('lic-jours').value=90" style="padding:2px 8px;font-size:10px">90j</button>
-            <button class="btn btn-out btn-sm" onclick="document.getElementById('lic-jours').value=180" style="padding:2px 8px;font-size:10px">180j</button>
-            <button class="btn btn-out btn-sm" onclick="document.getElementById('lic-jours').value=365" style="padding:2px 8px;font-size:10px">365j</button>
-          </div>
-        </div>
-        <div class="fr">
-          <label>Note (optionnel)</label>
-          <input type="text" id="lic-note" placeholder="Ex: Pour Jean Adekou - testeur">
-        </div>
-      </div>
-      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="genererNouvelleCle()">🔑 Générer la clé</button>
-      <div class="a-err" id="lic-gen-err"></div>
-
-      <!-- Résultat de génération -->
-      <div id="lic-gen-resultat" style="display:none;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.3);border-radius:10px;padding:14px;margin-top:12px">
-        <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:6px">✓ Clé générée</div>
-        <div id="lic-gen-cle" style="font-family:'DM Mono',monospace;font-size:18px;letter-spacing:2px;color:var(--gold);text-align:center;background:rgba(0,0,0,.3);padding:10px;border-radius:6px;margin-bottom:8px;cursor:pointer" onclick="copierCleGen()">—</div>
-        <div id="lic-gen-info" style="font-size:10px;color:var(--textm);text-align:center;margin-bottom:8px"></div>
-        <button class="btn btn-out btn-sm" onclick="copierCleGen()" style="width:100%;justify-content:center">📋 Copier la clé</button>
-      </div>
-    </div>
-
-    <!-- Liste des clés générées -->
-    <div class="card">
-      <div class="card-title">
-        <div class="ct-left"><span>🗝️ Mes clés générées</span></div>
-        <select id="lic-filtre" onchange="renderPageLicences()" style="font-size:11px;padding:4px 8px;width:auto">
-          <option value="all">Toutes</option>
-          <option value="disponibles">Disponibles</option>
-          <option value="utilisees">Utilisées</option>
-        </select>
-      </div>
-      <div id="lic-liste"></div>
-    </div>
-  </div>
-</div>
-
 <!-- DIRECTEUR STRATÉGIQUE -->
 <div class="page" id="page-directeur">
   <div class="page-title">Directeur Stratégique Commercial</div>
@@ -2179,7 +2120,6 @@
 <script src="js/benefices.js?v=2.7.0"></script>
 <script src="js/messages_pdv.js?v=2.7.0"></script>
 <script src="js/directeur.js?v=2.7.0"></script>
-<script src="js/licences.js?v=2.7.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js?v=2.7.0"></script>
 
