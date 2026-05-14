@@ -1149,6 +1149,7 @@ function localisermoi(){
 }
 
 async function savePDV(){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   const nom=document.getElementById('pv_nom')?.value.trim();
   const tel=document.getElementById('pv_tel')?.value.trim()||null;
   const adresse=document.getElementById('pv_adresse')?.value.trim()||null;
@@ -1187,6 +1188,7 @@ async function savePDV(){
 }
 
 async function deletePDV(id,nom){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   if(!confirm(`Supprimer le point de vente "${nom}" ?\nLes membres assignés passeront au siège principal.`))return;
   // Retirer le point_vente des membres
   await SB.from('gp_membres').update({point_vente:null}).eq('admin_id',GP_ADMIN_ID).eq('point_vente',nom);
@@ -1460,6 +1462,7 @@ async function saveEquipe(){
   const pv=document.getElementById('eq_pv_hidden')?.value.trim()||null;
   const err=document.getElementById('eq_err');
   const ok=document.getElementById('eq_ok');
+  if(GP_ROLE!=='admin'){err.textContent='Action réservée à l\'administrateur.';return;}
   if(!nom||!email){err.textContent='Nom et email requis.';return;}
   if(!tel){err.textContent='Numéro WhatsApp requis pour envoyer l\'invitation.';return;}
   err.textContent='';ok.innerHTML='';
@@ -1576,6 +1579,7 @@ async function saveEquipe(){
 }
 
 async function toggleMembreActif(id, estActif){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   const action=estActif?'désactiver':'réactiver';
   if(!confirm(`Voulez-vous ${action} ce membre ?`))return;
   await SB.from('gp_membres').update({actif:!estActif}).eq('id',id);
@@ -1583,6 +1587,7 @@ async function toggleMembreActif(id, estActif){
   notify(`Membre ${estActif?'désactivé':'réactivé'} ✓`,'gold');
 }
 async function deleteMembre(id){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   if(!confirm('Supprimer définitivement ce membre ? Cette action est irréversible.'))return;
   await SB.from('gp_membres').delete().eq('id',id);
   await renderPDV();
@@ -1846,6 +1851,7 @@ function membreCard(m){
 
 
 async function savePDV(){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   const nom=document.getElementById('pv_nom')?.value.trim();
   const tel=document.getElementById('pv_tel')?.value.trim()||null;
   const adresse=document.getElementById('pv_adresse')?.value.trim()||null;
@@ -1884,6 +1890,7 @@ async function savePDV(){
 }
 
 async function deletePDV(id,nom){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
   if(!confirm(`Supprimer le point de vente "${nom}" ?\nLes membres assignés passeront au siège principal.`))return;
   // Retirer le point_vente des membres
   await SB.from('gp_membres').update({point_vente:null}).eq('admin_id',GP_ADMIN_ID).eq('point_vente',nom);

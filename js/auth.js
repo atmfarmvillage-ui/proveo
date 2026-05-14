@@ -287,7 +287,22 @@ var PAGE_RENDERERS = {
   mes_rapports:  showMesRapports,
 };
 
+// Renvoie true si le rôle courant a le droit d'ouvrir cette page.
+// Même logique que applyRoleRestrictions() — les sous-pages sans entrée de menu ne sont pas restreintes ici.
+function pageAutoriseePourRole(page){
+  const navEl=document.querySelector(`.nav-item[data-page="${page}"]`);
+  if(!navEl)return true;
+  const roles=navEl.dataset.roles;
+  if(roles)return roles.split(',').map(r=>r.trim()).includes(GP_ROLE);
+  if(navEl.classList.contains('admin-only'))return GP_ROLE==='admin';
+  return true;
+}
 function showGP(page){
+  // Garde-fou : empêche d'atteindre une page interdite au rôle (ex. via la console)
+  if(!pageAutoriseePourRole(page)){
+    if(typeof notify==='function')notify('Accès non autorisé pour votre rôle','r');
+    return;
+  }
   // Fermer sidebar sur mobile
   if(window.innerWidth<=768)closeSidebar();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
