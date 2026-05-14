@@ -24,7 +24,10 @@ function genererCleATM(jours, tier = 'PROV'){
   const d1 = _b36pad(Math.floor(jours / 36**2), 2) + _b36pad(jours % 36**2, 2);
   const S1 = tier;
   const S2 = 'KY' + d1.slice(0, 2);
-  const cs = _hash32(S1 + S2 + jours + _ATM_SECRET);
+  // nonce aléatoire : sans lui la clé serait identique pour une même durée/tier
+  // (l'activation valide par recherche en base + format, pas par recalcul du checksum)
+  const nonce = Math.random().toString(36).slice(2) + Date.now();
+  const cs = _hash32(S1 + S2 + jours + _ATM_SECRET + nonce);
   const S3 = _b36pad(cs, 4);
   return `ATM-${S1}-${S2}-${S3}`;
 }

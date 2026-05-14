@@ -389,11 +389,16 @@ async function genererCle(){
   if(jours < 1 || jours > 3650){ err.textContent = 'Durée invalide (1 à 3650 jours).'; return; }
 
   const tier = jours <= 7 ? 'DEMO' : jours >= 1825 ? 'ENTR' : jours >= 365 ? 'PROV' : 'BASE';
-  const cle = genererCleATM(jours, tier);   // fonction de js/licences.js
 
-  const{ error } = await SBC.from('gp_cles').insert({
-    cle, duree_jours: jours, cree_par: ME.id, note
-  });
+  // Génère une clé unique — réessaie si collision sur le segment aléatoire (23505 = clé déjà en base)
+  let cle = null, error = null;
+  for(let i = 0; i < 6; i++){
+    cle = genererCleATM(jours, tier);   // fonction de js/licences.js
+    const res = await SBC.from('gp_cles').insert({ cle, duree_jours: jours, cree_par: ME.id, note });
+    error = res.error;
+    if(!error || error.code !== '23505') break;
+    cle = null;
+  }
   if(error){ err.textContent = 'Erreur : ' + error.message; return; }
 
   document.getElementById('gen-result').style.display = 'block';
