@@ -93,7 +93,7 @@ async function renderPageLicences(){
           <td>
             ${!enUtilisation ? `
               <button class="btn btn-out btn-sm" onclick="copierCleAdmin('${c.cle}')" title="Copier" style="padding:3px 7px">📋</button>
-              <a href="https://wa.me/?text=${encodeURIComponent('🔑 Voici votre clé d\\'activation PROVENDA :\n\n'+c.cle+'\n\nValide '+c.duree_jours+' jours.\n\nUtilisez-la sur : '+window.location.origin+'/gp_paiement.html')}" target="_blank" class="btn btn-g btn-sm" style="padding:3px 7px;text-decoration:none">📲</a>
+              <a href="https://wa.me/?text=${encodeURIComponent('🔑 Voici votre clé d\'activation PROVENDA :\n\n'+c.cle+'\n\nValide '+c.duree_jours+' jours.\n\nUtilisez-la sur : '+window.location.origin+'/gp_paiement.html')}" target="_blank" class="btn btn-g btn-sm" style="padding:3px 7px;text-decoration:none">📲</a>
               <button class="btn btn-red btn-sm" onclick="supprimerCle('${c.id}')" style="padding:3px 7px">✕</button>
             ` : ''}
           </td>
