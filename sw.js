@@ -1,7 +1,7 @@
-// PROVENDA Service Worker v4.2.6
+// PROVENDA Service Worker v4.2.7
 // Se met à jour automatiquement
 
-const CACHE_NAME = 'provenda-v4.2.6';
+const CACHE_NAME = 'provenda-v4.2.7';
 
 // Installation — vider l'ancien cache immédiatement
 self.addEventListener('install', e => {

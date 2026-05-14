@@ -134,6 +134,7 @@ tr:last-child td{border-bottom:none}
     <button class="tab" data-tab="clients" onclick="showTab('clients')">👥 Clients</button>
     <button class="tab" data-tab="paiements" onclick="showTab('paiements')">💳 Paiements</button>
     <button class="tab" data-tab="stats" onclick="showTab('stats')">📊 Statistiques</button>
+    <button class="tab" data-tab="catalogue" onclick="showTab('catalogue')">🌾 Catalogue MP</button>
   </div>
 
   <div class="content">
@@ -228,6 +229,93 @@ tr:last-child td{border-bottom:none}
       </div>
     </div>
 
+    <!-- ─── ONGLET CATALOGUE MP ─── -->
+    <div class="panel" id="panel-catalogue">
+      <h2>Catalogue des matières premières</h2>
+      <div class="panel-sub">Les MP de référence. Chaque nouvelle provenderie reçoit automatiquement ce catalogue à l'inscription.</div>
+      <div id="cat-kpis" class="kpis"></div>
+      <div class="filtre-bar">
+        <input type="text" id="cat-search" oninput="renderCatalogue()" placeholder="🔍 Rechercher une MP…"
+          style="flex:1;min-width:200px;padding:7px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--texte);font-family:inherit;font-size:12px">
+        <button class="btn btn-vert btn-sm" onclick="ouvrirAjoutMP()">➕ Ajouter</button>
+        <button class="btn btn-out btn-sm" onclick="ouvrirImportCSV()">📤 Importer CSV</button>
+        <button class="btn btn-out btn-sm" onclick="chargerCatalogue()">↻ Rafraîchir</button>
+      </div>
+      <div class="tbl-wrap" id="cat-liste"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════ MODALE AJOUT / ÉDITION MP CATALOGUE ════════ -->
+<div id="modal-mp" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalMP()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div id="mp-modal-title" style="font-family:'DM Serif Display',serif;font-size:18px">➕ Nouvelle MP du catalogue</div>
+      <button onclick="fermerModalMP()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input id="mp-id" type="hidden">
+    <div class="fr"><label>Nom *</label><input type="text" id="mp-nom" placeholder="ex: Maïs jaune"></div>
+    <div class="row2">
+      <div class="fr"><label>Protéines (%)</label><input type="number" step="0.01" id="mp-proteines"></div>
+      <div class="fr"><label>Énergie (kcal/kg)</label><input type="number" id="mp-energie"></div>
+    </div>
+    <div class="row2">
+      <div class="fr"><label>Lipides (%)</label><input type="number" step="0.01" id="mp-lipides"></div>
+      <div class="fr"><label>Fibres (%)</label><input type="number" step="0.01" id="mp-fibres"></div>
+    </div>
+    <div class="row2">
+      <div class="fr"><label>Lysine (%)</label><input type="number" step="0.001" id="mp-lysine"></div>
+      <div class="fr"><label>Méthionine (%)</label><input type="number" step="0.001" id="mp-methionine"></div>
+    </div>
+    <div class="row2">
+      <div class="fr"><label>Méth+Cyst (%)</label><input type="number" step="0.001" id="mp-meth_cyst"></div>
+      <div class="fr"><label>Thréonine (%)</label><input type="number" step="0.001" id="mp-threonine"></div>
+    </div>
+    <div class="row2">
+      <div class="fr"><label>Tryptophane (%)</label><input type="number" step="0.001" id="mp-tryptophane"></div>
+      <div class="fr"><label>Calcium (%)</label><input type="number" step="0.01" id="mp-calcium"></div>
+    </div>
+    <div class="row2">
+      <div class="fr"><label>P disponible (%)</label><input type="number" step="0.01" id="mp-phosphore_disp"></div>
+      <div class="fr"><label>Sodium (%)</label><input type="number" step="0.001" id="mp-sodium"></div>
+    </div>
+    <div class="fr"><label>Chlore (%)</label><input type="number" step="0.001" id="mp-chlore"></div>
+    <div id="mp-err" class="msg err"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-vert" onclick="saveCatalogueMP()" style="flex:1">💾 Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerModalMP()" style="flex:1">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MODALE IMPORT CSV ════════ -->
+<div id="modal-import" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalImport()">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:680px;width:100%;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-family:'DM Serif Display',serif;font-size:18px">📤 Importer le catalogue (CSV)</div>
+      <button onclick="fermerModalImport()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--textm);line-height:1.6;margin-bottom:10px">
+      <strong>Format attendu</strong> — 1ʳᵉ ligne = en-têtes, séparateur virgule :<br>
+      <code style="font-size:11px;background:var(--bg);padding:6px 10px;border-radius:6px;display:block;margin-top:6px;white-space:pre-wrap;word-break:break-all">nom,proteines,energie,lipides,fibres,lysine,methionine,meth_cyst,threonine,tryptophane,calcium,phosphore_disp,sodium,chlore</code>
+      Seul <strong>nom</strong> est obligatoire. Les colonnes manquantes seront laissées vides.<br>
+      <strong>Doublons</strong> : si un nom existe déjà dans le catalogue, la ligne CSV est <strong>ignorée</strong>.
+    </div>
+    <div class="fr">
+      <label>Coller le contenu CSV</label>
+      <textarea id="imp-csv" rows="8" placeholder="nom,proteines,energie,...&#10;Maïs jaune,8.5,3350,4.0,2.5,..." style="width:100%;font-family:'DM Mono',monospace;font-size:11px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--texte);resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:12px;color:var(--textm)">
+      <span>ou charger un fichier :</span>
+      <input type="file" id="imp-file" accept=".csv,.txt" onchange="lireCSVFichier()" style="flex:1;color:var(--textm);font-size:11px">
+    </div>
+    <div id="imp-err" class="msg err"></div>
+    <div id="imp-info" class="msg" style="color:var(--textm)"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-vert" onclick="importerCatalogueCSV()" style="flex:1">📥 Importer</button>
+      <button class="btn btn-out" onclick="fermerModalImport()" style="flex:1">Annuler</button>
+    </div>
   </div>
 </div>
 
@@ -245,6 +333,24 @@ let ME = null;            // user connecté
 let CLES = [];            // cache clés
 let CLIENTS = [];         // cache clients
 let PAIEMENTS = [];       // cache paiements
+let CATALOGUE = [];       // cache catalogue MP (gp_ingredients où admin_id IS NULL)
+
+// Colonnes nutriments du catalogue (nom + valeurs)
+const MP_NUTRIMENTS = [
+  {key:'proteines', label:'Prot', decimals:2},
+  {key:'energie', label:'EM', decimals:0},
+  {key:'lipides', label:'Lip', decimals:2},
+  {key:'fibres', label:'Fib', decimals:2},
+  {key:'lysine', label:'Lys', decimals:3},
+  {key:'methionine', label:'Met', decimals:3},
+  {key:'meth_cyst', label:'M+C', decimals:3},
+  {key:'threonine', label:'Thr', decimals:3},
+  {key:'tryptophane', label:'Trp', decimals:3},
+  {key:'calcium', label:'Ca', decimals:2},
+  {key:'phosphore_disp', label:'P', decimals:2},
+  {key:'sodium', label:'Na', decimals:3},
+  {key:'chlore', label:'Cl', decimals:3},
+];
 
 // ════════════════════════════════════════════
 // HELPERS
@@ -324,6 +430,7 @@ function chargerTout(){
   chargerCles();
   chargerClients();
   chargerPaiements();
+  chargerCatalogue();
 }
 
 // ════════════════════════════════════════════
@@ -578,6 +685,211 @@ function renderStats(){
       <tr><td>Clients via clé d'activation</td><td style="text-align:right">${actifs.filter(c=>c.plan==='CLE_ACTIVEE').length}</td></tr>
       <tr><td>MRR estimé</td><td style="text-align:right;color:var(--jaune);font-weight:700">${fmt(Math.round(mrr))} FCFA / mois</td></tr>
     </table>`;
+}
+
+// ════════════════════════════════════════════
+// ONGLET 5 — CATALOGUE MP
+// ════════════════════════════════════════════
+async function chargerCatalogue(){
+  // Les MP du catalogue = lignes avec admin_id IS NULL (visibles à l'OWNER via RLS)
+  const{ data, error } = await SBC.from('gp_ingredients')
+    .select('*').is('admin_id', null).order('nom');
+  if(error){
+    document.getElementById('cat-liste').innerHTML =
+      '<div class="empty">Erreur : '+error.message+'</div>';
+    CATALOGUE = [];
+    renderCatalogue();
+    return;
+  }
+  CATALOGUE = data || [];
+  renderCatalogue();
+}
+
+function renderCatalogue(){
+  const q = (document.getElementById('cat-search')?.value||'').toLowerCase().trim();
+  const list = q ? CATALOGUE.filter(m => (m.nom||'').toLowerCase().includes(q)) : CATALOGUE;
+
+  document.getElementById('cat-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-val">${CATALOGUE.length}</div><div class="kpi-lbl">MP au catalogue</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--lime)">${CATALOGUE.filter(m=>Number(m.proteines)>0).length}</div><div class="kpi-lbl">Avec nutriments</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--jaune)">${list.length}</div><div class="kpi-lbl">Affichées</div></div>`;
+
+  if(!list.length){
+    document.getElementById('cat-liste').innerHTML = q
+      ? '<div class="empty">Aucune MP ne correspond à votre recherche.</div>'
+      : '<div class="empty">Catalogue vide. Cliquez « ➕ Ajouter » ou « 📤 Importer CSV ».</div>';
+    return;
+  }
+
+  const ths = MP_NUTRIMENTS.map(n => `<th class="num" title="${n.key}">${n.label}</th>`).join('');
+  const rows = list.map(m => {
+    const tds = MP_NUTRIMENTS.map(n => {
+      const v = m[n.key];
+      return `<td class="num" style="color:var(--textm)">${v != null ? Number(v).toFixed(n.decimals) : '—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="font-weight:600">${m.nom||'—'}</td>
+      ${tds}
+      <td style="white-space:nowrap">
+        <button class="btn btn-out btn-sm" onclick="ouvrirEditMP('${m.id}')" title="Modifier">✏️</button>
+        <button class="btn btn-red btn-sm" onclick="supprimerCatalogueMP('${m.id}','${(m.nom||'').replace(/'/g,"\\'")}')" title="Retirer du catalogue">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cat-liste').innerHTML = `
+    <table><thead><tr>
+      <th>Nom</th>${ths}<th></th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function ouvrirAjoutMP(){
+  document.getElementById('mp-modal-title').textContent = '➕ Nouvelle MP du catalogue';
+  document.getElementById('mp-id').value = '';
+  document.getElementById('mp-nom').value = '';
+  document.getElementById('mp-err').textContent = '';
+  MP_NUTRIMENTS.forEach(n => { document.getElementById('mp-'+n.key).value = ''; });
+  document.getElementById('modal-mp').style.display = 'flex';
+}
+
+function ouvrirEditMP(id){
+  const mp = CATALOGUE.find(x => x.id === id);
+  if(!mp){ toast('MP introuvable'); return; }
+  document.getElementById('mp-modal-title').textContent = '✏️ Modifier — ' + mp.nom;
+  document.getElementById('mp-id').value = mp.id;
+  document.getElementById('mp-nom').value = mp.nom || '';
+  document.getElementById('mp-err').textContent = '';
+  MP_NUTRIMENTS.forEach(n => {
+    document.getElementById('mp-'+n.key).value = mp[n.key] != null ? mp[n.key] : '';
+  });
+  document.getElementById('modal-mp').style.display = 'flex';
+}
+
+function fermerModalMP(){ document.getElementById('modal-mp').style.display = 'none'; }
+
+async function saveCatalogueMP(){
+  const err = document.getElementById('mp-err');
+  err.textContent = '';
+  const id = document.getElementById('mp-id').value;
+  const nom = document.getElementById('mp-nom').value.trim();
+  if(!nom){ err.textContent = 'Le nom est obligatoire.'; return; }
+
+  const payload = { admin_id: null, nom };
+  MP_NUTRIMENTS.forEach(n => {
+    const v = document.getElementById('mp-'+n.key).value;
+    payload[n.key] = (v === '' || v == null) ? null : Number(v);
+  });
+
+  let res;
+  if(id){
+    res = await SBC.from('gp_ingredients').update(payload).eq('id', id);
+  } else {
+    // Vérifier le doublon (nom déjà au catalogue)
+    if(CATALOGUE.some(m => (m.nom||'').toLowerCase() === nom.toLowerCase())){
+      err.textContent = 'Une MP avec ce nom existe déjà au catalogue.'; return;
+    }
+    res = await SBC.from('gp_ingredients').insert(payload);
+  }
+  if(res.error){ err.textContent = 'Erreur : ' + res.error.message; return; }
+
+  toast(id ? 'MP modifiée ✓' : 'MP ajoutée au catalogue ✓');
+  fermerModalMP();
+  chargerCatalogue();
+}
+
+async function supprimerCatalogueMP(id, nom){
+  if(!confirm(`Retirer « ${nom} » du catalogue ?\n\nNote : les copies déjà reçues par les provenderies existantes ne sont pas affectées.`)) return;
+  const{ error } = await SBC.from('gp_ingredients').delete().eq('id', id).is('admin_id', null);
+  if(error){ toast('Erreur : ' + error.message); return; }
+  toast('MP retirée du catalogue');
+  chargerCatalogue();
+}
+
+// ─── Import CSV ───────────────────────────────
+function ouvrirImportCSV(){
+  document.getElementById('imp-csv').value = '';
+  document.getElementById('imp-file').value = '';
+  document.getElementById('imp-err').textContent = '';
+  document.getElementById('imp-info').textContent = '';
+  document.getElementById('modal-import').style.display = 'flex';
+}
+function fermerModalImport(){ document.getElementById('modal-import').style.display = 'none'; }
+
+function lireCSVFichier(){
+  const f = document.getElementById('imp-file').files?.[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('imp-csv').value = e.target.result; };
+  reader.readAsText(f, 'UTF-8');
+}
+
+// Parse CSV simple (gère les guillemets et virgules dans les champs)
+function _parseCSVLine(line){
+  const out = []; let cur = ''; let q = false;
+  for(let i=0; i<line.length; i++){
+    const c = line[i];
+    if(q){
+      if(c==='"' && line[i+1]==='"'){ cur += '"'; i++; }
+      else if(c==='"'){ q = false; }
+      else cur += c;
+    } else {
+      if(c===','){ out.push(cur); cur = ''; }
+      else if(c==='"'){ q = true; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+
+async function importerCatalogueCSV(){
+  const err = document.getElementById('imp-err');
+  const info = document.getElementById('imp-info');
+  err.textContent = ''; info.textContent = '';
+  const raw = document.getElementById('imp-csv').value.trim();
+  if(!raw){ err.textContent = 'Aucun contenu CSV à importer.'; return; }
+
+  const lines = raw.split(/\r?\n/).filter(l => l.trim());
+  if(lines.length < 2){ err.textContent = 'Le CSV doit contenir au moins une ligne d\'en-têtes et une ligne de données.'; return; }
+
+  const headers = _parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+  const iNom = headers.indexOf('nom');
+  if(iNom < 0){ err.textContent = 'Colonne « nom » introuvable dans les en-têtes.'; return; }
+
+  const noms = new Set(CATALOGUE.map(m => (m.nom||'').toLowerCase()));
+  const rows = [];
+  let skippedDup = 0, skippedNoName = 0;
+
+  for(let i=1; i<lines.length; i++){
+    const cols = _parseCSVLine(lines[i]);
+    const nom = (cols[iNom]||'').trim();
+    if(!nom){ skippedNoName++; continue; }
+    if(noms.has(nom.toLowerCase())){ skippedDup++; continue; }
+    noms.add(nom.toLowerCase());
+    const r = { admin_id: null, nom };
+    MP_NUTRIMENTS.forEach(n => {
+      const ix = headers.indexOf(n.key);
+      if(ix >= 0){
+        const v = (cols[ix]||'').replace(',', '.').trim();
+        r[n.key] = v === '' ? null : Number(v);
+        if(Number.isNaN(r[n.key])) r[n.key] = null;
+      }
+    });
+    rows.push(r);
+  }
+
+  if(!rows.length){
+    err.textContent = `Aucune ligne à importer (${skippedDup} doublon(s), ${skippedNoName} sans nom).`;
+    return;
+  }
+
+  info.textContent = `Insertion de ${rows.length} MP en cours…`;
+  const{ error } = await SBC.from('gp_ingredients').insert(rows);
+  if(error){ err.textContent = 'Erreur : ' + error.message; info.textContent = ''; return; }
+
+  toast(`${rows.length} MP importées ✓`);
+  info.textContent = `${rows.length} insérée(s) · ${skippedDup} doublon(s) ignoré(s) · ${skippedNoName} ligne(s) sans nom ignorée(s).`;
+  chargerCatalogue();
 }
 
 // Recalcule les stats à chaque ouverture de l'onglet
