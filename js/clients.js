@@ -64,7 +64,7 @@ async function renderClients(){
         </td>
         <td style="white-space:nowrap">
           ${montantDu>0?`
-            <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\'")}',${montantDu})" title="Solder la dette">💳</button>
+            <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${montantDu})" title="Solder la dette">💳</button>
             <button class="btn btn-out btn-sm" onclick="envoyerRappelDette('${c.id}')" title="Envoyer rappel WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>
           `:''}
           <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>

@@ -736,8 +736,8 @@ function filtrerIngrVente(){
     }
     const cursorStyle = enRupture ? 'cursor:not-allowed;opacity:.5' : 'cursor:pointer';
     const onclick = enRupture
-      ? `onclick="notify('🚫 ${i.nom.replace(/'/g,"\\'")} en rupture — vente impossible','r')"`
-      : `onclick="selectionnerIngrVente('${i.id}','${i.nom.replace(/'/g,"\\'")}',${i.prix_actuel||0},${stock})"`;
+      ? `onclick="notify('🚫 ${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')} en rupture — vente impossible','r')"`
+      : `onclick="selectionnerIngrVente('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0},${stock})"`;
     return `<div ${onclick}
       style="padding:9px 12px;${cursorStyle};border-bottom:1px solid rgba(30,45,74,.4);background:${bgColor};transition:background .15s"
       onmouseover="if(${!enRupture})this.style.background='rgba(22,163,74,.1)'"

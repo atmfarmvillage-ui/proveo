@@ -364,7 +364,7 @@ function filtrerIngrAchat(){
 
   results.style.display='block';
   results.innerHTML=filtered.map(i=>`
-    <div onclick="selectionnerIngrAchat('${i.id}','${i.nom.replace(/'/g,"\'")}',${i.prix_actuel||0})"
+    <div onclick="selectionnerIngrAchat('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0})"
       style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'"
       onmouseout="this.style.background=''">

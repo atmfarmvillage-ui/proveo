@@ -255,7 +255,7 @@ async function filtrerIngrFormule(){
     const prot = i.proteines || 0;
     const em = i.energie || 0;
     const hasData = prot > 0 || em > 0;
-    return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'")}')"
+    return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
       style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
       <div style="font-size:12px;font-weight:600">${i.nom}</div>
@@ -549,7 +549,7 @@ function _renderSuggestions(besoin, nutriments, espece){
           ${s.candidats.map(c => `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
               <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">+ ${c.mp.nom}</span>
-              <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'")}',${c.pctAjout.toFixed(2)})"
+              <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${c.pctAjout.toFixed(2)})"
                 style="background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
                 +${c.pctAjout.toFixed(1)}% (~${fmt(Math.round(c.cout))}F)
               </button>
@@ -1012,6 +1012,89 @@ function applyLogo(url){
   const preview=document.getElementById('cfg-logo-preview');
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
 }
+
+// ── ANIMATION COUNT-UP DES KPI ────────────────────
+// Anime le contenu numérique des .stat-val et .econo-val depuis 0 jusqu'à leur valeur finale.
+// Idempotent : ne ré-anime pas un élément déjà animé dans la session.
+function animateKpis(root){
+  const scope = root || document;
+  const els = scope.querySelectorAll('.stat-val, .econo-val');
+  els.forEach(el => {
+    if(el.dataset.animDone === '1') return;
+    const finalTxt = el.textContent;
+    const m = finalTxt.match(/-?\d[\d\s.,]*/);
+    if(!m) return;
+    const cleaned = m[0].replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'').replace(',','.');
+    const target = parseFloat(cleaned);
+    if(!isFinite(target) || Math.abs(target) < 5){el.dataset.animDone='1';return;}
+    const prefix = finalTxt.slice(0, m.index);
+    const suffix = finalTxt.slice(m.index + m[0].length);
+    el.dataset.animDone = '1';
+    const start = performance.now();
+    const dur = 650;
+    const fmtFr = n => new Intl.NumberFormat('fr-FR').format(Math.round(n));
+    function tick(now){
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = prefix + fmtFr(target * eased) + suffix;
+      if(t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalTxt;
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+// ── THÈME CLAIR/SOMBRE ────────────────────────────
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{localStorage.setItem('gp_theme',next);}catch(e){}
+  const btn=document.getElementById('theme-toggle-btn');
+  if(btn)btn.textContent=next==='dark'?'🌙':'☀️';
+}
+
+// ── EXTRACTION COULEUR DOMINANTE DU LOGO ──────────
+// Prend un File (image) et renvoie une string '#RRGGBB' représentant la couleur dominante.
+// Ignore les pixels trop clairs (proche blanc), trop sombres (proche noir) et trop gris.
+function extraireCouleurDominante(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject('fichier illisible');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          const size=60;
+          canvas.width=size;canvas.height=size;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,size,size);
+          const data=ctx.getImageData(0,0,size,size).data;
+          const buckets={};
+          for(let i=0;i<data.length;i+=4){
+            const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+            if(a<200)continue;
+            const max=Math.max(r,g,b),min=Math.min(r,g,b);
+            if(max>240&&min>240)continue; // proche blanc
+            if(max<25)continue; // proche noir
+            if(max-min<20)continue; // proche gris
+            const key=`${r>>5},${g>>5},${b>>5}`;
+            buckets[key]=(buckets[key]||0)+1;
+          }
+          const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]);
+          if(!sorted.length)return reject('aucune couleur dominante');
+          const [r,g,b]=sorted[0][0].split(',').map(n=>Math.min(255,(+n*32)+16));
+          const hex='#'+[r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+          resolve(hex);
+        }catch(e){reject(e);}
+      };
+      img.onerror=()=>reject('image invalide');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function loadConfigForm(){
   if(GP_CONFIG.nom_provenderie)document.getElementById('cfg_nom').value=GP_CONFIG.nom_provenderie;
   if(GP_CONFIG.slogan)document.getElementById('cfg_slogan').value=GP_CONFIG.slogan;
@@ -1020,7 +1103,6 @@ async function loadConfigForm(){
   if(GP_CONFIG.localisation)document.getElementById('cfg_loc').value=GP_CONFIG.localisation;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
-  if(GP_CONFIG.callmebot_apikey)document.getElementById('cfg_callmebot_apikey').value=GP_CONFIG.callmebot_apikey;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1036,14 +1118,11 @@ async function saveConfig(){
     email:document.getElementById('cfg_email').value.trim(),
     localisation:document.getElementById('cfg_loc').value.trim(),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte,
-    callmebot_apikey:document.getElementById('cfg_callmebot_apikey')?.value.trim()||null
+    tel_alerte_stock:telAlerte
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
   if(telAlerte)GP_CONFIG.tel_alerte_stock=telAlerte;
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  if(apikey)GP_CONFIG.callmebot_apikey=apikey;
   document.getElementById('tb-name').textContent=nom;
   applyColor(couleur);
   err.textContent='';ok.textContent='✓ Configuration sauvegardée !';
@@ -1068,37 +1147,28 @@ async function uploadLogo(){
   if(upErr){err.textContent='Erreur: '+upErr.message;return;}
   const{data:urlData}=SB.storage.from('gp-logos').getPublicUrl(path);
   const logo_url=urlData?.publicUrl;
-  await SB.from('gp_config').upsert({user_id:GP_ADMIN_ID,logo_url},{onConflict:'user_id'});
-  GP_CONFIG.logo_url=logo_url;
-  applyLogo(logo_url);
-  err.textContent='';ok.textContent='✓ Logo mis à jour !';
-  setTimeout(()=>ok.textContent='',3000);
-  notify('Logo uploadé ✓','gold');
-}
 
-async function testerCallMeBot(){
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  const tel=(document.getElementById('cfg_tel_alerte')?.value||document.getElementById('cfg_tel')?.value||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const status=document.getElementById('callmebot-status');
-  if(!apikey){status.style.color='#ef4444';status.textContent='⚠ Entrez votre clé API CallMeBot.';return;}
-  if(!tel){status.style.color='#ef4444';status.textContent='⚠ Entrez votre numéro de téléphone.';return;}
-  status.style.color='#94A3B8';status.textContent='⏳ Envoi en cours...';
-  const msg=encodeURIComponent('✅ Test PROVENDA — Vos alertes stock automatiques sont activées !');
-  const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
+  // Extraire la couleur dominante du logo pour l'utiliser comme accent
+  let couleurExtraite=null;
   try{
-    const res=await fetch(url);
-    const txt=await res.text();
-    if(txt.includes('Message Sent')||txt.includes('queued')){
-      status.style.color='#25D366';
-      status.textContent='✅ Message envoyé ! Vérifiez votre WhatsApp.';
-    } else {
-      status.style.color='#ef4444';
-      status.textContent='⚠ Erreur: '+txt.slice(0,80);
-    }
-  } catch(e){
-    status.style.color='#ef4444';
-    status.textContent='⚠ Erreur réseau: '+e.message;
+    couleurExtraite=await extraireCouleurDominante(file);
+  }catch(e){console.warn('Extraction couleur logo échouée:',e);}
+
+  const upd={user_id:GP_ADMIN_ID,logo_url};
+  if(couleurExtraite) upd.couleur=couleurExtraite;
+  await SB.from('gp_config').upsert(upd,{onConflict:'user_id'});
+  GP_CONFIG.logo_url=logo_url;
+  if(couleurExtraite){
+    GP_CONFIG.couleur=couleurExtraite;
+    applyColor(couleurExtraite);
+    const colorEl=document.getElementById('cfg_couleur');
+    if(colorEl)colorEl.value=couleurExtraite;
   }
+  applyLogo(logo_url);
+  err.textContent='';
+  ok.textContent=couleurExtraite?`✓ Logo + couleur ${couleurExtraite} appliqués !`:'✓ Logo mis à jour !';
+  setTimeout(()=>ok.textContent='',3500);
+  notify('Logo uploadé ✓','gold');
 }
 
 // ══════════════════════════════════════════════════
@@ -1605,6 +1675,89 @@ function applyLogo(url){
   const preview=document.getElementById('cfg-logo-preview');
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
 }
+
+// ── ANIMATION COUNT-UP DES KPI ────────────────────
+// Anime le contenu numérique des .stat-val et .econo-val depuis 0 jusqu'à leur valeur finale.
+// Idempotent : ne ré-anime pas un élément déjà animé dans la session.
+function animateKpis(root){
+  const scope = root || document;
+  const els = scope.querySelectorAll('.stat-val, .econo-val');
+  els.forEach(el => {
+    if(el.dataset.animDone === '1') return;
+    const finalTxt = el.textContent;
+    const m = finalTxt.match(/-?\d[\d\s.,]*/);
+    if(!m) return;
+    const cleaned = m[0].replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'').replace(',','.');
+    const target = parseFloat(cleaned);
+    if(!isFinite(target) || Math.abs(target) < 5){el.dataset.animDone='1';return;}
+    const prefix = finalTxt.slice(0, m.index);
+    const suffix = finalTxt.slice(m.index + m[0].length);
+    el.dataset.animDone = '1';
+    const start = performance.now();
+    const dur = 650;
+    const fmtFr = n => new Intl.NumberFormat('fr-FR').format(Math.round(n));
+    function tick(now){
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = prefix + fmtFr(target * eased) + suffix;
+      if(t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalTxt;
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+// ── THÈME CLAIR/SOMBRE ────────────────────────────
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{localStorage.setItem('gp_theme',next);}catch(e){}
+  const btn=document.getElementById('theme-toggle-btn');
+  if(btn)btn.textContent=next==='dark'?'🌙':'☀️';
+}
+
+// ── EXTRACTION COULEUR DOMINANTE DU LOGO ──────────
+// Prend un File (image) et renvoie une string '#RRGGBB' représentant la couleur dominante.
+// Ignore les pixels trop clairs (proche blanc), trop sombres (proche noir) et trop gris.
+function extraireCouleurDominante(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject('fichier illisible');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          const size=60;
+          canvas.width=size;canvas.height=size;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,size,size);
+          const data=ctx.getImageData(0,0,size,size).data;
+          const buckets={};
+          for(let i=0;i<data.length;i+=4){
+            const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+            if(a<200)continue;
+            const max=Math.max(r,g,b),min=Math.min(r,g,b);
+            if(max>240&&min>240)continue; // proche blanc
+            if(max<25)continue; // proche noir
+            if(max-min<20)continue; // proche gris
+            const key=`${r>>5},${g>>5},${b>>5}`;
+            buckets[key]=(buckets[key]||0)+1;
+          }
+          const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]);
+          if(!sorted.length)return reject('aucune couleur dominante');
+          const [r,g,b]=sorted[0][0].split(',').map(n=>Math.min(255,(+n*32)+16));
+          const hex='#'+[r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+          resolve(hex);
+        }catch(e){reject(e);}
+      };
+      img.onerror=()=>reject('image invalide');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function loadConfigForm(){
   if(GP_CONFIG.nom_provenderie)document.getElementById('cfg_nom').value=GP_CONFIG.nom_provenderie;
   if(GP_CONFIG.slogan)document.getElementById('cfg_slogan').value=GP_CONFIG.slogan;
@@ -1613,7 +1766,6 @@ async function loadConfigForm(){
   if(GP_CONFIG.localisation)document.getElementById('cfg_loc').value=GP_CONFIG.localisation;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
-  if(GP_CONFIG.callmebot_apikey)document.getElementById('cfg_callmebot_apikey').value=GP_CONFIG.callmebot_apikey;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1629,14 +1781,11 @@ async function saveConfig(){
     email:document.getElementById('cfg_email').value.trim(),
     localisation:document.getElementById('cfg_loc').value.trim(),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte,
-    callmebot_apikey:document.getElementById('cfg_callmebot_apikey')?.value.trim()||null
+    tel_alerte_stock:telAlerte
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
   if(telAlerte)GP_CONFIG.tel_alerte_stock=telAlerte;
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  if(apikey)GP_CONFIG.callmebot_apikey=apikey;
   document.getElementById('tb-name').textContent=nom;
   applyColor(couleur);
   err.textContent='';ok.textContent='✓ Configuration sauvegardée !';
@@ -1661,11 +1810,27 @@ async function uploadLogo(){
   if(upErr){err.textContent='Erreur: '+upErr.message;return;}
   const{data:urlData}=SB.storage.from('gp-logos').getPublicUrl(path);
   const logo_url=urlData?.publicUrl;
-  await SB.from('gp_config').upsert({user_id:GP_ADMIN_ID,logo_url},{onConflict:'user_id'});
+
+  // Extraire la couleur dominante du logo pour l'utiliser comme accent
+  let couleurExtraite=null;
+  try{
+    couleurExtraite=await extraireCouleurDominante(file);
+  }catch(e){console.warn('Extraction couleur logo échouée:',e);}
+
+  const upd={user_id:GP_ADMIN_ID,logo_url};
+  if(couleurExtraite) upd.couleur=couleurExtraite;
+  await SB.from('gp_config').upsert(upd,{onConflict:'user_id'});
   GP_CONFIG.logo_url=logo_url;
+  if(couleurExtraite){
+    GP_CONFIG.couleur=couleurExtraite;
+    applyColor(couleurExtraite);
+    const colorEl=document.getElementById('cfg_couleur');
+    if(colorEl)colorEl.value=couleurExtraite;
+  }
   applyLogo(logo_url);
-  err.textContent='';ok.textContent='✓ Logo mis à jour !';
-  setTimeout(()=>ok.textContent='',3000);
+  err.textContent='';
+  ok.textContent=couleurExtraite?`✓ Logo + couleur ${couleurExtraite} appliqués !`:'✓ Logo mis à jour !';
+  setTimeout(()=>ok.textContent='',3500);
   notify('Logo uploadé ✓','gold');
 }
 
@@ -1678,31 +1843,6 @@ window.addEventListener('load',function(){
     if(session)bootApp(session.user);
   }).catch(function(e){console.error('Session check failed:',e);});
 });
-async function testerCallMeBot(){
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  const tel=(document.getElementById('cfg_tel_alerte')?.value||document.getElementById('cfg_tel')?.value||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const status=document.getElementById('callmebot-status');
-  if(!apikey){status.style.color='#ef4444';status.textContent='⚠ Entrez votre clé API CallMeBot.';return;}
-  if(!tel){status.style.color='#ef4444';status.textContent='⚠ Entrez votre numéro de téléphone.';return;}
-  status.style.color='#94A3B8';status.textContent='⏳ Envoi en cours...';
-  const msg=encodeURIComponent('✅ Test PROVENDA — Vos alertes stock automatiques sont activées !');
-  const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
-  try{
-    const res=await fetch(url);
-    const txt=await res.text();
-    if(txt.includes('Message Sent')||txt.includes('queued')){
-      status.style.color='#25D366';
-      status.textContent='✅ Message envoyé ! Vérifiez votre WhatsApp.';
-    } else {
-      status.style.color='#ef4444';
-      status.textContent='⚠ Erreur: '+txt.slice(0,80);
-    }
-  } catch(e){
-    status.style.color='#ef4444';
-    status.textContent='⚠ Erreur réseau: '+e.message;
-  }
-}
-
 // ══════════════════════════════════════════════════
 // POINTS DE VENTE & ÉQUIPE
 // ══════════════════════════════════════════════════

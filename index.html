@@ -20,8 +20,22 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script>
+  // Applique le thème stocké AVANT le rendu CSS pour éviter le flash
+  (function(){
+    try{
+      const t = localStorage.getItem('gp_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      // Sync icône bouton dès que le DOM est prêt
+      document.addEventListener('DOMContentLoaded', function(){
+        const btn = document.getElementById('theme-toggle-btn');
+        if(btn) btn.textContent = t === 'dark' ? '🌙' : '☀️';
+      });
+    }catch(e){document.documentElement.setAttribute('data-theme','dark');}
+  })();
+</script>
 </head>
 <body>
 
@@ -84,7 +98,7 @@
 <div id="licence-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px"></div>
 
 <!-- BANNIÈRE TRIAL -->
-<div id="trial-banniere" style="display:none;position:fixed;top:var(--topbar);left:0;right:0;z-index:99;background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(245,158,11,.08));border-bottom:1px solid rgba(245,158,11,.3);padding:8px 20px;font-size:12px;color:var(--gold);align-items:center;justify-content:center;gap:14px"></div>
+<div id="trial-banniere" style="display:none;position:fixed;top:var(--topbar);left:0;right:0;z-index:99;background:linear-gradient(90deg,rgba(232,197,71,.15),rgba(232,197,71,.08));border-bottom:1px solid rgba(232,197,71,.3);padding:8px 20px;font-size:12px;color:var(--gold);align-items:center;justify-content:center;gap:14px"></div>
 
 <!-- TOPBAR -->
 <div id="topbar" style="display:none">
@@ -101,8 +115,9 @@
     </button>
     <div class="tb-user-info" id="tb-user-info"></div>
     <span class="tb-role" id="tb-role-badge">ADMIN</span>
-    <span id="tb-pv-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:3px 10px;border-radius:20px"></span>
+    <span id="tb-pv-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(232,197,71,.15);color:var(--gold);border:1px solid rgba(232,197,71,.3);padding:3px 10px;border-radius:20px"></span>
     <div class="notif-badge hidden" id="notif-remises" title="Remises en attente" onclick="showGP('remises')">0</div>
+    <button class="tb-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Changer thème clair/sombre" style="width:32px;height:32px;padding:0;font-size:14px;display:flex;align-items:center;justify-content:center">🌙</button>
     <button class="tb-btn" onclick="doLogout()">⎋ Déconnexion</button>
   </div>
 </div>
@@ -164,6 +179,7 @@
   <!-- ADMINISTRATION -->
   <div class="nav-sect">⚙️ Administration</div>
   <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
+  <div class="nav-item" onclick="showGP('licence')" data-page="licence"><span class="nav-icon">🪪</span>Ma Licence</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 
 </div>
@@ -306,7 +322,7 @@
         </div>
         <div class="fg2">
           <div class="fr"><label>Quantité reçue (kg)</label><input type="number" id="mp_qte" placeholder="500" step="0.1"></div>
-          <div class="fr"><label>Prix/kg (FCFA) <span style="font-size:9px;color:var(--textm);font-weight:400;text-transform:none">🔒 depuis fiche MP</span></label><input type="number" id="mp_prix" placeholder="200" readonly style="background:rgba(30,45,74,.3);color:var(--textm);cursor:not-allowed"></div>
+          <div class="fr"><label>Prix/kg (FCFA) <span style="font-size:9px;color:var(--textm);font-weight:400;text-transform:none">🔒 depuis fiche MP</span></label><input type="number" id="mp_prix" placeholder="200" readonly style="background:rgba(30,51,32,.3);color:var(--textm);cursor:not-allowed"></div>
         </div>
         <div class="fg2">
           <div class="fr"><label>Fournisseur</label><input type="text" id="mp_fourn" placeholder="Nom fournisseur"></div>
@@ -351,7 +367,7 @@
   <div class="page-title">Matières Premières</div>
   <div class="page-sub">Gérer les ingrédients · Prix · Seuils d'alerte critique</div>
   <div class="g4" id="mp-kpis" style="margin-bottom:14px"></div>
-  <div id="seuils-suggestions" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px;margin-bottom:14px"></div>
+  <div id="seuils-suggestions" style="display:none;background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:10px;padding:14px;margin-bottom:14px"></div>
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-out btn-sm" onclick="analyserSeuilsDynamiques()">💡 Analyser seuils dynamiques</button>
   </div>
@@ -515,7 +531,7 @@
             🧪 Formule
           </button>
           <button type="button" id="vt_type_mp_btn" onclick="basculerTypeProduitVente('mp')"
-            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)">
+            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
             🌾 Matière première
           </button>
         </div>
@@ -537,7 +553,7 @@
         <input type="text" id="vt_mp_search" placeholder="🔍 Tapez pour chercher (maïs, soja…)"
           oninput="filtrerIngrVente()" onfocus="filtrerIngrVente()" autocomplete="off"
           style="margin-bottom:4px;font-size:12px">
-        <div id="vt_mp_results" style="display:none;position:absolute;z-index:9999;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:280px;overflow-y:auto;width:100%;top:64px;left:0;box-shadow:0 12px 40px rgba(0,0,0,.8)"></div>
+        <div id="vt_mp_results" style="display:none;position:absolute;z-index:9999;background:#0E1A0C;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:280px;overflow-y:auto;width:100%;top:64px;left:0;box-shadow:0 12px 40px rgba(0,0,0,.8)"></div>
         <input type="hidden" id="vt_mp_id">
         <div id="vt_mp_selected" style="display:none;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;color:var(--g6);margin-top:4px"></div>
         <div id="vt-mp-stock-info" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
@@ -574,7 +590,7 @@
       <div id="vt-lignes-preview"></div>
 
       <!-- TOTAUX -->
-      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+      <div style="background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
           <span style="color:var(--textm)">Montant total</span>
           <span id="vt-montant-total" style="font-weight:700;font-size:15px;color:var(--gold)">0 F</span>
@@ -816,7 +832,7 @@
       </div>
       <div class="fr">
         <label>Aperçu du message</label>
-        <textarea id="wa-preview" rows="7" style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
+        <textarea id="wa-preview" rows="7" style="font-size:12px;line-height:1.6;background:rgba(8,14,7,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
       </div>
       <div style="display:flex;gap:8px;margin-top:4px">
         <button class="btn btn-g" onclick="envoyerWAClient()" style="flex:1;justify-content:center">📲 Ouvrir WhatsApp</button>
@@ -837,10 +853,10 @@
         <select id="app_client" onchange="onClientAppelChange()"><option value="">— Sélectionner —</option></select>
       </div>
       <div class="fr"><label>Téléphone <span style="font-size:9px;color:var(--textm)">🔒 auto depuis fiche client</span></label>
-        <input type="tel" id="app_tel" placeholder="Sélectionner un client d'abord" readonly style="background:rgba(30,45,74,.3);color:var(--textm)">
+        <input type="tel" id="app_tel" placeholder="Sélectionner un client d'abord" readonly style="background:rgba(30,51,32,.3);color:var(--textm)">
       </div>
       <div class="fr"><label>Appelé(e) par</label>
-        <input type="text" id="app_appelant" placeholder="Votre nom" style="background:rgba(30,45,74,.3);color:var(--textm)" readonly>
+        <input type="text" id="app_appelant" placeholder="Votre nom" style="background:rgba(30,51,32,.3);color:var(--textm)" readonly>
       </div>
       <div class="fr"><label>Résultat de l'appel</label>
         <select id="app_resultat" onchange="toggleAutreResultat()">
@@ -909,7 +925,7 @@
     </div>
     <div class="fr">
       <label>Aperçu du message</label>
-      <textarea id="prosp-preview" rows="6" style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
+      <textarea id="prosp-preview" rows="6" style="font-size:12px;line-height:1.6;background:rgba(8,14,7,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical"></textarea>
     </div>
     <div class="a-err" id="prosp_err"></div>
     <button class="btn btn-g" style="width:100%;justify-content:center" onclick="envoyerProspect()">📲 Envoyer par WhatsApp</button>
@@ -1074,7 +1090,7 @@
       </div>
 
       <!-- Contrat (visible uniquement pour rôle = directeur) -->
-      <div id="eq_contrat_fields" style="display:none;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div id="eq_contrat_fields" style="display:none;background:rgba(232,197,71,.05);border:1px solid rgba(232,197,71,.25);border-radius:10px;padding:14px;margin-bottom:10px">
         <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px">📄 Contrat du Directeur — sera créé automatiquement</div>
         <div class="fg2">
           <div class="fr"><label>Date début *</label><input type="date" id="eq_ctr_debut"></div>
@@ -1208,7 +1224,7 @@
     </div>
 
     <!-- CHAT -->
-    <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;height:480px">
+    <div style="background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;height:480px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div style="font-weight:700;font-size:14px">💬 Chat de l'équipe</div>
         <button class="btn btn-out btn-sm" onclick="chargerPlusDeMessages()" style="font-size:10px">⬆ Plus anciens</button>
@@ -1217,7 +1233,7 @@
       <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end">
         <textarea id="chat-input" placeholder="Tapez votre message... (Entrée pour envoyer)"
           onkeydown="chatKeydown(event)"
-          style="flex:1;resize:none;height:40px;padding:8px 12px;font-size:12px;font-family:inherit;border-radius:10px;background:rgba(30,45,74,.8);border:1px solid var(--border);color:var(--text);line-height:1.4"></textarea>
+          style="flex:1;resize:none;height:40px;padding:8px 12px;font-size:12px;font-family:inherit;border-radius:10px;background:rgba(30,51,32,.8);border:1px solid var(--border);color:var(--text);line-height:1.4"></textarea>
         <button class="btn btn-g" onclick="envoyerMessage()" style="height:40px;padding:0 14px">↗</button>
       </div>
     </div>
@@ -1232,7 +1248,7 @@
   <div style="display:grid;grid-template-columns:1fr 240px;gap:14px;height:calc(100vh - 160px);min-height:400px">
 
     <!-- ZONE CHAT -->
-    <div style="display:flex;flex-direction:column;background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <div style="display:flex;flex-direction:column;background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:12px;overflow:hidden">
       <!-- Header -->
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div style="font-weight:700;font-size:14px">💬 Chat de l'équipe</div>
@@ -1244,7 +1260,7 @@
       <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end">
         <textarea id="chat-input" placeholder="Tapez votre message... (Entrée pour envoyer, Maj+Entrée pour saut de ligne)"
           onkeydown="chatKeydown(event)"
-          style="flex:1;resize:none;min-height:40px;max-height:120px;padding:8px 12px;font-size:13px;font-family:inherit;border-radius:10px;background:rgba(30,45,74,.8);border:1px solid var(--border);color:var(--text);line-height:1.4"></textarea>
+          style="flex:1;resize:none;min-height:40px;max-height:120px;padding:8px 12px;font-size:13px;font-family:inherit;border-radius:10px;background:rgba(30,51,32,.8);border:1px solid var(--border);color:var(--text);line-height:1.4"></textarea>
         <button class="btn btn-g" onclick="envoyerMessage()" style="height:40px;padding:0 16px;white-space:nowrap">
           Envoyer ↗
         </button>
@@ -1253,7 +1269,7 @@
 
     <!-- PRÉSENCE -->
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:12px;padding:14px;flex:1;overflow-y:auto">
+      <div style="background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:12px;padding:14px;flex:1;overflow-y:auto">
         <div style="font-weight:700;font-size:13px;margin-bottom:10px">👥 Membres</div>
         <div id="presence-liste"></div>
       </div>
@@ -1289,7 +1305,7 @@
 
 <!-- MODAL PAIEMENT -->
 <div id="modal-paiement-mp" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalPaiement()">
-  <div style="background:var(--card2,#0E1428);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto">
+  <div style="background:var(--card2,#0E1A0C);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <div style="font-weight:700;font-size:15px" id="pmt-modal-titre">Paiement</div>
       <button onclick="fermerModalPaiement()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -1433,7 +1449,7 @@
       <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ingrédients à commander</div>
       <div class="fr" style="position:relative"><label>Rechercher un ingrédient</label>
         <input type="text" id="achat_ingr_search" placeholder="🔍 Tapez le nom de l'ingrédient..." oninput="filtrerIngrAchat()" autocomplete="off">
-        <div id="achat_ingr_results" style="display:none;position:absolute;z-index:9999;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;margin-top:4px;box-shadow:0 12px 40px rgba(0,0,0,.8)"></div>
+        <div id="achat_ingr_results" style="display:none;position:absolute;z-index:9999;background:#0E1A0C;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;margin-top:4px;box-shadow:0 12px 40px rgba(0,0,0,.8)"></div>
         <input type="hidden" id="achat_ingr">
         <div id="achat_ingr_selected" style="font-size:11px;color:var(--g6);margin-top:4px;display:none"></div>
       </div>
@@ -1598,7 +1614,7 @@
             <button type="button" id="dist_type_formule_btn" onclick="basculerTypeProduitDist('formule')"
               style="flex:1;padding:6px;border-radius:6px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)">🧪 Formule</button>
             <button type="button" id="dist_type_mp_btn" onclick="basculerTypeProduitDist('mp')"
-              style="flex:1;padding:6px;border-radius:6px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)">🌾 Matière première</button>
+              style="flex:1;padding:6px;border-radius:6px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">🌾 Matière première</button>
           </div>
           <input type="hidden" id="dist_type_produit" value="formule">
         </div>
@@ -1840,6 +1856,15 @@
   </div>
 </div>
 
+<!-- MA LICENCE -->
+<div class="page" id="page-licence">
+  <div class="page-title">Ma Licence</div>
+  <div class="page-sub">Plan actuel · Date d'expiration · Activation</div>
+  <div id="licence-content">
+    <div style="color:var(--textm);font-size:12px;padding:20px;text-align:center">Chargement...</div>
+  </div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
@@ -1856,22 +1881,8 @@
       <div class="fr"><label>Localisation</label><input type="text" id="cfg_loc" placeholder="Lomé, Togo"></div>
       <div class="fr">
         <label>📲 Numéro WhatsApp — Alertes stock critique</label>
-        <input type="tel" id="cfg_tel_alerte" placeholder="+228 90 00 00 00" style="border-color:rgba(245,158,11,.4)">
+        <input type="tel" id="cfg_tel_alerte" placeholder="+228 90 00 00 00" style="border-color:rgba(232,197,71,.4)">
         <div style="font-size:10px;color:var(--textm);margin-top:4px">Ce numéro reçoit les alertes quand un stock passe sous le seuil critique. Peut être différent du numéro principal (ex: responsable de stock).</div>
-      </div>
-      <div style="background:rgba(37,211,102,.06);border:1px solid rgba(37,211,102,.2);border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:700;color:#25D366;margin-bottom:8px">🤖 CallMeBot — Alertes automatiques WhatsApp</div>
-        <div style="font-size:10px;color:var(--textm);margin-bottom:10px;line-height:1.6">
-          Pour recevoir les alertes <strong>automatiquement</strong> sans cliquer :<br>
-          1. Ajoute <strong>+34 644 65 13 82</strong> dans tes contacts WhatsApp<br>
-          2. Envoie-lui : <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px">I allow callmebot to send me messages</code><br>
-          3. Colle la clé API reçue ci-dessous
-        </div>
-        <div class="fr"><label>Clé API CallMeBot</label>
-          <input type="text" id="cfg_callmebot_apikey" placeholder="Ex: 123456" style="border-color:rgba(37,211,102,.4);letter-spacing:2px">
-        </div>
-        <button class="btn btn-out btn-sm" onclick="testerCallMeBot()" style="border-color:#25D366;color:#25D366">📲 Tester l'envoi automatique</button>
-        <div id="callmebot-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
       </div>
       <div class="fr"><label>Couleur principale</label>
         <div style="display:flex;gap:8px;align-items:center">
@@ -1929,7 +1940,7 @@
 
 <!-- MODAL GÉNÉRATION SALAIRE DIRECTEUR -->
 <div id="modal-gen-salaire" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerGenSalaire()">
-  <div style="background:var(--g1,#0E1428);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div id="gs-titre" style="font-size:17px;font-weight:700;color:var(--gold)">Générer le salaire</div>
@@ -1977,7 +1988,7 @@
       <div id="gs-penalite-detail" style="font-size:10px;color:var(--textm);margin-top:2px"></div>
     </div>
 
-    <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:14px;margin-bottom:10px">
+    <div style="background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:10px;padding:14px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
         <span style="color:var(--textm)">Total primes</span>
         <strong id="gs-total-primes" style="color:var(--gold)">0 F</strong>
@@ -1986,7 +1997,7 @@
         <span style="color:var(--textm)">Total avances</span>
         <strong id="gs-total-avances" style="color:var(--red)">0 F</strong>
       </div>
-      <div style="border-top:1px solid rgba(245,158,11,.2);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
+      <div style="border-top:1px solid rgba(232,197,71,.2);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:13px;font-weight:700">NET À PAYER</span>
         <strong id="gs-net" style="font-size:20px;color:var(--green)">0 F</strong>
       </div>
@@ -2017,7 +2028,7 @@
 
 <!-- MODAL CRÉER CONTRAT -->
 <div id="modal-creer-contrat" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerCreerContrat()">
-  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-size:17px;font-weight:700">📄 Nouveau contrat</div>
       <button onclick="fermerCreerContrat()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -2038,7 +2049,7 @@
     </div>
     <div class="fr"><label>Salaire de base mensuel (FCFA)</label><input type="number" id="ctr_salaire" placeholder="100000"></div>
 
-    <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+    <div style="background:rgba(232,197,71,.05);border:1px solid rgba(232,197,71,.2);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">💰 Règles de commissions</div>
       <div class="fg2">
         <div class="fr"><label>FCFA / tonne aliment lapin</label><input type="number" id="ctr_lapin" placeholder="3000"></div>
@@ -2120,6 +2131,7 @@
 <script src="js/benefices.js?v=2.7.0"></script>
 <script src="js/messages_pdv.js?v=2.7.0"></script>
 <script src="js/directeur.js?v=2.7.0"></script>
+<script src="js/licences.js?v=2.7.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js?v=2.7.0"></script>
 
@@ -2172,7 +2184,7 @@ function installPWA(){
 
 <!-- MODAL PRÉVISUALISATION WHATSAPP AVANT ENVOI -->
 <div id="modal-preview-wa" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerPreviewWA()">
-  <div style="background:var(--g1,#0E1428);border:1px solid #25D366;border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid #25D366;border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div style="font-size:17px;font-weight:700;color:#25D366">📲 Aperçu WhatsApp</div>
@@ -2188,7 +2200,7 @@ function installPWA(){
     <div class="fr">
       <label>💬 Message (modifiable)</label>
       <textarea id="pwa-message" rows="11"
-        style="font-size:12px;line-height:1.6;background:rgba(8,11,24,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical;font-family:'Outfit',sans-serif"></textarea>
+        style="font-size:12px;line-height:1.6;background:rgba(8,14,7,.6);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;width:100%;resize:vertical;font-family:'Outfit',sans-serif"></textarea>
       <div style="font-size:10px;color:var(--textm);margin-top:4px">
         ℹ️ Message généré selon le profil client (fidèle/dette/nouveau). Vous pouvez l'éditer librement.
       </div>
@@ -2216,7 +2228,7 @@ function installPWA(){
   }
 </style>
 <div id="modal-formule" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerModalFormule()">
-  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:1100px;padding:20px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:1100px;padding:20px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div id="mf-titre" style="font-size:17px;font-weight:700;color:var(--g6)">🧪 Nouvelle formule</div>
       <button onclick="fermerModalFormule()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -2266,7 +2278,7 @@ function installPWA(){
             <div style="position:relative">
               <input type="text" id="mf_ingr_search" placeholder="🔍 Rechercher MP (maïs, soja…)"
                 oninput="filtrerIngrFormule()" onfocus="filtrerIngrFormule()" autocomplete="off">
-              <div id="mf_ingr_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:#0E1428;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;margin-top:2px;box-shadow:0 8px 30px rgba(0,0,0,.7)"></div>
+              <div id="mf_ingr_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:#0E1A0C;border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;margin-top:2px;box-shadow:0 8px 30px rgba(0,0,0,.7)"></div>
               <input type="hidden" id="mf_new_ingr_id">
               <input type="hidden" id="mf_new_ingr">
             </div>
@@ -2276,7 +2288,7 @@ function installPWA(){
         </div>
 
         <!-- Coûts (collapsible) -->
-        <details style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px;margin-bottom:10px">
+        <details style="background:rgba(232,197,71,.05);border:1px solid rgba(232,197,71,.2);border-radius:10px;padding:10px;margin-bottom:10px">
           <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--gold)">💰 Coûts de production (optionnel)</summary>
           <div style="margin-top:10px">
             <div class="fg2">
@@ -2299,7 +2311,7 @@ function installPWA(){
 
       <!-- ── COLONNE DROITE : ANALYSE NUTRITIONNELLE ── -->
       <div>
-        <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:10px;padding:12px;position:sticky;top:0">
+        <div style="background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:10px;padding:12px;position:sticky;top:0">
           <div style="font-size:12px;font-weight:700;color:var(--g6);margin-bottom:8px">📊 Analyse nutritionnelle</div>
           <div style="font-size:9px;color:var(--textm);margin-bottom:10px" id="mf-analyse-legend">
             🟢 OK · 🔴 manque · 🟠 excès · ⚪ pas de cible
@@ -2315,7 +2327,7 @@ function installPWA(){
 
 <!-- MODAL OPTIMISEUR (Phase 3) -->
 <div id="modal-optimiseur" style="display:none;position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerOptimiseur()">
-  <div style="background:var(--g1,#0E1428);border:1px solid #a855f7;border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid #a855f7;border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div style="font-size:17px;font-weight:700;color:#a855f7">🎯 Optimisation automatique</div>
@@ -2357,7 +2369,7 @@ function installPWA(){
 
 <!-- MODAL AJOUT ESPÈCE -->
 <div id="modal-ajout-espece" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
     <div style="font-size:15px;font-weight:700;margin-bottom:12px">➕ Nouvelle espèce</div>
     <div class="fr"><label>Code (sans espace, ex: cailles)</label><input type="text" id="ae_code" placeholder="cailles"></div>
     <div class="fr"><label>Nom complet</label><input type="text" id="ae_label" placeholder="Caille"></div>
@@ -2372,7 +2384,7 @@ function installPWA(){
 
 <!-- MODAL AJOUT CATÉGORIE -->
 <div id="modal-ajout-categorie" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--g1,#0E1428);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
     <div style="font-size:15px;font-weight:700;margin-bottom:4px">➕ Nouvelle catégorie</div>
     <div id="ac-espece-label" style="font-size:11px;color:var(--gold);margin-bottom:12px"></div>
     <div class="fr"><label>Code (sans espace, ex: ponte_pic)</label><input type="text" id="ac_code" placeholder="ponte_pic"></div>
@@ -2390,7 +2402,7 @@ function installPWA(){
   <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:16px;max-width:600px;margin:0 auto;padding:24px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
-        <div style="font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--g6)">📋 Feuille de fabrication</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:22px;font-weight:700;color:var(--g6)">📋 Feuille de fabrication</div>
         <div id="fab-ref" style="font-size:12px;color:var(--textm)"></div>
       </div>
 <span style="font-size:11px;color:var(--textm)">Cochage requis avant fermeture</span>
@@ -2400,7 +2412,7 @@ function installPWA(){
     <div id="fab-ingredients"></div>
     <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
       <div id="fab-progression" style="font-size:12px;color:var(--textm);margin-bottom:8px"></div>
-      <div style="background:rgba(30,45,74,.8);border-radius:20px;height:8px;overflow:hidden">
+      <div style="background:rgba(30,51,32,.8);border-radius:20px;height:8px;overflow:hidden">
         <div id="fab-progress-bar" style="height:100%;background:linear-gradient(90deg,var(--g4),var(--g6));border-radius:20px;transition:width .3s;width:0%"></div>
       </div>
     </div>
@@ -2428,7 +2440,7 @@ function installPWA(){
 <div id="modal-messages-pdv" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerModalMessages()">
   <div style="background:var(--g1);border:1px solid rgba(37,211,102,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div id="msg-pdv-titre" style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;color:var(--g6)">📱 Messages PDV</div>
+      <div id="msg-pdv-titre" style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--g6)">📱 Messages PDV</div>
       <button onclick="fermerModalMessages()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕ Fermer</button>
     </div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:14px">
@@ -2440,9 +2452,9 @@ function installPWA(){
 
 <!-- MODAL TOP 3 CLIENTS -->
 <div id="modal-top3-clients" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerTop3()">
-  <div style="background:var(--g1);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;color:var(--gold)">🏆 Messages Top 3 Clients</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--gold)">🏆 Messages Top 3 Clients</div>
       <button onclick="fermerTop3()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
     </div>
     <div id="top3-liste"></div>
@@ -2451,9 +2463,9 @@ function installPWA(){
 
 <!-- MODAL BILAN EMPLOYÉ -->
 <div id="modal-bilan-employe" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerBilanEmploye()">
-  <div style="background:var(--g1);border:1px solid rgba(245,158,11,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;color:var(--gold)">📊 Bilan employé</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--gold)">📊 Bilan employé</div>
       <button onclick="fermerBilanEmploye()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
     </div>
     <div id="bilan-employe-contenu"></div>
@@ -2463,7 +2475,7 @@ function installPWA(){
 <!-- MODAL PAYER DETTE CLIENT -->
 <div id="modal-payer-dette" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerPayerDette()">
   <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:400px;padding:24px">
-    <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;margin-bottom:4px">💳 Payer une dette</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;margin-bottom:4px">💳 Payer une dette</div>
     <div style="font-size:14px;font-weight:600;color:var(--g6);margin-bottom:4px" id="dette-client-nom"></div>
     <div style="font-size:12px;color:var(--red);margin-bottom:14px">Total dû : <strong id="dette-montant-du"></strong></div>
     <input type="hidden" id="dette-client-id">
@@ -2482,7 +2494,7 @@ function installPWA(){
 <!-- MODAL MODIFIER VENTE -->
 <div id="modal-modifier-vente" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModifierVente()">
   <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px">
-    <div style="font-family:'Crimson Pro',serif;font-size:20px;font-weight:700;margin-bottom:4px">✏️ Modifier la vente</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;margin-bottom:4px">✏️ Modifier la vente</div>
     <div style="font-size:13px;font-weight:600;color:var(--g6);margin-bottom:4px" id="mv-client"></div>
     <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Total : <strong id="mv-total"></strong></div>
     <input type="hidden" id="mv-id">

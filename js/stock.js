@@ -47,7 +47,7 @@ function filtrerMPStock(){
     else if(nv<seuil){badge='<span style="background:rgba(245,158,11,.12);color:var(--gold);border:1px solid rgba(245,158,11,.3);padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">⬇ FAIBLE</span>';bgColor='rgba(245,158,11,.04)';}
     else{badge='<span style="background:rgba(22,163,74,.12);color:var(--green);padding:1px 6px;border-radius:10px;font-size:9px">✓ OK</span>';}
     
-    return`<div onclick="selectionnerMPStock('${ingr.id}','${ingr.nom.replace(/'/g,"\'")}',${ingr.prix_actuel||0})"
+    return`<div onclick="selectionnerMPStock('${ingr.id}','${ingr.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${ingr.prix_actuel||0})"
       style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);background:${bgColor};transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.08)'" onmouseout="this.style.background='${bgColor}'">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -293,6 +293,7 @@ function filtrerStock(){
 }
 
 // ── NOTIFICATION WHATSAPP STOCK BAS ───────────────
+// Envoie l'alerte au numéro principal + DAF + Logistique (un onglet wa.me par destinataire)
 async function verifierAlerteStock(){
   const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
   if(!S)return;
@@ -310,83 +311,34 @@ async function verifierAlerteStock(){
     return;
   }
   const cfg=GP_CONFIG||{};
-  // Utiliser le numéro d'alerte dédié, sinon le numéro principal
-  const telAlerte=(cfg.tel_alerte_stock||cfg.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const destAff=cfg.tel_alerte_stock||cfg.telephone||'ton numéro';
+  const normTel=t=>(t||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+
+  // Destinataires : numéro d'alerte (ou principal) + DAF + logistique
+  const destinataires=[];
+  const telPrincipal=normTel(cfg.tel_alerte_stock||cfg.telephone);
+  if(telPrincipal) destinataires.push({tel:telPrincipal,libelle:cfg.tel_alerte_stock?'Alerte stock':'Principal'});
+
+  const{data:M}=await SB.from('gp_membres').select('nom,role,telephone').eq('admin_id',GP_ADMIN_ID).in('role',['daf','logistique']).eq('actif',true);
+  (M||[]).forEach(m=>{
+    const t=normTel(m.telephone);
+    if(t && !destinataires.find(d=>d.tel===t)) destinataires.push({tel:t,libelle:`${m.role.toUpperCase()} (${m.nom})`});
+  });
+
+  if(destinataires.length===0){
+    notify('⚠ Aucun destinataire configuré (numéro principal ou DAF/logistique)','r');
+    return;
+  }
+
   const lignes=alertes.map(a=>`• ${a.nom} : ${a.qte} kg — ${a.statut}`).join('\n');
   const msg=encodeURIComponent(
     `⚠️ *Alerte Stock — ${cfg.nom_provenderie||'Provenderie'}*\n`+
     `📅 ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}\n\n`+
     `${alertes.length} matière(s) en alerte :\n\n${lignes}\n\n`+
-    `_Connectez-vous sur GP pour réapprovisionner._`
+    `_Connectez-vous sur PROVENDA pour réapprovisionner._`
   );
-  notify(`📲 Envoi alerte à ${destAff}...`,'gold');
-  window.open(`https://wa.me/228${telAlerte}?text=${msg}`,'_blank');
-}
 
-// ── CALLMEBOT — ALERTES AUTOMATIQUES ─────────────
-async function envoyerAlerteCallMeBot(alertes){
-  const cfg = GP_CONFIG || {};
-  const apikey = cfg.callmebot_apikey || '';
-  const tel = (cfg.tel_alerte_stock || cfg.telephone || '').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-
-  if(!apikey || !tel){
-    console.log('CallMeBot: clé API ou téléphone manquant');
-    return false;
-  }
-
-  const lignes = alertes.map(a => `• ${a.nom}: ${a.qte} kg — ${a.statut}`).join('%0A');
-  const msg = encodeURIComponent(
-    `⚠️ Alerte Stock — ${cfg.nom_provenderie||'Provenderie'}\n`+
-    `${new Date().toLocaleDateString('fr-FR')} ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}\n\n`+
-    `${alertes.length} matière(s) critique(s) :\n`
-  ) + lignes;
-
-  const url = `https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
-
-  try{
-    const res = await fetch(url);
-    const txt = await res.text();
-    if(txt.includes('Message Sent') || txt.includes('queued')){
-      return true;
-    }
-    console.warn('CallMeBot response:', txt);
-    return false;
-  } catch(e){
-    console.warn('CallMeBot error:', e);
-    return false;
-  }
-}
-
-// Vérification automatique au chargement du logiciel
-async function autoVerifierStockAlerte(){
-  if(GP_ROLE !== 'admin') return;
-  const cfg = GP_CONFIG || {};
-  if(!cfg.callmebot_apikey) return; // Pas configuré
-
-  // Vérifier seulement si la dernière alerte date de plus de 6 heures
-  const lastAlerte = localStorage.getItem('gp_last_stock_alerte');
-  if(lastAlerte){
-    const diff = Date.now() - parseInt(lastAlerte);
-    if(diff < 6 * 60 * 60 * 1000) return; // Moins de 6h
-  }
-
-  const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
-  if(!S) return;
-  const niveaux = calcNiveaux(S);
-  const alertes = [];
-  Object.entries(niveaux).forEach(([nom,qte])=>{
-    const ingr = GP_INGREDIENTS.find(i=>i.nom===nom);
-    const seuil = ingr?.seuil_alerte||200;
-    if(qte<=0) alertes.push({nom,qte:0,statut:'ÉPUISÉ 🔴'});
-    else if(qte<seuil) alertes.push({nom,qte:qte.toFixed(1),statut:'BAS 🟡'});
+  notify(`📲 Envoi alerte à ${destinataires.length} destinataire(s)...`,'gold');
+  destinataires.forEach((d,i)=>{
+    setTimeout(()=>window.open(`https://wa.me/228${d.tel}?text=${msg}`,'_blank'),i*400);
   });
-
-  if(alertes.length === 0) return;
-
-  const ok = await envoyerAlerteCallMeBot(alertes);
-  if(ok){
-    localStorage.setItem('gp_last_stock_alerte', Date.now().toString());
-    notify(`📲 Alerte stock envoyée automatiquement (${alertes.length} MP)`, 'gold');
-  }
 }

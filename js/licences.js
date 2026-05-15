@@ -218,3 +218,142 @@ async function activerCleATM(sbClient, userId, cleRaw){
     duree_jours: cleData.duree_jours,
   };
 }
+
+// ══════════════════════════════════════════════════
+// PAGE "MA LICENCE" — TOUS LES UTILISATEURS (admin + membres)
+// ══════════════════════════════════════════════════
+async function renderPageLicenceClient(){
+  const root = document.getElementById('licence-content');
+  if(!root) return;
+
+  const cfg = GP_CONFIG || {};
+  const plan = cfg.plan || 'FREE';
+  const exp = cfg.plan_expire_le ? new Date(cfg.plan_expire_le) : null;
+  const now = new Date();
+
+  // Statut + jours restants
+  let joursRest = null;
+  let statutBadge = '';
+  let statutColor = 'green';
+  if(plan === 'OWNER'){
+    statutBadge = '👑 OWNER';
+    statutColor = 'gold';
+  } else if(!exp){
+    statutBadge = '⚠️ Sans abonnement';
+    statutColor = 'red';
+  } else {
+    joursRest = Math.ceil((exp - now) / (1000*60*60*24));
+    if(joursRest < 0){statutBadge = '❌ Expiré'; statutColor = 'red';}
+    else if(joursRest <= 7){statutBadge = '⚠️ Bientôt expiré'; statutColor = 'red';}
+    else if(joursRest <= 30){statutBadge = '🟡 À renouveler'; statutColor = 'gold';}
+    else {statutBadge = '✅ Actif'; statutColor = 'green';}
+  }
+
+  const planLabel = {
+    'OWNER': 'Propriétaire (ATM Farm Village)',
+    'CLE_ACTIVEE': 'Abonnement actif',
+    'PROV': 'Provenderie',
+    'SADARI': 'Sadari',
+    'FREE': 'Compte gratuit',
+  }[plan] || plan;
+
+  const isAdmin = GP_ROLE === 'admin';
+  const colorVar = statutColor === 'green' ? 'var(--green)' : statutColor === 'gold' ? 'var(--gold)' : 'var(--red)';
+  const colorRgb = statutColor === 'green' ? '22,163,74' : statutColor === 'gold' ? '232,197,71' : '239,68,68';
+
+  // Historique des clés activées par le compte admin de la provenderie
+  const{data:historique} = await SB.from('gp_cles')
+    .select('cle,duree_jours,utilisee_le,note')
+    .eq('utilisee_par', GP_ADMIN_ID)
+    .order('utilisee_le', {ascending:false});
+  const H = historique || [];
+
+  const joursRestTxt = joursRest === null ? '' :
+    (joursRest >= 0 ? `${joursRest} jour${joursRest>1?'s':''}` : `expiré depuis ${Math.abs(joursRest)} jour${Math.abs(joursRest)>1?'s':''}`);
+
+  root.innerHTML = `
+    <div class="g2" style="align-items:start;gap:14px">
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>🪪 Mon abonnement</span></div></div>
+        <div style="text-align:center;padding:18px 8px">
+          <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Plan</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:14px">${planLabel}</div>
+          <div style="display:inline-block;background:rgba(${colorRgb},.12);color:${colorVar};border:1px solid rgba(${colorRgb},.4);border-radius:18px;padding:5px 14px;font-size:11px;font-weight:700">${statutBadge}</div>
+        </div>
+        ${exp ? `
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:6px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+            <span style="color:var(--textm)">Expire le</span>
+            <span style="font-weight:600;font-family:'DM Mono',monospace">${exp.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</span>
+          </div>
+          ${joursRest !== null ? `
+          <div style="display:flex;justify-content:space-between;font-size:12px">
+            <span style="color:var(--textm)">Jours restants</span>
+            <span style="font-weight:700;color:${colorVar}">${joursRestTxt}</span>
+          </div>` : ''}
+        </div>` : ''}
+        ${isAdmin && plan !== 'OWNER' ? `
+        <div style="margin-top:14px">
+          <a href="gp_paiement.html" class="btn btn-out" style="width:100%;justify-content:center;text-decoration:none">💳 Renouveler l'abonnement</a>
+        </div>` : ''}
+        ${!isAdmin ? `
+        <div style="margin-top:14px;font-size:10px;color:var(--textm);text-align:center;padding:8px;background:rgba(255,255,255,.02);border-radius:6px;line-height:1.5">
+          ℹ️ Cette licence appartient à votre administrateur. Contactez-le pour la renouveler.
+        </div>` : ''}
+      </div>
+
+      ${isAdmin ? `
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>🔑 Activer une clé</span></div></div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:10px;line-height:1.5">
+          Si vous avez reçu une clé d'activation (format <code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:3px;font-size:10px">ATM-XXXX-KYxx-XXXX</code>), saisissez-la ici.
+        </div>
+        <div class="fr"><label>Clé d'activation</label>
+          <input type="text" id="lic-client-cle" placeholder="ATM-XXXX-KYxx-XXXX" style="font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">
+        </div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="activerCleDepuisApp()">✓ Activer</button>
+        <div id="lic-client-msg" style="font-size:11px;margin-top:8px;min-height:18px"></div>
+      </div>` : ''}
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="card-title"><div class="ct-left"><span>📜 Historique des activations</span></div></div>
+      ${H.length ? `
+        <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+          <thead><tr>
+            <th>Clé</th><th>Durée</th><th>Activée le</th><th>Note</th>
+          </tr></thead>
+          <tbody>
+          ${H.map(h => `<tr>
+            <td style="font-family:'DM Mono',monospace;font-size:10px">${h.cle}</td>
+            <td>${h.duree_jours} j</td>
+            <td style="font-size:10px;color:var(--textm)">${h.utilisee_le ? new Date(h.utilisee_le).toLocaleDateString('fr-FR') : '—'}</td>
+            <td style="font-size:10px;color:var(--textm)">${h.note || '—'}</td>
+          </tr>`).join('')}
+          </tbody>
+        </table></div>
+      ` : '<div style="color:var(--textm);font-size:12px;padding:14px;text-align:center">Aucune clé activée pour le moment.</div>'}
+    </div>
+  `;
+}
+
+async function activerCleDepuisApp(){
+  const msg = document.getElementById('lic-client-msg');
+  const cleInput = document.getElementById('lic-client-cle');
+  const cle = (cleInput?.value || '').trim().toUpperCase();
+  if(!cle){msg.style.color='var(--red)';msg.textContent='⚠ Entrez une clé.';return;}
+  if(GP_ROLE !== 'admin'){msg.style.color='var(--red)';msg.textContent='⚠ Action réservée à l\'administrateur.';return;}
+
+  msg.style.color='var(--textm)';msg.textContent='⏳ Activation...';
+  const result = await activerCleATM(SB, GP_ADMIN_ID, cle);
+
+  if(result.success){
+    msg.style.color='var(--green)';msg.textContent='✅ '+result.message;
+    cleInput.value = '';
+    notify('Licence activée ✓', 'gold');
+    await loadConfig();
+    await renderPageLicenceClient();
+  } else {
+    msg.style.color='var(--red)';msg.textContent='❌ '+result.message;
+  }
+}

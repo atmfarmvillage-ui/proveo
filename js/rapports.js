@@ -201,8 +201,6 @@ function goToBilanMois(mois){
 // ── ENVOI BILAN WHATSAPP ──────────────────────────
 async function envoyerBilanWhatsApp(mois){
   const cfg=GP_CONFIG||{};
-  const apikey=cfg.callmebot_apikey||'';
-  const tel=(cfg.tel_alerte_stock||cfg.telephone||'').replace(/[\s\-\+]/g,'').replace(/^228/,'');
 
   const[ventesRes,depRes,salRes]=await Promise.all([
     SB.from('gp_ventes').select('montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID)
@@ -229,13 +227,8 @@ async function envoyerBilanWhatsApp(mois){
     `${benefice>=0?'📈':'📉'} Bénéfice net : *${fmt(benefice)} F*\n\n`+
     `_Envoyé via PROVENDA_`;
 
-  if(apikey&&tel){
-    const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${encodeURIComponent(texte)}&apikey=${apikey}`;
-    fetch(url).then(()=>notify('Bilan envoyé via WhatsApp ✓','gold')).catch(()=>{});
-  } else {
-    const msg=encodeURIComponent(texte);
-    window.open(`https://wa.me/?text=${msg}`,'_blank');
-  }
+  const msg=encodeURIComponent(texte);
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
 }
 
 // ── RAPPORT PRODUCTION ────────────────────────────
@@ -315,15 +308,7 @@ async function envoyerRapportProdWhatsApp(mois){
     `📦 *Total produit : ${fmt(totalKg)} kg*\n\n`+
     `_Envoyé via PROVENDA_`;
 
-  const apikey=cfg.callmebot_apikey||'';
-  const tel=(cfg.tel_alerte_stock||cfg.telephone||'').replace(/[\s\-\+]/g,'').replace(/^228/,'');
-
-  if(apikey&&tel){
-    fetch(`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${encodeURIComponent(texte)}&apikey=${apikey}`)
-      .then(()=>notify('Rapport envoyé ✓','gold'));
-  } else {
-    window.open(`https://wa.me/?text=${encodeURIComponent(texte)}`,'_blank');
-  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(texte)}`,'_blank');
 }
 
 function imprimerBilan(mois){

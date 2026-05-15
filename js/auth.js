@@ -183,7 +183,6 @@ async function bootApp(user){
   // Mise à jour automatique via SW réseau-first
   try{mettreAJourPresence(true);}catch(e){}
   try{checkPendingRemises();}catch(e){}
-  try{autoVerifierStockAlerte();}catch(e){}
   const lotRef=document.getElementById('lot_ref');
   if(lotRef)lotRef.value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   // Auto refresh toutes les 30s
@@ -278,6 +277,7 @@ var PAGE_RENDERERS = {
   },
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
+  licence:       renderPageLicenceClient,
   config:        loadConfigForm,
   directeur:     function(){
     const el=document.getElementById('dir-mois');
@@ -312,7 +312,12 @@ function showGP(page){
   const navEl=document.querySelector(`[data-page="${page}"]`);
   if(navEl)navEl.classList.add('active');
   if(typeof PAGE_RENDERERS!=='undefined'&&PAGE_RENDERERS[page]){
-    try{PAGE_RENDERERS[page]();}
+    try{
+      const r=PAGE_RENDERERS[page]();
+      const trigger=()=>{if(typeof animateKpis==='function')animateKpis(pageEl);};
+      if(r&&typeof r.then==='function')r.then(trigger,trigger);
+      else setTimeout(trigger,50);
+    }
     catch(e){console.error('Erreur page',page,e);}
   }
 }
