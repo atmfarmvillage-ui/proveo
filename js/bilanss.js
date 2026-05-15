@@ -122,21 +122,34 @@ async function renderBilanVentes(){
   const mois=new Date().toISOString().slice(0,7);
 
   const[{data:V},{data:VL}]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,formule_nom,client_nom')
+    SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date,formule_nom,client_nom')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
-    SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,type_prix')
+    SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,type_prix,type_produit,vente_id')
       .eq('admin_id',GP_ADMIN_ID)
   ]);
 
   const VS=V||[];const VLS=VL||[];
-  const ca=VS.reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const enc=VS.reduce((s,v)=>s+Number(v.montant_paye||0),0);
-  const impaye=ca-enc;
+
+  // Séparer CA provenderie / ferme
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(VS.map(v=>v.id));
+  const ca = VS.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  const caFerme = VS.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
+  // Encaissé/impayé répartis au prorata
+  let enc=0, impaye=0;
+  VS.forEach(v=>{
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    const totalProv=caProvMap[v.id]||0;
+    const payeProv=Number(v.montant_paye||0)*r;
+    enc+=payeProv;
+    const reste=totalProv-payeProv;
+    if(reste>0) impaye+=reste;
+  });
   const txEnc=ca>0?Math.round(enc/ca*100):0;
 
-  // Par formule (depuis lignes)
+  // Par formule (depuis lignes) — exclut les lignes ferme
   const parFormule={};
   VLS.forEach(l=>{
+    if(l.type_produit==='ferme') return; // les produits ferme sont dans le bilan ferme
     const f=l.formule_nom||'—';
     if(!parFormule[f])parFormule[f]={kg:0,ca:0};
     parFormule[f].kg+=Number(l.quantite||0);
@@ -145,23 +158,24 @@ async function renderBilanVentes(){
   const formulesSorted=Object.entries(parFormule).sort((a,b)=>b[1].ca-a[1].ca);
   const totalKg=formulesSorted.reduce((s,[,v])=>s+v.kg,0);
 
-  // Par PDV
+  // Par PDV — montant provenderie uniquement
   const parPDV={};
   VS.forEach(v=>{
     const p=v.point_vente||'Siège';
     if(!parPDV[p])parPDV[p]={ca:0,enc:0,nb:0};
-    parPDV[p].ca+=Number(v.montant_total||0);
-    parPDV[p].enc+=Number(v.montant_paye||0);
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    parPDV[p].ca+=caProvMap[v.id]||0;
+    parPDV[p].enc+=Number(v.montant_paye||0)*r;
     parPDV[p].nb++;
   });
 
-  // Évolution par semaine
+  // Évolution par semaine — provenderie uniquement
   const parSemaine={};
   VS.forEach(v=>{
     const d=new Date(v.date);
     const sem=`S${Math.ceil(d.getDate()/7)}`;
     if(!parSemaine[sem])parSemaine[sem]=0;
-    parSemaine[sem]+=Number(v.montant_total||0);
+    parSemaine[sem]+=caProvMap[v.id]||0;
   });
   const maxSem=Math.max(...Object.values(parSemaine),1);
 
@@ -169,16 +183,20 @@ async function renderBilanVentes(){
     <!-- KPIs -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
       <div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;text-align:center;grid-column:1/-1">
-        <div style="font-family:'Crimson Pro',serif;font-size:26px;font-weight:700;color:var(--g6)">${fmt(ca)} F</div>
-        <div style="font-size:10px;color:var(--textm)">CA ${mois} · ${VS.length} ventes</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:26px;font-weight:700;color:var(--g6)">${fmt(ca)} F</div>
+        <div style="font-size:10px;color:var(--textm)">CA Provenderie ${mois} · ${VS.length} ventes</div>
       </div>
+      ${caFerme>0?`<div style="background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.2);border-radius:8px;padding:8px;text-align:center;grid-column:1/-1">
+        <div style="font-size:14px;font-weight:700;color:var(--gold)">🚜 ${fmt(caFerme)} F</div>
+        <div style="font-size:10px;color:var(--textm)">CA Ferme (lapins, œufs, poulets...)</div>
+      </div>`:''}
       <div style="background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:8px;text-align:center">
         <div style="font-size:14px;font-weight:700;color:var(--green)">${fmt(enc)} F</div>
-        <div style="font-size:10px;color:var(--textm)">Encaissé (${txEnc}%)</div>
+        <div style="font-size:10px;color:var(--textm)">Encaissé Prov. (${txEnc}%)</div>
       </div>
       <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:8px;padding:8px;text-align:center">
         <div style="font-size:14px;font-weight:700;color:var(--red)">${fmt(impaye)} F</div>
-        <div style="font-size:10px;color:var(--textm)">Impayés</div>
+        <div style="font-size:10px;color:var(--textm)">Impayés Prov.</div>
       </div>
     </div>
 
@@ -219,21 +237,25 @@ async function renderClassementPDV(){
   const mois=new Date().toISOString().slice(0,7);
 
   const[{data:V},{data:VL}]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,client_nom,date')
+    SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,client_nom,date')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
-    SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,vente_id')
+    SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,vente_id,type_produit')
       .eq('admin_id',GP_ADMIN_ID)
   ]);
 
   const VS=V||[];const VLS=VL||[];
 
-  // Construire stats par PDV
+  // Séparer CA prov / ferme pour ce classement (ne compte que provenderie)
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(VS.map(v=>v.id));
+
+  // Construire stats par PDV — uniquement la part provenderie
   const pdv={};
   VS.forEach(v=>{
     const p=v.point_vente||'Siège';
     if(!pdv[p])pdv[p]={ca:0,enc:0,nb:0,clients:new Set(),formules:{}};
-    pdv[p].ca+=Number(v.montant_total||0);
-    pdv[p].enc+=Number(v.montant_paye||0);
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    pdv[p].ca+=caProvMap[v.id]||0;
+    pdv[p].enc+=Number(v.montant_paye||0)*r;
     pdv[p].nb++;
     if(v.client_nom)pdv[p].clients.add(v.client_nom);
   });

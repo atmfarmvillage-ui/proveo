@@ -48,7 +48,7 @@ async function calculerBenefPeriode(debut, fin){
     {data:ventes},{data:depenses},{data:pmtsMP},{data:salaires},
     {data:lots},{data:stockSorties}
   ]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye,point_vente')
+    SB.from('gp_ventes').select('id,montant_total,montant_paye,point_vente')
       .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin),
     SB.from('gp_depenses').select('montant,categorie')
       .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin),
@@ -67,9 +67,15 @@ async function calculerBenefPeriode(debut, fin){
   const PA=pmtsMP||[];const SAL=salaires||[];
   const L=lots||[];const SS=stockSorties||[];
 
-  // REVENUS
-  const ca=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const enc=V.reduce((s,v)=>s+Number(v.montant_paye||0),0);
+  // REVENUS — ne compte que la part provenderie (formules + MP), pas la ferme
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(V.map(v=>v.id));
+  const ca = V.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  const caFerme = V.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
+  let enc = 0;
+  V.forEach(v=>{
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    enc += Number(v.montant_paye||0)*r;
+  });
   const impaye=ca-enc;
 
   // COÛTS DE PRODUCTION (Option B — MP consommée)

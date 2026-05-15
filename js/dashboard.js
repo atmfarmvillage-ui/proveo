@@ -40,17 +40,24 @@ async function renderDashboard(){
   const S=stockD;
 
   // ── CALCULS CORRECTS ─────────────────────────────
-  // CA du mois = somme des montants_total des ventes du mois
-  const caMois=VMois.reduce((s,v)=>s+Number(v.montant_total||0),0);
+  // Sépare le CA provenderie (aliments + MP) du CA ferme (lapin/œuf/poulet/autre)
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(VMois.map(v=>v.id));
 
-  // Impayés du mois = ventes du mois non soldées uniquement
-  const impayeMois=VMois.reduce((s,v)=>{
-    const reste=Number(v.montant_total||0)-Number(v.montant_paye||0);
-    return s+(reste>0?reste:0);
-  },0);
+  // CA du mois — provenderie uniquement (formules + MP)
+  const caMois = VMois.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  // CA ferme du mois (lapin, œuf, poulet, autre produit ferme)
+  const caFermeMois = VMois.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
 
-  // Encaissé du mois = somme des montants_paye
-  const encaisseMois=VMois.reduce((s,v)=>s+Number(v.montant_paye||0),0);
+  // Impayés/encaissé : on répartit montant_paye au prorata (provenderie / ferme)
+  let impayeMois = 0, encaisseMois = 0;
+  for(const v of VMois){
+    const r = ratioProvenderie(v.id, caProvMap, caFermeMap);
+    const totalProv = caProvMap[v.id] || 0;
+    const payeProv = Number(v.montant_paye||0) * r;
+    encaisseMois += payeProv;
+    const resteProv = totalProv - payeProv;
+    if(resteProv > 0) impayeMois += resteProv;
+  }
 
   // Dépenses courantes (fonctionnement)
   const depCourantes=D.reduce((s,d)=>s+Number(d.montant||0),0);
@@ -89,11 +96,11 @@ async function renderDashboard(){
     ${isAdmin?`
     <div class="stat-box">
       <div class="stat-val" style="color:var(--gold)">${fmt(caMois)}</div>
-      <div class="stat-lbl">CA ce mois (FCFA)</div>
+      <div class="stat-lbl">CA Provenderie ce mois</div>
     </div>
     <div class="stat-box">
       <div class="stat-val" style="color:var(--green)">${fmt(encaisseMois)}</div>
-      <div class="stat-lbl">Encaissé ce mois</div>
+      <div class="stat-lbl">Encaissé Provenderie</div>
     </div>
     <div class="stat-box">
       <div class="stat-val" style="color:${impayeMois>0?'var(--red)':'var(--green)'}">${fmt(impayeMois)}</div>
@@ -102,7 +109,11 @@ async function renderDashboard(){
     <div class="stat-box">
       <div class="stat-val" style="color:${depMois>encaisseMois?'var(--red)':'var(--textm)'}">${fmt(depMois)}</div>
       <div class="stat-lbl">Dépenses ce mois</div>
-    </div>`:''}
+    </div>
+    ${caFermeMois>0?`<div class="stat-box">
+      <div class="stat-val" style="color:var(--g6)">${fmt(caFermeMois)}</div>
+      <div class="stat-lbl">🚜 CA Ferme ce mois</div>
+    </div>`:''}`:''}
     <div class="stat-box">
       <div class="stat-val">${fmt(prodMois)} kg</div>
       <div class="stat-lbl">Produits ce mois${nbSacsMois>0?` · ${nbSacsMois} sacs`:''}</div>
@@ -201,11 +212,15 @@ async function renderDashboard(){
         <div class="card-title"><div class="ct-left"><span>📊 Bilan ${m}</span></div></div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
-            <span style="color:var(--textm)">CA total</span>
+            <span style="color:var(--textm)">CA Provenderie</span>
             <span style="color:var(--gold);font-family:'DM Mono',monospace">${fmt(caMois)} F</span>
           </div>
+          ${caFermeMois>0?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <span style="color:var(--textm)">🚜 CA Ferme</span>
+            <span style="color:var(--g6);font-family:'DM Mono',monospace">${fmt(caFermeMois)} F</span>
+          </div>`:''}
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
-            <span style="color:var(--textm)">Encaissé</span>
+            <span style="color:var(--textm)">Encaissé Provenderie</span>
             <span style="color:var(--green);font-family:'DM Mono',monospace">${fmt(encaisseMois)} F</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
