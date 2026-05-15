@@ -70,7 +70,7 @@
 :root[data-theme="light"] .tb-btn:hover{border-color:var(--g4);color:var(--g5)}
 :root[data-theme="light"] .tb-sub{color:var(--textm)}
 :root[data-theme="light"] code{background:rgba(0,0,0,.05)!important;color:var(--text)!important}
-html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px}
+html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);font-family:'Outfit',sans-serif;font-size:14px}
 
 /* ── AUTH ───────────────────────────── */
 #authScreen{position:fixed;inset:0;z-index:1001;background:radial-gradient(ellipse at 50% 30%,#0a1a0f,#050A02 70%);display:flex;align-items:center;justify-content:center;padding:1rem}
