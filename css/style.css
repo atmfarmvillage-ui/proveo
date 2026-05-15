@@ -9,6 +9,23 @@
   --border:#1E3320;--border2:#2E4A30;--card:#0E1A0C;--card2:#11180F;
   --sidebar:256px;--topbar:54px;--radius:8px;
 }
+/* Thème clair — surcharges */
+:root[data-theme="light"]{
+  --g0:#F5F7F3;--g1:#FFFFFF;--g2:#FAFBF8;--g3:#E8EDE3;
+  --g4:#16A34A;--g5:#15803D;--g6:#15803D;
+  --gold:#C9A93C;--goldd:#A88E2E;
+  --red:#dc2626;--green:#16a34a;--blue:#1d4ed8;--orange:#ea580c;
+  --text:#1F2937;--textm:#6B7280;--textl:#9CA3AF;
+  --border:#E5E7EB;--border2:#D1D5DB;--card:#FFFFFF;--card2:#F9FAF7;
+}
+:root[data-theme="light"] #topbar{background:rgba(255,255,255,.92);border-bottom:1px solid rgba(0,0,0,.08)}
+:root[data-theme="light"] #sidebar{background:linear-gradient(180deg,#FFFFFF,#F9FAF7);border-right:1px solid rgba(0,0,0,.06)}
+:root[data-theme="light"] #authScreen{background:radial-gradient(ellipse at 50% 30%,#FFFFFF,#E8EDE3 70%)}
+:root[data-theme="light"] .nav-item:hover{background:rgba(22,163,74,.10)}
+:root[data-theme="light"] .nav-item.active{background:linear-gradient(90deg,rgba(22,163,74,.16),rgba(22,163,74,.04));color:var(--g5)}
+:root[data-theme="light"] .nav-sect{color:var(--g5)}
+:root[data-theme="light"] .tb-tag{color:var(--g5)}
+:root[data-theme="light"] .a-link span{color:var(--g5)}
 html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px}
 
 /* ── AUTH ───────────────────────────── */

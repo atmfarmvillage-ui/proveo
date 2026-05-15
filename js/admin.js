@@ -1012,6 +1012,58 @@ function applyLogo(url){
   const preview=document.getElementById('cfg-logo-preview');
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
 }
+
+// ── THÈME CLAIR/SOMBRE ────────────────────────────
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{localStorage.setItem('gp_theme',next);}catch(e){}
+  const btn=document.getElementById('theme-toggle-btn');
+  if(btn)btn.textContent=next==='dark'?'🌙':'☀️';
+}
+
+// ── EXTRACTION COULEUR DOMINANTE DU LOGO ──────────
+// Prend un File (image) et renvoie une string '#RRGGBB' représentant la couleur dominante.
+// Ignore les pixels trop clairs (proche blanc), trop sombres (proche noir) et trop gris.
+function extraireCouleurDominante(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject('fichier illisible');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          const size=60;
+          canvas.width=size;canvas.height=size;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,size,size);
+          const data=ctx.getImageData(0,0,size,size).data;
+          const buckets={};
+          for(let i=0;i<data.length;i+=4){
+            const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+            if(a<200)continue;
+            const max=Math.max(r,g,b),min=Math.min(r,g,b);
+            if(max>240&&min>240)continue; // proche blanc
+            if(max<25)continue; // proche noir
+            if(max-min<20)continue; // proche gris
+            const key=`${r>>5},${g>>5},${b>>5}`;
+            buckets[key]=(buckets[key]||0)+1;
+          }
+          const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]);
+          if(!sorted.length)return reject('aucune couleur dominante');
+          const [r,g,b]=sorted[0][0].split(',').map(n=>Math.min(255,(+n*32)+16));
+          const hex='#'+[r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+          resolve(hex);
+        }catch(e){reject(e);}
+      };
+      img.onerror=()=>reject('image invalide');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function loadConfigForm(){
   if(GP_CONFIG.nom_provenderie)document.getElementById('cfg_nom').value=GP_CONFIG.nom_provenderie;
   if(GP_CONFIG.slogan)document.getElementById('cfg_slogan').value=GP_CONFIG.slogan;
@@ -1064,11 +1116,27 @@ async function uploadLogo(){
   if(upErr){err.textContent='Erreur: '+upErr.message;return;}
   const{data:urlData}=SB.storage.from('gp-logos').getPublicUrl(path);
   const logo_url=urlData?.publicUrl;
-  await SB.from('gp_config').upsert({user_id:GP_ADMIN_ID,logo_url},{onConflict:'user_id'});
+
+  // Extraire la couleur dominante du logo pour l'utiliser comme accent
+  let couleurExtraite=null;
+  try{
+    couleurExtraite=await extraireCouleurDominante(file);
+  }catch(e){console.warn('Extraction couleur logo échouée:',e);}
+
+  const upd={user_id:GP_ADMIN_ID,logo_url};
+  if(couleurExtraite) upd.couleur=couleurExtraite;
+  await SB.from('gp_config').upsert(upd,{onConflict:'user_id'});
   GP_CONFIG.logo_url=logo_url;
+  if(couleurExtraite){
+    GP_CONFIG.couleur=couleurExtraite;
+    applyColor(couleurExtraite);
+    const colorEl=document.getElementById('cfg_couleur');
+    if(colorEl)colorEl.value=couleurExtraite;
+  }
   applyLogo(logo_url);
-  err.textContent='';ok.textContent='✓ Logo mis à jour !';
-  setTimeout(()=>ok.textContent='',3000);
+  err.textContent='';
+  ok.textContent=couleurExtraite?`✓ Logo + couleur ${couleurExtraite} appliqués !`:'✓ Logo mis à jour !';
+  setTimeout(()=>ok.textContent='',3500);
   notify('Logo uploadé ✓','gold');
 }
 
@@ -1576,6 +1644,58 @@ function applyLogo(url){
   const preview=document.getElementById('cfg-logo-preview');
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
 }
+
+// ── THÈME CLAIR/SOMBRE ────────────────────────────
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{localStorage.setItem('gp_theme',next);}catch(e){}
+  const btn=document.getElementById('theme-toggle-btn');
+  if(btn)btn.textContent=next==='dark'?'🌙':'☀️';
+}
+
+// ── EXTRACTION COULEUR DOMINANTE DU LOGO ──────────
+// Prend un File (image) et renvoie une string '#RRGGBB' représentant la couleur dominante.
+// Ignore les pixels trop clairs (proche blanc), trop sombres (proche noir) et trop gris.
+function extraireCouleurDominante(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject('fichier illisible');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          const size=60;
+          canvas.width=size;canvas.height=size;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,size,size);
+          const data=ctx.getImageData(0,0,size,size).data;
+          const buckets={};
+          for(let i=0;i<data.length;i+=4){
+            const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+            if(a<200)continue;
+            const max=Math.max(r,g,b),min=Math.min(r,g,b);
+            if(max>240&&min>240)continue; // proche blanc
+            if(max<25)continue; // proche noir
+            if(max-min<20)continue; // proche gris
+            const key=`${r>>5},${g>>5},${b>>5}`;
+            buckets[key]=(buckets[key]||0)+1;
+          }
+          const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]);
+          if(!sorted.length)return reject('aucune couleur dominante');
+          const [r,g,b]=sorted[0][0].split(',').map(n=>Math.min(255,(+n*32)+16));
+          const hex='#'+[r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+          resolve(hex);
+        }catch(e){reject(e);}
+      };
+      img.onerror=()=>reject('image invalide');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function loadConfigForm(){
   if(GP_CONFIG.nom_provenderie)document.getElementById('cfg_nom').value=GP_CONFIG.nom_provenderie;
   if(GP_CONFIG.slogan)document.getElementById('cfg_slogan').value=GP_CONFIG.slogan;
@@ -1628,11 +1748,27 @@ async function uploadLogo(){
   if(upErr){err.textContent='Erreur: '+upErr.message;return;}
   const{data:urlData}=SB.storage.from('gp-logos').getPublicUrl(path);
   const logo_url=urlData?.publicUrl;
-  await SB.from('gp_config').upsert({user_id:GP_ADMIN_ID,logo_url},{onConflict:'user_id'});
+
+  // Extraire la couleur dominante du logo pour l'utiliser comme accent
+  let couleurExtraite=null;
+  try{
+    couleurExtraite=await extraireCouleurDominante(file);
+  }catch(e){console.warn('Extraction couleur logo échouée:',e);}
+
+  const upd={user_id:GP_ADMIN_ID,logo_url};
+  if(couleurExtraite) upd.couleur=couleurExtraite;
+  await SB.from('gp_config').upsert(upd,{onConflict:'user_id'});
   GP_CONFIG.logo_url=logo_url;
+  if(couleurExtraite){
+    GP_CONFIG.couleur=couleurExtraite;
+    applyColor(couleurExtraite);
+    const colorEl=document.getElementById('cfg_couleur');
+    if(colorEl)colorEl.value=couleurExtraite;
+  }
   applyLogo(logo_url);
-  err.textContent='';ok.textContent='✓ Logo mis à jour !';
-  setTimeout(()=>ok.textContent='',3000);
+  err.textContent='';
+  ok.textContent=couleurExtraite?`✓ Logo + couleur ${couleurExtraite} appliqués !`:'✓ Logo mis à jour !';
+  setTimeout(()=>ok.textContent='',3500);
   notify('Logo uploadé ✓','gold');
 }
 
