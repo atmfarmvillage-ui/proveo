@@ -160,22 +160,38 @@ async function mppSauverSeuil(id){
 
 // ── AJOUTER UNE MP ──────────────────────────────────
 async function saveMPPage(){
-  const nom=document.getElementById('mpp_nom').value.trim();
-  const prix=+document.getElementById('mpp_prix').value||0;
-  const seuil=+document.getElementById('mpp_seuil').value||200;
-  const prot=+document.getElementById('mpp_prot').value||null;
-  const em=+document.getElementById('mpp_em').value||null;
-  const fourn=document.getElementById('mpp_fourn').value.trim()||null;
+  const num=id=>{const v=document.getElementById(id)?.value;return v===''||v==null?null:+v;};
+  const txt=id=>document.getElementById(id)?.value.trim()||null;
+
+  const nom=txt('mpp_nom');
   const err=document.getElementById('mpp_err');
   if(!nom){err.textContent='Nom requis.';return;}
   err.textContent='';
+
   const{error}=await SB.from('gp_ingredients').insert({
-    admin_id:GP_ADMIN_ID,nom,prix_actuel:prix,
-    unite:'kg',proteines:prot,energie:em,
-    seuil_alerte:seuil,fournisseur:fourn
+    admin_id:GP_ADMIN_ID,nom,unite:'kg',
+    prix_actuel:num('mpp_prix')||0,
+    seuil_alerte:num('mpp_seuil')||200,
+    fournisseur:txt('mpp_fourn'),
+    proteines:num('mpp_prot'),
+    energie:num('mpp_em'),
+    lipides:num('mpp_lip'),
+    fibres:num('mpp_fib'),
+    lysine:num('mpp_lys'),
+    methionine:num('mpp_met'),
+    meth_cyst:num('mpp_metcys'),
+    threonine:num('mpp_thr'),
+    tryptophane:num('mpp_try'),
+    calcium:num('mpp_ca'),
+    phosphore_disp:num('mpp_phos'),
+    sodium:num('mpp_na'),
+    chlore:num('mpp_cl')
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
-  ['mpp_nom','mpp_prix','mpp_prot','mpp_em','mpp_fourn'].forEach(id=>{
+
+  ['mpp_nom','mpp_prix','mpp_fourn','mpp_prot','mpp_em','mpp_lip','mpp_fib',
+   'mpp_lys','mpp_met','mpp_metcys','mpp_thr','mpp_try',
+   'mpp_ca','mpp_phos','mpp_na','mpp_cl'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   document.getElementById('mpp_seuil').value='200';

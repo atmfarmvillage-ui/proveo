@@ -393,11 +393,45 @@
         <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="mpp_prix" placeholder="400"></div>
         <div class="fr"><label>Seuil critique (kg)</label><input type="number" id="mpp_seuil" placeholder="200" value="200"></div>
       </div>
-      <div class="fg2">
-        <div class="fr"><label>Protéines (%)</label><input type="number" id="mpp_prot" placeholder="44" step="0.1"></div>
-        <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="mpp_em" placeholder="2770"></div>
-      </div>
       <div class="fr"><label>Fournisseur</label><input type="text" id="mpp_fourn" placeholder="Marché de Lomé..."></div>
+
+      <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:.5px">🌾 Énergie & Protéines</summary>
+        <div class="fg2" style="margin-top:10px">
+          <div class="fr"><label>Protéines (%)</label><input type="number" id="mpp_prot" placeholder="44" step="0.1"></div>
+          <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="mpp_em" placeholder="2770"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Lipides (%)</label><input type="number" id="mpp_lip" placeholder="3.5" step="0.1"></div>
+          <div class="fr"><label>Fibres (%)</label><input type="number" id="mpp_fib" placeholder="1.9" step="0.1"></div>
+        </div>
+      </details>
+
+      <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:.5px">🧬 Acides aminés (%)</summary>
+        <div class="fg2" style="margin-top:10px">
+          <div class="fr"><label>Lysine</label><input type="number" id="mpp_lys" placeholder="2.70" step="0.01"></div>
+          <div class="fr"><label>Méthionine</label><input type="number" id="mpp_met" placeholder="0.65" step="0.01"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Méth + Cyst</label><input type="number" id="mpp_metcys" placeholder="1.35" step="0.01"></div>
+          <div class="fr"><label>Thréonine</label><input type="number" id="mpp_thr" placeholder="1.74" step="0.01"></div>
+        </div>
+        <div class="fr"><label>Tryptophane</label><input type="number" id="mpp_try" placeholder="0.57" step="0.01"></div>
+      </details>
+
+      <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:.5px">⚪ Minéraux (%)</summary>
+        <div class="fg2" style="margin-top:10px">
+          <div class="fr"><label>Calcium</label><input type="number" id="mpp_ca" placeholder="0.31" step="0.01"></div>
+          <div class="fr"><label>Phosphore dispo.</label><input type="number" id="mpp_phos" placeholder="0.56" step="0.01"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Sodium</label><input type="number" id="mpp_na" placeholder="0.08" step="0.01"></div>
+          <div class="fr"><label>Chlore</label><input type="number" id="mpp_cl" placeholder="0.04" step="0.01"></div>
+        </div>
+      </details>
+
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveMPPage()">➕ Ajouter</button>
       <div class="a-err" id="mpp_err"></div>
     </div>
