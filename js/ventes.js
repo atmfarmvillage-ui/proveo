@@ -582,11 +582,22 @@ async function renderVentes(){
 async function updateVentesKPIs(){
   const{data:V}=await SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
   const vd=V||[];
-  const ca=vd.reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const impaye=vd.reduce((s,v)=>s+(Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
+  // Sépare CA provenderie / ferme du jour
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(vd.map(v=>v.id));
+  const ca = vd.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  const caFerme = vd.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
+  let impaye=0;
+  vd.forEach(v=>{
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    const totalProv=caProvMap[v.id]||0;
+    const payeProv=Number(v.montant_paye||0)*r;
+    const reste=totalProv-payeProv;
+    if(reste>0)impaye+=reste;
+  });
   document.getElementById('ventes-kpis').innerHTML=`
     <div class="econo-box"><div class="econo-val">${vd.length}</div><div class="econo-lbl">Ventes du jour</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${GP_ROLE==='admin'?fmt(ca)+' F':'—'}</div><div class="econo-lbl">CA du jour</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${GP_ROLE==='admin'?fmt(ca)+' F':'—'}</div><div class="econo-lbl">CA Prov. du jour</div></div>
+    ${caFerme>0?`<div class="econo-box"><div class="econo-val" style="color:var(--g6)">🚜 ${fmt(caFerme)} F</div><div class="econo-lbl">CA Ferme du jour</div></div>`:''}
     <div class="econo-box"><div class="econo-val" style="color:${impaye>0?'var(--red)':'var(--green)'}">${GP_ROLE==='admin'?fmt(impaye)+' F':'—'}</div><div class="econo-lbl">Impayés du jour</div></div>
     <div class="econo-box"><div class="econo-val">${vd.reduce((s,v)=>s+Number(v.qte_vendue||0),0).toFixed(0)}</div><div class="econo-lbl">Kg vendus</div></div>`;
 }

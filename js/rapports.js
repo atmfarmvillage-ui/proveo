@@ -16,7 +16,7 @@ async function renderBilanAvance(){
   }
 
   const[ventesRes,depRes,lotsRes,salRes]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date')
+    SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant,categorie,description,point_vente,date,prix_unitaire,quantite')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
@@ -31,8 +31,17 @@ async function renderBilanAvance(){
   const lots=lotsRes.data||[];
   const salaires=salRes.data||[];
 
-  const totalVentes=ventes.reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const totalEncaisse=ventes.reduce((s,v)=>s+Number(v.montant_paye||0),0);
+  // Séparer CA provenderie / ferme
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(ventes.map(v=>v.id));
+  const totalVentes = ventes.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  const totalCAFerme = ventes.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
+  let totalEncaisse = 0, totalEncFerme = 0;
+  ventes.forEach(v=>{
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    const paye=Number(v.montant_paye||0);
+    totalEncaisse += paye*r;
+    totalEncFerme += paye*(1-r);
+  });
   const totalDep=depenses.reduce((s,d)=>s+Number(d.montant||0),0);
   const totalSal=salaires.reduce((s,x)=>s+Number(x.montant||0),0);
   const totalProd=lots.reduce((s,l)=>s+Number(l.quantite_kg||0),0);
@@ -40,10 +49,11 @@ async function renderBilanAvance(){
 
   // KPIs
   document.getElementById('bilan-kpis').innerHTML=`
-    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalVentes)}</div><div class="econo-lbl">CA total (F)</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalVentes)}</div><div class="econo-lbl">CA Provenderie (F)</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(totalEncaisse)}</div><div class="econo-lbl">Encaissé (F)</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(totalDep+totalSal)}</div><div class="econo-lbl">Dépenses (F)</div></div>
-    <div class="econo-box"><div class="econo-val" style="color:${benefice>=0?'var(--green)':'var(--red)'}">${fmt(benefice)}</div><div class="econo-lbl">Bénéfice net (F)</div></div>`;
+    <div class="econo-box"><div class="econo-val" style="color:${benefice>=0?'var(--green)':'var(--red)'}">${fmt(benefice)}</div><div class="econo-lbl">Bénéfice net (F)</div></div>
+    ${totalCAFerme>0?`<div class="econo-box"><div class="econo-val" style="color:var(--g6)">🚜 ${fmt(totalCAFerme)}</div><div class="econo-lbl">CA Ferme (F)</div></div>`:''}`;
 
   // Dépenses groupées par catégorie (drill-down)
   const depParCat={};
@@ -78,12 +88,12 @@ async function renderBilanAvance(){
         </div>
       </div>`).join('');
 
-  // Ventes par point de vente
+  // Ventes par point de vente — provenderie uniquement
   const ventesPDV={};
   ventes.forEach(v=>{
     const pv=v.point_vente||'Siège';
     if(!ventesPDV[pv])ventesPDV[pv]={total:0,count:0};
-    ventesPDV[pv].total+=Number(v.montant_total||0);
+    ventesPDV[pv].total+=caProvMap[v.id]||0;
     ventesPDV[pv].count++;
   });
 
@@ -135,13 +145,16 @@ async function renderBilanAnnuel(){
   const donnees=await Promise.all(mois.map(async(m)=>{
     const moisStr=`${annee}-${m}`;
     const[v,d,s]=await Promise.all([
-      SB.from('gp_ventes').select('montant_paye').eq('admin_id',GP_ADMIN_ID)
+      SB.from('gp_ventes').select('id,montant_paye').eq('admin_id',GP_ADMIN_ID)
         .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
       SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
         .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
       SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',moisStr)
     ]);
-    const recettes=(v.data||[]).reduce((s,x)=>s+Number(x.montant_paye||0),0);
+    // Encaissé provenderie uniquement (au prorata)
+    const ventesM=v.data||[];
+    const{provenderie:cpm, ferme:cfm} = await separerCAProvFerme(ventesM.map(x=>x.id));
+    const recettes=ventesM.reduce((s,x)=>s+Number(x.montant_paye||0)*ratioProvenderie(x.id,cpm,cfm),0);
     // Charges = dépenses courantes + salaires + achats MP payés ce mois
     const{data:pmtsMP}=await SB.from('gp_achats_paiements').select('montant')
       .eq('admin_id',GP_ADMIN_ID).gte('date_paiement',moisStr+'-01').lte('date_paiement',_finMois(moisStr));
@@ -203,15 +216,22 @@ async function envoyerBilanWhatsApp(mois){
   const cfg=GP_CONFIG||{};
 
   const[ventesRes,depRes,salRes]=await Promise.all([
-    SB.from('gp_ventes').select('montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID)
+    SB.from('gp_ventes').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID)
       .gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
       .gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',mois)
   ]);
 
-  const totalVentes=(ventesRes.data||[]).reduce((s,v)=>s+Number(v.montant_total||0),0);
-  const encaisse=(ventesRes.data||[]).reduce((s,v)=>s+Number(v.montant_paye||0),0);
+  const ventes=ventesRes.data||[];
+  const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(ventes.map(v=>v.id));
+  const totalVentes = ventes.reduce((s,v)=>s+(caProvMap[v.id]||0),0);
+  const totalCAFerme = ventes.reduce((s,v)=>s+(caFermeMap[v.id]||0),0);
+  let encaisse=0;
+  ventes.forEach(v=>{
+    const r=ratioProvenderie(v.id,caProvMap,caFermeMap);
+    encaisse += Number(v.montant_paye||0)*r;
+  });
   const depenses=(depRes.data||[]).reduce((s,d)=>s+Number(d.montant||0),0);
   const salaires=(salRes.data||[]).reduce((s,x)=>s+Number(x.montant||0),0);
   const benefice=encaisse-depenses-salaires;
@@ -219,7 +239,8 @@ async function envoyerBilanWhatsApp(mois){
   const texte=
     `📊 *Bilan Mensuel — ${mois}*\n`+
     `*${cfg.nom_provenderie||'PROVENDA'}*\n\n`+
-    `💰 CA total : ${fmt(totalVentes)} F\n`+
+    `💰 CA Provenderie : ${fmt(totalVentes)} F\n`+
+    (totalCAFerme>0?`🚜 CA Ferme : ${fmt(totalCAFerme)} F\n`:'')+
     `✅ Encaissé : ${fmt(encaisse)} F\n`+
     `💸 Dépenses : ${fmt(depenses)} F\n`+
     `👤 Salaires : ${fmt(salaires)} F\n`+

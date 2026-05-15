@@ -5,6 +5,36 @@ function fmtDate(d){return d?new Date(d+'T12:00:00').toLocaleDateString('fr-FR')
 function today(){return new Date().toISOString().slice(0,10);}
 function thisMonth(){return new Date().toISOString().slice(0,7);}
 
+// Sépare le CA d'une liste de ventes entre provenderie (formules + MP) et ferme (lapin/œuf/poulet).
+// Retourne deux maps { venteId => montant } : provenderie + ferme.
+// Pour les ventes anciennes sans lignes ferme, tout va dans provenderie automatiquement.
+async function separerCAProvFerme(venteIds){
+  if(!venteIds || !venteIds.length) return { provenderie:{}, ferme:{} };
+  const{data:L} = await SB.from('gp_ventes_lignes')
+    .select('vente_id,montant_ligne,type_produit')
+    .in('vente_id', venteIds);
+  const prov = {}, ferme = {};
+  (L||[]).forEach(l => {
+    const m = Number(l.montant_ligne||0);
+    if(l.type_produit === 'ferme'){
+      ferme[l.vente_id] = (ferme[l.vente_id]||0) + m;
+    } else {
+      prov[l.vente_id] = (prov[l.vente_id]||0) + m;
+    }
+  });
+  return { provenderie:prov, ferme };
+}
+
+// Calcule le ratio provenderie d'une vente (utile pour répartir le montant_paye au prorata)
+// Retourne 1.0 si pas de ligne ferme, sinon prov / (prov + ferme)
+function ratioProvenderie(venteId, provMap, fermeMap){
+  const p = provMap[venteId] || 0;
+  const f = fermeMap[venteId] || 0;
+  const total = p + f;
+  if(total === 0) return 1.0; // vente vide ou ancienne sans lignes — par défaut 100% provenderie
+  return p / total;
+}
+
 function notify(msg,type=''){
   const el=document.getElementById('notif-toast');
   el.textContent=msg;el.className='notif show '+(type==='r'?'red':type==='gold'?'gold':'');
