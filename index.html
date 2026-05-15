@@ -164,6 +164,7 @@
   <!-- ADMINISTRATION -->
   <div class="nav-sect">⚙️ Administration</div>
   <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
+  <div class="nav-item" onclick="showGP('licence')" data-page="licence"><span class="nav-icon">🪪</span>Ma Licence</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 
 </div>
@@ -1837,6 +1838,15 @@
       <div class="card-title"><div class="ct-left"><span>📋 Historique reversements</span></div></div>
       <div id="rev-liste"></div>
     </div>
+  </div>
+</div>
+
+<!-- MA LICENCE -->
+<div class="page" id="page-licence">
+  <div class="page-title">Ma Licence</div>
+  <div class="page-sub">Plan actuel · Date d'expiration · Activation</div>
+  <div id="licence-content">
+    <div style="color:var(--textm);font-size:12px;padding:20px;text-align:center">Chargement...</div>
   </div>
 </div>
 

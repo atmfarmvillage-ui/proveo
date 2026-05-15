@@ -277,6 +277,7 @@ var PAGE_RENDERERS = {
   },
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
+  licence:       renderPageLicenceClient,
   config:        loadConfigForm,
   directeur:     function(){
     const el=document.getElementById('dir-mois');
