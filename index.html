@@ -559,17 +559,35 @@
       <!-- TYPE DE PRODUIT -->
       <div class="fr" style="margin-bottom:8px">
         <label>Type de produit</label>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button type="button" id="vt_type_formule_btn" onclick="basculerTypeProduitVente('formule')"
-            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)">
+            style="flex:1;min-width:90px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)">
             🧪 Formule
           </button>
           <button type="button" id="vt_type_mp_btn" onclick="basculerTypeProduitVente('mp')"
-            style="flex:1;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
-            🌾 Matière première
+            style="flex:1;min-width:90px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
+            🌾 Matière 1ère
+          </button>
+          <button type="button" id="vt_type_ferme_btn" onclick="basculerTypeProduitVente('ferme')"
+            style="flex:1;min-width:90px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
+            🚜 Produit ferme
           </button>
         </div>
         <input type="hidden" id="vt_type_produit" value="formule">
+        <input type="hidden" id="vt_sous_type" value="">
+      </div>
+
+      <!-- PRODUIT FERME (lapin vif / œuf / poulet / autre) -->
+      <div class="fr" id="vt-ferme-wrap" style="margin-bottom:8px;display:none">
+        <label>Sous-type</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button type="button" class="vt-ferme-btn" data-type="lapin_vivant" onclick="choisirSousTypeFerme('lapin_vivant')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">🐰 Lapin vivant</button>
+          <button type="button" class="vt-ferme-btn" data-type="oeuf" onclick="choisirSousTypeFerme('oeuf')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">🥚 Œuf</button>
+          <button type="button" class="vt-ferme-btn" data-type="poulet" onclick="choisirSousTypeFerme('poulet')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">🐔 Poulet</button>
+          <button type="button" class="vt-ferme-btn" data-type="autre_ferme" onclick="choisirSousTypeFerme('autre_ferme')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">📦 Autre</button>
+        </div>
+        <label style="font-size:10px;color:var(--textm)">Description (race, taille, lot…)</label>
+        <input type="text" id="vt_ferme_desc" placeholder="Ex: Race rex 2kg, Lot pondeuses…" style="font-size:12px">
       </div>
 
       <!-- FORMULE -->
@@ -1993,12 +2011,17 @@
         <strong id="gs-comm-aliments" style="color:var(--gold)">0 F</strong>
       </div>
       <div id="gs-comm-detail" style="font-size:10px;color:var(--textm);margin-left:14px;margin-bottom:6px"></div>
+      <div id="gs-comm-ferme-wrap" style="display:none;display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>Commissions ferme (auto depuis ventes)</span>
+        <strong id="gs-comm-ferme" style="color:var(--gold)">0 F</strong>
+      </div>
+      <div id="gs-comm-ferme-detail" style="font-size:10px;color:var(--textm);margin-left:14px"></div>
     </div>
 
     <div class="fr">
-      <label>🐰 Nombre de lapins vivants vendus ce mois</label>
+      <label>🐰 Lapins vifs supplémentaires (hors ventes enregistrées)</label>
       <input type="number" id="gs-lapins" min="0" value="0" oninput="recalcGenSalaire()">
-      <div style="font-size:10px;color:var(--textm);margin-top:2px">Commission lapins vivants : <span id="gs-comm-lapins-vifs">0 F</span></div>
+      <div style="font-size:10px;color:var(--textm);margin-top:2px">⚠ Mettez 0 si tous les lapins ont déjà été enregistrés dans la page Ventes. · Commission : <span id="gs-comm-lapins-vifs">0 F</span></div>
     </div>
 
     <div class="fg2">
@@ -2093,6 +2116,14 @@
         <div class="fr"><label>FCFA / tonne aliment poisson</label><input type="number" id="ctr_poisson" placeholder="0"></div>
         <div class="fr"><label>FCFA / lapin vivant vendu</label><input type="number" id="ctr_lapin_vif" placeholder="100"></div>
       </div>
+      <details style="margin-top:8px;border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+        <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--g6)">🚜 Autres produits ferme (optionnel)</summary>
+        <div class="fg2" style="margin-top:8px">
+          <div class="fr"><label>FCFA / œuf vendu</label><input type="number" id="ctr_oeuf" placeholder="0"></div>
+          <div class="fr"><label>FCFA / poulet vendu</label><input type="number" id="ctr_poulet" placeholder="0"></div>
+        </div>
+        <div class="fr"><label>FCFA / autre produit ferme</label><input type="number" id="ctr_autre_ferme" placeholder="0"></div>
+      </details>
     </div>
 
     <div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:12px;margin-bottom:10px">
