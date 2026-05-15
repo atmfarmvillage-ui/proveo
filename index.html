@@ -1859,20 +1859,6 @@
         <input type="tel" id="cfg_tel_alerte" placeholder="+228 90 00 00 00" style="border-color:rgba(232,197,71,.4)">
         <div style="font-size:10px;color:var(--textm);margin-top:4px">Ce numéro reçoit les alertes quand un stock passe sous le seuil critique. Peut être différent du numéro principal (ex: responsable de stock).</div>
       </div>
-      <div style="background:rgba(37,211,102,.06);border:1px solid rgba(37,211,102,.2);border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:700;color:#25D366;margin-bottom:8px">🤖 CallMeBot — Alertes automatiques WhatsApp</div>
-        <div style="font-size:10px;color:var(--textm);margin-bottom:10px;line-height:1.6">
-          Pour recevoir les alertes <strong>automatiquement</strong> sans cliquer :<br>
-          1. Ajoute <strong>+34 644 65 13 82</strong> dans tes contacts WhatsApp<br>
-          2. Envoie-lui : <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px">I allow callmebot to send me messages</code><br>
-          3. Colle la clé API reçue ci-dessous
-        </div>
-        <div class="fr"><label>Clé API CallMeBot</label>
-          <input type="text" id="cfg_callmebot_apikey" placeholder="Ex: 123456" style="border-color:rgba(37,211,102,.4);letter-spacing:2px">
-        </div>
-        <button class="btn btn-out btn-sm" onclick="testerCallMeBot()" style="border-color:#25D366;color:#25D366">📲 Tester l'envoi automatique</button>
-        <div id="callmebot-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
-      </div>
       <div class="fr"><label>Couleur principale</label>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="color" id="cfg_couleur" value="#16A34A" style="width:50px;height:36px;padding:2px;border-radius:6px;cursor:pointer" oninput="applyColor(this.value)">

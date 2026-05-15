@@ -1020,7 +1020,6 @@ async function loadConfigForm(){
   if(GP_CONFIG.localisation)document.getElementById('cfg_loc').value=GP_CONFIG.localisation;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
-  if(GP_CONFIG.callmebot_apikey)document.getElementById('cfg_callmebot_apikey').value=GP_CONFIG.callmebot_apikey;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1036,14 +1035,11 @@ async function saveConfig(){
     email:document.getElementById('cfg_email').value.trim(),
     localisation:document.getElementById('cfg_loc').value.trim(),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte,
-    callmebot_apikey:document.getElementById('cfg_callmebot_apikey')?.value.trim()||null
+    tel_alerte_stock:telAlerte
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
   if(telAlerte)GP_CONFIG.tel_alerte_stock=telAlerte;
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  if(apikey)GP_CONFIG.callmebot_apikey=apikey;
   document.getElementById('tb-name').textContent=nom;
   applyColor(couleur);
   err.textContent='';ok.textContent='✓ Configuration sauvegardée !';
@@ -1074,31 +1070,6 @@ async function uploadLogo(){
   err.textContent='';ok.textContent='✓ Logo mis à jour !';
   setTimeout(()=>ok.textContent='',3000);
   notify('Logo uploadé ✓','gold');
-}
-
-async function testerCallMeBot(){
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  const tel=(document.getElementById('cfg_tel_alerte')?.value||document.getElementById('cfg_tel')?.value||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const status=document.getElementById('callmebot-status');
-  if(!apikey){status.style.color='#ef4444';status.textContent='⚠ Entrez votre clé API CallMeBot.';return;}
-  if(!tel){status.style.color='#ef4444';status.textContent='⚠ Entrez votre numéro de téléphone.';return;}
-  status.style.color='#94A3B8';status.textContent='⏳ Envoi en cours...';
-  const msg=encodeURIComponent('✅ Test PROVENDA — Vos alertes stock automatiques sont activées !');
-  const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
-  try{
-    const res=await fetch(url);
-    const txt=await res.text();
-    if(txt.includes('Message Sent')||txt.includes('queued')){
-      status.style.color='#25D366';
-      status.textContent='✅ Message envoyé ! Vérifiez votre WhatsApp.';
-    } else {
-      status.style.color='#ef4444';
-      status.textContent='⚠ Erreur: '+txt.slice(0,80);
-    }
-  } catch(e){
-    status.style.color='#ef4444';
-    status.textContent='⚠ Erreur réseau: '+e.message;
-  }
 }
 
 // ══════════════════════════════════════════════════
@@ -1613,7 +1584,6 @@ async function loadConfigForm(){
   if(GP_CONFIG.localisation)document.getElementById('cfg_loc').value=GP_CONFIG.localisation;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
-  if(GP_CONFIG.callmebot_apikey)document.getElementById('cfg_callmebot_apikey').value=GP_CONFIG.callmebot_apikey;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1629,14 +1599,11 @@ async function saveConfig(){
     email:document.getElementById('cfg_email').value.trim(),
     localisation:document.getElementById('cfg_loc').value.trim(),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte,
-    callmebot_apikey:document.getElementById('cfg_callmebot_apikey')?.value.trim()||null
+    tel_alerte_stock:telAlerte
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
   if(telAlerte)GP_CONFIG.tel_alerte_stock=telAlerte;
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  if(apikey)GP_CONFIG.callmebot_apikey=apikey;
   document.getElementById('tb-name').textContent=nom;
   applyColor(couleur);
   err.textContent='';ok.textContent='✓ Configuration sauvegardée !';
@@ -1678,31 +1645,6 @@ window.addEventListener('load',function(){
     if(session)bootApp(session.user);
   }).catch(function(e){console.error('Session check failed:',e);});
 });
-async function testerCallMeBot(){
-  const apikey=document.getElementById('cfg_callmebot_apikey')?.value.trim();
-  const tel=(document.getElementById('cfg_tel_alerte')?.value||document.getElementById('cfg_tel')?.value||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
-  const status=document.getElementById('callmebot-status');
-  if(!apikey){status.style.color='#ef4444';status.textContent='⚠ Entrez votre clé API CallMeBot.';return;}
-  if(!tel){status.style.color='#ef4444';status.textContent='⚠ Entrez votre numéro de téléphone.';return;}
-  status.style.color='#94A3B8';status.textContent='⏳ Envoi en cours...';
-  const msg=encodeURIComponent('✅ Test PROVENDA — Vos alertes stock automatiques sont activées !');
-  const url=`https://api.callmebot.com/whatsapp.php?phone=228${tel}&text=${msg}&apikey=${apikey}`;
-  try{
-    const res=await fetch(url);
-    const txt=await res.text();
-    if(txt.includes('Message Sent')||txt.includes('queued')){
-      status.style.color='#25D366';
-      status.textContent='✅ Message envoyé ! Vérifiez votre WhatsApp.';
-    } else {
-      status.style.color='#ef4444';
-      status.textContent='⚠ Erreur: '+txt.slice(0,80);
-    }
-  } catch(e){
-    status.style.color='#ef4444';
-    status.textContent='⚠ Erreur réseau: '+e.message;
-  }
-}
-
 // ══════════════════════════════════════════════════
 // POINTS DE VENTE & ÉQUIPE
 // ══════════════════════════════════════════════════
