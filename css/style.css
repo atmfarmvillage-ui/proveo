@@ -26,6 +26,37 @@
 :root[data-theme="light"] .nav-sect{color:var(--g5)}
 :root[data-theme="light"] .tb-tag{color:var(--g5)}
 :root[data-theme="light"] .a-link span{color:var(--g5)}
+/* Composants principaux en thème clair */
+:root[data-theme="light"] .card{background:linear-gradient(135deg,#FFFFFF,#F9FAF7);border:1px solid var(--border);box-shadow:0 2px 10px rgba(0,0,0,.04)}
+:root[data-theme="light"] .stat-box,
+:root[data-theme="light"] .econo-box{background:#FFFFFF;border:1px solid var(--border)}
+:root[data-theme="light"] input[type=text],
+:root[data-theme="light"] input[type=number],
+:root[data-theme="light"] input[type=date],
+:root[data-theme="light"] input[type=email],
+:root[data-theme="light"] input[type=tel],
+:root[data-theme="light"] input[type=password],
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea{background:#FAFBF8;border:1px solid var(--border);color:var(--text)}
+:root[data-theme="light"] input:focus,
+:root[data-theme="light"] select:focus,
+:root[data-theme="light"] textarea:focus{border-color:var(--g4);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
+:root[data-theme="light"] .a-inp{background:#FAFBF8;border:1px solid var(--border);color:var(--text)}
+:root[data-theme="light"] .a-box{background:#FFFFFF;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.08)}
+:root[data-theme="light"] .btn-out{background:#FFFFFF;border:1px solid var(--border2);color:var(--text)}
+:root[data-theme="light"] .btn-out:hover{background:#F5F7F3;border-color:var(--g4)}
+:root[data-theme="light"] .tbl td{border-bottom:1px solid var(--border);color:var(--text)}
+:root[data-theme="light"] .tbl tr:hover td{background:rgba(22,163,74,.05)}
+:root[data-theme="light"] .sec-hdr,
+:root[data-theme="light"] .divider,
+:root[data-theme="light"] .ingr-row{border-color:var(--border)}
+:root[data-theme="light"] .ingr-pct-bar{background:#E5E7EB}
+:root[data-theme="light"] .notif{background:#FFFFFF;border:1px solid var(--border);color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,.10)}
+:root[data-theme="light"] .card-title span{color:var(--g5)}
+:root[data-theme="light"] .tb-btn{background:#FFFFFF;border:1px solid var(--border);color:var(--text)}
+:root[data-theme="light"] .tb-btn:hover{border-color:var(--g4);color:var(--g5)}
+:root[data-theme="light"] .tb-sub{color:var(--textm)}
+:root[data-theme="light"] code{background:rgba(0,0,0,.05)!important;color:var(--text)!important}
 html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px}
 
 /* ── AUTH ───────────────────────────── */
