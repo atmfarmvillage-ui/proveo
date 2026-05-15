@@ -74,6 +74,9 @@ async function calculerCommissionsMois(contratId, mois){
     autres:   Number(regles.autres_par_tonne  || 0),
     poisson:  Number(regles.poisson_par_tonne || 0),
     lapinVif: Number(regles.lapin_vivant_unite|| 0),
+    oeuf:     Number(regles.oeuf_unite        || 0),
+    poulet:   Number(regles.poulet_unite      || 0),
+    autreFerme: Number(regles.autre_ferme_unite || 0),
   };
 
   // 2. Bornes du mois (intersection avec la période du contrat)
@@ -82,32 +85,47 @@ async function calculerCommissionsMois(contratId, mois){
   const debutCalc = moisDebut > c.date_debut ? moisDebut : c.date_debut;
   const finCalc   = c.date_fin && moisFin > c.date_fin ? c.date_fin : moisFin;
 
-  // 3. Charger les ventes du mois
-  const { data: ventes } = await SB.from('gp_ventes')
-    .select('id,date,statut_paiement')
+  // 2b. Récupérer le user_id du directeur via le membre lié au contrat (attribution)
+  let userIdDirecteur = null;
+  if(c.membre_id){
+    const { data: mb } = await SB.from('gp_membres').select('user_id').eq('id', c.membre_id).maybeSingle();
+    userIdDirecteur = mb?.user_id || null;
+  }
+
+  // 3. Charger les ventes du mois (filtrées par saisi_par si membre lié)
+  let qV = SB.from('gp_ventes')
+    .select('id,date,statut_paiement,saisi_par')
     .eq('admin_id', GP_ADMIN_ID)
     .gte('date', debutCalc).lte('date', finCalc);
+  if(userIdDirecteur) qV = qV.eq('saisi_par', userIdDirecteur);
+  const { data: ventes } = await qV;
   const venteIds = (ventes||[]).map(v=>v.id);
 
   // 4. Charger les lignes correspondantes
   let lignes = [];
   if(venteIds.length){
     const { data: L } = await SB.from('gp_ventes_lignes')
-      .select('formule_nom,quantite,vente_id,type_produit')
+      .select('formule_nom,quantite,vente_id,type_produit,sous_type')
       .in('vente_id', venteIds);
     lignes = L || [];
   }
 
-  // 5. Agréger les kg par groupe de commission
-  // - Formules : déduction de l'espèce depuis le nom de la formule
-  // - MP (matières premières) : toujours classées en « autres aliments »
-  //   (un nom de MP contenant "lapin" ne signifie pas un aliment lapin)
+  // 5. Agréger : kg pour les aliments (formules + MP), unités pour les produits ferme
   const kgParGroupe = { lapin: 0, autres: 0, poisson: 0 };
+  const unitesFerme = { lapinVif: 0, oeuf: 0, poulet: 0, autreFerme: 0 };
   for(const l of lignes){
-    const grp = (l.type_produit === 'mp')
-      ? 'autres'
-      : _groupeCommission(_especeDepuisFormule(l.formule_nom));
-    kgParGroupe[grp] += Number(l.quantite || 0);
+    if(l.type_produit === 'ferme'){
+      const st = l.sous_type || 'autre_ferme';
+      if(st === 'lapin_vivant') unitesFerme.lapinVif += Number(l.quantite || 0);
+      else if(st === 'oeuf') unitesFerme.oeuf += Number(l.quantite || 0);
+      else if(st === 'poulet') unitesFerme.poulet += Number(l.quantite || 0);
+      else unitesFerme.autreFerme += Number(l.quantite || 0);
+    } else {
+      const grp = (l.type_produit === 'mp')
+        ? 'autres'
+        : _groupeCommission(_especeDepuisFormule(l.formule_nom));
+      kgParGroupe[grp] += Number(l.quantite || 0);
+    }
   }
 
   // 6. Convertir en tonnes et calculer les commissions
@@ -120,8 +138,13 @@ async function calculerCommissionsMois(contratId, mois){
     lapin:   Math.round(tonnes.lapin   * tarifs.lapin),
     autres:  Math.round(tonnes.autres  * tarifs.autres),
     poisson: Math.round(tonnes.poisson * tarifs.poisson),
+    lapinVif: Math.round(unitesFerme.lapinVif * tarifs.lapinVif),
+    oeuf:     Math.round(unitesFerme.oeuf * tarifs.oeuf),
+    poulet:   Math.round(unitesFerme.poulet * tarifs.poulet),
+    autreFerme: Math.round(unitesFerme.autreFerme * tarifs.autreFerme),
   };
   const totalCommissionsAliments = commissions.lapin + commissions.autres + commissions.poisson;
+  const totalCommissionsFerme = commissions.lapinVif + commissions.oeuf + commissions.poulet + commissions.autreFerme;
 
   // 7. Compter les rapports quotidiens manqués
   let nbRapportsManques = 0;
@@ -149,9 +172,11 @@ async function calculerCommissionsMois(contratId, mois){
     bornes: { debut: debutCalc, fin: finCalc },
     kgParGroupe,
     tonnes,
+    unitesFerme,
     tarifs,
     commissions,
     totalCommissionsAliments,
+    totalCommissionsFerme,
     rapports: {
       obligatoire: c.rapport_quotidien_obligatoire,
       joursAttendus: joursAttendus.length,
@@ -210,10 +235,14 @@ async function renderDirecteur(){
   // Objectifs
   const objectifsHtml = await _renderObjectifs(c, mois);
 
-  // Détail commissions
+  // Détail commissions — Aliments
+  const ligneFerme = (icone, label, qte, tarif, comm) => qte>0 || tarif>0 ? `
+    <tr><td>${icone} ${label}</td><td class="num">${qte} u</td><td class="num">${fmt(tarif)} F/u</td><td class="num" style="color:var(--gold);font-weight:700">${fmt(comm)} F</td></tr>
+  ` : '';
+
   const detailCommissions = `
     <div class="card" style="margin-bottom:14px">
-      <div class="card-title"><div class="ct-left"><span>💰 Commissions du mois — ${_moisLabel(mois)}</span></div></div>
+      <div class="card-title"><div class="ct-left"><span>💰 Commissions aliments — ${_moisLabel(mois)}</span></div></div>
       <table class="tbl" style="font-size:11px;width:100%">
         <thead><tr><th>Catégorie</th><th class="num">Tonnes vendues</th><th class="num">Tarif</th><th class="num">Commission</th></tr></thead>
         <tbody>
@@ -226,10 +255,27 @@ async function renderDirecteur(){
           </tr>
         </tbody>
       </table>
+    </div>
+    ${(calc.totalCommissionsFerme>0 || calc.tarifs.lapinVif>0 || calc.tarifs.oeuf>0 || calc.tarifs.poulet>0 || calc.tarifs.autreFerme>0) ? `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><div class="ct-left"><span>🚜 Commissions produits ferme — ${_moisLabel(mois)}</span></div></div>
+      <table class="tbl" style="font-size:11px;width:100%">
+        <thead><tr><th>Catégorie</th><th class="num">Unités vendues</th><th class="num">Tarif</th><th class="num">Commission</th></tr></thead>
+        <tbody>
+          ${ligneFerme('🐰','Lapins vivants', calc.unitesFerme.lapinVif, calc.tarifs.lapinVif, calc.commissions.lapinVif)}
+          ${ligneFerme('🥚','Œufs', calc.unitesFerme.oeuf, calc.tarifs.oeuf, calc.commissions.oeuf)}
+          ${ligneFerme('🐔','Poulets', calc.unitesFerme.poulet, calc.tarifs.poulet, calc.commissions.poulet)}
+          ${ligneFerme('📦','Autres produits ferme', calc.unitesFerme.autreFerme, calc.tarifs.autreFerme, calc.commissions.autreFerme)}
+          <tr style="background:rgba(22,163,74,.05);font-weight:700">
+            <td colspan="3">Total commissions ferme</td>
+            <td class="num" style="color:var(--gold)">${fmt(calc.totalCommissionsFerme)} F</td>
+          </tr>
+        </tbody>
+      </table>
       <div style="font-size:10px;color:var(--textm);margin-top:8px">
-        💡 La commission « 100 F par lapin vivant vendu » est saisie manuellement lors de la génération du salaire.
+        💡 Les commissions ferme sont calculées automatiquement depuis les ventes enregistrées dans la page Ventes (type « Produit ferme »).
       </div>
-    </div>`;
+    </div>` : ''}`;
 
   // Rapports
   const rapportsHtml = calc.rapports.obligatoire ? `
@@ -252,8 +298,9 @@ async function renderDirecteur(){
         Calcul automatique : <strong style="color:var(--gold)">${fmt(c.salaire_base)} F</strong>
         (salaire base) + <strong style="color:var(--gold)">${fmt(calc.totalCommissionsAliments)} F</strong>
         (commissions aliments)
-        ${calc.rapports.penalite_totale>0?`− <strong style="color:var(--red)">${fmt(calc.rapports.penalite_totale)} F</strong> (pénalités)`:''}
-        = Net pré-calculé <strong style="color:var(--green)">${fmt(Number(c.salaire_base)+calc.totalCommissionsAliments-calc.rapports.penalite_totale)} F</strong>
+        ${calc.totalCommissionsFerme>0?` + <strong style="color:var(--gold)">${fmt(calc.totalCommissionsFerme)} F</strong> (commissions ferme)`:''}
+        ${calc.rapports.penalite_totale>0?` − <strong style="color:var(--red)">${fmt(calc.rapports.penalite_totale)} F</strong> (pénalités)`:''}
+        = Net pré-calculé <strong style="color:var(--green)">${fmt(Number(c.salaire_base)+calc.totalCommissionsAliments+calc.totalCommissionsFerme-calc.rapports.penalite_totale)} F</strong>
       </div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="ouvrirGenererSalaire('${c.id}','${mois}')">
         💰 Générer le salaire de ${_moisLabel(mois)}
@@ -279,6 +326,13 @@ async function _renderObjectifs(c, mois){
   const obj = c.objectifs || [];
   if(!obj.length) return '';
 
+  // Récupérer le user_id du membre lié au contrat pour filtrer les ventes
+  let userIdDir = null;
+  if(c.membre_id){
+    const { data: mb } = await SB.from('gp_membres').select('user_id').eq('id', c.membre_id).maybeSingle();
+    userIdDir = mb?.user_id || null;
+  }
+
   const cards = await Promise.all(obj.map(async o => {
     let realise = 0;
     let pct = 0;
@@ -287,24 +341,40 @@ async function _renderObjectifs(c, mois){
     if(o.type === 'ventes_kg_espece'){
       // Total kg vendus depuis date_debut jusqu'à la deadline (ou aujourd'hui)
       const fin = o.deadline && o.deadline < today() ? o.deadline : today();
-      const { data: V } = await SB.from('gp_ventes')
-        .select('id').eq('admin_id', GP_ADMIN_ID)
+      let qV = SB.from('gp_ventes').select('id')
+        .eq('admin_id', GP_ADMIN_ID)
         .gte('date', c.date_debut).lte('date', fin);
+      if(userIdDir) qV = qV.eq('saisi_par', userIdDir);
+      const { data: V } = await qV;
       const ids = (V||[]).map(v=>v.id);
       if(ids.length){
         const { data: L } = await SB.from('gp_ventes_lignes')
-          .select('formule_nom,quantite').in('vente_id', ids);
-        realise = (L||[]).filter(l => _especeDepuisFormule(l.formule_nom) === o.espece)
+          .select('formule_nom,quantite,type_produit').in('vente_id', ids);
+        realise = (L||[]).filter(l => l.type_produit !== 'ferme' && l.type_produit !== 'mp' && _especeDepuisFormule(l.formule_nom) === o.espece)
                          .reduce((s,l)=>s+Number(l.quantite||0), 0);
       }
       pct = Math.min(100, Math.round(realise / o.cible * 100));
       detail = `${fmtKg(realise/1000)} t / ${fmtKg(o.cible/1000)} t`;
     } else if(o.type === 'lapins_vivants_mois'){
-      // Compte les lapins vivants saisis dans les salaires du mois courant
+      // Source 1 : ventes ferme sous_type='lapin_vivant' du mois
+      let qV = SB.from('gp_ventes').select('id')
+        .eq('admin_id', GP_ADMIN_ID)
+        .gte('date', mois+'-01').lte('date', finMois(mois));
+      if(userIdDir) qV = qV.eq('saisi_par', userIdDir);
+      const { data: V } = await qV;
+      const ids = (V||[]).map(v=>v.id);
+      let lapinsVentes = 0;
+      if(ids.length){
+        const { data: L } = await SB.from('gp_ventes_lignes')
+          .select('quantite,sous_type,type_produit').in('vente_id', ids);
+        lapinsVentes = (L||[]).filter(l => l.type_produit==='ferme' && l.sous_type==='lapin_vivant')
+                              .reduce((s,l)=>s+Number(l.quantite||0), 0);
+      }
+      // Source 2 : saisies manuelles dans les salaires (rétrocompat)
       const { data: S } = await SB.from('gp_salaires').select('detail_calcul')
         .eq('contrat_id', c.id).eq('mois', mois);
-      const lapins = (S||[]).reduce((s,x)=>s+Number(x.detail_calcul?.lapins_vivants||0),0);
-      realise = lapins;
+      const lapinsManuel = (S||[]).reduce((s,x)=>s+Number(x.detail_calcul?.lapins_vivants||0),0);
+      realise = lapinsVentes + lapinsManuel;
       pct = Math.min(100, Math.round(realise / o.cible * 100));
       detail = `${realise} / ${o.cible} lapins`;
     }
@@ -433,6 +503,15 @@ async function ouvrirGenererSalaire(contratId, mois){
     🐰 Lapins : ${fmt(calc.commissions.lapin)} F (${fmtKg(calc.tonnes.lapin)} t)<br>
     🌾 Autres : ${fmt(calc.commissions.autres)} F (${fmtKg(calc.tonnes.autres)} t)<br>
     🐟 Poissons : ${fmt(calc.commissions.poisson)} F (${fmtKg(calc.tonnes.poisson)} t)`;
+  // Commissions ferme (auto depuis ventes)
+  const commFerme = calc.totalCommissionsFerme || 0;
+  document.getElementById('gs-comm-ferme-wrap').style.display = commFerme>0 ? 'flex' : 'none';
+  document.getElementById('gs-comm-ferme').textContent = fmt(commFerme) + ' F';
+  document.getElementById('gs-comm-ferme-detail').innerHTML = commFerme>0 ? `
+    🐰 Lapins vifs : ${fmt(calc.commissions.lapinVif)} F (${calc.unitesFerme.lapinVif} u)<br>
+    🥚 Œufs : ${fmt(calc.commissions.oeuf)} F (${calc.unitesFerme.oeuf} u)<br>
+    🐔 Poulets : ${fmt(calc.commissions.poulet)} F (${calc.unitesFerme.poulet} u)<br>
+    📦 Autres : ${fmt(calc.commissions.autreFerme)} F (${calc.unitesFerme.autreFerme} u)` : '';
   document.getElementById('gs-penalite').textContent = `−${fmt(calc.rapports.penalite_totale)} F`;
   document.getElementById('gs-penalite-detail').textContent =
     calc.rapports.obligatoire ? `${calc.rapports.manques} rapport(s) manqué(s) × ${fmt(calc.rapports.penalite_unitaire)} F` : 'Non applicable';
@@ -447,15 +526,16 @@ function recalcGenSalaire(){
   const c = data.calc.contrat;
   const tarifLapinVif = Number(c.regles_commissions?.lapin_vivant_unite || 0);
   const nbLapins = +document.getElementById('gs-lapins').value || 0;
-  const commLapinsVifs = nbLapins * tarifLapinVif;
+  const commLapinsVifs = nbLapins * tarifLapinVif;  // saisie manuelle additionnelle (hors ventes)
 
   const base = Number(c.salaire_base);
   const commAliments = data.calc.totalCommissionsAliments;
+  const commFerme = data.calc.totalCommissionsFerme || 0;  // depuis les ventes ferme
   const penalite = data.calc.rapports.penalite_totale;
   const primesManuelles = +document.getElementById('gs-primes').value || 0;
   const avancesManuelles = +document.getElementById('gs-avances').value || 0;
 
-  const totalPrimes = commAliments + commLapinsVifs + primesManuelles;
+  const totalPrimes = commAliments + commFerme + commLapinsVifs + primesManuelles;
   const totalAvances = penalite + avancesManuelles;
   const net = base + totalPrimes - totalAvances;
 
@@ -648,7 +728,8 @@ async function ouvrirCreerContrat(){
 
   // Reset
   ['ctr_nom','ctr_poste','ctr_date_debut','ctr_date_fin','ctr_salaire',
-   'ctr_lapin','ctr_autres','ctr_poisson','ctr_lapin_vif','ctr_penalite','ctr_notes']
+   'ctr_lapin','ctr_autres','ctr_poisson','ctr_lapin_vif','ctr_oeuf','ctr_poulet','ctr_autre_ferme',
+   'ctr_penalite','ctr_notes']
     .forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
 
   // Valeurs par défaut (contrat type Directeur Stratégique)
@@ -695,6 +776,9 @@ async function saveContrat(){
     autres_par_tonne:   +document.getElementById('ctr_autres').value || 0,
     poisson_par_tonne:  +document.getElementById('ctr_poisson').value || 0,
     lapin_vivant_unite: +document.getElementById('ctr_lapin_vif').value || 0,
+    oeuf_unite:         +document.getElementById('ctr_oeuf')?.value || 0,
+    poulet_unite:       +document.getElementById('ctr_poulet')?.value || 0,
+    autre_ferme_unite:  +document.getElementById('ctr_autre_ferme')?.value || 0,
   };
 
   // Objectifs (par défaut, ceux du contrat Amezian si CDD ≤ 3 mois)
