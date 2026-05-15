@@ -1013,6 +1013,37 @@ function applyLogo(url){
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
 }
 
+// ── ANIMATION COUNT-UP DES KPI ────────────────────
+// Anime le contenu numérique des .stat-val et .econo-val depuis 0 jusqu'à leur valeur finale.
+// Idempotent : ne ré-anime pas un élément déjà animé dans la session.
+function animateKpis(root){
+  const scope = root || document;
+  const els = scope.querySelectorAll('.stat-val, .econo-val');
+  els.forEach(el => {
+    if(el.dataset.animDone === '1') return;
+    const finalTxt = el.textContent;
+    const m = finalTxt.match(/-?\d[\d\s.,]*/);
+    if(!m) return;
+    const cleaned = m[0].replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'').replace(',','.');
+    const target = parseFloat(cleaned);
+    if(!isFinite(target) || Math.abs(target) < 5){el.dataset.animDone='1';return;}
+    const prefix = finalTxt.slice(0, m.index);
+    const suffix = finalTxt.slice(m.index + m[0].length);
+    el.dataset.animDone = '1';
+    const start = performance.now();
+    const dur = 650;
+    const fmtFr = n => new Intl.NumberFormat('fr-FR').format(Math.round(n));
+    function tick(now){
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = prefix + fmtFr(target * eased) + suffix;
+      if(t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalTxt;
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
 // ── THÈME CLAIR/SOMBRE ────────────────────────────
 function toggleTheme(){
   const cur=document.documentElement.getAttribute('data-theme')||'dark';
@@ -1643,6 +1674,37 @@ function applyLogo(url){
   if(tb)tb.innerHTML=`<img src="${url}" style="width:30px;height:30px;object-fit:contain;border-radius:6px">`;
   const preview=document.getElementById('cfg-logo-preview');
   if(preview)preview.innerHTML=`<img src="${url}" style="width:90px;height:90px;object-fit:contain;border-radius:12px;margin:0 auto 8px;display:block">`;
+}
+
+// ── ANIMATION COUNT-UP DES KPI ────────────────────
+// Anime le contenu numérique des .stat-val et .econo-val depuis 0 jusqu'à leur valeur finale.
+// Idempotent : ne ré-anime pas un élément déjà animé dans la session.
+function animateKpis(root){
+  const scope = root || document;
+  const els = scope.querySelectorAll('.stat-val, .econo-val');
+  els.forEach(el => {
+    if(el.dataset.animDone === '1') return;
+    const finalTxt = el.textContent;
+    const m = finalTxt.match(/-?\d[\d\s.,]*/);
+    if(!m) return;
+    const cleaned = m[0].replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'').replace(',','.');
+    const target = parseFloat(cleaned);
+    if(!isFinite(target) || Math.abs(target) < 5){el.dataset.animDone='1';return;}
+    const prefix = finalTxt.slice(0, m.index);
+    const suffix = finalTxt.slice(m.index + m[0].length);
+    el.dataset.animDone = '1';
+    const start = performance.now();
+    const dur = 650;
+    const fmtFr = n => new Intl.NumberFormat('fr-FR').format(Math.round(n));
+    function tick(now){
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = prefix + fmtFr(target * eased) + suffix;
+      if(t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalTxt;
+    }
+    requestAnimationFrame(tick);
+  });
 }
 
 // ── THÈME CLAIR/SOMBRE ────────────────────────────

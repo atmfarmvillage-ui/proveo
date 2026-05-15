@@ -312,7 +312,12 @@ function showGP(page){
   const navEl=document.querySelector(`[data-page="${page}"]`);
   if(navEl)navEl.classList.add('active');
   if(typeof PAGE_RENDERERS!=='undefined'&&PAGE_RENDERERS[page]){
-    try{PAGE_RENDERERS[page]();}
+    try{
+      const r=PAGE_RENDERERS[page]();
+      const trigger=()=>{if(typeof animateKpis==='function')animateKpis(pageEl);};
+      if(r&&typeof r.then==='function')r.then(trigger,trigger);
+      else setTimeout(trigger,50);
+    }
     catch(e){console.error('Erreur page',page,e);}
   }
 }
