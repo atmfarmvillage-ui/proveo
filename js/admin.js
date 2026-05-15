@@ -255,7 +255,7 @@ async function filtrerIngrFormule(){
     const prot = i.proteines || 0;
     const em = i.energie || 0;
     const hasData = prot > 0 || em > 0;
-    return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'")}')"
+    return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
       style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
       <div style="font-size:12px;font-weight:600">${i.nom}</div>
@@ -549,7 +549,7 @@ function _renderSuggestions(besoin, nutriments, espece){
           ${s.candidats.map(c => `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
               <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">+ ${c.mp.nom}</span>
-              <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'")}',${c.pctAjout.toFixed(2)})"
+              <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${c.pctAjout.toFixed(2)})"
                 style="background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
                 +${c.pctAjout.toFixed(1)}% (~${fmt(Math.round(c.cout))}F)
               </button>
