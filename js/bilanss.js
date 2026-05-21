@@ -217,7 +217,7 @@ async function renderBilanVentes(){
     ${formulesSorted.slice(0,8).map(([f,v])=>{
       const pct=ca>0?Math.round(v.ca/ca*100):0;
       const espece=FORMULES_SADARI?.find(x=>x.nom===f)?.espece||'';
-      const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+      const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
       return`<div style="margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
           <span style="font-weight:600">${icons[espece]||'🌾'} ${f}</span>

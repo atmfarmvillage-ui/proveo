@@ -145,7 +145,7 @@ function printFicheTechnique(formule){
     :'<span style="font-size:20px">&#127807;</span>';
   const emLabel=['lapin'].includes(formule.espece)?'ED Lapin (kcal/kg)'
     :['porc'].includes(formule.espece)?'ED Porc (kcal/kg)'
-    :['tilapia','goliath'].includes(formule.espece)?'ED Poisson (kcal/kg)'
+    :['tilapia'].includes(formule.espece)?'ED Poisson (kcal/kg)'
     :'EM Volaille (kcal/kg)';
 
   function lbl(){
@@ -267,7 +267,7 @@ function printFicheTechniqueLot(formule, numLot, qteProduite, dateLot){
 
   const emLabel = ['lapin'].includes(formule.espece) ? 'ED Lapin (kcal/kg)'
     : ['porc'].includes(formule.espece) ? 'ED Porc (kcal/kg)'
-    : ['tilapia','goliath'].includes(formule.espece) ? 'ED Poisson (kcal/kg)'
+    : ['tilapia'].includes(formule.espece) ? 'ED Poisson (kcal/kg)'
     : 'EM Volaille (kcal/kg)';
 
   function lbl(){

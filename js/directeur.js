@@ -12,14 +12,14 @@ function _especeDepuisFormule(formuleNom){
   if(f?.espece) return f.espece;
   const lc = formuleNom.toLowerCase();
   if(lc.includes('lapin')) return 'lapin';
-  if(lc.includes('tilapia')||lc.includes('goliath')||lc.includes('poisson')) return 'poisson';
+  if(lc.includes('tilapia')||lc.includes('poisson')) return 'poisson';
   return 'autres';
 }
 
 function _groupeCommission(espece){
   // Mappe l'espèce vers le groupe de commission du contrat
   if(espece==='lapin') return 'lapin';
-  if(espece==='tilapia'||espece==='goliath'||espece==='poisson') return 'poisson';
+  if(espece==='tilapia'||espece==='poisson') return 'poisson';
   return 'autres';
 }
 

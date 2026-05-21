@@ -486,7 +486,7 @@ async function renderBilanProduction(lotsData){
     parFormule[f].lots++;
   });
 
-  const especeIcon={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟',autre:'🌾'};
+  const especeIcon={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔',autre:'🌾'};
   const especeLabel={pondeuse:'Volaille Ponte',chair:'Volaille Chair',lapin:'Lapin',porc:'Porc',canard:'Canard Musqué',tilapia:'Tilapia',goliath:'Goliath',autre:'Autre'};
 
   // Trier espèces par kg décroissant

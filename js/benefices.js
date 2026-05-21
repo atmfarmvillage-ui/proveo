@@ -137,7 +137,7 @@ function afficherDetailBenef(d, periode){
   const sante=d.benefNet>0?(d.benefNet/Math.max(d.enc,1)>0.15?'green':'gold'):'red';
   const pctBenef=d.enc>0?((d.benefNet/d.enc)*100).toFixed(1):0;
 
-  const especeIcons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const especeIcons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
 
   el.innerHTML=`
   <div class="g2" style="gap:14px">
