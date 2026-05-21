@@ -1,13 +1,17 @@
 // ── PRODUCTION ─────────────────────────────────────
 function onFormuleChange(){
-  const nom=document.getElementById('lot_formule').value;
+  const sel=document.getElementById('lot_formule');
+  const nom=sel.value;
+  // Raccourci : l'utilisateur a choisi « ➕ Créer une formule… »
+  if(nom==='__creer__'){
+    sel.value='';
+    showGP('formules');
+    notify('Créez votre formule ici, puis revenez à la production.','gold');
+    return;
+  }
   const qte=+document.getElementById('lot_qte').value||0;
   if(nom)chargerCoutsFormule(nom).then(()=>previewLot());
   else previewLot();
-  if(nom){
-    const prix=getPrix(nom);
-    // No prix input in production form — just show
-  }
 }
 // Formule précédente pour pré-cocher une seule fois
 let _lastFormule='';

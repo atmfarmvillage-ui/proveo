@@ -466,13 +466,17 @@ function populateSelects(){
   ['lot_formule','vt_formule','pf_formule'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
     const groups={};
-    allF.forEach(f=>{if(!groups[f.espece])groups[f.espece]=[];groups[f.espece].push(f);});
-    let html='<option value="">— Sélectionner une formule —</option>';
+    allF.forEach(f=>{const esp=f.espece||'autre';if(!groups[esp])groups[esp]=[];groups[esp].push(f);});
+    let html=allF.length
+      ? '<option value="">— Sélectionner une formule —</option>'
+      : '<option value="">— Aucune formule enregistrée —</option>';
     Object.entries(groups).forEach(([esp,fs])=>{
       html+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
       fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});
       html+='</optgroup>';
     });
+    // Raccourci de création — sur le select de production uniquement
+    if(id==='lot_formule')html+='<option value="__creer__">➕ Créer une formule…</option>';
     el.innerHTML=html;
   });
   // Client select
