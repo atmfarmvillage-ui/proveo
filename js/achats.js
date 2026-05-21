@@ -81,6 +81,35 @@ function actionsAchat(a){
   return btns;
 }
 
+// ── PRIX SAC ↔ KG ─────────────────────────────────
+// Saisie du prix au sac OU au kg ; l'autre se calcule via le poids du sac.
+// Le prix/kg reste la valeur de référence stockée dans la ligne d'achat.
+function syncPrixAchat(source){
+  const poidsSac=+document.getElementById('achat_poids_sac')?.value||0;
+  const prixSacEl=document.getElementById('achat_prix_sac');
+  const prixKgEl=document.getElementById('achat_prix');
+  if(!prixSacEl||!prixKgEl)return;
+  if(poidsSac<=0){
+    // Sans poids de sac valide, on ne peut pas convertir
+    if(source==='sac')prixKgEl.value='';
+    else prixSacEl.value='';
+    return;
+  }
+  if(source==='sac'){
+    const prixSac=+prixSacEl.value||0;
+    prixKgEl.value=prixSac?(prixSac/poidsSac).toFixed(2):'';
+  } else {
+    const prixKg=+prixKgEl.value||0;
+    prixSacEl.value=prixKg?Math.round(prixKg*poidsSac):'';
+  }
+}
+
+// Quand le poids du sac change : recalcule à partir du champ déjà rempli
+function onPoidsSacChange(){
+  const prixSac=+document.getElementById('achat_prix_sac')?.value||0;
+  syncPrixAchat(prixSac>0?'sac':'kg');
+}
+
 // ── CRÉER UN BON DE COMMANDE ──────────────────────
 function ajouterLigneAchat(){
   const ingr=document.getElementById('achat_ingr')?.value;
@@ -100,6 +129,8 @@ function ajouterLigneAchat(){
   ACHAT_LIGNES.push({ingredient_id:ingr,ingredient_nom:ingrNom,qte_commandee:qte,prix_unitaire:prix,montant_ligne:qte*prix});
   document.getElementById('achat_qte').value='';
   document.getElementById('achat_prix').value='';
+  const prixSacEl=document.getElementById('achat_prix_sac');
+  if(prixSacEl)prixSacEl.value='';
   document.getElementById('achat_ingr').value='';
   document.getElementById('achat_ingr_search').value='';
   const sel=document.getElementById('achat_ingr_selected');
@@ -382,9 +413,9 @@ function selectionnerIngrAchat(id,nom,prix){
     selected.style.display='block';
     selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg`;
   }
-  // Pré-remplir le prix
+  // Pré-remplir le prix/kg et recalculer le prix/sac
   const prixEl=document.getElementById('achat_prix');
-  if(prixEl&&prix>0)prixEl.value=prix;
+  if(prixEl&&prix>0){prixEl.value=prix;syncPrixAchat('kg');}
 }
 
 // Fermer la liste si clic ailleurs
