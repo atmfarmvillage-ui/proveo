@@ -792,7 +792,7 @@ function filtrerFormuleSelect(selectId, searchId){
     }
   });
   let html='<option value="">— Sélectionner une formule —</option>';
-  const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   Object.entries(groups).forEach(([esp,fs])=>{
     html+=`<optgroup label="${icons[esp]||'🌾'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
     fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});

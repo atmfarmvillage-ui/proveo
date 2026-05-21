@@ -589,7 +589,7 @@ async function ouvrirPreviewWA(venteId){
   const L = lignes || [];
   let produitsLine = L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
   if(Number(v.remise_montant||0)>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(v.remise_montant)} F*`;
-  const especeEmoji = {pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const especeEmoji = {pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   const formuleStr = L.map(l=>l.formule_nom).join(', ');
   const especeIcon = Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1] || '🌾';
 
@@ -1276,7 +1276,7 @@ async function envoyerWAVente(id){
   if(Number(v.remise_montant||0)>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(v.remise_montant)} F*`;
 
   // Espèce principale achetée pour personnaliser
-  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   const formuleStr=L.map(l=>l.formule_nom).join(', ');
   const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
 
@@ -1371,7 +1371,7 @@ async function envoyerWAVenteAuto(venteId,client,lignes,total,paye){
   if(!tel)return; // Pas de numéro → pas d'envoi auto
   const{data:lignesDB}=await SB.from('gp_ventes_lignes').select('*').eq('vente_id',venteId);
   const L=lignesDB||lignes||[];
-  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
+  const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   const formuleStr=L.map(l=>l.formule_nom).join(', ');
   const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
   let produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
