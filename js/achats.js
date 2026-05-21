@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════
 
 let ACHAT_LIGNES = []; // lignes du bon en cours
+let MODIF_LIGNES = []; // lignes du bon en cours de modification (modal)
 
 // ── PAGE PRINCIPALE ───────────────────────────────
 async function renderAchats(){
@@ -75,6 +76,10 @@ function actionsAchat(a){
   if(['recu_complet','recu_partiel'].includes(a.statut)&&(GP_ROLE==='daf'||GP_ROLE==='admin')){
     btns+=`<button class="btn btn-g btn-sm" onclick="validerAchatDAF('${a.id}',true)">✅ Valider</button>`;
     btns+=`<button class="btn btn-red btn-sm" onclick="validerAchatDAF('${a.id}',false)">✕</button>`;
+  }
+  // Admin : modifier un achat déjà validé
+  if(a.statut==='valide_daf'&&GP_ROLE==='admin'){
+    btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirModificationAchat('${a.id}')" title="Modifier">✏️</button>`;
   }
   // Voir détail
   btns+=`<button class="btn btn-out btn-sm" onclick="voirDetailAchat('${a.id}')">👁</button>`;
@@ -203,6 +208,261 @@ async function saveAchat(){
   notify(`Bon de commande ${ref} créé ✓`,'gold');
 }
 
+// ── MODIFIER UN ACHAT VALIDÉ (modal) ──────────────
+// Ouvre le modal de modification, pré-rempli avec l'achat choisi.
+async function ouvrirModificationAchat(id){
+  const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
+  if(!a){notify('Achat introuvable','r');return;}
+  const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',id);
+  if(!GP_INGREDIENTS.length)await loadIngredients();
+  // Fermer le modal détail s'il est ouvert
+  const det=document.getElementById('modal-detail-achat');
+  if(det)det.style.display='none';
+
+  MODIF_LIGNES=(lignes||[]).map(l=>({
+    ingredient_id:l.ingredient_id,
+    ingredient_nom:l.ingredient_nom,
+    qte_commandee:Number(l.qte_commandee||0),
+    prix_unitaire:Number(l.prix_unitaire||0),
+    montant_ligne:Number(l.montant_ligne||0)
+  }));
+
+  // Remplir le select fournisseur du modal
+  const fsel=document.getElementById('modif_fournisseur');
+  if(fsel){
+    const{data:F}=await SB.from('gp_fournisseurs').select('id,nom')
+      .eq('admin_id',GP_ADMIN_ID).order('nom');
+    fsel.innerHTML='<option value="">— Sélectionner —</option>'
+      +(F||[]).map(f=>`<option value="${f.id}">${f.nom}</option>`).join('');
+    fsel.value=a.fournisseur_id||'';
+  }
+
+  const set=(elId,val)=>{const el=document.getElementById(elId);if(el)el.value=val;};
+  set('modif_achat_id',id);
+  set('modif_condition',a.condition_paiement||'livraison');
+  set('modif_date',a.date_commande||today());
+  set('modif_date_liv',a.date_livraison_prev||'');
+  ['modif_ingr_id','modif_ingr_search','modif_ingr_qte','modif_ingr_prix'].forEach(x=>set(x,''));
+  const ref=document.getElementById('modif-achat-ref');
+  if(ref)ref.textContent=a.ref||'';
+  const err=document.getElementById('modif_err');if(err)err.textContent='';
+  renderModifLignes();
+  document.getElementById('modal-modifier-achat').style.display='flex';
+}
+
+function fermerModalModif(){
+  const m=document.getElementById('modal-modifier-achat');
+  if(m)m.style.display='none';
+  MODIF_LIGNES=[];
+}
+
+// Affiche les lignes éditables du bon en cours de modification
+function renderModifLignes(){
+  const c=document.getElementById('modif-lignes');
+  if(!c)return;
+  if(!MODIF_LIGNES.length){
+    c.innerHTML='<div style="color:var(--textm);font-size:12px">Aucun ingrédient — ajoutez-en ci-dessous.</div>';
+    majTotalModif();return;
+  }
+  c.innerHTML=MODIF_LIGNES.map((l,i)=>`
+    <div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-weight:600;font-size:12px">${l.ingredient_nom}</span>
+      <input type="number" value="${l.qte_commandee}" step="0.1" title="Quantité (kg)"
+        oninput="modifLigneChange(${i},'qte',this.value)"
+        style="width:70px;font-size:11px;padding:4px 6px">
+      <input type="number" value="${l.prix_unitaire}" title="Prix/kg (F)"
+        oninput="modifLigneChange(${i},'prix',this.value)"
+        style="width:70px;font-size:11px;padding:4px 6px">
+      <span id="modif-mnt-${i}" style="width:80px;text-align:right;font-size:11px;color:var(--gold)">${fmt(l.montant_ligne)} F</span>
+      <button class="btn btn-red btn-sm" onclick="supprimerModifLigne(${i})" style="padding:3px 7px">✕</button>
+    </div>`).join('');
+  majTotalModif();
+}
+
+function modifLigneChange(idx,champ,val){
+  const l=MODIF_LIGNES[idx];if(!l)return;
+  if(champ==='qte')l.qte_commandee=+val||0;
+  else l.prix_unitaire=+val||0;
+  l.montant_ligne=Math.round(l.qte_commandee*l.prix_unitaire);
+  const mnt=document.getElementById('modif-mnt-'+idx);
+  if(mnt)mnt.textContent=fmt(l.montant_ligne)+' F';
+  majTotalModif();
+}
+
+function supprimerModifLigne(idx){
+  MODIF_LIGNES.splice(idx,1);
+  renderModifLignes();
+}
+
+function majTotalModif(){
+  const t=MODIF_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
+  const el=document.getElementById('modif-total');
+  if(el)el.textContent=fmt(t)+' F';
+}
+
+// Recherche d'ingrédient dans le modal de modification
+function filtrerIngrModif(){
+  const search=normalizeSearch(document.getElementById('modif_ingr_search')?.value||'');
+  const results=document.getElementById('modif_ingr_results');
+  if(!results)return;
+  if(!search){results.style.display='none';return;}
+  const filtered=[...GP_INGREDIENTS]
+    .filter(i=>normalizeSearch(i.nom).includes(search))
+    .sort((a,b)=>a.nom.localeCompare(b.nom)).slice(0,10);
+  if(!filtered.length){results.style.display='none';return;}
+  results.style.display='block';
+  results.innerHTML=filtered.map(i=>`
+    <div onclick="selectionnerIngrModif('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0})"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'"
+      onmouseout="this.style.background=''">
+      <span style="font-weight:600">${i.nom}</span>
+      <span style="color:var(--textm);margin-left:8px">${fmt(i.prix_actuel||0)} F/kg</span>
+    </div>`).join('');
+}
+
+function selectionnerIngrModif(id,nom,prix){
+  document.getElementById('modif_ingr_id').value=id;
+  document.getElementById('modif_ingr_search').value=nom;
+  document.getElementById('modif_ingr_results').style.display='none';
+  const prixEl=document.getElementById('modif_ingr_prix');
+  if(prixEl&&prix>0)prixEl.value=prix;
+}
+
+function ajouterModifLigne(){
+  const id=document.getElementById('modif_ingr_id')?.value;
+  const nom=document.getElementById('modif_ingr_search')?.value.trim();
+  const qte=+document.getElementById('modif_ingr_qte')?.value||0;
+  const prix=+document.getElementById('modif_ingr_prix')?.value||0;
+  if(!id||!qte||!prix){notify('Sélectionnez un ingrédient, quantité et prix','r');return;}
+  MODIF_LIGNES.push({
+    ingredient_id:id,ingredient_nom:nom,
+    qte_commandee:qte,prix_unitaire:prix,
+    montant_ligne:Math.round(qte*prix)
+  });
+  ['modif_ingr_id','modif_ingr_search','modif_ingr_qte','modif_ingr_prix']
+    .forEach(x=>{const el=document.getElementById(x);if(el)el.value='';});
+  const res=document.getElementById('modif_ingr_results');
+  if(res)res.style.display='none';
+  renderModifLignes();
+}
+
+// Enregistre la modification : vérifie le stock, met à jour l'achat + ses lignes,
+// recrée les entrées de stock, ré-applique les prix.
+async function saveModificationAchat(){
+  const err=document.getElementById('modif_err');
+  if(err)err.textContent='';
+  const id=document.getElementById('modif_achat_id')?.value;
+  const fsel=document.getElementById('modif_fournisseur');
+  const fournId=fsel?.value;
+  const fournNom=fsel?.options[fsel.selectedIndex]?.text;
+  const date=document.getElementById('modif_date')?.value||today();
+  const dateLiv=document.getElementById('modif_date_liv')?.value||null;
+  const condition=document.getElementById('modif_condition')?.value||'livraison';
+
+  if(!id){if(err)err.textContent='Achat introuvable.';return;}
+  if(!fournId){if(err)err.textContent='Sélectionnez un fournisseur.';return;}
+  if(!MODIF_LIGNES.length){if(err)err.textContent='Ajoutez au moins un ingrédient.';return;}
+
+  const{data:achat}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
+  if(!achat){if(err)err.textContent='Achat introuvable.';return;}
+
+  // Anciennes entrées de stock de cet achat (par achat_id, repli sur ref texte)
+  let{data:ancStock}=await SB.from('gp_stock_mp').select('*').eq('achat_id',id);
+  if((!ancStock||!ancStock.length)&&achat.ref){
+    const r=await SB.from('gp_stock_mp').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('ref','Achat '+achat.ref).is('achat_id',null);
+    ancStock=r.data||[];
+  }
+  ancStock=ancStock||[];
+
+  // Apport ancien / nouveau par ingrédient
+  const ancienApport={},nouvelApport={};
+  ancStock.forEach(s=>{if(s.ingredient_id)ancienApport[s.ingredient_id]=(ancienApport[s.ingredient_id]||0)+Number(s.quantite||0);});
+  MODIF_LIGNES.forEach(l=>{if(l.ingredient_id)nouvelApport[l.ingredient_id]=(nouvelApport[l.ingredient_id]||0)+Number(l.qte_commandee||0);});
+
+  // Stock actuel par ingrédient (entrées − sorties)
+  const{data:tousStock}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+  const stockActuel={};
+  (tousStock||[]).forEach(s=>{
+    if(!s.ingredient_id)return;
+    const signe=s.type==='entree'?1:-1;
+    stockActuel[s.ingredient_id]=(stockActuel[s.ingredient_id]||0)+signe*Number(s.quantite||0);
+  });
+
+  // BLOCAGE : aucun ingrédient ne doit passer sous zéro
+  const problemes=[];
+  new Set([...Object.keys(ancienApport),...Object.keys(nouvelApport)]).forEach(iid=>{
+    const fin=(stockActuel[iid]||0)-(ancienApport[iid]||0)+(nouvelApport[iid]||0);
+    if(fin<-0.01){
+      const nom=GP_INGREDIENTS.find(x=>x.id===iid)?.nom||'ingrédient';
+      problemes.push(`${nom} (${fmtKg(fin)} kg)`);
+    }
+  });
+  if(problemes.length){
+    if(err)err.textContent='🚫 Modification bloquée — stock négatif : '+problemes.join(' · ');
+    notify('Modification bloquée — stock insuffisant','r');
+    return;
+  }
+
+  const total=MODIF_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+
+  // Avertir si le montant déjà payé dépasse le nouveau total
+  if(Number(achat.montant_paye||0)>total){
+    if(!confirm(`⚠️ Le montant déjà payé (${fmt(achat.montant_paye)} F) dépasse le nouveau total (${fmt(total)} F).\n\nEnregistrer quand même ?`))return;
+  }
+
+  // Trace de modification (ajoutée à la note DAF)
+  const qui=GP_USER?.email?.split('@')[0]||'admin';
+  const trace=`✏️ Modifié le ${today()} par ${qui} (total ${fmt(achat.montant_total)} → ${fmt(total)} F)`;
+  const noteDaf=(achat.note_daf?achat.note_daf+'\n':'')+trace;
+
+  // 1. Mettre à jour l'achat
+  await SB.from('gp_achats').update({
+    fournisseur_id:fournId,fournisseur_nom:fournNom,
+    date_commande:date,date_livraison_prev:dateLiv,
+    condition_paiement:condition,
+    montant_total:total,note_daf:noteDaf
+  }).eq('id',id);
+
+  // 2. Remplacer les lignes
+  await SB.from('gp_achats_lignes').delete().eq('achat_id',id);
+  await SB.from('gp_achats_lignes').insert(
+    MODIF_LIGNES.map(l=>({
+      achat_id:id,admin_id:GP_ADMIN_ID,
+      ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
+      qte_commandee:l.qte_commandee,qte_recue:l.qte_commandee,
+      prix_unitaire:l.prix_unitaire,montant_ligne:l.montant_ligne
+    }))
+  );
+
+  // 3. Supprimer les anciennes entrées de stock → recréer
+  if(ancStock.length){
+    await SB.from('gp_stock_mp').delete().in('id',ancStock.map(s=>s.id));
+  }
+  await SB.from('gp_stock_mp').insert(
+    MODIF_LIGNES.map(l=>({
+      admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:id,
+      type:'entree',date:date,
+      ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
+      quantite:l.qte_commandee,prix_unit:l.prix_unitaire,
+      ref:'Achat '+(achat.ref||id.slice(0,8)),note:'Achat modifié'
+    }))
+  );
+
+  // 4. Ré-appliquer les prix des ingrédients
+  for(const l of MODIF_LIGNES){
+    if(l.ingredient_id){
+      await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+    }
+  }
+
+  fermerModalModif();
+  await renderAchats();
+  if(typeof renderStockNiveaux==='function')renderStockNiveaux();
+  notify('Achat modifié ✓ — stock recalculé','gold');
+}
+
 // ── CONFIRMER ─────────────────────────────────────
 async function confirmerAchat(id){
   await SB.from('gp_achats').update({statut:'confirme'}).eq('id',id);
@@ -292,7 +552,7 @@ async function validerAchatDAF(achatId,approuve){
 
   // Créer les entrées stock
   const stockEntrees=L.map(l=>({
-    admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
+    admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
     type:'entree',date:achat.date_commande,
     ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
     quantite:l.qte_recue||l.qte_commandee,

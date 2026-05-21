@@ -8,6 +8,7 @@ const GP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 let SB = null;
 let GP_USER = null;
 let GP_ROLE = 'secretaire';
+let GP_EST_GERANT = false; // true si le membre est gérant (traité comme admin, sauf Configuration)
 let GP_ADMIN_ID = null;
 let GP_CONFIG = {};
 let GP_INGREDIENTS = [];

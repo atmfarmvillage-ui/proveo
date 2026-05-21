@@ -158,10 +158,15 @@ async function bootApp(user){
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
     GP_POINT_VENTE=membre.point_vente||null;
+    // Le gérant représente l'administration : traité comme un admin
+    // dans toute l'app (sauf la page Configuration, cachée plus bas).
+    GP_EST_GERANT=(membre.role==='gerant');
+    if(GP_EST_GERANT)GP_ROLE='admin';
   } else {
     GP_ROLE='admin';
     GP_ADMIN_ID=user.id;
     GP_POINT_VENTE=null;
+    GP_EST_GERANT=false;
   }
   // Show UI
   document.getElementById('authScreen').classList.add('hidden');
@@ -189,8 +194,8 @@ async function bootApp(user){
   applyRoleRestrictions();
   document.getElementById('main').style.display='block';
   // Set role in topbar
-  document.getElementById('tb-role-badge').textContent=GP_ROLE.toUpperCase();
-  document.getElementById('tb-role-badge').className='tb-role '+GP_ROLE;
+  document.getElementById('tb-role-badge').textContent=GP_EST_GERANT?'GÉRANT':GP_ROLE.toUpperCase();
+  document.getElementById('tb-role-badge').className='tb-role '+(GP_EST_GERANT?'gerant':GP_ROLE);
   document.getElementById('tb-user-info').textContent=user.email?.split('@')[0]||'';
   // Afficher le point de vente dans la topbar et formulaire vente
   const pvNomEl=document.getElementById('vt-pv-nom');
@@ -247,8 +252,22 @@ async function bootApp(user){
   // Realtime sync — recharger la page active à chaque changement DB
   initRealtimeSync();
 }
+// Pages visibles par le technicien nutritionniste (liste blanche stricte)
+const PAGES_TECHNICIEN=['dashboard','achats','matieres','stock','inventaire_physique','production','formules','licence'];
+
 function applyRoleRestrictions(){
   document.querySelectorAll('.nav-item').forEach(el=>{
+    const page=el.dataset.page;
+    // Technicien : seules les pages de sa liste blanche
+    if(GP_ROLE==='technicien'){
+      el.style.display=PAGES_TECHNICIEN.includes(page)?'flex':'none';
+      return;
+    }
+    // Gérant (aliasé admin) : tout sauf la Configuration
+    if(GP_EST_GERANT&&page==='config'){
+      el.style.display='none';
+      return;
+    }
     const roles=el.dataset.roles;
     // data-roles a priorité absolue sur admin-only
     if(roles){
@@ -338,6 +357,10 @@ var PAGE_RENDERERS = {
 // Renvoie true si le rôle courant a le droit d'ouvrir cette page.
 // Même logique que applyRoleRestrictions() — les sous-pages sans entrée de menu ne sont pas restreintes ici.
 function pageAutoriseePourRole(page){
+  // Technicien : liste blanche stricte (cohérent avec applyRoleRestrictions)
+  if(GP_ROLE==='technicien')return PAGES_TECHNICIEN.includes(page);
+  // Gérant (aliasé admin) : tout sauf la Configuration
+  if(GP_EST_GERANT&&page==='config')return false;
   const navEl=document.querySelector(`.nav-item[data-page="${page}"]`);
   if(!navEl)return true;
   const roles=navEl.dataset.roles;
