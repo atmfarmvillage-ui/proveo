@@ -92,36 +92,31 @@ async function renderDashboard(){
 
   const isAdmin=GP_ROLE==='admin';
 
+  // Helper KPI : icône pastel + libellé + valeur + delta optionnel
+  const kpi=(icon,iconColor,label,value,delta)=>`
+    <div class="stat-box">
+      <div class="kpi-head">
+        <div class="kpi-icon ${iconColor}">${icon}</div>
+        <div class="stat-lbl">${label}</div>
+      </div>
+      <div class="stat-val">${value}</div>
+      ${delta?`<div class="kpi-delta ${delta.type||'flat'}">${delta.text}</div>`:''}
+    </div>`;
+
   document.getElementById('dash-kpis').innerHTML=`
     ${isAdmin?`
-    <div class="stat-box">
-      <div class="stat-val" style="color:var(--gold)">${fmt(caMois)}</div>
-      <div class="stat-lbl">CA Provenderie ce mois</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-val" style="color:var(--green)">${fmt(encaisseMois)}</div>
-      <div class="stat-lbl">Encaissé Provenderie</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-val" style="color:${impayeMois>0?'var(--red)':'var(--green)'}">${fmt(impayeMois)}</div>
-      <div class="stat-lbl">Impayés du mois</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-val" style="color:${depMois>encaisseMois?'var(--red)':'var(--textm)'}">${fmt(depMois)}</div>
-      <div class="stat-lbl">Dépenses ce mois</div>
-    </div>
-    ${caFermeMois>0?`<div class="stat-box">
-      <div class="stat-val" style="color:var(--g6)">${fmt(caFermeMois)}</div>
-      <div class="stat-lbl">🚜 CA Ferme ce mois</div>
-    </div>`:''}`:''}
-    <div class="stat-box">
-      <div class="stat-val">${fmt(prodMois)} kg</div>
-      <div class="stat-lbl">Produits ce mois${nbSacsMois>0?` · ${nbSacsMois} sacs`:''}</div>
-    </div>
-    ${!isAdmin?`<div class="stat-box">
-      <div class="stat-val" style="color:${alertes.length>0?'var(--red)':'var(--green)'}">${alertes.length}</div>
-      <div class="stat-lbl">Alertes stock</div>
-    </div>`:''}`;
+    ${kpi('💰','gold','CA Provenderie ce mois',fmt(caMois))}
+    ${kpi('✓','green','Encaissé Provenderie',fmt(encaisseMois),
+      caMois>0?{type:'up',text:`${Math.round(encaisseMois/caMois*100)} % du CA`}:null)}
+    ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),
+      impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'})}
+    ${kpi('💸','orange','Dépenses ce mois',fmt(depMois),
+      depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'})}
+    ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois)):''}`:''}
+    ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,
+      nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
+    ${!isAdmin?kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,
+      alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'}):''}`;
 
   // Derniers lots
   const derniersLotsHtml=DL.map(l=>`
