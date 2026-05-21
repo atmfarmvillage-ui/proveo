@@ -412,13 +412,18 @@ function _renderAnalyseNutritionnelle(){
   const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
   const {nutriments, coutMP} = _calculerNutriments();
 
-  el.innerHTML = `<table class="tbl" style="width:100%;font-size:10px"><thead>
-    <tr><th>Nutriment</th><th class="num">Calc.</th><th class="num">Cible</th><th></th></tr>
+  el.innerHTML = `<table class="tbl" style="width:100%;font-size:13px"><thead>
+    <tr>
+      <th style="font-size:10px">Nutriment</th>
+      <th class="num" style="font-size:10px">Calc.</th>
+      <th class="num" style="font-size:10px">Cible</th>
+      <th style="width:26px"></th>
+    </tr>
   </thead><tbody>${NUTRIMENTS.map(n => {
     const v = nutriments[n.key];
     const min = besoin?.[n.besoinMin];
     const max = besoin?.[n.besoinMax];
-    let statut = '⚪', color = 'var(--textm)';
+    let statut = '⚪', color = 'var(--text)';
     if(min != null || max != null){
       if(min != null && v < Number(min) * 0.97){ statut = '🔴'; color = 'var(--red)'; }
       else if(max != null && v > Number(max) * 1.03){ statut = '🟠'; color = 'var(--gold)'; }
@@ -429,15 +434,15 @@ function _renderAnalyseNutritionnelle(){
       : (min != null ? `≥ ${Number(min).toFixed(n.decimals)}`
          : (max != null ? `≤ ${Number(max).toFixed(n.decimals)}` : '—'));
     return `<tr>
-      <td style="font-size:10px">${n.label} <span style="color:var(--textm);font-size:9px">${n.unite}</span></td>
-      <td class="num" style="color:${color};font-weight:700">${v.toFixed(n.decimals)}</td>
-      <td class="num" style="color:var(--textm);font-size:9px">${cible}</td>
-      <td>${statut}</td>
+      <td style="font-size:12px;font-weight:600;color:var(--text)">${n.label} <span style="color:var(--textm);font-size:10px;font-weight:500">${n.unite}</span></td>
+      <td class="num" style="color:${color};font-weight:800;font-size:14px">${v.toFixed(n.decimals)}</td>
+      <td class="num" style="color:var(--textm);font-size:11px">${cible}</td>
+      <td style="text-align:center;font-size:14px">${statut}</td>
     </tr>`;
   }).join('')}</tbody></table>`;
 
   if(coutEl){
-    coutEl.innerHTML = `<div style="display:flex;justify-content:space-between"><span style="color:var(--textm)">💰 Coût MP / tonne</span><strong style="color:var(--gold)">${fmt(Math.round(coutMP))} F</strong></div>`;
+    coutEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--textm);font-size:12px;font-weight:600">💰 Coût MP / tonne</span><strong style="color:var(--gold);font-size:16px;font-weight:800">${fmt(Math.round(coutMP))} F</strong></div>`;
   }
 
   // Suggestions d'ajustement (Phase 2)
@@ -536,33 +541,33 @@ function _renderSuggestions(besoin, nutriments, espece){
 
   const sugs = _calculerSuggestions(besoin, nutriments, espece);
   if(!sugs.length){
-    sugEl.innerHTML = '<div style="font-size:10px;color:var(--green)">✓ Aucun ajustement majeur nécessaire</div>';
+    sugEl.innerHTML = '<div style="font-size:12px;font-weight:600;color:var(--green)">✓ Aucun ajustement majeur nécessaire</div>';
     return;
   }
 
   sugEl.innerHTML = `
-    <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">💡 Suggestions d'ajustement</div>
+    <div style="font-size:13px;font-weight:800;color:var(--gold);margin-bottom:8px">💡 Suggestions d'ajustement</div>
     ${sugs.slice(0,5).map(s => {
       if(s.type === 'manque'){
-        return `<div style="font-size:10px;background:rgba(239,68,68,.06);border-left:2px solid var(--red);padding:6px 8px;margin-bottom:5px;border-radius:4px">
-          <div style="color:var(--red);font-weight:600">🔴 ${s.nutriment.label} : manque ${s.ecart.toFixed(s.decimals)} ${s.unite}</div>
+        return `<div style="font-size:12px;background:rgba(239,68,68,.06);border-left:3px solid var(--red);padding:8px 10px;margin-bottom:6px;border-radius:6px">
+          <div style="color:var(--red);font-weight:700;font-size:12px">🔴 ${s.nutriment.label} : manque ${s.ecart.toFixed(s.decimals)} ${s.unite}</div>
           ${s.candidats.map(c => `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
-              <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">+ ${c.mp.nom}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;gap:6px">
+              <span style="font-size:11px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">+ ${c.mp.nom}</span>
               <button onclick="appliquerSuggestion('${c.mp.id}','${c.mp.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${c.pctAjout.toFixed(2)})"
-                style="background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
+                style="background:rgba(22,163,74,.15);color:var(--green);border:1px solid rgba(22,163,74,.4);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;font-family:'Outfit',sans-serif">
                 +${c.pctAjout.toFixed(1)}% (~${fmt(Math.round(c.cout))}F)
               </button>
             </div>`).join('')}
         </div>`;
       } else {
-        return `<div style="font-size:10px;background:rgba(245,158,11,.06);border-left:2px solid var(--gold);padding:6px 8px;margin-bottom:5px;border-radius:4px">
-          <div style="color:var(--gold);font-weight:600">🟠 ${s.nutriment.label} : excès ${s.exces.toFixed(s.decimals)} ${s.unite}</div>
+        return `<div style="font-size:12px;background:rgba(245,158,11,.06);border-left:3px solid var(--gold);padding:8px 10px;margin-bottom:6px;border-radius:6px">
+          <div style="color:var(--gold);font-weight:700;font-size:12px">🟠 ${s.nutriment.label} : excès ${s.exces.toFixed(s.decimals)} ${s.unite}</div>
           ${s.candidats.map(c => `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;gap:4px">
-              <span style="font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">− ${c.mp.nom}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;gap:6px">
+              <span style="font-size:11px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.mp.nom}">− ${c.mp.nom}</span>
               <button onclick="appliquerReduction('${c.mp.id}',${c.pctRetirer.toFixed(2)})"
-                style="background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.4);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:9px;font-family:'Outfit',sans-serif">
+                style="background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.4);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;font-family:'Outfit',sans-serif">
                 −${c.pctRetirer.toFixed(1)}% (~${fmt(Math.round(c.economie))}F éco.)
               </button>
             </div>`).join('')}

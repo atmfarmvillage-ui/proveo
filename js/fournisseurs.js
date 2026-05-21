@@ -25,8 +25,9 @@ async function renderFournisseurs(){
         <td>
           <div style="display:flex;gap:4px">
             ${f.whatsapp?`<a href="https://wa.me/228${f.whatsapp.replace(/[\s\-\+]/g,'').replace(/^228/,'')}" target="_blank" class="btn btn-g btn-sm">📲</a>`:''}
-            <button class="btn btn-out btn-sm" onclick="ouvrirBilanFourn('${f.id}','${f.nom}')">📊</button>
-            <button class="btn btn-red btn-sm" onclick="deleteFourn('${f.id}')">✕</button>
+            <button class="btn btn-out btn-sm" onclick="ouvrirBilanFourn('${f.id}','${f.nom}')" title="Bilan">📊</button>
+            <button class="btn btn-out btn-sm" onclick="ouvrirModificationFourn('${f.id}')" title="Modifier">✏️</button>
+            <button class="btn btn-red btn-sm" onclick="deleteFourn('${f.id}')" title="Archiver">✕</button>
           </div>
         </td>
       </tr>`).join('')}
@@ -100,6 +101,47 @@ async function deleteFourn(id){
   await SB.from('gp_fournisseurs').update({actif:false}).eq('id',id);
   await renderFournisseurs();
   notify('Fournisseur archivé','r');
+}
+
+// ── MODIFIER FOURNISSEUR ──────────────────────────
+async function ouvrirModificationFourn(id){
+  const{data:f}=await SB.from('gp_fournisseurs').select('*').eq('id',id).maybeSingle();
+  if(!f){notify('Fournisseur introuvable','r');return;}
+  document.getElementById('ef_id').value=f.id;
+  document.getElementById('ef_nom').value=f.nom||'';
+  document.getElementById('ef_contact').value=f.contact_nom||'';
+  document.getElementById('ef_wa').value=f.whatsapp||'';
+  document.getElementById('ef_adresse').value=f.adresse||'';
+  document.getElementById('ef_condition').value=f.condition_paiement||'livraison';
+  document.getElementById('ef_delai').value=f.delai_credit_jours||0;
+  document.getElementById('ef_err').textContent='';
+  document.getElementById('modal-modifier-fourn').style.display='flex';
+}
+
+function fermerModalFourn(){
+  document.getElementById('modal-modifier-fourn').style.display='none';
+}
+
+async function saveModificationFourn(){
+  const id=document.getElementById('ef_id').value;
+  const nom=document.getElementById('ef_nom').value.trim();
+  const contact=document.getElementById('ef_contact').value.trim();
+  const err=document.getElementById('ef_err');
+  if(!id){err.textContent='Fournisseur introuvable.';return;}
+  if(!nom&&!contact){err.textContent='Renseignez au moins le nom du fournisseur ou la personne de contact.';return;}
+  const{error}=await SB.from('gp_fournisseurs').update({
+    nom:nom||contact,
+    contact_nom:contact||null,
+    whatsapp:document.getElementById('ef_wa').value.trim()||null,
+    adresse:document.getElementById('ef_adresse').value.trim()||null,
+    condition_paiement:document.getElementById('ef_condition').value||'livraison',
+    delai_credit_jours:+document.getElementById('ef_delai').value||0,
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  fermerModalFourn();
+  populateFournisseurSelect();
+  await renderFournisseurs();
+  notify('Fournisseur modifié ✓','gold');
 }
 
 // ── POPULATE SELECT FOURNISSEURS ──────────────────
