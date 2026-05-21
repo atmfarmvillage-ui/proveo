@@ -167,6 +167,24 @@ async function bootApp(user){
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('topbar').style.display='flex';
   document.getElementById('sidebar').style.display='block';
+  // Injection des éléments décoratifs sidebar (barre gauche pulsante + shimmer + underline doré)
+  document.querySelectorAll('#sidebar .nav-item').forEach(el=>{
+    if(!el.querySelector('.left-bar')){
+      const bar=document.createElement('span');bar.className='left-bar';el.prepend(bar);
+    }
+    if(!el.querySelector('.nav-shimmer')){
+      const sh=document.createElement('span');sh.className='nav-shimmer';el.appendChild(sh);
+    }
+    if(!el.querySelector('.nav-underline')){
+      const ul=document.createElement('span');ul.className='nav-underline';el.appendChild(ul);
+    }
+  });
+  // Flash doré au clic
+  document.querySelectorAll('#sidebar .nav-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');
+    });
+  });
   // Gérer visibilité nav selon rôle (appel unique)
   applyRoleRestrictions();
   document.getElementById('main').style.display='block';
