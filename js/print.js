@@ -113,7 +113,7 @@ function printRecu(vente){
     +'<div style="font-size:10px;margin-bottom:2px">'+(vente.formule_nom||'--')+'</div>'
     +'<div class="r"><span>Quantite :</span><span class="b">'+Number(vente.qte_vendue||0).toFixed(1)+' kg</span></div>'
     +'<div class="r"><span>Prix/kg :</span><span>'+fmt(vente.prix_unitaire)+' FCFA</span></div>'
-    +(Number(vente.remise||0)>0?'<div class="r"><span>Remise :</span><span>- '+fmt(vente.remise)+' FCFA</span></div>':'')
+    +(Number(vente.remise_montant||0)>0?'<div class="r"><span>Remise :</span><span>- '+fmt(vente.remise_montant)+' FCFA</span></div>':'')
     +'<div class="l"></div>'
     +'<div class="r tot"><span>TOTAL :</span><span>'+fmt(vente.montant_total)+' FCFA</span></div>'
     +(vente.statut_paiement!=='paye'?'<div class="r"><span>Paye :</span><span>'+fmt(montantPaye)+' FCFA</span></div><div class="r b"><span>Reste :</span><span>'+fmt(reste)+' FCFA</span></div>':'')
@@ -354,7 +354,9 @@ function imprimerRecuThermique(vente){
   const cfg=GP_CONFIG||{};
   const prov=cfg.nom_provenderie||'PROVENDERIE SADARI';
   const lignes=vente.lignes||[];
-  const total=lignes.length?lignes.reduce((s,l)=>s+Number(l.montant_ligne||0),0):Number(vente.montant_total||0);
+  const remiseRecu=Number(vente.remise_montant||0);
+  const sousTotalRecu=lignes.length?lignes.reduce((s,l)=>s+Number(l.montant_ligne||0),0):(Number(vente.montant_total||0)+remiseRecu);
+  const total=Math.max(0,sousTotalRecu-remiseRecu);
   const paye=Number(vente.montant_paye||0);
   const remis=Number(vente.montant_remis||paye);
   const monnaie=Number(vente.monnaie_rendue||0);
@@ -430,6 +432,8 @@ ${lignes.length?`
   </tbody>
 </table>
 <div class="line"></div>`:''}
+${remiseRecu>0?`<div class="row"><span>Sous-total</span><span>${fmt(sousTotalRecu)} F</span></div>
+<div class="row"><span>Remise${vente.remise_motif?' ('+vente.remise_motif+')':''}</span><span>- ${fmt(remiseRecu)} F</span></div>`:''}
 <div class="row bold"><span>TOTAL</span><span>${fmt(total)} F</span></div>
 ${remis!==paye?`<div class="row"><span>Remis client</span><span>${fmt(remis)} F</span></div>`:''}
 <div class="row"><span>Encaissé</span><span>${fmt(paye)} F</span></div>
