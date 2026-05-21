@@ -1162,7 +1162,9 @@
         <select id="eq_role" onchange="toggleContratFields()">
           <option value="secretaire">Secrétaire (saisie uniquement)</option>
           <option value="logistique">Logistique (achats MP)</option>
+          <option value="technicien">Technicien nutritionniste (formules & production)</option>
           <option value="daf">DAF (validation financière)</option>
+          <option value="gerant">Gérant (représentant de l'administration)</option>
           <option value="directeur">Directeur Stratégique Commercial</option>
           <option value="admin">Admin (accès complet)</option>
         </select>
@@ -1576,6 +1578,55 @@
         <button onclick="document.getElementById('modal-detail-achat').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
       </div>
       <div id="detail-achat-content"></div>
+    </div>
+  </div>
+
+  <!-- Modal modifier achat validé -->
+  <div id="modal-modifier-achat" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalModif()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:88vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">✏️ Modifier l'achat <span id="modif-achat-ref" style="color:var(--gold)"></span></div>
+        <button onclick="fermerModalModif()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <input type="hidden" id="modif_achat_id">
+      <div class="fg2">
+        <div class="fr"><label>Fournisseur *</label><select id="modif_fournisseur"></select></div>
+        <div class="fr"><label>Condition paiement</label>
+          <select id="modif_condition">
+            <option value="livraison">À la livraison</option>
+            <option value="avance">Avance</option>
+            <option value="credit">Crédit</option>
+            <option value="tranches">En tranches</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Date commande</label><input type="date" id="modif_date"></div>
+        <div class="fr"><label>Livraison prévue</label><input type="date" id="modif_date_liv"></div>
+      </div>
+      <hr class="divider">
+      <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ingrédients du bon</div>
+      <div id="modif-lignes"></div>
+      <hr class="divider">
+      <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">➕ Ajouter un ingrédient</div>
+      <div class="fr" style="position:relative;margin-bottom:6px">
+        <input type="text" id="modif_ingr_search" placeholder="🔍 Rechercher un ingrédient..." oninput="filtrerIngrModif()" autocomplete="off">
+        <div id="modif_ingr_results" style="display:none;position:absolute;z-index:10000;background:var(--card);border:1px solid var(--border2);border-radius:8px;max-height:200px;overflow-y:auto;width:100%;top:100%;left:0;margin-top:4px;box-shadow:0 12px 40px rgba(0,0,0,.28)"></div>
+        <input type="hidden" id="modif_ingr_id">
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Quantité (kg)</label><input type="number" id="modif_ingr_qte" placeholder="500" step="0.1"></div>
+        <div class="fr"><label>Prix/kg (F)</label><input type="number" id="modif_ingr_prix" placeholder="200"></div>
+      </div>
+      <button class="btn btn-out btn-sm" onclick="ajouterModifLigne()" style="width:100%;justify-content:center;margin-bottom:10px">➕ Ajouter à la liste</button>
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;padding:8px 0;border-top:1px solid var(--border)">
+        <span>TOTAL</span><span id="modif-total" style="color:var(--gold)">0 F</span>
+      </div>
+      <div class="a-err" id="modif_err"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-g" onclick="saveModificationAchat()" style="flex:1;justify-content:center">💾 Enregistrer les modifications</button>
+        <button class="btn btn-out" onclick="fermerModalModif()" style="flex:1;justify-content:center">Annuler</button>
+      </div>
     </div>
   </div>
 </div>

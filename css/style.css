@@ -106,6 +106,8 @@ html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);fon
 .tb-role{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700}
 .tb-role.admin{background:rgba(232,197,71,.15);color:var(--gold);border:1px solid rgba(232,197,71,.3)}
 .tb-role.secretaire{background:rgba(26,86,219,.15);color:#93C5FD;border:1px solid rgba(26,86,219,.3)}
+.tb-role.gerant{background:rgba(22,163,74,.15);color:var(--g6);border:1px solid rgba(22,163,74,.35)}
+.tb-role.technicien{background:rgba(168,85,247,.15);color:#C4A5F7;border:1px solid rgba(168,85,247,.3)}
 .tb-btn{background:none;border:1px solid var(--border2);color:var(--textm);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s}
 .tb-btn:hover{border-color:var(--g4);color:var(--g6)}
 .notif-badge{background:var(--red);color:white;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer}
