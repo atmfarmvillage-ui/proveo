@@ -642,9 +642,36 @@
       <div id="vt-lignes-preview"></div>
 
       <!-- TOTAUX -->
-      <div style="background:rgba(14,26,12,.6);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span style="color:var(--textm)">Montant total</span>
+          <span style="color:var(--textm)">Sous-total produits</span>
+          <span id="vt-sous-total" style="font-weight:600;font-size:13px">0 F</span>
+        </div>
+
+        <!-- REMISE -->
+        <div style="border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin-bottom:6px">
+          <div style="font-size:10px;font-weight:700;color:var(--textm);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">💸 Remise (optionnel)</div>
+          <div class="fg2">
+            <div class="fr" style="margin-bottom:6px"><label>Type de remise</label>
+              <select id="vt_remise_type" onchange="calcVente()">
+                <option value="totale">Montant total (F)</option>
+                <option value="kg">Par kg (F/kg)</option>
+                <option value="sac">Par sac (F/sac)</option>
+              </select>
+            </div>
+            <div class="fr" style="margin-bottom:6px"><label id="vt-remise-valeur-label">Montant total (F)</label><input type="number" id="vt_remise_valeur" placeholder="0" oninput="calcVente()"></div>
+          </div>
+          <div id="vt-remise-calc" style="font-size:11px;color:var(--g6);font-weight:600;margin-bottom:6px;display:none">➜ Remise appliquée : 0 F</div>
+          <div class="fr" style="margin-bottom:6px"><label>Motif</label><input type="text" id="vt_remise_motif" placeholder="Client gros, accord admin..."></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:0">
+            <input type="checkbox" id="vt_remise_validee" onchange="onRemiseValideeToggle()">
+            <span>✅ Remise autorisée par l'admin</span>
+          </label>
+          <div class="fr" id="vt-remise-par-row" style="display:none;margin-top:6px;margin-bottom:0"><label>Autorisé par</label><input type="text" id="vt_remise_par" placeholder="Nom de l'admin"></div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--textm)">Montant total à payer</span>
           <span id="vt-montant-total" style="font-weight:700;font-size:15px;color:var(--gold)">0 F</span>
         </div>
         <div class="fr" style="margin-bottom:6px">

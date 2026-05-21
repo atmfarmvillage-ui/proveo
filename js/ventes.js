@@ -97,6 +97,71 @@ function calcVenteFromSacs(){
   calcVente();
 }
 
+// ── REMISE ────────────────────────────────────────
+// Quantité totale de la vente (lignes ajoutées, ou ligne en cours de saisie).
+function getTotalQteVente(){
+  let q=VT_LIGNES.reduce((s,l)=>s+Number(l.quantite||0),0);
+  if(q<=0){
+    const nb=+document.getElementById('vt_nb_sacs')?.value||0;
+    const poids=document.getElementById('vt_poids_sac')?.value;
+    let qte=+document.getElementById('vt_qte')?.value||0;
+    if(nb>0&&poids&&poids!=='kg'&&poids!=='unite'&&qte===0)qte=nb*+poids;
+    q=qte;
+  }
+  return q;
+}
+
+// Quantité totale en sacs de la vente (lignes ajoutées, ou ligne en cours)
+function getTotalSacsVente(){
+  let s=VT_LIGNES.reduce((acc,l)=>acc+Number(l.nb_sacs||0),0);
+  if(s<=0)s=+document.getElementById('vt_nb_sacs')?.value||0;
+  return s;
+}
+
+// Calcule le montant total de la remise selon le type : totale / par kg / par sac
+function computeRemiseVente(){
+  const type=document.getElementById('vt_remise_type')?.value||'totale';
+  const valeur=+document.getElementById('vt_remise_valeur')?.value||0;
+  if(type==='kg')return Math.round(valeur*getTotalQteVente());
+  if(type==='sac')return Math.round(valeur*getTotalSacsVente());
+  return Math.round(valeur);
+}
+
+// Met à jour le libellé du champ valeur + l'affichage du total remisé
+function majAffichageRemise(remise){
+  const type=document.getElementById('vt_remise_type')?.value||'totale';
+  const lbl=document.getElementById('vt-remise-valeur-label');
+  if(lbl)lbl.textContent=type==='kg'?'Remise par kg (F/kg)':type==='sac'?'Remise par sac (F/sac)':'Montant total (F)';
+  const calcEl=document.getElementById('vt-remise-calc');
+  if(calcEl){
+    if((type==='kg'||type==='sac')&&remise>0){
+      calcEl.style.display='block';
+      calcEl.textContent='➜ Remise appliquée : '+fmt(remise)+' F';
+    }else{
+      calcEl.style.display='none';
+    }
+  }
+}
+
+// Affiche/masque le champ « Autorisé par » selon la case
+function onRemiseValideeToggle(){
+  const checked=document.getElementById('vt_remise_validee')?.checked;
+  const row=document.getElementById('vt-remise-par-row');
+  if(row)row.style.display=checked?'block':'none';
+}
+
+// Pré-coche la validation si l'utilisateur connecté est admin
+function initRemiseVente(){
+  const chk=document.getElementById('vt_remise_validee');
+  const parEl=document.getElementById('vt_remise_par');
+  if(!chk)return;
+  if(GP_ROLE==='admin'){
+    chk.checked=true;
+    if(parEl&&!parEl.value)parEl.value=GP_USER?.email?.split('@')[0]||'Admin';
+  }
+  onRemiseValideeToggle();
+}
+
 function calcVente(){
   const nb=+document.getElementById('vt_nb_sacs')?.value||0;
   const poids=+document.getElementById('vt_poids_sac')?.value||25;
@@ -108,7 +173,11 @@ function calcVente(){
   // Total depuis les lignes déjà ajoutées + ligne en cours
   const totalLignes=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
   const ligneEnCours=Math.round(qte*prix);
-  const total=totalLignes||(ligneEnCours);
+  const sousTotal=totalLignes||(ligneEnCours);
+  // Remise déduite du sous-total (type : totale / par kg / par sac)
+  const remise=computeRemiseVente();
+  majAffichageRemise(remise);
+  const total=Math.max(0,sousTotal-remise);
 
   // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
   // Si remis < total → reste à payer
@@ -128,6 +197,8 @@ function calcVente(){
   const monnaieRow=document.getElementById('vt-monnaie-row');
   const monnaieEl=document.getElementById('vt-monnaie');
   mettreAJourLigneVente();
+  const sousTotalEl=document.getElementById('vt-sous-total');
+  if(sousTotalEl)sousTotalEl.textContent=fmt(sousTotal)+' F';
   if(totalEl)totalEl.textContent=fmt(total)+' F';
 
   if(monnaie > 0){
@@ -224,7 +295,11 @@ async function saveVente(){
     notify(nomComplet+' enregistré comme client ✓','gold');
   }
 
-  const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  const sousTotal=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
+  // Remise déduite du sous-total
+  const remiseMontant=computeRemiseVente();
+  const remiseValidee=document.getElementById('vt_remise_validee')?.checked||false;
+  const total=Math.max(0,sousTotal-remiseMontant);
   // Calcul monnaie : si remis >= total, payé conservé = total et rendu = remis - total
   const paye = remis >= total ? total : remis;
   const monnaie = remis > total ? (remis - total) : 0;
@@ -252,7 +327,11 @@ async function saveVente(){
     saisi_par:GP_USER?.id,
     formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', '),
     qte_vendue:VT_LIGNES.reduce((s,l)=>s+Number(l.quantite||0),0)||0,
-    prix_unitaire:VT_LIGNES.length?VT_LIGNES[0].prix_unitaire||0:0
+    prix_unitaire:VT_LIGNES.length?VT_LIGNES[0].prix_unitaire||0:0,
+    remise_montant:remiseMontant,
+    remise_motif:document.getElementById('vt_remise_motif')?.value.trim()||null,
+    remise_validee:remiseValidee,
+    remise_validee_par:remiseValidee?(document.getElementById('vt_remise_par')?.value.trim()||null):null
   }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
@@ -327,8 +406,15 @@ async function saveVente(){
 
   const lignes_a_insert=VT_LIGNES.slice();
   VT_LIGNES=[];renderLignesVente();
-  ['vt_note','vt_paye'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['vt_note','vt_paye','vt_remise_valeur','vt_remise_motif']
+    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const rtype=document.getElementById('vt_remise_type');if(rtype)rtype.value='totale';
   document.getElementById('vt_client').value='';
+  const remiseChk=document.getElementById('vt_remise_validee');
+  if(remiseChk)remiseChk.checked=false;
+  const remiseParEl=document.getElementById('vt_remise_par');
+  if(remiseParEl)remiseParEl.value='';
+  initRemiseVente();
   err.textContent='';
 
   // Notification claire (rappel monnaie si applicable)
@@ -501,7 +587,8 @@ async function ouvrirPreviewWA(venteId){
   const totalHistorique = H.reduce((s,x)=>s+Number(x.montant_total||0),0);
   const localite = client?.localite || '';
   const L = lignes || [];
-  const produitsLine = L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  let produitsLine = L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  if(Number(v.remise_montant||0)>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(v.remise_montant)} F*`;
   const especeEmoji = {pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
   const formuleStr = L.map(l=>l.formule_nom).join(', ');
   const especeIcon = Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1] || '🌾';
@@ -553,6 +640,7 @@ async function envoyerWAPreview(){
 }
 
 async function renderVentes(){
+  initRemiseVente();
   const filtDate=document.getElementById('vt-filtre-date')?.value||'';
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
   let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).order('created_at',{ascending:false}).limit(50);
@@ -937,6 +1025,7 @@ function ajouterLigneVente(){
 async function supprimerLigneVente(idx){
   VT_LIGNES.splice(idx,1);
   renderLignesVente();
+  calcVente();
 }
 
 async function renderLignesVente(){
@@ -1183,7 +1272,8 @@ async function envoyerWAVente(id){
 
   // Détails produits
   const L=lignes||[];
-  const produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  let produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  if(Number(v.remise_montant||0)>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(v.remise_montant)} F*`;
 
   // Espèce principale achetée pour personnaliser
   const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
@@ -1284,7 +1374,9 @@ async function envoyerWAVenteAuto(venteId,client,lignes,total,paye){
   const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐟'};
   const formuleStr=L.map(l=>l.formule_nom).join(', ');
   const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
-  const produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  let produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
+  const remiseWA=L.reduce((s,l)=>s+Number(l.montant_ligne||0),0)-Number(total||0);
+  if(remiseWA>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(remiseWA)} F*`;
   const{data:histo}=await SB.from('gp_ventes').select('montant_total').eq('admin_id',GP_ADMIN_ID).eq('client_id',client.id);
   const nbAchats=(histo||[]).length;
   const totalHisto=(histo||[]).reduce((s,x)=>s+Number(x.montant_total||0),0);
