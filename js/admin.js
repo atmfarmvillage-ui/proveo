@@ -1614,22 +1614,22 @@ async function saveEquipe(){
   const siteUrl=window.location.origin;
   const paysInfo=detecterPays(tel);
   const telClean=paysInfo.numero_whatsapp;
-  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':'Secrétaire';
+  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':role==='gerant'?'Gérant':role==='technicien'?'Technicien nutritionniste':'Secrétaire';
   const msg=encodeURIComponent(
-    `Bonjour ${nom} 👋\n\n`+
+    `Bonjour ${nom},\n\n`+
     `Vous êtes invité(e) à rejoindre *${GP_CONFIG?.nom_provenderie||'PROVENDA'}* en tant que *${roleLabel}*`+
-    (pv?`\n📍 Point de vente : *${pv}*`:'')+
+    (pv?`\nPoint de vente : *${pv}*`:'')+
     `\n\n`+
-    `🔑 *Votre code d'invitation :*\n`+
+    `*Votre code d'invitation :*\n`+
     `\`${code}\`\n`+
     `_(appuyez longuement pour copier le code)_\n\n`+
-    `⏰ Valide pendant *48 heures*\n\n`+
-    `📧 *Votre email de connexion :*\n`+
+    `Valide pendant *48 heures*\n\n`+
+    `*Votre email de connexion :*\n`+
     `\`${email}\`\n`+
     `_(appuyez longuement pour copier l'email)_\n\n`+
-    `📌 *Comment rejoindre l'équipe :*\n`+
+    `*Comment rejoindre l'équipe :*\n`+
     `1. Ouvrez ce lien : ${siteUrl}\n`+
-    `2. Cliquez *"🔑 Rejoindre une équipe avec un code"*\n`+
+    `2. Cliquez sur "Rejoindre une provenderie"\n`+
     `3. Entrez votre email et le code ci-dessus\n`+
     `4. Choisissez un mot de passe\n\n`+
     `_PROVENDA · ATM Farm Village_`
@@ -1943,9 +1943,9 @@ function membreCard(m){
   const siteUrl=window.location.origin;
   const code=m.code_invitation&&!m.code_invitation.startsWith('USED_')?m.code_invitation:null;
   const reinvitMsg=encodeURIComponent(
-    `Bonjour ${m.nom} 👋\n\n`+
+    `Bonjour ${m.nom},\n\n`+
     (code?
-      `Votre code d'invitation PROVENDA :\n\`${code}\`\n_(appuyez longuement pour copier)_\n\n📧 Email : \`${m.email}\`\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
+      `Votre code d'invitation PROVENDA :\n\`${code}\`\n_(appuyez longuement pour copier)_\n\nEmail : \`${m.email}\`\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`
       :`Rappel : connectez-vous sur PROVENDA.\n\nEmail : *${m.email}*\n\nLien : ${siteUrl}\n\n_PROVENDA · ATM Farm Village_`)
   );
 
