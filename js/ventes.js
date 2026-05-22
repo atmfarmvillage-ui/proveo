@@ -97,6 +97,23 @@ function calcVenteFromSacs(){
   calcVente();
 }
 
+// Prix au sac ↔ prix au kg — synchronisation auto selon le conditionnement.
+// source='kg' : on a saisi le prix/kg → recalcule le prix/sac.
+// source='sac': on a saisi le prix/sac → recalcule le prix/kg (utilisé pour le calcul).
+function syncPrixVente(source){
+  const poids=+document.getElementById('vt_poids_sac')?.value||0; // 0 en mode vrac (kg)
+  const prixKgEl=document.getElementById('vt_prix');
+  const prixSacEl=document.getElementById('vt_prix_sac');
+  if(!prixKgEl||!prixSacEl||poids<=0) return; // vrac : pas de prix/sac
+  if(source==='sac'){
+    const ps=+prixSacEl.value||0;
+    prixKgEl.value = ps>0 ? Math.round(ps/poids*100)/100 : '';
+  } else {
+    const pk=+prixKgEl.value||0;
+    prixSacEl.value = pk>0 ? Math.round(pk*poids) : '';
+  }
+}
+
 // ── REMISE ────────────────────────────────────────
 // Quantité totale de la vente (lignes ajoutées, ou ligne en cours de saisie).
 function getTotalQteVente(){
@@ -259,6 +276,7 @@ async function onVenteFormuleChange(){
 
   const prixEl=document.getElementById('vt_prix');
   if(prixEl&&prix)prixEl.value=prix;
+  syncPrixVente('kg'); // met à jour le prix/sac affiché
 
   calcVente();
 }
@@ -691,6 +709,13 @@ async function updateVentesKPIs(){
 }
 
 async function renderDep(){
+  // Datalist fournisseurs pour le champ Bénéficiaire (liste déroulante + recherche)
+  try{
+    const{data:fournDL}=await SB.from('gp_fournisseurs').select('nom')
+      .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
+    const dl=document.getElementById('dep-fourn-list');
+    if(dl)dl.innerHTML=(fournDL||[]).map(f=>`<option value="${(f.nom||'').replace(/"/g,'&quot;')}"></option>`).join('');
+  }catch(e){}
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',finMois(filtMois));
@@ -1192,6 +1217,7 @@ function onConditionnementChange(){
   const qteLabel=document.getElementById('vt-qte-label');
   const nbInput=document.getElementById('vt_nb_sacs');
   const qteInput=document.getElementById('vt_qte');
+  const prixSacWrap=document.getElementById('vt-prix-sac-wrap');
 
   if(val==='kg'){
     // Mode vrac — saisir directement les kg
@@ -1199,11 +1225,14 @@ function onConditionnementChange(){
     if(qteLabel)qteLabel.textContent='Quantité (kg)';
     if(nbInput)nbInput.value='';
     if(qteInput){qteInput.value='';qteInput.placeholder='Ex: 5';}
+    if(prixSacWrap)prixSacWrap.style.display='none';
   } else {
     // Mode sacs
     if(nbWrap)nbWrap.style.display='block';
     if(qteLabel)qteLabel.textContent='Kg total (auto)';
     if(qteInput){qteInput.value='';qteInput.placeholder='';}
+    if(prixSacWrap)prixSacWrap.style.display='block';
+    syncPrixVente('kg'); // recalcule le prix/sac avec le nouveau poids
   }
   calcVente();
 }

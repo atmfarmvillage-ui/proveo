@@ -1669,6 +1669,48 @@ async function deleteMembre(id){
   notify('Membre supprimé ✓','r');
 }
 
+// ── MODIFIER UN MEMBRE (nom, téléphone, rôle, point de vente) ──
+async function ouvrirModificationMembre(id){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
+  const{data:m}=await SB.from('gp_membres').select('*').eq('id',id).maybeSingle();
+  if(!m){notify('Membre introuvable','r');return;}
+  document.getElementById('em_id').value=m.id;
+  document.getElementById('em_nom').value=m.nom||'';
+  document.getElementById('em_tel').value=m.telephone||'';
+  document.getElementById('em_role').value=m.role||'secretaire';
+  // Remplir le select des points de vente
+  const{data:P}=await SB.from('gp_points_vente').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom');
+  const selPv=document.getElementById('em_pv');
+  selPv.innerHTML='<option value="">— Siège principal —</option>'+
+    (P||[]).map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
+  selPv.value=m.point_vente||'';
+  document.getElementById('em_err').textContent='';
+  document.getElementById('modal-modifier-membre').style.display='flex';
+}
+
+function fermerModalMembre(){
+  document.getElementById('modal-modifier-membre').style.display='none';
+}
+
+async function saveModificationMembre(){
+  if(GP_ROLE!=='admin'){notify('Action réservée à l\'administrateur','r');return;}
+  const id=document.getElementById('em_id').value;
+  const nom=document.getElementById('em_nom').value.trim();
+  const err=document.getElementById('em_err');
+  if(!id){err.textContent='Membre introuvable.';return;}
+  if(!nom){err.textContent='Le nom est requis.';return;}
+  const{error}=await SB.from('gp_membres').update({
+    nom,
+    telephone:document.getElementById('em_tel').value.trim()||null,
+    role:document.getElementById('em_role').value,
+    point_vente:document.getElementById('em_pv').value||null
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  fermerModalMembre();
+  await renderPDV();
+  notify('Membre modifié ✓','gold');
+}
+
 // ── CONFIG ─────────────────────────────────────────
 function applyColor(c){
   document.documentElement.style.setProperty('--g4',c);
@@ -1984,6 +2026,7 @@ function membreCard(m){
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
         ${m.telephone?`<a href="https://wa.me/${paysInfo.numero_whatsapp}?text=${reinvitMsg}" target="_blank" class="btn btn-g btn-sm" title="${m.user_id?'Envoyer message':'Renvoyer invitation'}">📲</a>`:''}
+        <button class="btn btn-out btn-sm membre-admin-btn" onclick="ouvrirModificationMembre('${m.id}')" title="Modifier">✏️</button>
         <button class="btn btn-sm membre-admin-btn" onclick="toggleMembreActif('${m.id}',${m.actif!==false})"
           style="background:${m.actif!==false?'rgba(245,158,11,.15)':'rgba(22,163,74,.15)'};border:1px solid ${m.actif!==false?'rgba(245,158,11,.4)':'rgba(22,163,74,.4)'};color:${m.actif!==false?'var(--gold)':'var(--green)'}">
           ${m.actif!==false?'🔒 Désactiver':'✅ Réactiver'}
