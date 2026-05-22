@@ -18,6 +18,7 @@ let GP_REMISE_MAX = 5;
 let GP_CHARTS = {};
 let GP_POINT_VENTE = null;
 let GP_PRIX_GROS = {}; // Prix grossiste par formule // Point de vente du membre connecté
+let GP_STOCK_VENTE = {}; // {formule_nom: qte_disponible en kg} au PDV courant — pour le menu de vente
 let GP_CATEGORIES = []; // [{espece, espece_label, espece_icon, categorie, categorie_label, ordre}]
 let GP_BESOINS = [];    // [{espece, categorie, pb_min, pb_max, em_min, ..., source}]
 let GP_CONTRAINTES_MP = []; // [{espece, ingredient_pattern, pct_min, pct_max, note}]

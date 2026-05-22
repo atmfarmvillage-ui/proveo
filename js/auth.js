@@ -307,6 +307,7 @@ var PAGE_RENDERERS = {
   },
   ventes: async function(){
     if(!GP_CLIENTS.length)await loadClients();
+    await loadStockVente();
     populateSelects();
     await renderVentes();
   },
@@ -495,7 +496,10 @@ function populateSelects(){
       : '<option value="">— Aucune formule enregistrée —</option>';
     Object.entries(groups).forEach(([esp,fs])=>{
       html+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
-      fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});
+      const liste=id==='vt_formule'
+        ? fs.slice().sort((a,b)=>((GP_STOCK_VENTE?.[b.nom]||0)>0?1:0)-((GP_STOCK_VENTE?.[a.nom]||0)>0?1:0))
+        : fs;
+      liste.forEach(f=>{html+=`<option value="${f.nom}">${id==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;});
       html+='</optgroup>';
     });
     // Raccourci de création — sur le select de production uniquement
@@ -797,11 +801,19 @@ function filtrerFormuleSelect(selectId, searchId){
   const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   Object.entries(groups).forEach(([esp,fs])=>{
     html+=`<optgroup label="${icons[esp]||'🌾'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
-    fs.forEach(f=>{html+=`<option value="${f.nom}">${f.nom}</option>`;});
+    fs.forEach(f=>{html+=`<option value="${f.nom}">${selectId==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;});
     html+='</optgroup>';
   });
   sel.innerHTML=html;
   if(search&&Object.values(groups).flat().length===1){
     sel.value=Object.values(groups).flat()[0].nom;
   }
+}
+
+// Libellé d'une formule dans le menu de VENTE — avec le stock disponible au PDV courant.
+function vtFormuleLabel(f){
+  const q=GP_STOCK_VENTE?.[f.nom];
+  if(q===undefined) return f.nom;          // pas de PDV, ou aucune info de stock
+  if(q<=0) return `${f.nom} · rupture`;
+  return `${f.nom} · ${fmtKg(q)} kg`;
 }
