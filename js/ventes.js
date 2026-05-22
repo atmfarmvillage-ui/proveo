@@ -114,6 +114,19 @@ function syncPrixVente(source){
   }
 }
 
+// Stock disponible à la vente (gp_stock_produits_pdv) — pour annoter le menu des formules.
+async function loadStockVente(){
+  GP_STOCK_VENTE = {};
+  if(!GP_POINT_VENTE) return; // pas de point de vente → pas d'annotation stock
+  try{
+    const{data}=await SB.from('gp_stock_produits_pdv').select('formule_nom,qte_disponible')
+      .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE);
+    (data||[]).forEach(r=>{
+      GP_STOCK_VENTE[r.formule_nom]=(GP_STOCK_VENTE[r.formule_nom]||0)+Number(r.qte_disponible||0);
+    });
+  }catch(e){}
+}
+
 // ── REMISE ────────────────────────────────────────
 // Quantité totale de la vente (lignes ajoutées, ou ligne en cours de saisie).
 function getTotalQteVente(){
@@ -421,6 +434,10 @@ async function saveVente(){
       }
     }
   }
+
+  // Rafraîchir le stock affiché dans le menu des formules
+  await loadStockVente();
+  populateSelects();
 
   const lignes_a_insert=VT_LIGNES.slice();
   VT_LIGNES=[];renderLignesVente();
