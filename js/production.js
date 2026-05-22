@@ -1,5 +1,5 @@
 // ── PRODUCTION ─────────────────────────────────────
-function onFormuleChange(){
+async function onFormuleChange(){
   const sel=document.getElementById('lot_formule');
   const nom=sel.value;
   // Raccourci : l'utilisateur a choisi « ➕ Créer une formule… »
@@ -9,9 +9,11 @@ function onFormuleChange(){
     notify('Créez votre formule ici, puis revenez à la production.','gold');
     return;
   }
-  const qte=+document.getElementById('lot_qte').value||0;
-  if(nom)chargerCoutsFormule(nom).then(()=>previewLot());
-  else previewLot();
+  if(nom){
+    await loadStockMPLot();
+    await chargerCoutsFormule(nom);
+  }
+  previewLot();
 }
 // Formule précédente pour pré-cocher une seule fois
 let _lastFormule='';
@@ -37,6 +39,142 @@ async function chargerCoutsFormule(nom){
   }
 }
 
+// ══════════════════════════════════════════════════
+// COMPOSITION DU LOT — ajustable en kg + contrôle de stock MP
+// ══════════════════════════════════════════════════
+let LOT_COMPO = [];     // [{id, nom, kg, prix}]
+let LOT_STOCK_MP = {};  // {ingredient_id: kg disponible}
+
+// Charge le stock MP courant (entrées - sorties) par ingredient_id.
+async function loadStockMPLot(){
+  LOT_STOCK_MP = {};
+  try{
+    const{data}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+    (data||[]).forEach(r=>{
+      if(!r.ingredient_id)return;
+      LOT_STOCK_MP[r.ingredient_id]=(LOT_STOCK_MP[r.ingredient_id]||0)+(r.type==='entree'?1:-1)*Number(r.quantite||0);
+    });
+  }catch(e){}
+}
+
+// Retrouve une MP de GP_INGREDIENTS à partir d'un nom de formule.
+function trouverIngrParNom(nom){
+  if(!nom)return null;
+  const n=nom.toLowerCase();
+  return (GP_INGREDIENTS||[]).find(i=>i.nom.toLowerCase()===n)
+      || (GP_INGREDIENTS||[]).find(i=>i.nom.toLowerCase().includes(n.slice(0,6)))
+      || null;
+}
+
+// (Re)construit la composition du lot depuis la formule × quantité à produire.
+function rebuildLotCompo(){
+  const nom=document.getElementById('lot_formule')?.value;
+  const qte=+document.getElementById('lot_qte')?.value||0;
+  const f=getFormule(nom)||FORMULES_SADARI.find(x=>x.nom===nom)||null;
+  LOT_COMPO=[];
+  if(f&&qte>0&&Array.isArray(f.ingredients)){
+    f.ingredients.forEach(ing=>{
+      const ingData=trouverIngrParNom(ing.nom);
+      LOT_COMPO.push({
+        id: ingData?.id||null,
+        nom: ing.nom,
+        kg: Math.round((Number(ing.pct||0)/100)*qte*100)/100,
+        prix: ingData?.prix_actuel||0
+      });
+    });
+  }
+}
+
+// True si une MP de la composition dépasse le stock disponible.
+function lotARupture(){
+  return LOT_COMPO.some(c=>c.id && Number(c.kg||0)>(LOT_STOCK_MP[c.id]||0)+0.001);
+}
+
+// Affiche la composition éditable + le contrôle de rupture.
+function renderLotMP(){
+  const wrap=document.getElementById('lot-mp-preview');
+  const list=document.getElementById('lot-mp-list');
+  const rupt=document.getElementById('lot-mp-rupture');
+  if(!wrap||!list)return;
+  if(!LOT_COMPO.length){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  let nbRupture=0,totalKg=0;
+  list.innerHTML=LOT_COMPO.map((c,i)=>{
+    const dispo=c.id?(LOT_STOCK_MP[c.id]||0):null;
+    const manque=dispo!=null && Number(c.kg||0)>dispo+0.001;
+    if(manque)nbRupture++;
+    totalKg+=Number(c.kg||0);
+    const dispoTxt=dispo==null
+      ? '<span style="color:var(--textm)">stock inconnu</span>'
+      : `<span style="color:${manque?'var(--red)':'var(--green)'};font-weight:${manque?'700':'500'}">${fmtKg(dispo)} kg en stock</span>`;
+    return `<div style="display:grid;grid-template-columns:1fr 84px 28px;gap:6px;align-items:center;padding:5px 7px;background:${manque?'rgba(239,68,68,.08)':'rgba(14,20,40,.4)'};border:1px solid ${manque?'rgba(239,68,68,.4)':'var(--border)'};border-radius:6px;margin-bottom:4px">
+      <div style="min-width:0">
+        <div style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.nom}">${c.nom}</div>
+        <div style="font-size:9px">${dispoTxt}</div>
+      </div>
+      <input type="number" step="0.1" min="0" value="${c.kg}" onchange="modifierKgLotMP(${i},this.value)"
+        style="font-size:11px;padding:3px 5px;text-align:right;${manque?'color:var(--red);font-weight:700':''}">
+      <button onclick="supprimerMPLot(${i})" title="Retirer" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
+    </div>`;
+  }).join('')+`<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--textm);padding:3px 7px 0">
+    <span>Total composition</span><span style="font-weight:700">${fmtKg(totalKg)} kg</span></div>`;
+  if(rupt){
+    if(nbRupture>0){
+      rupt.style.display='block';
+      rupt.textContent=`⛔ ${nbRupture} matière(s) première(s) en rupture — ajustez la composition avant d'enregistrer le lot.`;
+    }else rupt.style.display='none';
+  }
+}
+
+function modifierKgLotMP(i,val){
+  if(LOT_COMPO[i])LOT_COMPO[i].kg=Math.max(0,+val||0);
+  renderLotMP();
+}
+function supprimerMPLot(i){
+  LOT_COMPO.splice(i,1);
+  renderLotMP();
+}
+
+// Recherche d'une MP à ajouter à la composition du lot.
+function filtrerMPLot(){
+  const q=normalizeSearch(document.getElementById('lot_mp_search')?.value||'');
+  const results=document.getElementById('lot_mp_results');
+  if(!results)return;
+  const deja=new Set(LOT_COMPO.map(c=>(c.nom||'').toLowerCase()));
+  let liste=(GP_INGREDIENTS||[]).filter(i=>!deja.has(i.nom.toLowerCase()));
+  if(q)liste=liste.filter(i=>normalizeSearch(i.nom).includes(q));
+  liste=liste.slice(0,10);
+  if(!liste.length){
+    results.innerHTML='<div style="padding:8px;font-size:11px;color:var(--textm);text-align:center">Aucune MP</div>';
+    results.style.display='block';return;
+  }
+  results.innerHTML=liste.map(i=>{
+    const dispo=LOT_STOCK_MP[i.id]||0;
+    return `<div onclick="selectionnerMPLot('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4)"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
+      <div style="font-size:11px;font-weight:600">${i.nom}</div>
+      <div style="font-size:9px;color:${dispo>0?'var(--green)':'var(--red)'}">${fmtKg(dispo)} kg en stock</div>
+    </div>`;
+  }).join('');
+  results.style.display='block';
+}
+
+function selectionnerMPLot(id,nom){
+  const ingData=(GP_INGREDIENTS||[]).find(x=>x.id===id);
+  LOT_COMPO.push({id, nom, kg:0, prix:ingData?.prix_actuel||0});
+  const s=document.getElementById('lot_mp_search'); if(s)s.value='';
+  const r=document.getElementById('lot_mp_results'); if(r)r.style.display='none';
+  renderLotMP();
+}
+
+// Fermer la liste de recherche MP si clic ailleurs
+document.addEventListener('click',e=>{
+  const s=document.getElementById('lot_mp_search');
+  const r=document.getElementById('lot_mp_results');
+  if(s&&r&&!s.contains(e.target)&&!r.contains(e.target))r.style.display='none';
+});
+
 function previewLot(){
   const nom=document.getElementById('lot_formule')?.value;
   const qte=+document.getElementById('lot_qte')?.value||0;
@@ -47,6 +185,7 @@ function previewLot(){
     if(coutZone)coutZone.style.display='none';
     document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
     document.getElementById('lot-mp-preview').style.display='none';
+    LOT_COMPO=[];
     return;
   }
 
@@ -64,6 +203,7 @@ function previewLot(){
   if(!nom||!qte){
     document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
     document.getElementById('lot-mp-preview').style.display='none';
+    LOT_COMPO=[];
     return;
   }
 
@@ -102,6 +242,8 @@ function previewLot(){
       :`<div>Formule : <strong style="color:var(--g6)">${nom}</strong></div>
       <div>Quantité : <strong style="color:var(--g6)">${fmt(qte)} kg</strong></div>`}
     </div>`;
+  rebuildLotCompo();
+  renderLotMP();
 }
 async function saveLot(){
   const nom=document.getElementById('lot_formule').value;
@@ -118,17 +260,22 @@ async function saveLot(){
   const pv=GP_POINT_VENTE||'';
   const err=document.getElementById('lot_err');
   if(!nom||!date||!qte){err.textContent='Formule, date et quantité requis.';return;}
-  err.textContent='Enregistrement...';
-  const f=getFormule(nom);
-  let coutMP=0;const mpSorties=[];
-  if(f){
-    f.ingredients.forEach(ing=>{
-      const kgNeeded=(ing.pct/100)*qte;
-      const ingData=GP_INGREDIENTS.find(i=>i.nom.toLowerCase().includes(ing.nom.toLowerCase().slice(0,6)));
-      if(ingData)coutMP+=kgNeeded*ingData.prix_actuel;
-      mpSorties.push({nom:ing.nom,kg:kgNeeded,ingrData:ingData});
-    });
+  // Contrôle de stock MP — composition ajustable du lot (LOT_COMPO)
+  if(!LOT_COMPO.length)rebuildLotCompo();
+  if(!LOT_COMPO.length){err.textContent='Composition du lot vide.';return;}
+  await loadStockMPLot();
+  if(lotARupture()){
+    renderLotMP();
+    err.textContent='⛔ Stock MP insuffisant pour cette composition. Ajustez les quantités (ou ajoutez/remplacez une MP) avant d\'enregistrer.';
+    return;
   }
+  err.textContent='Enregistrement...';
+  let coutMP=0;const mpSorties=[];
+  LOT_COMPO.forEach(c=>{
+    const ingData=(GP_INGREDIENTS||[]).find(i=>i.id===c.id)||trouverIngrParNom(c.nom);
+    coutMP+=Number(c.kg||0)*(ingData?.prix_actuel||c.prix||0);
+    mpSorties.push({nom:c.nom,kg:Number(c.kg||0),ingrData:ingData});
+  });
   const coutTotal=coutMP+mo+emb+(transport||0);
   const prixVente=getPrix(nom);
   const espece=FORMULES_SADARI.find(x=>x.nom===nom)?.espece||'';
@@ -165,6 +312,8 @@ async function saveLot(){
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
   document.getElementById('lot-mp-preview').style.display='none';
+  LOT_COMPO=[];
+  const lmps=document.getElementById('lot_mp_search'); if(lmps)lmps.value='';
 
   // Alimenter le stock produits finis
   if(nbSacsSaves>0&&pdvProdSaves&&typeof upsertStockPF==='function'){
