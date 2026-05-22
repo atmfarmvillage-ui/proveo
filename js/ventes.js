@@ -148,29 +148,21 @@ function getTotalSacsVente(){
   return s;
 }
 
-// Calcule le montant total de la remise selon le type : totale / par kg / par sac
-function computeRemiseVente(){
+// Calcule la remise de la LIGNE en cours selon le type : par kg / par sac / total.
+function computeRemiseLigneVente(qte, nbSacs){
   const type=document.getElementById('vt_remise_type')?.value||'totale';
   const valeur=+document.getElementById('vt_remise_valeur')?.value||0;
-  if(type==='kg')return Math.round(valeur*getTotalQteVente());
-  if(type==='sac')return Math.round(valeur*getTotalSacsVente());
-  return Math.round(valeur);
+  if(valeur<=0)return 0;
+  if(type==='kg') return Math.round(valeur*Number(qte||0));
+  if(type==='sac')return Math.round(valeur*Number(nbSacs||0));
+  return Math.round(valeur); // totale
 }
 
-// Met à jour le libellé du champ valeur + l'affichage du total remisé
-function majAffichageRemise(remise){
+// Met à jour le libellé du champ remise selon le type choisi.
+function majLabelRemise(){
   const type=document.getElementById('vt_remise_type')?.value||'totale';
   const lbl=document.getElementById('vt-remise-valeur-label');
-  if(lbl)lbl.textContent=type==='kg'?'Remise par kg (F/kg)':type==='sac'?'Remise par sac (F/sac)':'Montant total (F)';
-  const calcEl=document.getElementById('vt-remise-calc');
-  if(calcEl){
-    if((type==='kg'||type==='sac')&&remise>0){
-      calcEl.style.display='block';
-      calcEl.textContent='➜ Remise appliquée : '+fmt(remise)+' F';
-    }else{
-      calcEl.style.display='none';
-    }
-  }
+  if(lbl)lbl.textContent=type==='kg'?'Remise par kg (F/kg)':type==='sac'?'Remise par sac (F/sac)':'Remise — montant total (F)';
 }
 
 // Affiche/masque le champ « Autorisé par » selon la case
@@ -200,14 +192,23 @@ function calcVente(){
   const prix=+document.getElementById('vt_prix')?.value||0;
   const remis=+document.getElementById('vt_paye')?.value||0;
 
-  // Total depuis les lignes déjà ajoutées + ligne en cours
-  const totalLignes=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
-  const ligneEnCours=Math.round(qte*prix);
-  const sousTotal=totalLignes||(ligneEnCours);
-  // Remise déduite du sous-total (type : totale / par kg / par sac)
-  const remise=computeRemiseVente();
-  majAffichageRemise(remise);
-  const total=Math.max(0,sousTotal-remise);
+  // montant_ligne des lignes ajoutées = déjà NET de remise.
+  let sousTotal, remise, total;
+  if(VT_LIGNES.length){
+    total     = VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
+    remise    = VT_LIGNES.reduce((s,l)=>s+Number(l.remise||0),0);
+    sousTotal = total + remise;
+  } else {
+    // Aperçu de la ligne en cours de saisie
+    const brut = Math.round(qte*prix);
+    const remL = computeRemiseLigneVente(qte, nb);
+    sousTotal  = brut;
+    remise     = Math.min(remL, brut);
+    total      = Math.max(0, brut - remise);
+  }
+  majLabelRemise();
+  const remiseTotEl=document.getElementById('vt-remise-totale');
+  if(remiseTotEl)remiseTotEl.textContent=fmt(remise)+' F';
 
   // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
   // Si remis < total → reste à payer
@@ -326,11 +327,10 @@ async function saveVente(){
     notify(nomComplet+' enregistré comme client ✓','gold');
   }
 
-  const sousTotal=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
-  // Remise déduite du sous-total
-  const remiseMontant=computeRemiseVente();
+  // montant_ligne = déjà net de remise ; remise_montant = somme des remises de lignes
+  const remiseMontant=VT_LIGNES.reduce((s,l)=>s+Number(l.remise||0),0);
+  const total=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
   const remiseValidee=document.getElementById('vt_remise_validee')?.checked||false;
-  const total=Math.max(0,sousTotal-remiseMontant);
   // Calcul monnaie : si remis >= total, payé conservé = total et rendu = remis - total
   const paye = remis >= total ? total : remis;
   const monnaie = remis > total ? (remis - total) : 0;
@@ -373,6 +373,7 @@ async function saveVente(){
       vente_id:vente.id,admin_id:GP_ADMIN_ID,
       formule_nom:l.formule_nom,quantite:l.quantite,
       prix_unitaire:l.prix_unitaire,montant_ligne:l.montant_ligne,
+      remise:l.remise||0,
       type_prix:l.type_prix,
       type_produit:l.type_produit||'formule',
       sous_type:l.sous_type||null,
@@ -1024,12 +1025,17 @@ function ajouterLigneVente(){
   const prixUnit = +document.getElementById('vt_prix')?.value || 0;
   if(!prixUnit){ err.textContent = typeProduit==='ferme' ? 'Le prix/unité est requis.' : 'Le prix/kg est requis.'; return; }
 
+  // Remise de la ligne (selon le champ remise du formulaire), plafonnée au montant brut
+  const montantBrut = Math.round(qte * prixUnit);
+  const remiseLigne = Math.min(computeRemiseLigneVente(qte, nbSacs), montantBrut);
+
   // Construire la ligne (formule_nom sert d'étiquette dans tous les cas)
   const ligne = {
     formule_nom: produitNom,
     quantite: qte,
     prix_unitaire: prixUnit,
-    montant_ligne: Math.round(qte * prixUnit),
+    remise: remiseLigne,
+    montant_ligne: Math.max(0, montantBrut - remiseLigne),  // NET de remise
     conditionnement: cond,
     nb_sacs: nbSacs,
     type_produit: typeProduit,         // 'formule' | 'mp' | 'ferme'
@@ -1050,7 +1056,7 @@ function ajouterLigneVente(){
   }
 
   // Reset champs
-  ['vt_qte','vt_nb_sacs','vt_prix','vt_ferme_desc'].forEach(id => {
+  ['vt_qte','vt_nb_sacs','vt_prix','vt_prix_sac','vt_remise_valeur','vt_ferme_desc'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
   if(typeProduit === 'formule'){
@@ -1080,6 +1086,7 @@ async function renderLignesVente(){
       ${VT_LIGNES.map((l,i)=>`<tr>
         <td style="font-weight:600">${l.type_produit==='mp'?'🌾 ':''}${l.formule_nom}
           <span class="badge ${l.type_produit==='mp'?'bdg-b':l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_produit==='mp'?'MP':l.type_prix||'detail'}</span>
+          ${Number(l.remise)>0?`<div style="font-size:9px;color:var(--red)">remise −${fmt(l.remise)} F</div>`:''}
         </td>
         <td class="num">${l.quantite}</td>
         <td class="num">${fmt(l.prix_unitaire)} F</td>
@@ -1235,6 +1242,7 @@ function onConditionnementChange(){
   const nbInput=document.getElementById('vt_nb_sacs');
   const qteInput=document.getElementById('vt_qte');
   const prixSacWrap=document.getElementById('vt-prix-sac-wrap');
+  const remiseTypeEl=document.getElementById('vt_remise_type');
 
   if(val==='kg'){
     // Mode vrac — saisir directement les kg
@@ -1243,6 +1251,7 @@ function onConditionnementChange(){
     if(nbInput)nbInput.value='';
     if(qteInput){qteInput.value='';qteInput.placeholder='Ex: 5';}
     if(prixSacWrap)prixSacWrap.style.display='none';
+    if(remiseTypeEl)remiseTypeEl.value='kg'; // remise par kg en mode vrac
   } else {
     // Mode sacs
     if(nbWrap)nbWrap.style.display='block';
@@ -1250,7 +1259,9 @@ function onConditionnementChange(){
     if(qteInput){qteInput.value='';qteInput.placeholder='';}
     if(prixSacWrap)prixSacWrap.style.display='block';
     syncPrixVente('kg'); // recalcule le prix/sac avec le nouveau poids
+    if(remiseTypeEl)remiseTypeEl.value='sac'; // remise par sac en mode sacs
   }
+  majLabelRemise();
   calcVente();
 }
 
@@ -1420,9 +1431,13 @@ async function envoyerWAVenteAuto(venteId,client,lignes,total,paye){
   const especeEmoji={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
   const formuleStr=L.map(l=>l.formule_nom).join(', ');
   const especeIcon=Object.entries(especeEmoji).find(([k])=>formuleStr.toLowerCase().includes(k))?.[1]||'🌾';
-  let produitsLine=L.map(l=>`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`).join('\n');
-  const remiseWA=L.reduce((s,l)=>s+Number(l.montant_ligne||0),0)-Number(total||0);
-  if(remiseWA>0) produitsLine += `\n   🎁 Remise accordée : *-${fmt(remiseWA)} F*`;
+  let produitsLine=L.map(l=>{
+    let s=`   🌾 ${l.formule_nom} — ${l.quantite} kg × ${fmt(l.prix_unitaire)} F = *${fmt(l.montant_ligne)} F*`;
+    if(Number(l.remise||0)>0) s+=` _(remise −${fmt(l.remise)} F)_`;
+    return s;
+  }).join('\n');
+  const remiseWA=L.reduce((s,l)=>s+Number(l.remise||0),0);
+  if(remiseWA>0) produitsLine += `\n   🎁 Remise totale : *-${fmt(remiseWA)} F*`;
   const{data:histo}=await SB.from('gp_ventes').select('montant_total').eq('admin_id',GP_ADMIN_ID).eq('client_id',client.id);
   const nbAchats=(histo||[]).length;
   const totalHisto=(histo||[]).reduce((s,x)=>s+Number(x.montant_total||0),0);
