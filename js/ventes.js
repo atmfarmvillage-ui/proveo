@@ -693,6 +693,7 @@ async function renderVentes(){
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(v.montant_total)} F</td>`:''}
       <td><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}">${v.statut_paiement==='paye'?'✅':'⚠'}</span></td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">
+        ${v.statut_paiement!=='paye'?`<button class="btn btn-g btn-sm" onclick="ouvrirPaiementVente('${v.id}')" title="Encaisser un paiement" style="padding:4px 7px">💳</button>`:''}
         <button class="btn btn-out btn-sm" onclick="envoyerWAVente('${v.id}')" title="WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3);padding:4px 7px">📲</button>
         <button class="btn btn-print btn-sm" onclick="imprimerVente('${encodeURIComponent(JSON.stringify(v))}')">🖨️</button>
         ${GP_ROLE==='admin'?`
@@ -1306,6 +1307,67 @@ async function saveModifierVente(){
   if(error){notify('Erreur: '+error.message,'r');return;}
   fermerModifierVente();renderVentes();
   notify('Vente modifiée ✓','gold');
+}
+
+// ── ENCAISSER UN PAIEMENT (solde d'une vente partielle/impayée) ──
+async function ouvrirPaiementVente(id){
+  const{data:v}=await SB.from('gp_ventes').select('*').eq('id',id).maybeSingle();
+  if(!v){notify('Vente introuvable','r');return;}
+  const total=Number(v.montant_total||0), paye=Number(v.montant_paye||0);
+  document.getElementById('pmv-vente-id').value=v.id;
+  document.getElementById('pmv-client').textContent=v.client_nom||'Client comptant';
+  document.getElementById('pmv-total').textContent=fmt(total)+' F';
+  document.getElementById('pmv-deja').textContent=fmt(paye)+' F';
+  document.getElementById('pmv-reste').textContent=fmt(Math.max(0,total-paye))+' F';
+  document.getElementById('pmv-montant').value='';
+  document.getElementById('pmv-err').textContent='';
+  document.getElementById('modal-paiement-vente').style.display='flex';
+}
+
+function fermerPaiementVente(){
+  document.getElementById('modal-paiement-vente').style.display='none';
+}
+
+async function savePaiementVente(){
+  const id=document.getElementById('pmv-vente-id').value;
+  const montant=+document.getElementById('pmv-montant').value||0;
+  const mode=document.getElementById('pmv-mode').value||'especes';
+  const err=document.getElementById('pmv-err');
+  if(!id){err.textContent='Vente introuvable.';return;}
+  if(montant<=0){err.textContent='Entrez le montant encaissé.';return;}
+  const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye,point_vente').eq('id',id).maybeSingle();
+  if(!v){err.textContent='Vente introuvable.';return;}
+  const total=Number(v.montant_total||0);
+  const reste=Math.max(0,total-Number(v.montant_paye||0));
+  if(reste<=0){err.textContent='Cette vente est déjà soldée.';return;}
+  const montantApplique=Math.min(montant,reste);
+  const nouveauPaye=Number(v.montant_paye||0)+montantApplique;
+  const statut=nouveauPaye>=total?'paye':'partiel';
+  const{error}=await SB.from('gp_ventes').update({
+    montant_paye:nouveauPaye,statut_paiement:statut
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  // Mouvement de caisse (entrée) — le solde encaissé entre en caisse du PDV
+  try{
+    const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
+    const{data:caisse}=await SB.from('gp_caisses').select('id')
+      .eq('admin_id',GP_ADMIN_ID).eq('point_vente',v.point_vente||'').maybeSingle();
+    if(caisse){
+      await SB.from('gp_mouvements_caisse').insert({
+        admin_id:GP_ADMIN_ID,caisse_id:caisse.id,
+        type:'entree',categorie:'vente',
+        montant:montantApplique,date_mouvement:today(),
+        description:'Solde vente '+id.slice(0,8)+' ('+modeLabel+')',
+        vente_id:id,
+        enregistre_par:GP_USER?.id,
+        enregistre_par_nom:GP_USER?.email?.split('@')[0]
+      });
+    }
+  }catch(e){}
+  fermerPaiementVente();
+  renderVentes();
+  const monnaie=montant-montantApplique;
+  notify(`Paiement de ${fmt(montantApplique)} F encaissé ✓`+(statut==='paye'?' — vente soldée 🎉':'')+(monnaie>0?` · Rendre ${fmt(monnaie)} F`:''),'gold');
 }
 
 async function envoyerWAVente(id){
