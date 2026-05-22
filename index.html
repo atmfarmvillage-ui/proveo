@@ -629,9 +629,13 @@
           <label id="vt-qte-label">Quantité (kg)</label>
           <input type="number" id="vt_qte" placeholder="5" oninput="calcVente();mettreAJourLigneVente();">
         </div>
+        <div class="fr" id="vt-prix-sac-wrap" style="display:none">
+          <label>Prix/sac (FCFA)</label>
+          <input type="number" id="vt_prix_sac" placeholder="8750" oninput="syncPrixVente('sac');calcVente()">
+        </div>
         <div class="fr">
           <label>Prix/kg (FCFA)</label>
-          <input type="number" id="vt_prix" placeholder="350" oninput="calcVente()">
+          <input type="number" id="vt_prix" placeholder="350" oninput="syncPrixVente('kg');calcVente()">
           <div id="vt-cout-info" style="font-size:9px;color:var(--textm);margin-top:2px"></div>
         </div>
       </div>
@@ -767,7 +771,10 @@
       <div class="fr"><label>Description</label><input type="text" id="dep_desc" placeholder="Description de la dépense"></div>
       <div class="fg2">
         <div class="fr"><label>Montant (FCFA)</label><input type="number" id="dep_montant" placeholder="25000"></div>
-        <div class="fr"><label>Bénéficiaire</label><input type="text" id="dep_benef" placeholder="Fournisseur / Personne"></div>
+        <div class="fr"><label>Bénéficiaire</label>
+          <input type="text" id="dep_benef" list="dep-fourn-list" placeholder="Fournisseur / Personne" autocomplete="off">
+          <datalist id="dep-fourn-list"></datalist>
+        </div>
       </div>
       <div class="fr"><label>Point de vente</label><input type="text" id="dep_pv" placeholder="Dépôt principal"></div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveDep()">✓ Enregistrer</button>
@@ -1218,6 +1225,39 @@
       <div style="display:flex;gap:8px">
         <button class="btn btn-g" onclick="saveEquipe()" style="flex:1;justify-content:center">➕ Ajouter</button>
         <button class="btn btn-out" onclick="fermerModalEq()" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MODIFIER UN MEMBRE -->
+  <div id="modal-modifier-membre" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalMembre()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">✏️ Modifier le membre</div>
+        <button onclick="fermerModalMembre()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <input type="hidden" id="em_id">
+      <div class="fr"><label>Nom complet *</label><input type="text" id="em_nom" placeholder="Marie Koffi"></div>
+      <div class="fr"><label>WhatsApp / Téléphone</label><input type="tel" id="em_tel" placeholder="+228 90 00 00 00"></div>
+      <div class="fr"><label>Rôle</label>
+        <select id="em_role">
+          <option value="secretaire">Secrétaire (saisie uniquement)</option>
+          <option value="logistique">Logistique (achats MP)</option>
+          <option value="technicien">Technicien nutritionniste (formules & production)</option>
+          <option value="daf">DAF (validation financière)</option>
+          <option value="gerant">Gérant (représentant de l'administration)</option>
+          <option value="directeur">Directeur Stratégique Commercial</option>
+          <option value="admin">Admin (accès complet)</option>
+        </select>
+      </div>
+      <div class="fr"><label>Point de vente</label>
+        <select id="em_pv"><option value="">— Siège principal —</option></select>
+      </div>
+      <div style="font-size:10px;color:var(--textm);margin-bottom:10px">L'email de connexion ne se modifie pas ici.</div>
+      <div class="a-err" id="em_err"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="saveModificationMembre()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+        <button class="btn btn-out" onclick="fermerModalMembre()" style="flex:1;justify-content:center">Annuler</button>
       </div>
     </div>
   </div>

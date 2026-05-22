@@ -17,7 +17,7 @@ async function renderDashboard(){
   const[
     r1,r2,r3,r4,r5,r6,r7,r8
   ]=await Promise.all([
-    safe(SB.from('gp_ventes').select('montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
+    safe(SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_ventes').select('id,client_id,montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date,recu_imprime,wa_envoye,sms_envoye').eq('admin_id',GP_ADMIN_ID).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
     safe(SB.from('gp_depenses').select('montant,date').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_achats_paiements').select('montant,date_paiement').eq('admin_id',GP_ADMIN_ID).gte('date_paiement',mDebut).lte('date_paiement',mFin)),

@@ -786,7 +786,9 @@ function filtrerFormuleSelect(selectId, searchId){
   const allF=getAllFormules();
   const groups={};
   allF.forEach(f=>{
-    if(!search||normalizeSearch(f.nom).includes(search)||normalizeSearch(f.espece).includes(search)){
+    // Recherche élargie : nom + espèce + catégorie (stade). "ponte" retrouve aussi les pondeuses.
+    const hay=normalizeSearch([f.nom,f.espece,f.stade,f.espece==='pondeuse'?'ponte':''].filter(Boolean).join(' '));
+    if(!search||hay.includes(search)){
       if(!groups[f.espece])groups[f.espece]=[];
       groups[f.espece].push(f);
     }
