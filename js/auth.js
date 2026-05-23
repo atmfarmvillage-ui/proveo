@@ -287,8 +287,8 @@ function applyRoleRestrictions(){
 // ── ROUTER COMPLET ────────────────────────────────
 var PAGE_RENDERERS = {
   dashboard:     renderDashboard,
-  stock:         renderStockNiveaux,
-  matieres:      renderMatieresPremieresPage,
+  stock:         function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderStockNiveaux(); },
+  matieres:      function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderMatieresPremieresPage(); },
   inventaire:    renderInventaire,
   inventaire_physique: function(){
     const el=document.getElementById('invp-mois');
@@ -298,6 +298,7 @@ var PAGE_RENDERERS = {
   production:    renderLots,
   rapport:       renderRapport,
   formules:      function(){
+    if(typeof populateFournisseurSelect==='function') populateFournisseurSelect();
     loadFormules().then(()=>{
       renderPrixFormules();
       if(typeof renderCustomFormules==='function') renderCustomFormules();

@@ -149,7 +149,7 @@ async function populateFournisseurSelect(){
   const{data}=await SB.from('gp_fournisseurs').select('id,nom')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
   const F=data||[];
-  ['achat_fournisseur'].forEach(id=>{
+  ['achat_fournisseur','modif_fournisseur'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
     const valeurActuelle=el.value; // Sauvegarder la sélection
@@ -157,6 +157,11 @@ async function populateFournisseurSelect(){
       F.map(f=>`<option value="${f.id}">${f.nom}</option>`).join('');
     if(valeurActuelle)el.value=valeurActuelle; // Restaurer la sélection
   });
+  // Datalist partagée pour tous les champs libres "Fournisseur" (Stock MP, Formules & Prix, etc.)
+  const dl=document.getElementById('fourn-list');
+  if(dl){
+    dl.innerHTML=F.map(f=>`<option value="${(f.nom||'').replace(/"/g,'&quot;')}"></option>`).join('');
+  }
 }
 
 // ── BILAN FOURNISSEUR ─────────────────────────────
