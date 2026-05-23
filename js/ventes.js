@@ -23,9 +23,9 @@ function rechercherClientTel(){
   results.innerHTML=liste.map(c=>{
     const detteBadge=Number(c.solde_impaye||0)>0?`<span style="color:var(--red);font-size:9px"> · Dette: ${fmt(c.solde_impaye)} F</span>`:'';
     return`<div onclick="selectionnerClientVente('${c.id}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);transition:background .15s"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);transition:background .15s;color:var(--text)"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
-      <div style="font-weight:600;font-size:12px">${c.nom}${detteBadge}</div>
+      <div style="font-weight:600;font-size:12px;color:var(--text)">${c.nom}${detteBadge}</div>
       <div style="font-size:10px;color:var(--textm)">${c.telephone||'—'} · ${c.nom_ferme||''} ${c.localite?'· '+c.localite:''} · <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-b'}" style="font-size:8px">${c.type_client==='gros'?'GROS':'DÉTAIL'}</span></div>
     </div>`;
   }).join('');
@@ -764,12 +764,18 @@ async function updateVentesKPIs(){
 }
 
 async function renderDep(){
-  // Datalist fournisseurs pour le champ Bénéficiaire (liste déroulante + recherche)
+  // Datalist Bénéficiaire = fournisseurs + clients enregistrés (recherche + auto-complétion)
   try{
-    const{data:fournDL}=await SB.from('gp_fournisseurs').select('nom')
-      .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
+    const[{data:fournDL},{data:clientsDL}]=await Promise.all([
+      SB.from('gp_fournisseurs').select('nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom'),
+      SB.from('gp_clients').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom')
+    ]);
     const dl=document.getElementById('dep-fourn-list');
-    if(dl)dl.innerHTML=(fournDL||[]).map(f=>`<option value="${(f.nom||'').replace(/"/g,'&quot;')}"></option>`).join('');
+    if(dl){
+      const fourns=(fournDL||[]).map(f=>`<option value="${(f.nom||'').replace(/"/g,'&quot;')}">Fournisseur</option>`);
+      const cls=(clientsDL||[]).map(c=>`<option value="${(c.nom||'').replace(/"/g,'&quot;')}">Client</option>`);
+      dl.innerHTML=[...fourns,...cls].join('');
+    }
   }catch(e){}
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
