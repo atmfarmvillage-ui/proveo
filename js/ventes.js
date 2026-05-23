@@ -303,6 +303,7 @@ async function saveVente(){
   const err=document.getElementById('vt_err');
 
   if(!VT_LIGNES.length){err.textContent='Ajoutez au moins un produit.';return;}
+  if(!clientId){err.textContent='Sélectionnez un client (recherche ou ➕ Nouveau client).';return;}
 
   // ── NOUVEAU CLIENT ──────────────────────────────
   if(clientId==='__nouveau__'){
