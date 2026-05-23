@@ -318,7 +318,7 @@
             <div class="fr"><label>Protéines (%)</label><input type="number" id="nmp_prot" placeholder="44" step="0.1"></div>
             <div class="fr"><label>EM (kcal/kg)</label><input type="number" id="nmp_em" placeholder="2770"></div>
           </div>
-          <div class="fr"><label>Fournisseur</label><input type="text" id="nmp_fourn" placeholder="Marché de Lomé..."></div>
+          <div class="fr"><label>Fournisseur</label><input type="text" id="nmp_fourn" list="fourn-list" placeholder="Marché de Lomé..." autocomplete="off"></div>
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn btn-g btn-sm" onclick="saveNouvelleMP()" style="flex:1;justify-content:center">✓ Enregistrer</button>
             <button class="btn btn-out btn-sm" onclick="toggleNouvelleMP()" style="flex:1;justify-content:center">Annuler</button>
@@ -330,7 +330,7 @@
           <div class="fr"><label>Prix/kg (FCFA) <span style="font-size:9px;color:var(--textm);font-weight:400;text-transform:none">🔒 depuis fiche MP</span></label><input type="number" id="mp_prix" placeholder="200" readonly style="background:rgba(30,51,32,.3);color:var(--textm);cursor:not-allowed"></div>
         </div>
         <div class="fg2">
-          <div class="fr"><label>Fournisseur</label><input type="text" id="mp_fourn" placeholder="Nom fournisseur"></div>
+          <div class="fr"><label>Fournisseur</label><input type="text" id="mp_fourn" list="fourn-list" placeholder="Nom fournisseur" autocomplete="off"></div>
           <div class="fr"><label>Référence BL</label><input type="text" id="mp_ref" placeholder="BL-2026-001"></div>
         </div>
         <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveMPEntree()">📥 Enregistrer la réception</button>
@@ -398,7 +398,7 @@
         <div class="fr"><label>Prix/kg (FCFA)</label><input type="number" id="mpp_prix" placeholder="400"></div>
         <div class="fr"><label>Seuil critique (kg)</label><input type="number" id="mpp_seuil" placeholder="200" value="200"></div>
       </div>
-      <div class="fr"><label>Fournisseur</label><input type="text" id="mpp_fourn" placeholder="Marché de Lomé..."></div>
+      <div class="fr"><label>Fournisseur</label><input type="text" id="mpp_fourn" list="fourn-list" placeholder="Marché de Lomé..." autocomplete="off"></div>
 
       <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
         <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:.5px">🌾 Énergie & Protéines</summary>
@@ -526,7 +526,7 @@
         <button onclick="ouvrirNouveauClient()" class="btn btn-g btn-sm" style="width:100%;justify-content:center">
           ➕ Nouveau client
         </button>
-        <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:#0D1120;color:var(--text);border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.28)"></div>
+        <div id="vt_client_results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--card);color:var(--text);border:1px solid rgba(22,163,74,.4);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.28)"></div>
       </div>
 
       <!-- CLIENT SÉLECTIONNÉ -->
@@ -800,6 +800,7 @@
         <div class="fr"><label>Bénéficiaire</label>
           <input type="text" id="dep_benef" list="dep-fourn-list" placeholder="Fournisseur / Personne" autocomplete="off">
           <datalist id="dep-fourn-list"></datalist>
+          <datalist id="fourn-list"></datalist>
         </div>
       </div>
       <div class="fr"><label>Point de vente</label><input type="text" id="dep_pv" placeholder="Dépôt principal"></div>
@@ -1107,7 +1108,7 @@
       </div>
       <div class="fg2">
         <div class="fr"><label>Seuil alerte (kg)</label><input type="number" id="ni_seuil" value="200"></div>
-        <div class="fr"><label>Fournisseur</label><input type="text" id="ni_fourn" placeholder="Marché..."></div>
+        <div class="fr"><label>Fournisseur</label><input type="text" id="ni_fourn" list="fourn-list" placeholder="Marché..." autocomplete="off"></div>
       </div>
       <button class="btn btn-g btn-sm" onclick="saveIngredient()">➕ Ajouter manuellement</button>
       <div class="a-err" id="ni_err"></div>
