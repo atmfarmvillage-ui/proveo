@@ -519,7 +519,7 @@
 
       <!-- RECHERCHE CLIENT -->
       <div class="fr" style="position:relative;margin-bottom:6px">
-        <label>🔍 Rechercher un client</label>
+        <label>🔍 Rechercher un client <span style="color:var(--red)">*</span></label>
         <input type="text" id="vt_tel_search" placeholder="Tapez nom ou téléphone..." 
           oninput="rechercherClientTel()" onfocus="rechercherClientTel()" 
           autocomplete="off" style="width:100%;margin-bottom:6px">
@@ -725,7 +725,7 @@
               <option value="">Tous statuts</option>
               <option value="paye">Payés</option>
               <option value="partiel">Partiels</option>
-              <option value="credit">Crédit</option>
+              <option value="impaye">Impayés</option>
             </select>
           </div>
         </div>
