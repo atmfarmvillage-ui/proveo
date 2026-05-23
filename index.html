@@ -577,9 +577,22 @@
             style="flex:1;min-width:90px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
             🚜 Produit ferme
           </button>
+          <button type="button" id="vt_type_prestation_btn" onclick="basculerTypeProduitVente('prestation')"
+            style="flex:1;min-width:90px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">
+            🛠 Prestation
+          </button>
         </div>
         <input type="hidden" id="vt_type_produit" value="formule">
         <input type="hidden" id="vt_sous_type" value="">
+      </div>
+
+      <!-- PRESTATION (décorticage, mouture…) -->
+      <div class="fr" id="vt-prestation-wrap" style="margin-bottom:8px;display:none">
+        <label>Service</label>
+        <select id="vt_service" onchange="onVenteServiceChange()" style="margin-bottom:6px"><option value="">— Sélectionner —</option></select>
+        <label style="font-size:10px;color:var(--textm)">Détail matière travaillée (optionnel)</label>
+        <input type="text" id="vt_prestation_detail" placeholder="Ex: Maïs 200 kg, Soja brut…" style="font-size:12px">
+        <div id="vt-prestation-info" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
       </div>
 
       <!-- PRODUIT FERME (lapin vif / œuf / poulet / autre) -->
