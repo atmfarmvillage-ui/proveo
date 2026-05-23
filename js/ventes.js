@@ -127,6 +127,40 @@ async function loadStockVente(){
   }catch(e){}
 }
 
+// Catalogue des prestations (décorticage, mouture…) — alimente le select Service
+let GP_SERVICES = [];
+async function loadServices(){
+  try{
+    const{data}=await SB.from('gp_services').select('id,nom,unite,prix_unitaire,actif')
+      .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('nom');
+    GP_SERVICES = data || [];
+    const sel = document.getElementById('vt_service');
+    if(sel){
+      sel.innerHTML = '<option value="">— Sélectionner —</option>' +
+        GP_SERVICES.map(s=>`<option value="${s.id}">${s.nom} (${s.prix_unitaire} F/${s.unite})</option>`).join('');
+    }
+  }catch(e){ GP_SERVICES = []; }
+}
+
+function onVenteServiceChange(){
+  const id = document.getElementById('vt_service')?.value;
+  const s = GP_SERVICES.find(x=>x.id===id);
+  if(!s){ document.getElementById('vt-prestation-info').textContent=''; return; }
+  // Auto-remplit prix unitaire et adapte le conditionnement
+  const prixEl = document.getElementById('vt_prix');
+  if(prixEl) prixEl.value = s.prix_unitaire || 0;
+  // Force le conditionnement selon l'unité du service
+  const condEl = document.getElementById('vt_poids_sac');
+  if(condEl){
+    if(s.unite==='sac'){ condEl.value='50'; }
+    else { condEl.value='kg'; }
+    if(typeof onConditionnementChange==='function') onConditionnementChange();
+  }
+  document.getElementById('vt-prestation-info').textContent =
+    s.unite==='forfait' ? 'Forfait — entrez 1 en quantité.' : `Tarif : ${s.prix_unitaire} F par ${s.unite}.`;
+  calcVente();
+}
+
 // ── REMISE ────────────────────────────────────────
 // Quantité totale de la vente (lignes ajoutées, ou ligne en cours de saisie).
 function getTotalQteVente(){
@@ -422,6 +456,7 @@ async function saveVente(){
     for(const l of VT_LIGNES){
       if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
       if(l.type_produit==='ferme') continue; // les produits ferme ne sont pas du stock provenderie
+      if(l.type_produit==='prestation') continue; // les prestations ne touchent aucun stock
       const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
         .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE)
         .eq('formule_nom',l.formule_nom).maybeSingle();
@@ -783,45 +818,52 @@ async function deleteDep(id){
 
 function mettreAJourLigneVente(){} // stub — mise à jour manuelle uniquement
 
-// ── BASCULE TYPE PRODUIT (formule / matière première / produit ferme) ──
+// ── BASCULE TYPE PRODUIT (formule / matière première / produit ferme / prestation) ──
 function basculerTypeProduitVente(type){
   document.getElementById('vt_type_produit').value = type;
   document.getElementById('vt_sous_type').value = type==='ferme' ? '' : '';
   const btnF = document.getElementById('vt_type_formule_btn');
   const btnM = document.getElementById('vt_type_mp_btn');
   const btnFE = document.getElementById('vt_type_ferme_btn');
+  const btnP = document.getElementById('vt_type_prestation_btn');
   const wrapF = document.getElementById('vt-formule-wrap');
   const wrapM = document.getElementById('vt-mp-wrap');
   const wrapFE = document.getElementById('vt-ferme-wrap');
+  const wrapP = document.getElementById('vt-prestation-wrap');
   const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
   const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
   const setActif = (btn, on) => {
+    if(!btn) return;
     btn.style.cssText = (on ? btn.style.cssText.replace(inactif,'')+';'+actif
                             : btn.style.cssText.replace(actif,'')+';'+inactif);
   };
   setActif(btnF, type==='formule');
   setActif(btnM, type==='mp');
   setActif(btnFE, type==='ferme');
+  setActif(btnP, type==='prestation');
   wrapF.style.display  = type==='formule' ? 'block' : 'none';
   wrapM.style.display  = type==='mp' ? 'block' : 'none';
   wrapFE.style.display = type==='ferme' ? 'block' : 'none';
+  if(wrapP) wrapP.style.display = type==='prestation' ? 'block' : 'none';
   // Cacher le conditionnement (sac kg) pour les produits ferme (vendus à l'unité)
   const condWrap = document.getElementById('vt_poids_sac')?.closest('.fr');
   if(condWrap) condWrap.style.display = type==='ferme' ? 'none' : 'block';
   // Adapter les labels Quantité / Prix selon le type
   const qteLbl = document.getElementById('vt-qte-label');
-  const prixLbl = document.querySelector('label[for="vt_prix"]') || qteLbl?.parentElement?.parentElement?.querySelector('.fr:last-child label');
-  if(qteLbl) qteLbl.textContent = type==='ferme' ? 'Quantité (unités)' : 'Quantité (kg)';
+  if(qteLbl) qteLbl.textContent = type==='ferme' ? 'Quantité (unités)' : type==='prestation' ? 'Quantité travaillée (kg)' : 'Quantité (kg)';
   // Le label "Prix/kg" est inline, on cible son texte par parent
   const prixInput = document.getElementById('vt_prix');
   const prixLab = prixInput?.parentElement?.querySelector('label');
-  if(prixLab) prixLab.textContent = type==='ferme' ? 'Prix/unité (FCFA)' : 'Prix/kg (FCFA)';
+  if(prixLab) prixLab.textContent = type==='ferme' ? 'Prix/unité (FCFA)' : type==='prestation' ? 'Tarif (F/unité)' : 'Prix/kg (FCFA)';
 
   if(type === 'mp') populateSelectMPVente();
+  if(type === 'prestation') loadServices();
   // Reset champs prix/qté
-  ['vt_qte','vt_nb_sacs','vt_prix','vt_ferme_desc'].forEach(id => {
+  ['vt_qte','vt_nb_sacs','vt_prix','vt_ferme_desc','vt_prestation_detail'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  const svcSel = document.getElementById('vt_service'); if(svcSel) svcSel.value = '';
+  const svcInfo = document.getElementById('vt-prestation-info'); if(svcInfo) svcInfo.textContent = '';
   // Reset boutons sous-type ferme
   document.querySelectorAll('.vt-ferme-btn').forEach(b=>{
     b.style.cssText = b.style.cssText.replace(actif,'')+';'+inactif;
@@ -1013,6 +1055,12 @@ function ajouterLigneVente(){
     const desc = document.getElementById('vt_ferme_desc')?.value.trim();
     const labels = {lapin_vivant:'🐰 Lapin vivant', oeuf:'🥚 Œuf', poulet:'🐔 Poulet', autre_ferme:'📦 Produit ferme'};
     produitNom = labels[sousType] + (desc ? ` — ${desc}` : '');
+  } else if(typeProduit === 'prestation'){
+    const svcId = document.getElementById('vt_service')?.value;
+    const svc = GP_SERVICES.find(x=>x.id===svcId);
+    if(!svc){ err.textContent = 'Sélectionnez un service (Décorticage, Mouture…).'; return; }
+    const detail = document.getElementById('vt_prestation_detail')?.value.trim();
+    produitNom = '🛠 ' + svc.nom + (detail ? ` — ${detail}` : '');
   } else {
     produitNom = document.getElementById('vt_formule')?.value;
     if(!produitNom){ err.textContent = 'Sélectionnez une formule.'; return; }
@@ -1040,9 +1088,11 @@ function ajouterLigneVente(){
     montant_ligne: Math.max(0, montantBrut - remiseLigne),  // NET de remise
     conditionnement: cond,
     nb_sacs: nbSacs,
-    type_produit: typeProduit,         // 'formule' | 'mp' | 'ferme'
-    sous_type: typeProduit==='ferme' ? sousType : null,
-    ingredient_id: ingredientId,        // null si formule/ferme
+    type_produit: typeProduit,         // 'formule' | 'mp' | 'ferme' | 'prestation'
+    sous_type: typeProduit==='ferme'
+      ? sousType
+      : (typeProduit==='prestation' ? (document.getElementById('vt_prestation_detail')?.value.trim() || null) : null),
+    ingredient_id: ingredientId,        // null si formule/ferme/prestation
     type_prix: typeProduit==='ferme' ? 'unite' : 'detail',
   };
 
@@ -1087,7 +1137,7 @@ async function renderLignesVente(){
       <tbody>
       ${VT_LIGNES.map((l,i)=>`<tr>
         <td style="font-weight:600">${l.type_produit==='mp'?'🌾 ':''}${l.formule_nom}
-          <span class="badge ${l.type_produit==='mp'?'bdg-b':l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_produit==='mp'?'MP':l.type_prix||'detail'}</span>
+          <span class="badge ${l.type_produit==='mp'?'bdg-b':l.type_produit==='prestation'?'bdg-gold':l.type_prix==='gros'?'bdg-gold':'bdg-g'}" style="font-size:8px;margin-left:4px">${l.type_produit==='mp'?'MP':l.type_produit==='prestation'?'PRESTA':l.type_prix||'detail'}</span>
           ${Number(l.remise)>0?`<div style="font-size:9px;color:var(--red)">remise −${fmt(l.remise)} F</div>`:''}
         </td>
         <td class="num">${l.quantite}</td>

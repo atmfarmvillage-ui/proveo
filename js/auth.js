@@ -308,6 +308,7 @@ var PAGE_RENDERERS = {
   ventes: async function(){
     if(!GP_CLIENTS.length)await loadClients();
     await loadStockVente();
+    await loadServices();
     populateSelects();
     await renderVentes();
   },
