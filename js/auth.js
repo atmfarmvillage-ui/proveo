@@ -236,6 +236,7 @@ async function bootApp(user){
   // Mise à jour automatique via SW réseau-first
   try{mettreAJourPresence(true);}catch(e){}
   try{checkPendingRemises();}catch(e){}
+  try{if(typeof initNotifications==='function') initNotifications();}catch(e){}
   const lotRef=document.getElementById('lot_ref');
   if(lotRef)lotRef.value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   // Auto refresh toutes les 30s

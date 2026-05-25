@@ -14,6 +14,8 @@ async function initChat(){
   await renderChat();
   await renderPresence();
   abonnerChatRealtime();
+  // Marquer le channel comme lu (efface le badge)
+  if(typeof chatMarquerLu==='function') chatMarquerLu();
   // Mettre à jour présence toutes les 60s
   if(PRESENCE_INTERVAL) clearInterval(PRESENCE_INTERVAL);
   PRESENCE_INTERVAL = setInterval(()=>{
@@ -22,6 +24,16 @@ async function initChat(){
   }, 60000);
   // Marquer hors ligne à la fermeture
   window.addEventListener('beforeunload', ()=>mettreAJourPresence(false));
+}
+
+// Marque le channel équipe comme lu pour l'utilisateur courant (efface le badge non-lu)
+async function chatMarquerLu(){
+  if(!GP_USER?.id||!GP_ADMIN_ID) return;
+  await SB.from('gp_message_lectures').upsert({
+    user_id:GP_USER.id, admin_id:GP_ADMIN_ID, channel:'equipe',
+    last_read_at:new Date().toISOString()
+  });
+  if(typeof refreshChatBadge==='function') refreshChatBadge();
 }
 
 // ── PRÉSENCE ──────────────────────────────────────
@@ -117,11 +129,14 @@ async function renderChat(){
     const heure=new Date(m.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const date=new Date(m.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
     const isToday=new Date(m.created_at).toDateString()===new Date().toDateString();
+    const imgHtml=m.image_url
+      ?`<img src="${m.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${m.message?'6px':'0'}" onclick="window.open('${m.image_url}','_blank')">`
+      :'';
     return `<div style="display:flex;flex-direction:${estMoi?'row-reverse':'row'};gap:8px;margin-bottom:10px;align-items:flex-end">
       <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(m.auteur_nom||'?')[0].toUpperCase()}</div>
       <div style="max-width:75%">
         ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px;${estMoi?'text-align:right':''}">${m.auteur_nom} <span style="opacity:.6">· ${m.auteur_role||''}</span></div>`:''}
-        <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${m.message}</div>
+        <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${imgHtml}${m.message||''}</div>
         <div style="font-size:10px;color:var(--textm);margin-top:2px;${estMoi?'text-align:right':''}">${isToday?heure:date+' '+heure}</div>
       </div>
     </div>`;
@@ -133,9 +148,26 @@ async function renderChat(){
 
 async function envoyerMessage(){
   const inp=document.getElementById('chat-input');
-  const message=inp?.value.trim();
-  if(!message)return;
-  inp.value='';
+  const fileInp=document.getElementById('chat-file');
+  const message=(inp?.value||'').trim();
+  const file=fileInp?.files?.[0];
+  if(!message && !file) return; // rien à envoyer
+
+  // Upload image si présente
+  let imageUrl=null;
+  if(file){
+    try{
+      const blob=await chatCompresserImage(file);
+      const path=`${GP_ADMIN_ID}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+      const{error:upErr}=await SB.storage.from('chat-images').upload(path,blob,{contentType:'image/jpeg'});
+      if(upErr) throw upErr;
+      const{data:pub}=SB.storage.from('chat-images').getPublicUrl(path);
+      imageUrl=pub?.publicUrl||null;
+    }catch(e){
+      notify('Erreur upload image: '+(e.message||e),'r');
+      return;
+    }
+  }
 
   const nom=GP_USER.user_metadata?.nom||GP_USER.email?.split('@')[0]||'—';
   const{error}=await SB.from('gp_messages_equipe').insert({
@@ -143,9 +175,56 @@ async function envoyerMessage(){
     auteur_id:GP_USER.id,
     auteur_nom:nom,
     auteur_role:GP_ROLE,
-    message
+    message: message || '',
+    image_url: imageUrl
   });
-  if(error){notify('Erreur envoi message: '+error.message,'r');}
+  if(error){notify('Erreur envoi message: '+error.message,'r');return;}
+
+  // Reset champs
+  if(inp) inp.value='';
+  if(fileInp) fileInp.value='';
+  const prev=document.getElementById('chat-file-preview'); if(prev) prev.innerHTML='';
+}
+
+// Compresse une image (max 1200px, JPEG 85%) avant upload
+async function chatCompresserImage(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1200;
+        let w=img.width, h=img.height;
+        if(w>max||h>max){
+          if(w>h){ h=Math.round(h*max/w); w=max; }
+          else   { w=Math.round(w*max/h); h=max; }
+        }
+        const cv=document.createElement('canvas');
+        cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        cv.toBlob(b=>b?resolve(b):reject(new Error('Compression échouée')),'image/jpeg',0.85);
+      };
+      img.onerror=()=>reject(new Error('Image illisible'));
+      img.src=ev.target.result;
+    };
+    reader.onerror=()=>reject(new Error('Lecture fichier échouée'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Aperçu local de l'image sélectionnée
+function chatFilePreview(){
+  const fileInp=document.getElementById('chat-file');
+  const prev=document.getElementById('chat-file-preview');
+  if(!fileInp||!prev) return;
+  const f=fileInp.files?.[0];
+  if(!f){ prev.innerHTML=''; return; }
+  const url=URL.createObjectURL(f);
+  prev.innerHTML=`<div style="display:flex;align-items:center;gap:8px;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.3);border-radius:8px;padding:6px 10px;font-size:11px;margin-bottom:6px">
+    <img src="${url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px">
+    <span style="flex:1;color:var(--g6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+    <button onclick="document.getElementById('chat-file').value='';chatFilePreview()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
+  </div>`;
 }
 
 function chatKeydown(e){
@@ -178,11 +257,14 @@ function ajouterMessageRealtime(msg){
   const heure=new Date(msg.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   const div=document.createElement('div');
   div.style.cssText=`display:flex;flex-direction:${estMoi?'row-reverse':'row'};gap:8px;margin-bottom:10px;align-items:flex-end`;
+  const imgHtml=msg.image_url
+    ?`<img src="${msg.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${msg.message?'6px':'0'}" onclick="window.open('${msg.image_url}','_blank')">`
+    :'';
   div.innerHTML=`
     <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(msg.auteur_nom||'?')[0].toUpperCase()}</div>
     <div style="max-width:75%">
       ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px">${msg.auteur_nom} <span style="opacity:.6">· ${msg.auteur_role||''}</span></div>`:''}
-      <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${msg.message}</div>
+      <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${imgHtml}${msg.message||''}</div>
       <div style="font-size:10px;color:var(--textm);margin-top:2px;${estMoi?'text-align:right':''}">${heure}</div>
     </div>`;
   container.appendChild(div);
@@ -190,7 +272,14 @@ function ajouterMessageRealtime(msg){
   // Notif si pas sur la page chat
   const activePage=document.querySelector('.page.active')?.id;
   if(activePage!=='page-equipe'&&!estMoi){
-    notify(`💬 ${msg.auteur_nom} : ${msg.message.slice(0,40)}${msg.message.length>40?'...':''}`, 'gold');
+    const preview = msg.message ? msg.message.slice(0,40)+(msg.message.length>40?'...':'') : '📷 Photo';
+    notify(`💬 ${msg.auteur_nom} : ${preview}`, 'gold');
+  }
+  // Si on est sur la page chat, marquer comme lu ; sinon rafraîchir le badge
+  if(activePage==='page-equipe'){
+    if(typeof chatMarquerLu==='function') chatMarquerLu();
+  } else {
+    if(typeof refreshChatBadge==='function') refreshChatBadge();
   }
 }
 
