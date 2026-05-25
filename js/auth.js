@@ -239,16 +239,19 @@ async function bootApp(user){
   try{if(typeof initNotifications==='function') initNotifications();}catch(e){}
   const lotRef=document.getElementById('lot_ref');
   if(lotRef)lotRef.value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
-  // Auto refresh toutes les 30s
+  // Auto refresh page entière toutes les 3 min (était 30s, trop agressif).
+  // Réduit à 1 fois / 3 min car le Realtime sync ci-dessous rafraîchit déjà sur changement DB.
+  // Skip si l'onglet est caché (browser inactif).
   setInterval(()=>{
+    if(document.visibilityState!=='visible') return;
     const active=document.querySelector('.page.active')?.id?.replace('page-','');
     const pagesJamaisRefresh2=['achats','production'];
-    const pagesExclues2=['ventes','fournisseurs','clients'];
+    const pagesExclues2=['ventes','fournisseurs','clients','equipe'];
     const formulaireActif2=document.activeElement&&
       ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
     if(active&&!pagesJamaisRefresh2.includes(active)&&!(formulaireActif2&&pagesExclues2.includes(active)))showGP(active);
     checkPendingRemises();
-  },30000);
+  },180000); // 3 minutes
 
   // Realtime sync — recharger la page active à chaque changement DB
   initRealtimeSync();
@@ -687,6 +690,7 @@ function closeSidebar(){
 }
 // ── REALTIME SYNC GLOBAL ─────────────────────
 let _realtimeChannel=null;
+let _realtimeRerenderTimer=null;
 function initRealtimeSync(){
   if(!GP_ADMIN_ID)return;
   // Supprimer l'ancien canal si existe
@@ -702,6 +706,23 @@ function initRealtimeSync(){
     'gp_ingredients','gp_prix_formules','gp_points_vente'
   ];
 
+  // Re-render debounced : regroupe les rafales (équipe qui save plusieurs trucs d'affilée)
+  // en UN seul re-render après 3s d'inactivité. Skip si onglet caché ou formulaire actif.
+  function scheduleRerender(){
+    if(document.visibilityState!=='visible') return;
+    if(_realtimeRerenderTimer) clearTimeout(_realtimeRerenderTimer);
+    _realtimeRerenderTimer=setTimeout(()=>{
+      _realtimeRerenderTimer=null;
+      const active=document.querySelector('.page.active')?.id?.replace('page-','');
+      const pagesExclues=['achats','ventes','fournisseurs','clients','production','equipe'];
+      const formulaireActif=document.activeElement&&
+        ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
+      if(active&&PAGE_RENDERERS[active]&&!(formulaireActif&&pagesExclues.includes(active))){
+        try{PAGE_RENDERERS[active]();}catch(e){}
+      }
+    },3000);
+  }
+
   // Un seul canal pour tous les changements
   const channel=SB.channel('provenda-sync-'+GP_ADMIN_ID);
 
@@ -712,18 +733,12 @@ function initRealtimeSync(){
       table:table,
       filter:'admin_id=eq.'+GP_ADMIN_ID
     },()=>{
-      // Recharger les données globales si besoin
+      // Recharger les données globales si besoin (immédiat — pas debouncé)
       if(['gp_clients'].includes(table))loadClients();
       if(['gp_prix_formules'].includes(table))loadPrix();
       if(['gp_ingredients'].includes(table))loadIngredients();
-      // Rafraîchir la page active
-      const active=document.querySelector('.page.active')?.id?.replace('page-','');
-      const pagesExclues=['achats','ventes','fournisseurs','clients','production'];
-      const formulaireActif=document.activeElement&&
-        ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
-      if(active&&PAGE_RENDERERS[active]&&!(formulaireActif&&pagesExclues.includes(active))){
-        try{PAGE_RENDERERS[active]();}catch(e){}
-      }
+      // Re-render de la page active : debouncé pour éviter les rafales
+      scheduleRerender();
     });
   });
 
