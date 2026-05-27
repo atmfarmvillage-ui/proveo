@@ -133,10 +133,10 @@ async function renderChat(){
       ?`<img src="${m.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${m.message?'6px':'0'}" onclick="window.open('${m.image_url}','_blank')">`
       :'';
     return `<div style="display:flex;flex-direction:${estMoi?'row-reverse':'row'};gap:8px;margin-bottom:10px;align-items:flex-end">
-      <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(m.auteur_nom||'?')[0].toUpperCase()}</div>
+      <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(m.auteur_nom||'?')[0].toUpperCase()}</div>
       <div style="max-width:75%">
         ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px;${estMoi?'text-align:right':''}">${m.auteur_nom} <span style="opacity:.6">· ${m.auteur_role||''}</span></div>`:''}
-        <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${imgHtml}${m.message||''}</div>
+        <div style="background:${estMoi?'var(--g5)':'var(--card2)'};color:${estMoi?'#FFFFFF':'var(--text)'};border:1px solid ${estMoi?'rgba(255,255,255,.15)':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5;word-wrap:break-word">${imgHtml}${m.message||''}</div>
         <div style="font-size:10px;color:var(--textm);margin-top:2px;${estMoi?'text-align:right':''}">${isToday?heure:date+' '+heure}</div>
       </div>
     </div>`;
@@ -271,10 +271,10 @@ function ajouterMessageRealtime(msg){
     ?`<img src="${msg.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${msg.message?'6px':'0'}" onclick="window.open('${msg.image_url}','_blank')">`
     :'';
   div.innerHTML=`
-    <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(msg.auteur_nom||'?')[0].toUpperCase()}</div>
+    <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(msg.auteur_nom||'?')[0].toUpperCase()}</div>
     <div style="max-width:75%">
       ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px">${msg.auteur_nom} <span style="opacity:.6">· ${msg.auteur_role||''}</span></div>`:''}
-      <div style="background:${estMoi?'var(--vert2)':'rgba(30,45,74,.8)'};border:1px solid ${estMoi?'transparent':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5">${imgHtml}${msg.message||''}</div>
+      <div style="background:${estMoi?'var(--g5)':'var(--card2)'};color:${estMoi?'#FFFFFF':'var(--text)'};border:1px solid ${estMoi?'rgba(255,255,255,.15)':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5;word-wrap:break-word">${imgHtml}${msg.message||''}</div>
       <div style="font-size:10px;color:var(--textm);margin-top:2px;${estMoi?'text-align:right':''}">${heure}</div>
     </div>`;
   container.appendChild(div);
