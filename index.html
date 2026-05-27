@@ -2095,6 +2095,21 @@
   <div class="page-title">Configuration</div>
   <div class="page-sub">Personnalisez votre provenderie</div>
 
+  <!-- PUSH NOTIFICATIONS (système, fonctionne app fermée) -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><div class="ct-left"><span>🔔 Notifications système</span></div>
+      <span style="font-size:10px;color:var(--textm);font-weight:400">Par appareil</span>
+    </div>
+    <div id="cfg-push-status" style="font-size:11px;color:var(--textm);margin-bottom:10px;line-height:1.4">Chargement…</div>
+    <button id="cfg-push-btn" style="padding:10px 16px;border-radius:8px;border:1.5px solid var(--g4);background:var(--g4);color:#fff;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;font-size:12px">🔔 Activer les notifications</button>
+    <div style="font-size:10px;color:var(--textm);margin-top:8px;line-height:1.5">
+      Tu recevras des notifications système (sonnerie/vibration) pour :<br>
+      💬 Nouveaux messages du chat équipe<br>
+      🚨 Alertes stock matière première sous le seuil critique<br>
+      <em>iOS : nécessite d'installer l'app via Safari (icône partage → "Sur l'écran d'accueil").</em>
+    </div>
+  </div>
+
   <!-- PRÉFÉRENCE STYLE DES CHAMPS (par utilisateur, sauvegardé dans localStorage) -->
   <div class="card" style="margin-bottom:14px">
     <div class="card-title"><div class="ct-left"><span>🎨 Style des champs de saisie</span></div>
@@ -2463,6 +2478,7 @@ try{
 <script src="js/chat.js?v=2.7.0"></script>
 <script src="js/notifications.js?v=2.7.0"></script>
 <script src="js/qr_clients.js?v=2.7.0"></script>
+<script src="js/push.js?v=2.7.0"></script>
 <script src="js/reversements.js?v=2.7.0"></script>
 <script src="js/paiements_mp.js?v=2.7.0"></script>
 <script src="js/stock_pf.js?v=2.7.0"></script>

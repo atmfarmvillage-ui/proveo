@@ -184,6 +184,16 @@ async function envoyerMessage(){
   if(inp) inp.value='';
   if(fileInp) fileInp.value='';
   const prev=document.getElementById('chat-file-preview'); if(prev) prev.innerHTML='';
+
+  // ── PUSH NOTIF aux autres membres de l'équipe (Trigger A) ──
+  if(typeof pushSendToTeam === 'function'){
+    const preview = message ? (message.length>80 ? message.slice(0,80)+'…' : message) : (imageUrl ? '📷 Photo' : '');
+    pushSendToTeam(`💬 ${nom}`, preview, {
+      excludeSelf: true,
+      tag: 'chat-equipe',
+      url: '/?page=equipe'
+    });
+  }
 }
 
 // Compresse une image (max 1200px, JPEG 85%) avant upload

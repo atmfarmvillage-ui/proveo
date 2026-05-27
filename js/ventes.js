@@ -682,6 +682,8 @@ async function saveVente(){
         prix_unit:l.prix_unitaire,
         ref:'Vente '+vente.id.slice(0,8)
       });
+      // Trigger B : vérifier seuil critique après sortie MP
+      if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(l.ingredient_id);
     }
   }
 

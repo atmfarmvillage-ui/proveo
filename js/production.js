@@ -298,6 +298,8 @@ async function saveLot(){
         ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,
         prix_unit:s.ingrData.prix_actuel,lot_id:lot?.id,ref:'Production '+ref
       });
+      // Trigger B : vérifier seuil critique après sortie production
+      if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(s.ingrData.id);
     }
   }
   err.textContent='';
