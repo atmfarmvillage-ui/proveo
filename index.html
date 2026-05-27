@@ -132,6 +132,13 @@
   <!-- TABLEAU DE BORD -->
   <div class="nav-item active" onclick="showGP('dashboard')" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
 
+  <!-- VENTES & CLIENTS (en première position après Dashboard — usage quotidien) -->
+  <div class="nav-sect">💰 Ventes & Clients</div>
+  <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
+  <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">👥</span>Clients</div>
+  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">📞</span>Suivi & Appels</div>
+  <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
+
   <!-- ÉTAPE 1 : APPROVISIONNEMENT -->
   <div class="nav-sect">🛒 Approvisionnement</div>
   <div class="nav-item" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
@@ -154,13 +161,6 @@
   <div class="nav-sect">🚚 Distribution</div>
   <div class="nav-item admin-only" onclick="showGP('distribution')" data-page="distribution"><span class="nav-icon">🚚</span>Distribution PDV</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
-
-  <!-- ÉTAPE 5 : VENTES & CLIENTS -->
-  <div class="nav-sect">💰 Ventes & Clients</div>
-  <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
-  <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">👥</span>Clients</div>
-  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">📞</span>Suivi & Appels</div>
-  <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
   <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
   <div class="nav-sect">💵 Finances</div>
@@ -546,16 +546,18 @@
       <!-- NOUVEAU CLIENT (caché par défaut) -->
       <div id="vt-nouveau-client" style="display:none;background:rgba(22,163,74,.05);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:10px">
         <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">➕ Informations nouveau client</div>
-        <div class="fg2">
-          <div class="fr"><label>Nom *</label><input type="text" id="vt_cl_nom" placeholder="Koffi"></div>
-          <div class="fr"><label>Prénom</label><input type="text" id="vt_cl_prenom" placeholder="Marie"></div>
+        <div class="fr">
+          <label>Nom complet *</label>
+          <input type="text" id="vt_cl_nom" placeholder="Marie Koffi" oninput="chercherClientsSimilairesDebounced()">
         </div>
+        <!-- Suggestion clients similaires (anti-doublon) -->
+        <div id="vt-cl-similaires" style="display:none;background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:8px;padding:8px;margin-bottom:8px"></div>
         <div class="fg2">
           <div class="fr"><label>Nom de la ferme</label><input type="text" id="vt_cl_ferme" placeholder="Ferme Adekou"></div>
           <div class="fr"><label>Localité</label><input type="text" id="vt_cl_localite" placeholder="Sanguera, Lomé..."></div>
         </div>
         <div class="fg2">
-          <div class="fr"><label>Téléphone *</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00"></div>
+          <div class="fr"><label>Téléphone *</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00" oninput="chercherClientsSimilairesDebounced()"></div>
           <div class="fr"><label>Type client</label>
             <select id="vt_cl_type">
               <option value="detail">Détaillant</option>
@@ -615,6 +617,8 @@
       <!-- FORMULE -->
       <div class="fr" id="vt-formule-wrap" style="margin-bottom:8px">
         <label>Formule / Aliment</label>
+        <!-- Favoris : top 5 formules les plus vendues du PDV sur 30j (rempli par renderFavorisFormules) -->
+        <div id="vt-favoris-formules" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px"></div>
         <input type="text" id="vt_formule_search" placeholder="🔍 Taper pour filtrer (ex: lapin, ponte...)"
           oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')"
           style="margin-bottom:4px;font-size:12px">
@@ -649,7 +653,7 @@
         </div>
         <div class="fr">
           <label id="vt-qte-label">Quantité (kg)</label>
-          <input type="number" id="vt_qte" placeholder="5" oninput="calcVente();mettreAJourLigneVente();">
+          <input type="number" id="vt_qte" placeholder="5" oninput="calcVente();mettreAJourLigneVente();" onkeydown="if(event.key==='Enter'){event.preventDefault();ajouterLigneVente();}">
         </div>
         <div class="fr" id="vt-prix-sac-wrap" style="display:none">
           <label>Prix/sac (FCFA)</label>
@@ -662,25 +666,36 @@
         </div>
       </div>
 
-      <!-- REMISE SUR CE PRODUIT (par kg / par sac / total) -->
-      <div class="fg2" style="margin-bottom:6px">
-        <div class="fr">
-          <label>Remise sur ce produit</label>
-          <select id="vt_remise_type" onchange="majLabelRemise();calcVente()">
-            <option value="kg">Par kg (F/kg)</option>
-            <option value="sac">Par sac (F/sac)</option>
-            <option value="totale">Montant total (F)</option>
-          </select>
-        </div>
-        <div class="fr">
-          <label id="vt-remise-valeur-label">Remise par kg (F/kg)</label>
-          <input type="number" id="vt_remise_valeur" placeholder="0" oninput="calcVente()">
+      <!-- REMISE SUR CE PRODUIT (replie par defaut — bouton toggle) -->
+      <button type="button" id="vt-remise-toggle" onclick="toggleRemiseProduit()"
+        style="background:rgba(232,197,71,.08);border:1px dashed rgba(232,197,71,.3);color:var(--gold);padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:8px;display:inline-flex;align-items:center;gap:6px">
+        💸 <span id="vt-remise-toggle-label">Ajouter une remise</span>
+      </button>
+      <div id="vt-remise-bloc" style="display:none;background:rgba(232,197,71,.04);border:1px solid rgba(232,197,71,.2);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div class="fg2" style="margin-bottom:0">
+          <div class="fr">
+            <label>Type de remise</label>
+            <select id="vt_remise_type" onchange="majLabelRemise();calcVente()">
+              <option value="kg">Par kg (F/kg)</option>
+              <option value="sac">Par sac (F/sac)</option>
+              <option value="totale">Montant total (F)</option>
+            </select>
+          </div>
+          <div class="fr">
+            <label id="vt-remise-valeur-label">Remise par kg (F/kg)</label>
+            <input type="number" id="vt_remise_valeur" placeholder="0" oninput="calcVente();majBoutonRemise()">
+          </div>
         </div>
       </div>
 
-      <button class="btn btn-g btn-sm" style="width:100%;justify-content:center;margin-bottom:8px" onclick="ajouterLigneVente()">
-        ➕ Ajouter ce produit à la vente
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btn-out btn-sm" style="flex:1;min-width:140px;justify-content:center" onclick="ajouterLigneVente()">
+          ➕ Ajouter un autre produit
+        </button>
+        <button class="btn btn-g" style="flex:2;min-width:160px;justify-content:center;font-weight:700" onclick="enregistrerVenteRapide()">
+          ✅ Enregistrer la vente
+        </button>
+      </div>
       <div id="vt-lignes-preview"></div>
 
       <!-- TOTAUX -->
@@ -690,18 +705,18 @@
           <span id="vt-sous-total" style="font-weight:600;font-size:13px">0 F</span>
         </div>
 
-        <!-- REMISE — total des remises de lignes + validation admin -->
-        <div style="border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin-bottom:6px">
+        <!-- REMISE — bloc affiche uniquement si au moins une ligne a une remise -->
+        <div id="vt-remise-totaux-bloc" style="display:none;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin-bottom:6px">
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
             <span style="color:var(--textm)">💸 Total des remises</span>
             <span id="vt-remise-totale" style="font-weight:600;font-size:13px;color:var(--red)">0 F</span>
           </div>
           <div class="fr" style="margin-bottom:6px"><label>Motif des remises</label><input type="text" id="vt_remise_motif" placeholder="Client gros, accord admin..."></div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:0">
+          <label class="vt-admin-only" style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:0">
             <input type="checkbox" id="vt_remise_validee" onchange="onRemiseValideeToggle()">
             <span>✅ Remises autorisées par l'admin</span>
           </label>
-          <div class="fr" id="vt-remise-par-row" style="display:none;margin-top:6px;margin-bottom:0"><label>Autorisé par</label><input type="text" id="vt_remise_par" placeholder="Nom de l'admin"></div>
+          <div class="fr vt-admin-only" id="vt-remise-par-row" style="display:none;margin-top:6px;margin-bottom:0"><label>Autorisé par</label><input type="text" id="vt_remise_par" placeholder="Nom de l'admin"></div>
         </div>
 
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
@@ -728,9 +743,6 @@
 
       <div class="fr"><label>Note (optionnel)</label><input type="text" id="vt_note" placeholder="Commande spéciale, livraison..."></div>
       <div class="a-err" id="vt_err"></div>
-      <button class="btn btn-g" style="width:100%;justify-content:center;font-size:14px;min-height:46px" onclick="saveVente()">
-        ✓ Enregistrer la vente
-      </button>
     </div>
     <div>
       <div class="card">
@@ -2074,6 +2086,31 @@
 <div class="page" id="page-config">
   <div class="page-title">Configuration</div>
   <div class="page-sub">Personnalisez votre provenderie</div>
+
+  <!-- PRÉFÉRENCE STYLE DES CHAMPS (par utilisateur, sauvegardé dans localStorage) -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><div class="ct-left"><span>🎨 Style des champs de saisie</span></div>
+      <span style="font-size:10px;color:var(--textm);font-weight:400">Préférence personnelle (sauvegardée sur cet appareil)</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="cfg-style-btn" data-style="" onclick="setInputStyle('')" style="flex:1;min-width:180px;padding:14px;border-radius:10px;background:var(--card2);border:2px solid var(--border);color:var(--text);cursor:pointer;text-align:left;font-family:inherit">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">🟨 Style B — Crème + bord or <span style="font-size:9px;background:var(--gold);color:#000;padding:1px 6px;border-radius:8px;margin-left:4px">DÉFAUT</span></div>
+        <div style="font-size:10px;color:var(--textm)">3D creusé, palette PROVENDA, doux à l'œil</div>
+      </button>
+      <button class="cfg-style-btn" data-style="A" onclick="setInputStyle('A')" style="flex:1;min-width:180px;padding:14px;border-radius:10px;background:var(--card2);border:2px solid var(--border);color:var(--text);cursor:pointer;text-align:left;font-family:inherit">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">⬜ Style A — Blanc / Bleu</div>
+        <div style="font-size:10px;color:var(--textm)">Sombre = fond blanc · Clair = fond bleu pâle · Texte noir · Max contraste</div>
+      </button>
+      <button class="cfg-style-btn" data-style="C" onclick="setInputStyle('C')" style="flex:1;min-width:180px;padding:14px;border-radius:10px;background:var(--card2);border:2px solid var(--border);color:var(--text);cursor:pointer;text-align:left;font-family:inherit">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">🟢 Style C — Quasi-blanc teinté</div>
+        <div style="font-size:10px;color:var(--textm)">Sombre = crème · Clair = vert pâle · Texte noir</div>
+      </button>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--textm)">
+      <strong>Aperçu :</strong> <input type="text" placeholder="Tape ici pour tester" style="max-width:240px;display:inline-block;margin-left:8px">
+    </div>
+  </div>
+
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>🏭 Informations</span></div></div>
@@ -2321,6 +2358,28 @@
 <button class="sb-toggle" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('show')">☰</button>
 <div class="overlay" id="overlay" onclick="document.getElementById('sidebar').classList.remove('open');this.classList.remove('show')"></div>
 <div class="notif" id="notif-toast"></div>
+
+<script>
+// ── Préférence personnelle "Style des champs" (page Configuration) ──
+function setInputStyle(s){
+  const html=document.documentElement;
+  if(s){ html.setAttribute('data-input-style',s); }
+  else { html.removeAttribute('data-input-style'); }
+  try{ localStorage.setItem('input_style', s||''); }catch(e){}
+  // Refléter l'état dans les boutons de la page Config
+  document.querySelectorAll('.cfg-style-btn').forEach(b=>{
+    const on = (b.dataset.style||'')===(s||'');
+    b.style.borderColor = on ? 'var(--gold)' : 'var(--border)';
+    b.style.background = on ? 'rgba(232,197,71,.1)' : 'var(--card2)';
+  });
+}
+// Charger la préférence au démarrage
+try{
+  const saved = localStorage.getItem('input_style')||'';
+  if(saved) document.documentElement.setAttribute('data-input-style', saved);
+  window.addEventListener('load', ()=>setInputStyle(saved));
+}catch(e){}
+</script>
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->

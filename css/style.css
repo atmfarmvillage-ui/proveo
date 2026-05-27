@@ -47,15 +47,75 @@
 :root[data-theme="light"] .econo-box{background:#FFFFFF;border:1px solid var(--border)}
 :root[data-theme="light"] input[type=text],
 :root[data-theme="light"] input[type=number],
+/* Mode clair — DÉFAUT (Option B = CRÈME + bord OR) */
+:root[data-theme="light"] input[type=text],
+:root[data-theme="light"] input[type=number],
 :root[data-theme="light"] input[type=date],
 :root[data-theme="light"] input[type=email],
 :root[data-theme="light"] input[type=tel],
 :root[data-theme="light"] input[type=password],
 :root[data-theme="light"] select,
-:root[data-theme="light"] textarea{background:#FAFBF8;border:1px solid var(--border);color:var(--text)}
+:root[data-theme="light"] textarea{
+  background:linear-gradient(180deg, #EEE6C8, #F3EBD1);
+  border:1.5px solid #C9A93C;
+  color:var(--text);
+  box-shadow:
+    inset 0 3px 6px rgba(139,116,40,.22),
+    inset 0 1px 1px rgba(139,116,40,.28),
+    inset 0 -1px 0 rgba(255,255,255,.5);
+}
 :root[data-theme="light"] input:focus,
 :root[data-theme="light"] select:focus,
-:root[data-theme="light"] textarea:focus{border-color:var(--g4);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
+:root[data-theme="light"] textarea:focus{
+  border-color:#A88E2E;
+  background:linear-gradient(180deg, #E8DFB8, #EFE6C0);
+  box-shadow:
+    inset 0 3px 6px rgba(139,116,40,.25),
+    inset 0 1px 1px rgba(139,116,40,.32),
+    0 0 0 3px rgba(168,142,46,.22);
+}
+
+/* Mode clair — Option A (bleu pâle + texte noir) */
+:root[data-input-style="A"][data-theme="light"] input[type=text],
+:root[data-input-style="A"][data-theme="light"] input[type=number],
+:root[data-input-style="A"][data-theme="light"] input[type=date],
+:root[data-input-style="A"][data-theme="light"] input[type=email],
+:root[data-input-style="A"][data-theme="light"] input[type=tel],
+:root[data-input-style="A"][data-theme="light"] input[type=password],
+:root[data-input-style="A"][data-theme="light"] select,
+:root[data-input-style="A"][data-theme="light"] textarea{
+  background:#E8F0FB;
+  border:1.5px solid #93B5E0;
+  color:#0F1B14;
+  box-shadow:inset 0 1px 2px rgba(20,60,120,.1);
+}
+:root[data-input-style="A"][data-theme="light"] input:focus,
+:root[data-input-style="A"][data-theme="light"] select:focus,
+:root[data-input-style="A"][data-theme="light"] textarea:focus{
+  border-color:#1D4ED8;background:#E0EBF8;color:#0F1B14;
+  box-shadow:0 0 0 3px rgba(29,78,216,.22);
+}
+
+/* Mode clair — Option C (vert pâle + texte noir) */
+:root[data-input-style="C"][data-theme="light"] input[type=text],
+:root[data-input-style="C"][data-theme="light"] input[type=number],
+:root[data-input-style="C"][data-theme="light"] input[type=date],
+:root[data-input-style="C"][data-theme="light"] input[type=email],
+:root[data-input-style="C"][data-theme="light"] input[type=tel],
+:root[data-input-style="C"][data-theme="light"] input[type=password],
+:root[data-input-style="C"][data-theme="light"] select,
+:root[data-input-style="C"][data-theme="light"] textarea{
+  background:#F0F7EE;
+  border:1.5px solid #B8C5AA;
+  color:#0F1B14;
+  box-shadow:inset 0 1px 2px rgba(22,163,74,.08);
+}
+:root[data-input-style="C"][data-theme="light"] input:focus,
+:root[data-input-style="C"][data-theme="light"] select:focus,
+:root[data-input-style="C"][data-theme="light"] textarea:focus{
+  border-color:var(--g4);background:#EAF5E7;color:#0F1B14;
+  box-shadow:0 0 0 3px rgba(22,163,74,.22);
+}
 :root[data-theme="light"] .a-inp{background:#FAFBF8;border:1px solid var(--border);color:var(--text)}
 :root[data-theme="light"] .a-box{background:#FFFFFF;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.08)}
 :root[data-theme="light"] .btn-out{background:#FFFFFF;border:1px solid var(--border2);color:var(--text)}
@@ -258,10 +318,75 @@ html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);fon
 .econo-lbl{font-size:10px;color:var(--textm);margin-top:4px}
 
 /* ── FORMS ──────────────────────────── */
+/* Style "Crème papier 3D" : background chaud + inset shadow + relief subtil */
 .fr{margin-bottom:10px}
 .fr label,.lbl{display:block;font-size:10px;color:var(--textm);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.8px}
-input[type=text],input[type=number],input[type=date],input[type=email],input[type=tel],select,textarea{background:rgba(8,14,7,.8);border:1px solid rgba(30,51,32,.9);color:var(--text);padding:8px 11px;border-radius:7px;font-size:12px;font-family:'Outfit',sans-serif;outline:none;transition:all .2s;width:100%}
-input:focus,select:focus,textarea:focus{border-color:rgba(22,163,74,.7);box-shadow:0 0 0 3px rgba(22,163,74,.1)}
+/* Style par défaut (= OPTION B "Crème + bord or 3D") — surchargeable via data-input-style */
+input[type=text],input[type=number],input[type=date],input[type=email],input[type=tel],input[type=password],select,textarea{
+  background:linear-gradient(180deg, rgba(0,0,0,.22), rgba(232,197,71,.04));
+  border:1.5px solid rgba(232,197,71,.45);
+  color:var(--text);
+  padding:9px 12px;border-radius:8px;font-size:12px;font-family:'Outfit',sans-serif;outline:none;
+  transition:all .2s;width:100%;
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,.45),
+    inset 0 1px 1px rgba(0,0,0,.5),
+    inset 0 -1px 0 rgba(232,197,71,.1);
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--gold);background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(232,197,71,.06));
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,.5),
+    inset 0 1px 1px rgba(0,0,0,.55),
+    0 0 0 3px rgba(232,197,71,.22);
+}
+input::placeholder,textarea::placeholder{color:var(--textl)}
+
+/* ── OPTION A — Blanc (dark) / Bleu pâle (light) + texte noir ── */
+:root[data-input-style="A"] input[type=text],
+:root[data-input-style="A"] input[type=number],
+:root[data-input-style="A"] input[type=date],
+:root[data-input-style="A"] input[type=email],
+:root[data-input-style="A"] input[type=tel],
+:root[data-input-style="A"] input[type=password],
+:root[data-input-style="A"] select,
+:root[data-input-style="A"] textarea{
+  background:#FFFFFF;
+  border:1.5px solid #C4CDBF;
+  color:#0F1B14;
+  box-shadow:0 1px 2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5);
+}
+:root[data-input-style="A"] input:focus,
+:root[data-input-style="A"] select:focus,
+:root[data-input-style="A"] textarea:focus{
+  border-color:var(--g4);background:#FFFFFF;color:#0F1B14;
+  box-shadow:0 0 0 3px rgba(22,163,74,.25);
+}
+:root[data-input-style="A"] input::placeholder,
+:root[data-input-style="A"] textarea::placeholder{color:#8A9385}
+
+/* ── OPTION C — Quasi-blanc TEINTÉ (dark: crème, light: vert pâle) + texte noir ── */
+:root[data-input-style="C"] input[type=text],
+:root[data-input-style="C"] input[type=number],
+:root[data-input-style="C"] input[type=date],
+:root[data-input-style="C"] input[type=email],
+:root[data-input-style="C"] input[type=tel],
+:root[data-input-style="C"] input[type=password],
+:root[data-input-style="C"] select,
+:root[data-input-style="C"] textarea{
+  background:#F5F0DD;
+  border:1.5px solid rgba(232,197,71,.4);
+  color:#0F1B14;
+  box-shadow:0 1px 3px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.5);
+}
+:root[data-input-style="C"] input:focus,
+:root[data-input-style="C"] select:focus,
+:root[data-input-style="C"] textarea:focus{
+  border-color:var(--gold);background:#FAF5E5;color:#0F1B14;
+  box-shadow:0 0 0 3px rgba(232,197,71,.25);
+}
+:root[data-input-style="C"] input::placeholder,
+:root[data-input-style="C"] textarea::placeholder{color:#8A7340}
 input::placeholder,textarea::placeholder{color:var(--textl)}
 
 /* ── BUTTONS ─────────────────────────── */

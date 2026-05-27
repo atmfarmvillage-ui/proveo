@@ -55,15 +55,105 @@ function selectionnerClientVente(clientId){
   // Badge dette si client a des impayés
   const detteClt=Number(c.montant_du||0);
   if(detteClt>0)infos.push(`⚠ Dette : ${fmt(detteClt)} F`);
+  // Afficher les defaults (dernière vente) du client
+  if(c.derniere_formule){
+    infos.push(`🔁 Dernier achat : ${c.derniere_formule}${c.derniere_qte?' · '+fmtKg(c.derniere_qte)+' kg':''}`);
+  }
   if(infoEl)infoEl.innerHTML=infos.join(' · ');
 
   // Masquer nouveau client
   const nv=document.getElementById('vt-nouveau-client');
   if(nv)nv.style.display='none';
+  // Cacher la zone des suggestions de doublons
+  const sim=document.getElementById('vt-cl-similaires');
+  if(sim)sim.style.display='none';
+
+  // ── DEFAULTS INTELLIGENTS : pré-remplir avec le dernier achat du client ──
+  prefillDefaultsDernierAchatClient(c);
 
   // Charger le prix selon type client et formule + coût de prod
   onVenteFormuleChange();
   calcVente();
+}
+
+// Pré-remplit le formulaire produit avec le dernier achat du client (defaults intelligents)
+function prefillDefaultsDernierAchatClient(c){
+  if(!c) return;
+  // Ne pas écraser si l'utilisateur a déjà saisi quelque chose
+  const formuleSel=document.getElementById('vt_formule');
+  const qteEl=document.getElementById('vt_qte');
+  const condEl=document.getElementById('vt_poids_sac');
+  if(formuleSel && !formuleSel.value && c.derniere_formule){
+    // Vérifier que la formule existe encore dans la liste
+    const opt=Array.from(formuleSel.options).find(o=>o.value===c.derniere_formule);
+    if(opt){
+      formuleSel.value=c.derniere_formule;
+      // Déclencher le changement (charge le prix)
+      onVenteFormuleChange();
+    }
+  }
+  if(condEl && c.dernier_conditionnement){
+    const opt=Array.from(condEl.options).find(o=>o.value===String(c.dernier_conditionnement));
+    if(opt){ condEl.value=String(c.dernier_conditionnement); if(typeof onConditionnementChange==='function') onConditionnementChange(); }
+  }
+  if(qteEl && !qteEl.value && c.derniere_qte){
+    qteEl.value=Number(c.derniere_qte);
+  }
+}
+
+// ── ANTI-DOUBLON CLIENTS : recherche live des clients similaires ──
+// Normalise une chaîne pour comparaison fuzzy : lowercase + sans accents + trim
+function normaliserNomClient(s){
+  return (s||'').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+// Normalise un téléphone : ne garde que les 8 derniers chiffres
+function normaliserTelClient(t){
+  return (t||'').replace(/\D/g,'').slice(-8);
+}
+
+// Recherche des clients similaires sur (nom + prénom) OU téléphone
+function chercherClientsSimilaires(nom, tel){
+  const nomN = normaliserNomClient(nom);
+  const telN = normaliserTelClient(tel);
+  if(nomN.length<2 && telN.length<4) return [];
+  return GP_CLIENTS.filter(c=>{
+    const cNom = normaliserNomClient(c.nom);
+    const cTel = normaliserTelClient(c.telephone);
+    // Match si nom contenu OU tel contenu (≥4 chiffres)
+    const nomMatch = nomN.length>=2 && (cNom.includes(nomN) || nomN.includes(cNom));
+    const telMatch = telN.length>=4 && cTel && (cTel.includes(telN) || telN.includes(cTel));
+    return nomMatch || telMatch;
+  }).slice(0,5);
+}
+
+// Debounce simple (250ms) pour ne pas chercher à chaque touche
+let _simDebounce=null;
+function chercherClientsSimilairesDebounced(){
+  if(_simDebounce) clearTimeout(_simDebounce);
+  _simDebounce=setTimeout(()=>{
+    const nom = document.getElementById('vt_cl_nom')?.value||'';
+    const tel = document.getElementById('vt_cl_tel')?.value||'';
+    const matches = chercherClientsSimilaires(nom.trim(), tel);
+    const wrap = document.getElementById('vt-cl-similaires');
+    if(!wrap) return;
+    if(!matches.length){ wrap.style.display='none'; return; }
+    wrap.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">⚠ ${matches.length} client${matches.length>1?'s':''} ressemble${matches.length>1?'nt':''} déjà à votre saisie :</div>`
+      + matches.map(c=>{
+          const tel=c.telephone||'—';
+          const ferme=c.nom_ferme?' · '+c.nom_ferme:'';
+          return `<div style="background:rgba(0,0,0,.15);border-radius:6px;padding:6px 10px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:11px;flex:1">
+              <div style="font-weight:600">${c.nom}</div>
+              <div style="font-size:10px;color:var(--textm)">${tel}${ferme}</div>
+            </div>
+            <button onclick="selectionnerClientVente('${c.id}')" class="btn btn-g btn-sm" style="font-size:10px;padding:4px 10px">Utiliser celui-ci</button>
+          </div>`;
+        }).join('')
+      + `<div style="font-size:10px;color:var(--textm);margin-top:4px">Si vraiment différent, continuez à remplir et enregistrez.</div>`;
+    wrap.style.display='block';
+  },250);
 }
 
 function effacerClientVente(){
@@ -125,6 +215,60 @@ async function loadStockVente(){
       GP_STOCK_VENTE[r.formule_nom]=(GP_STOCK_VENTE[r.formule_nom]||0)+Number(r.qte_disponible||0);
     });
   }catch(e){}
+}
+
+// Favoris formules — uniquement les formules effectivement vendues (max 8).
+// Croît naturellement avec les ventes : 0 vente = 0 favori, 3 ventes différentes = 3 favoris, etc.
+let GP_FAVORIS_FORMULES = [];
+async function loadFavorisFormules(){
+  GP_FAVORIS_FORMULES = [];
+  try{
+    const il_y_a_30j = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+    let q = SB.from('gp_ventes_lignes')
+      .select('formule_nom,quantite,gp_ventes!inner(point_vente,date,admin_id)')
+      .eq('admin_id',GP_ADMIN_ID)
+      .eq('type_produit','formule')
+      .gte('gp_ventes.date', il_y_a_30j);
+    if(GP_POINT_VENTE) q = q.eq('gp_ventes.point_vente', GP_POINT_VENTE);
+    const{data}=await q;
+    const agg = {};
+    (data||[]).forEach(l=>{
+      if(!l.formule_nom) return;
+      agg[l.formule_nom] = (agg[l.formule_nom]||0) + Number(l.quantite||0);
+    });
+    GP_FAVORIS_FORMULES = Object.entries(agg)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,8)
+      .map(([nom,kg])=>({nom, kg}));
+  }catch(e){ /* silencieux */ }
+  renderFavorisFormules();
+}
+
+function renderFavorisFormules(){
+  const wrap = document.getElementById('vt-favoris-formules');
+  if(!wrap) return;
+  if(!GP_FAVORIS_FORMULES.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = GP_FAVORIS_FORMULES.map(f=>{
+    const nom = (f.nom||'').replace(/'/g,'\\\'');
+    return `<button type="button" onclick="choisirFavoriFormule('${nom}')"
+      title="Vendu ${fmtKg(f.kg)} kg sur 30j"
+      style="font-size:10px;padding:5px 9px;border-radius:14px;background:rgba(232,197,71,.1);border:1px solid rgba(232,197,71,.3);color:var(--gold);cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap">
+      ⭐ ${f.nom}
+    </button>`;
+  }).join('');
+}
+
+function choisirFavoriFormule(nom){
+  const sel = document.getElementById('vt_formule');
+  if(!sel) return;
+  const opt = Array.from(sel.options).find(o=>o.value===nom);
+  if(!opt){ notify('Formule indisponible (stock?)','r'); return; }
+  sel.value = nom;
+  const search = document.getElementById('vt_formule_search');
+  if(search) search.value='';
+  onVenteFormuleChange();
+  // Focus sur quantité pour gagner du temps
+  setTimeout(()=>document.getElementById('vt_qte')?.focus(),50);
 }
 
 // Catalogue des prestations (décorticage, mouture…) — alimente le select Service
@@ -216,6 +360,95 @@ function initRemiseVente(){
     if(parEl&&!parEl.value)parEl.value=GP_USER?.email?.split('@')[0]||'Admin';
   }
   onRemiseValideeToggle();
+  // Cacher les champs admin-only pour les non-admins
+  if(GP_ROLE!=='admin'){
+    document.querySelectorAll('.vt-admin-only').forEach(el=>el.style.display='none');
+  }
+}
+
+// ── BLOC REMISE par produit : toggle replier / deplier ──
+function toggleRemiseProduit(){
+  const bloc=document.getElementById('vt-remise-bloc');
+  if(!bloc) return;
+  const visible = bloc.style.display!=='none';
+  bloc.style.display = visible ? 'none' : 'block';
+  if(!visible){
+    // Au déploiement, focus sur le champ valeur
+    setTimeout(()=>document.getElementById('vt_remise_valeur')?.focus(),50);
+  }
+  majBoutonRemise();
+}
+
+// Met à jour le label du bouton remise (affiche le montant si > 0)
+function majBoutonRemise(){
+  const btn=document.getElementById('vt-remise-toggle');
+  const lbl=document.getElementById('vt-remise-toggle-label');
+  if(!btn||!lbl) return;
+  const val=+document.getElementById('vt_remise_valeur')?.value||0;
+  const bloc=document.getElementById('vt-remise-bloc');
+  const visible = bloc && bloc.style.display!=='none';
+  if(val>0){
+    lbl.textContent = `Remise active : ${fmt(val)} F`;
+    btn.style.background='rgba(232,197,71,.2)';
+    btn.style.borderStyle='solid';
+    btn.style.color='var(--gold)';
+  } else {
+    lbl.textContent = visible ? 'Annuler la remise' : 'Ajouter une remise';
+    btn.style.background='rgba(232,197,71,.08)';
+    btn.style.borderStyle='dashed';
+    btn.style.color='var(--gold)';
+  }
+}
+
+// ── RACCOURCIS CLAVIER (page Ventes uniquement) ──
+// Ctrl+S = enregistrer la vente. Esc = vider les champs du produit en cours.
+// Enter dans qté est géré inline dans index.html (appelle ajouterLigneVente).
+document.addEventListener('keydown',(e)=>{
+  const onVentes = document.getElementById('page-ventes')?.classList.contains('active');
+  if(!onVentes) return;
+  // Ctrl+S / Cmd+S
+  if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='S')){
+    e.preventDefault();
+    if(typeof enregistrerVenteRapide==='function') enregistrerVenteRapide();
+    return;
+  }
+  // Esc : vider le produit en cours (mais conserver client + lignes ajoutées)
+  if(e.key==='Escape'){
+    const tag = document.activeElement?.tagName;
+    if(tag && ['INPUT','SELECT','TEXTAREA'].includes(tag)){
+      ['vt_qte','vt_nb_sacs','vt_prix','vt_prix_sac','vt_remise_valeur','vt_ferme_desc','vt_prestation_detail']
+        .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      const fs=document.getElementById('vt_formule_search'); if(fs) fs.value='';
+      const remBloc=document.getElementById('vt-remise-bloc'); if(remBloc) remBloc.style.display='none';
+      if(typeof majBoutonRemise==='function') majBoutonRemise();
+      if(typeof calcVente==='function') calcVente();
+      document.activeElement.blur();
+    }
+  }
+});
+
+// ── ENREGISTREMENT RAPIDE (vente unique) ──
+// Si aucun produit n'est dans VT_LIGNES mais le formulaire contient un produit complet,
+// ajoute la ligne automatiquement puis enregistre. Sinon, enregistre directement.
+async function enregistrerVenteRapide(){
+  const err=document.getElementById('vt_err');
+  if(err) err.textContent='';
+  // Si la liste est vide, on tente d'ajouter le produit en cours
+  if(VT_LIGNES.length===0){
+    const formuleChoisie=document.getElementById('vt_formule')?.value
+      || document.getElementById('vt_mp_id')?.value
+      || document.getElementById('vt_service')?.value
+      || document.getElementById('vt_sous_type')?.value;
+    const qte=+document.getElementById('vt_qte')?.value||0;
+    if(!formuleChoisie || !qte){
+      if(err) err.textContent='Sélectionnez un produit et une quantité avant d\'enregistrer.';
+      return;
+    }
+    ajouterLigneVente();
+    // Si ajouterLigneVente a mis un message d'erreur ou que rien n'a été ajouté, on stoppe
+    if(VT_LIGNES.length===0){ return; }
+  }
+  await saveVente();
 }
 
 function calcVente(){
@@ -243,6 +476,9 @@ function calcVente(){
   majLabelRemise();
   const remiseTotEl=document.getElementById('vt-remise-totale');
   if(remiseTotEl)remiseTotEl.textContent=fmt(remise)+' F';
+  // Afficher le bloc des remises totales (avec motif + validation admin) uniquement si remise > 0
+  const remiseTotauxBloc=document.getElementById('vt-remise-totaux-bloc');
+  if(remiseTotauxBloc) remiseTotauxBloc.style.display = remise>0 ? 'block' : 'none';
 
   // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
   // Si remis < total → reste à payer
@@ -341,25 +577,41 @@ async function saveVente(){
 
   // ── NOUVEAU CLIENT ──────────────────────────────
   if(clientId==='__nouveau__'){
-    const nom=document.getElementById('vt_cl_nom')?.value.trim();
-    const prenom=document.getElementById('vt_cl_prenom')?.value.trim()||'';
+    const nomComplet=document.getElementById('vt_cl_nom')?.value.trim();
     const ferme=document.getElementById('vt_cl_ferme')?.value.trim()||null;
     const localite=document.getElementById('vt_cl_localite')?.value.trim()||null;
     const tel=document.getElementById('vt_cl_tel')?.value.trim()||null;
     const typeNv=document.getElementById('vt_cl_type')?.value||'detail';
-    if(!nom){err.textContent='Entrez le nom du nouveau client.';return;}
-    const nomComplet=(nom+(prenom?' '+prenom:'')).trim();
-    const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
-      admin_id:GP_ADMIN_ID,
-      nom:nomComplet,telephone:tel,
-      type_client:typeNv,total_achats:0,
-      nom_ferme:ferme,localite
-    }).select().maybeSingle();
-    if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
-    clientId=nc?.id||null;
-    await loadClients();
-    populateSelects();
-    notify(nomComplet+' enregistré comme client ✓','gold');
+    if(!nomComplet){err.textContent='Entrez le nom du nouveau client.';return;}
+    // ── ANTI-DOUBLON : vérif finale avant INSERT ──
+    const similaires=chercherClientsSimilaires(nomComplet, tel);
+    if(similaires.length>0){
+      const liste=similaires.map(c=>`• ${c.nom}${c.telephone?' ('+c.telephone+')':''}`).join('\n');
+      const choix=confirm(
+        `⚠ ${similaires.length} client(s) existent déjà avec un nom/téléphone similaire :\n\n${liste}\n\n`+
+        `Cliquez "OK" pour utiliser le premier de la liste, ou "Annuler" pour créer quand même un nouveau client.`
+      );
+      if(choix){
+        // Utiliser le premier match — pas d'INSERT, on remplace clientId
+        clientId=similaires[0].id;
+        notify('Client existant utilisé : '+similaires[0].nom,'gold');
+      } else {
+        // L'utilisateur force la création — on continue
+      }
+    }
+    if(clientId==='__nouveau__'){
+      const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
+        admin_id:GP_ADMIN_ID,
+        nom:nomComplet,telephone:tel,
+        type_client:typeNv,total_achats:0,
+        nom_ferme:ferme,localite
+      }).select().maybeSingle();
+      if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
+      clientId=nc?.id||null;
+      await loadClients();
+      populateSelects();
+      notify(nomComplet+' enregistré comme client ✓','gold');
+    }
   }
 
   // montant_ligne = déjà net de remise ; remise_montant = somme des remises de lignes
@@ -470,6 +722,26 @@ async function saveVente(){
         }
       }
     }
+  }
+
+  // ── DEFAULTS INTELLIGENTS : mémoriser le 1er produit (le + courant) sur le client ──
+  // On prend la 1re ligne de la vente comme "dernière habitude" du client.
+  if(clientId && VT_LIGNES.length){
+    const l0=VT_LIGNES[0];
+    try{
+      await SB.from('gp_clients').update({
+        derniere_formule: l0.formule_nom||null,
+        dernier_conditionnement: l0.conditionnement?String(l0.conditionnement):null,
+        derniere_qte: Number(l0.quantite)||null
+      }).eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+      // Mettre à jour le cache local pour les ventes suivantes
+      const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
+      if(ci>=0){
+        GP_CLIENTS[ci].derniere_formule=l0.formule_nom||null;
+        GP_CLIENTS[ci].dernier_conditionnement=l0.conditionnement?String(l0.conditionnement):null;
+        GP_CLIENTS[ci].derniere_qte=Number(l0.quantite)||null;
+      }
+    }catch(e){ /* silencieux — pas critique */ }
   }
 
   // Rafraîchir le stock affiché dans le menu des formules
@@ -1022,11 +1294,22 @@ function effacerSelectionMPVente(){
   window._vtMPStock = undefined;
 }
 
-// Fermer la liste si clic ailleurs
+// Fermer la liste MP si clic ailleurs
 document.addEventListener('click', e => {
   const search = document.getElementById('vt_mp_search');
   const results = document.getElementById('vt_mp_results');
   if(search && results && !search.contains(e.target) && !results.contains(e.target)){
+    results.style.display = 'none';
+  }
+});
+
+// Fermer la liste CLIENT (résultats recherche par nom/tel) si clic ailleurs + bouton Nouveau client
+document.addEventListener('click', e => {
+  const search = document.getElementById('vt_tel_search');
+  const results = document.getElementById('vt_client_results');
+  const btnNouveau = document.querySelector('[onclick="ouvrirNouveauClient()"]');
+  if(!search || !results) return;
+  if(!search.contains(e.target) && !results.contains(e.target) && (!btnNouveau || !btnNouveau.contains(e.target))){
     results.style.display = 'none';
   }
 });
@@ -1123,6 +1406,10 @@ function ajouterLigneVente(){
   } else if(typeProduit === 'mp'){
     effacerSelectionMPVente();
   }
+  // Replier le bloc remise et réinitialiser le bouton (la remise vient d'être appliquée à la ligne)
+  const remBloc = document.getElementById('vt-remise-bloc');
+  if(remBloc) remBloc.style.display = 'none';
+  if(typeof majBoutonRemise === 'function') majBoutonRemise();
   err.textContent = '';
   calcVente();
   renderLignesVente();
