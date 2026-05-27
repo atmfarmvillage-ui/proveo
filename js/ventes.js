@@ -825,6 +825,12 @@ function afficherActionsApresVente(venteComplete, client, total, remis, paye, mo
         ${hasContact?'':'disabled'}>
         💬 Envoyer SMS de secours${hasContact?'':' (numéro client manquant)'}
       </button>
+      ${client?.id?`
+      <button id="post-vente-carte"
+        onclick="ouvrirCarteClient('${client.id}')"
+        style="grid-column:span 2;min-height:38px;padding:8px;border-radius:8px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;background:rgba(232,197,71,.12);color:var(--gold);border:1px solid rgba(232,197,71,.4)">
+        📲 Envoyer la carte client (QR)
+      </button>`:''}
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:8px;text-align:center">
       ℹ️ Le message WhatsApp s'adapte au profil client (fidèle/nouveau/dette). SMS = secours si WA absent.
