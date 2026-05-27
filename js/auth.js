@@ -320,6 +320,7 @@ var PAGE_RENDERERS = {
     await loadStockVente();
     await loadServices();
     populateSelects();
+    if(typeof loadFavorisFormules==='function') loadFavorisFormules();
     await renderVentes();
   },
   depenses:      renderDep,
