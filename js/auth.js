@@ -229,7 +229,12 @@ async function bootApp(user){
   ['lot-filtre-mois','mp-filtre-mois','dep-filtre-mois','inv-mois','rpt-mois','inv-phys-mois'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=monthStr;});
   const vtDate=document.getElementById('vt-filtre-date');if(vtDate)vtDate.value=todayStr;
   try{populateSelects();}catch(e){console.warn('populateSelects:',e);}
-  try{renderDashboard();}catch(e){console.error('renderDashboard:',e);}
+  // renderDashboard est async — il faut catcher la promesse, sinon les erreurs laissent "Chargement..." figé
+  renderDashboard().catch(e=>{
+    console.error('renderDashboard FAILED:',e);
+    const sub=document.getElementById('dash-date-sub');
+    if(sub) sub.textContent='⚠ Erreur de chargement — voir console (F12). '+(e?.message||'');
+  });
   // Fonctions optionnelles — ne bloquent pas le boot
   try{verifierLicence();}catch(e){}
   try{verifierEtEnvoyerMessages();}catch(e){}
