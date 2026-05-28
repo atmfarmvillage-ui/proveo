@@ -215,6 +215,7 @@
         <div class="fr"><label>N° Lot</label><input type="text" id="lot_ref" placeholder="LOT-001"></div>
       </div>
       <div class="fr"><label>Formule</label>
+        <div id="lot-favoris-formules" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px"></div>
         <select id="lot_formule" onchange="onFormuleChange()">
           <option value="">— Sélectionner une formule —</option>
         </select>
@@ -1104,7 +1105,10 @@
         <div id="prix-formules-liste"></div>
         <hr class="divider">
         <div class="fg2">
-          <div class="fr"><label>Formule</label><select id="pf_formule" style="width:100%"><option value="">— Sélectionner —</option></select></div>
+          <div class="fr"><label>Formule</label>
+            <div id="pf-favoris-formules" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px"></div>
+            <select id="pf_formule" style="width:100%"><option value="">— Sélectionner —</option></select>
+          </div>
           <div class="fr"><label>Nouveau prix/kg (FCFA)</label><input type="number" id="pf_prix" placeholder="350"></div>
         </div>
         <button class="btn btn-g btn-sm" onclick="savePrixFormule()">✓ Mettre à jour le prix</button>
@@ -1851,6 +1855,7 @@
         </div>
       </div>
       <div class="fr" id="dist-formule-wrap"><label>Produit (formule)</label>
+        <div id="dist-favoris-formules" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px"></div>
         <select id="dist_formule"><option value="">— Sélectionner —</option></select>
       </div>
       <div class="fr" id="dist-mp-wrap" style="display:none">
