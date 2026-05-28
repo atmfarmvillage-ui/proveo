@@ -178,7 +178,8 @@ async function populateSelectMPDist(){
 
 // ── CRÉER UNE LIVRAISON ───────────────────────────
 async function saveLivraison(){
-  const sourceId=document.getElementById('dist_source')?.value||GP_POINT_VENTE||'Production';
+  // dist_source contient un NOM (PDV du membre ou "Production"/siège), pas un UUID
+  const sourceNom=document.getElementById('dist_source')?.value||GP_POINT_VENTE||'Production';
   const destId=document.getElementById('dist_dest')?.value;
   const typeProduit = document.getElementById('dist_type_produit')?.value || 'formule';
   const qte=+document.getElementById('dist_qte')?.value||0;
@@ -198,18 +199,23 @@ async function saveLivraison(){
     if(!produitNom){ err.textContent='Sélectionnez une formule.'; return; }
   }
 
-  if(!sourceId||!destId||!qte||!prixGros){
+  if(!sourceNom||!destId||!qte||!prixGros){
     err.textContent='Tous les champs sont requis.';return;
   }
-  if(sourceId===destId){err.textContent='Source et destination doivent être différents.';return;}
 
-  const source=GP_PDV_LIST.find(p=>p.id===sourceId);
+  // Résoudre la source par son NOM : si c'est un vrai PDV → son UUID ; sinon (Production/siège) → null
+  const source=GP_PDV_LIST.find(p=>p.nom===sourceNom);
   const dest=GP_PDV_LIST.find(p=>p.id===destId);
+  const sourceUuid=source?.id||null;          // null = Production/siège (pas un PDV)
+  const sourceNomFinal=source?.nom||sourceNom; // ex: "Production"
+
+  if(dest && dest.nom===sourceNomFinal){err.textContent='Source et destination doivent être différents.';return;}
+  if(sourceUuid && sourceUuid===destId){err.textContent='Source et destination doivent être différents.';return;}
 
   const{data:liv,error}=await SB.from('gp_livraisons_pdv').insert({
     admin_id:GP_ADMIN_ID,
-    pdv_source_id:sourceId,pdv_dest_id:destId,
-    pdv_source_nom:source?.nom,pdv_dest_nom:dest?.nom,
+    pdv_source_id:sourceUuid,pdv_dest_id:destId,
+    pdv_source_nom:sourceNomFinal,pdv_dest_nom:dest?.nom,
     type_relation:typeRel,
     formule_nom:produitNom,
     type_produit:typeProduit,
