@@ -212,8 +212,10 @@ async function saveLivraison(){
   if(dest && dest.nom===sourceNomFinal){err.textContent='Source et destination doivent être différents.';return;}
   if(sourceUuid && sourceUuid===destId){err.textContent='Source et destination doivent être différents.';return;}
 
+  const refLiv='LIV-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
   const{data:liv,error}=await SB.from('gp_livraisons_pdv').insert({
     admin_id:GP_ADMIN_ID,
+    ref:refLiv,
     pdv_source_id:sourceUuid,pdv_dest_id:destId,
     pdv_source_nom:sourceNomFinal,pdv_dest_nom:dest?.nom,
     type_relation:typeRel,
