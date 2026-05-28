@@ -84,6 +84,9 @@ async function renderDistribution(){
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucune livraison enregistrée.</div>';
 
+  // Selects de la saisie manuelle (départ / inventaire)
+  if(typeof remplirSelectsStockManuel==='function') remplirSelectsStockManuel();
+
   // Stock produits finis par PDV
   await renderStockPDV();
 }
@@ -183,6 +186,7 @@ async function saveLivraison(){
   const destId=document.getElementById('dist_dest')?.value;
   const typeProduit = document.getElementById('dist_type_produit')?.value || 'formule';
   const qte=+document.getElementById('dist_qte')?.value||0;
+  const poidsSac=+document.getElementById('dist_poids')?.value||25;
   const prixGros=+document.getElementById('dist_prix')?.value||0;
   const typeRel=document.getElementById('dist_type')?.value||'vente_gros';
   const err=document.getElementById('dist_err');
@@ -212,6 +216,19 @@ async function saveLivraison(){
   if(dest && dest.nom===sourceNomFinal){err.textContent='Source et destination doivent être différents.';return;}
   if(sourceUuid && sourceUuid===destId){err.textContent='Source et destination doivent être différents.';return;}
 
+  // ── BLOCAGE : la source doit avoir assez de stock (formules ; MP gérée par gp_stock_mp) ──
+  // Stock en KG ; quantité distribuée = qte sacs × poids du sac
+  const kgDistribue = qte * poidsSac;
+  if(typeProduit==='formule'){
+    const{data:srcStock}=await SB.from('gp_stock_produits_pdv').select('qte_disponible')
+      .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',sourceNomFinal).eq('formule_nom',produitNom).maybeSingle();
+    const dispoKg=Number(srcStock?.qte_disponible||0);
+    if(dispoKg < kgDistribue){
+      err.textContent=`🚫 Stock insuffisant à ${sourceNomFinal} : ${fmt(dispoKg)} kg dispo pour ${produitNom}, ${fmt(kgDistribue)} kg demandés (${qte} sac(s) × ${poidsSac} kg).`;
+      return;
+    }
+  }
+
   const refLiv='LIV-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
   const{data:liv,error}=await SB.from('gp_livraisons_pdv').insert({
     admin_id:GP_ADMIN_ID,
@@ -223,6 +240,7 @@ async function saveLivraison(){
     type_produit:typeProduit,
     ingredient_id:ingredientId,
     qte_envoyee:qte,qte_confirmee:0,
+    poids_sac:poidsSac,
     prix_gros_unitaire:prixGros,
     montant_total:qte*prixGros,
     montant_paye:0,
@@ -233,6 +251,11 @@ async function saveLivraison(){
   }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
+
+  // Déduire le stock de la SOURCE à l'envoi (formules), en KG. La dest sera créditée à la confirmation.
+  if(typeProduit==='formule'){
+    await ajusterStockPDV(sourceNomFinal, produitNom, -kgDistribue);
+  }
 
   // Si MP : décrémenter le stock central immédiatement (envoi vers PDV)
   if(typeProduit === 'mp' && ingredientId){
@@ -295,22 +318,9 @@ async function confirmerReceptionLivraison(){
     return;
   }
 
-  // Mettre à jour stock PDV destination
-  const{data:stockExist}=await SB.from('gp_stock_produits_pdv').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',l.pdv_dest_nom).eq('formule_nom',l.formule_nom).maybeSingle();
-
-  if(stockExist){
-    await SB.from('gp_stock_produits_pdv').update({
-      qte_disponible:Number(stockExist.qte_disponible)+qteConfirmee,
-      updated_at:new Date().toISOString()
-    }).eq('id',stockExist.id);
-  } else {
-    await SB.from('gp_stock_produits_pdv').insert({
-      admin_id:GP_ADMIN_ID,
-      pdv_nom:l.pdv_dest_nom,formule_nom:l.formule_nom,
-      qte_disponible:qteConfirmee,seuil_critique:10,prix_vente_local:0
-    });
-  }
+  // Crédite le stock du PDV destination — en KG (qté confirmée en sacs × poids du sac)
+  const kgRecu = qteConfirmee * Number(l.poids_sac||25);
+  await ajusterStockPDV(l.pdv_dest_nom, l.formule_nom, kgRecu);
 
   // Si écart → créer dette secrétaire
   if(qteConfirmee<l.qte_envoyee){
@@ -368,6 +378,69 @@ async function savePaiementLivraison(){
 }
 
 // ── STOCK PRODUITS FINIS PAR PDV ─────────────────
+// Ajuste le stock d'un PDV (ou de "Production") pour une formule. delta en KG (+ entrée / - sortie).
+// Table unique gp_stock_produits_pdv = vérité opérationnelle (Production = pseudo-PDV). Tout en KG.
+async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
+  if(!pdvNom || !formuleNom) return;
+  const{data:st}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).maybeSingle();
+  if(st){
+    await SB.from('gp_stock_produits_pdv').update({
+      qte_disponible:Math.max(0,Number(st.qte_disponible||0)+deltaKg),
+      updated_at:new Date().toISOString()
+    }).eq('id',st.id);
+  } else if(deltaKg>0){
+    await SB.from('gp_stock_produits_pdv').insert({
+      admin_id:GP_ADMIN_ID, pdv_nom:pdvNom, formule_nom:formuleNom,
+      qte_disponible:Math.max(0,deltaKg), seuil_critique:100 // 100 kg ≈ 4 sacs 25kg
+    });
+  }
+}
+
+// Définit la valeur ABSOLUE du stock d'un PDV/formule (init départ ou inventaire). kg.
+async function setStockPDV(pdvNom, formuleNom, kgAbsolu){
+  if(!pdvNom||!formuleNom) return;
+  const{data:st}=await SB.from('gp_stock_produits_pdv').select('id')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).maybeSingle();
+  if(st){
+    await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,kgAbsolu),updated_at:new Date().toISOString()}).eq('id',st.id);
+  } else {
+    await SB.from('gp_stock_produits_pdv').insert({
+      admin_id:GP_ADMIN_ID, pdv_nom:pdvNom, formule_nom:formuleNom,
+      qte_disponible:Math.max(0,kgAbsolu), seuil_critique:100
+    });
+  }
+}
+
+// Saisie manuelle du stock (formulaire départ/inventaire)
+async function saisirStockManuel(){
+  const pdv=document.getElementById('sm_pdv')?.value;
+  const formule=document.getElementById('sm_formule')?.value;
+  const kg=+document.getElementById('sm_kg')?.value;
+  const err=document.getElementById('sm_err');
+  if(err) err.textContent='';
+  if(!pdv||!formule){ if(err)err.textContent='Choisis le point de vente et la formule.'; return; }
+  if(isNaN(kg)||kg<0){ if(err)err.textContent='Entre une quantité valide (kg).'; return; }
+  await setStockPDV(pdv, formule, kg);
+  document.getElementById('sm_kg').value='';
+  notify(`Stock ${formule} à ${pdv} défini à ${fmt(kg)} kg ✓`,'gold');
+  await renderStockPDV();
+}
+
+// Remplit les selects de la saisie manuelle (PDV incluant Production + formules)
+function remplirSelectsStockManuel(){
+  const selPdv=document.getElementById('sm_pdv');
+  if(selPdv){
+    selPdv.innerHTML='<option value="Production">🏭 Production (siège)</option>'+
+      GP_PDV_LIST.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('');
+  }
+  const selF=document.getElementById('sm_formule');
+  if(selF && typeof getAllFormules==='function'){
+    selF.innerHTML='<option value="">— Formule —</option>'+
+      getAllFormules().map(f=>`<option value="${f.nom}">${f.nom}</option>`).join('');
+  }
+}
+
 async function renderStockPDV(){
   const{data}=await SB.from('gp_stock_produits_pdv').select('*')
     .eq('admin_id',GP_ADMIN_ID).order('pdv_nom').order('formule_nom');
@@ -399,8 +472,8 @@ async function renderStockPDV(){
         <thead><tr><th>Produit</th><th class="num">Stock</th><th class="num">Seuil</th><th class="num">Prix local</th><th>Statut</th></tr></thead>
         <tbody>${stocks.map(s=>`<tr>
           <td style="font-weight:600">${s.formule_nom}</td>
-          <td class="num ${s.qte_disponible<=s.seuil_critique?'bad':''}">${s.qte_disponible} sacs</td>
-          <td class="num" style="color:var(--textm)">${s.seuil_critique} sacs</td>
+          <td class="num ${s.qte_disponible<=s.seuil_critique?'bad':''}">${fmt(s.qte_disponible)} kg <span style="color:var(--textm);font-size:9px">≈${Math.round(s.qte_disponible/25)} sacs</span></td>
+          <td class="num" style="color:var(--textm)">${fmt(s.seuil_critique)} kg</td>
           <td class="num">
             ${GP_ROLE==='admin'||GP_ROLE==='secretaire'?
               `<input type="number" value="${s.prix_vente_local||0}" style="width:80px;text-align:right;font-size:10px;padding:2px 4px"

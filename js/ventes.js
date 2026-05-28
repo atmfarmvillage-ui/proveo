@@ -809,22 +809,24 @@ async function saveVente(){
     }
   }
 
-  // Déduire du stock PDV si applicable (uniquement pour les formules, pas les MP ni les produits ferme)
-  if(GP_POINT_VENTE){
+  // Déduire du stock (formules) — en KG. Production (admin sans PDV) déduit aussi de son stock.
+  {
+    const pdvStock = GP_POINT_VENTE || 'Production';
     for(const l of VT_LIGNES){
       if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
       if(l.type_produit==='ferme') continue; // les produits ferme ne sont pas du stock provenderie
       if(l.type_produit==='prestation') continue; // les prestations ne touchent aucun stock
       const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
-        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE)
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock)
         .eq('formule_nom',l.formule_nom).maybeSingle();
       if(stock){
-        const newQte=Math.max(0,Number(stock.qte_disponible)-Number(l.quantite));
+        // quantite est en KG (sacs : nb_sacs×poids ; vrac : kg direct)
+        const newQte=Math.max(0,Number(stock.qte_disponible)-Number(l.quantite||0));
         await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()})
           .eq('id',stock.id);
         // Vérifier seuil critique
         if(newQte<=stock.seuil_critique){
-          envoyerAlerteSeuil(GP_POINT_VENTE,l.formule_nom,newQte,stock.seuil_critique);
+          envoyerAlerteSeuil(pdvStock,l.formule_nom,newQte,stock.seuil_critique);
         }
       }
     }

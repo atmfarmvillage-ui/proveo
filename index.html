@@ -221,7 +221,19 @@
         </select>
       </div>
       <div class="fg2">
-        <div class="fr"><label>Quantité produite (kg)</label><input type="number" id="lot_qte" placeholder="1000" oninput="previewLot()"></div>
+        <div class="fr"><label>Quantité lancée (kg)</label><input type="number" id="lot_qte" placeholder="1000" oninput="previewLot();majPerteLot()"></div>
+        <div class="fr"><label>Sacs obtenus (réels)</label><input type="number" id="lot_nb_sacs" placeholder="38" oninput="majPerteLot()"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Poids / sac</label>
+          <select id="lot_poids_sac" onchange="majPerteLot()">
+            <option value="25">Sac 25 kg</option>
+            <option value="50">Sac 50 kg</option>
+          </select>
+        </div>
+        <div class="fr"><label>Perte estimée</label>
+          <input type="text" id="lot-perte-affichage" readonly value="—" style="background:rgba(239,68,68,.06);color:var(--red);font-weight:700">
+        </div>
       </div>
       <!-- Coûts automatiques depuis la formule -->
       <div id="lot-couts-auto" style="display:none;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">
@@ -1865,8 +1877,11 @@
       </div>
       <div class="fg2">
         <div class="fr"><label id="dist-qte-label">Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
-        <div class="fr"><label id="dist-prix-label">Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
+        <div class="fr" id="dist-poids-wrap"><label>Poids du sac</label>
+          <select id="dist_poids"><option value="25">Sac 25 kg</option><option value="50">Sac 50 kg</option></select>
+        </div>
       </div>
+      <div class="fr"><label id="dist-prix-label">Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveLivraison()">📤 Créer la livraison</button>
       <div class="a-err" id="dist_err"></div>
     </div>
@@ -1875,6 +1890,22 @@
         <div class="ct-left"><span>📦 Stock produits finis par PDV</span></div>
         <button class="btn btn-out btn-sm" onclick="actualiserStockPDV()">🔄</button>
       </div>
+      <!-- Saisie manuelle : stock initial / inventaire (en kg) -->
+      <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">✏️ Saisir un stock (départ / inventaire)</summary>
+        <div style="margin-top:8px">
+          <div class="fg2">
+            <div class="fr"><label>Point de vente</label><select id="sm_pdv"></select></div>
+            <div class="fr"><label>Formule</label><select id="sm_formule"></select></div>
+          </div>
+          <div class="fg2">
+            <div class="fr"><label>Stock réel (kg)</label><input type="number" id="sm_kg" placeholder="950"></div>
+            <div class="fr" style="display:flex;align-items:flex-end"><button class="btn btn-g" style="width:100%;justify-content:center" onclick="saisirStockManuel()">✓ Enregistrer le stock</button></div>
+          </div>
+          <div style="font-size:10px;color:var(--textm)">Définit la valeur exacte (remplace le stock actuel de cette formule à ce point). Idéal pour le démarrage ou après inventaire physique.</div>
+          <div class="a-err" id="sm_err"></div>
+        </div>
+      </details>
       <div id="stock-pdv-liste"></div>
     </div>
   </div>

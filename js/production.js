@@ -175,6 +175,21 @@ document.addEventListener('click',e=>{
   if(s&&r&&!s.contains(e.target)&&!r.contains(e.target))r.style.display='none';
 });
 
+// Affiche la perte de production = quantité lancée − (sacs obtenus × poids)
+function majPerteLot(){
+  const qte=+document.getElementById('lot_qte')?.value||0;
+  const nbSacs=+document.getElementById('lot_nb_sacs')?.value||0;
+  const poids=+document.getElementById('lot_poids_sac')?.value||25;
+  const el=document.getElementById('lot-perte-affichage');
+  if(!el) return;
+  if(!qte || !nbSacs){ el.value='—'; return; }
+  const reel=nbSacs*poids;
+  const perte=qte-reel;
+  if(perte>0)      el.value=`${fmt(perte)} kg perdus (${fmt(reel)} kg en sacs)`;
+  else if(perte<0) el.value=`⚠ ${fmt(-perte)} kg en trop (vérifier)`;
+  else             el.value=`0 — aucune perte (${fmt(reel)} kg)`;
+}
+
 function previewLot(){
   const nom=document.getElementById('lot_formule')?.value;
   const qte=+document.getElementById('lot_qte')?.value||0;
@@ -317,9 +332,15 @@ async function saveLot(){
   LOT_COMPO=[];
   const lmps=document.getElementById('lot_mp_search'); if(lmps)lmps.value='';
 
-  // Alimenter le stock produits finis
+  // Alimenter le stock produits finis (détail par poids de sac — historique)
   if(nbSacsSaves>0&&pdvProdSaves&&typeof upsertStockPF==='function'){
     await upsertStockPF(pdvProdSaves,nom,poidsSacSaves,nbSacsSaves);
+  }
+  // Alimenter aussi gp_stock_produits_pdv (vérité opérationnelle pour la distribution / blocage) — en KG
+  // Stock réel = sacs obtenus × poids (net de perte) ; à défaut de sacs saisis, on prend la qté lancée
+  const kgProduitReel = nbSacsSaves>0 ? nbSacsSaves*poidsSacSaves : qte;
+  if(pdvProdSaves && kgProduitReel>0 && typeof ajusterStockPDV==='function'){
+    await ajusterStockPDV(pdvProdSaves, nom, kgProduitReel);
   }
 
   // Afficher la feuille de fabrication
