@@ -107,7 +107,7 @@ function renderLotMP(){
     const dispoTxt=dispo==null
       ? '<span style="color:var(--textm)">stock inconnu</span>'
       : `<span style="color:${manque?'var(--red)':'var(--green)'};font-weight:${manque?'700':'500'}">${fmtKg(dispo)} kg en stock</span>`;
-    return `<div style="display:grid;grid-template-columns:1fr 84px 28px;gap:6px;align-items:center;padding:5px 7px;background:${manque?'rgba(239,68,68,.08)':'rgba(14,20,40,.4)'};border:1px solid ${manque?'rgba(239,68,68,.4)':'var(--border)'};border-radius:6px;margin-bottom:4px">
+    return `<div style="display:grid;grid-template-columns:1fr 84px 28px;gap:6px;align-items:center;padding:5px 7px;background:${manque?'rgba(239,68,68,.08)':'var(--card2)'};border:1px solid ${manque?'rgba(239,68,68,.4)':'var(--border)'};border-radius:6px;margin-bottom:4px">
       <div style="min-width:0">
         <div style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.nom}">${c.nom}</div>
         <div style="font-size:9px">${dispoTxt}</div>
@@ -151,7 +151,7 @@ function filtrerMPLot(){
   results.innerHTML=liste.map(i=>{
     const dispo=LOT_STOCK_MP[i.id]||0;
     return `<div onclick="selectionnerMPLot('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
-      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4)"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--card2)"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
       <div style="font-size:11px;font-weight:600">${i.nom}</div>
       <div style="font-size:9px;color:${dispo>0?'var(--green)':'var(--red)'}">${fmtKg(dispo)} kg en stock</div>
@@ -422,7 +422,7 @@ async function renderInventaire(){
     ${Object.entries(conso).sort((a,b)=>b[1]-a[1]).map(([nom,qte])=>`<tr>
       <td style="font-weight:600">${nom}</td>
       <td class="num">${fmtKg(qte)}</td>
-      <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:rgba(30,45,74,.8);border-radius:3px"><div style="width:${totSorties>0?qte/totSorties*100:0}%;height:100%;background:var(--g4);border-radius:3px"></div></div><span style="font-size:10px;color:var(--textm)">${totSorties>0?(qte/totSorties*100).toFixed(1):0}%</span></div></td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:var(--card2);border-radius:3px"><div style="width:${totSorties>0?qte/totSorties*100:0}%;height:100%;background:var(--g4);border-radius:3px"></div></div><span style="font-size:10px;color:var(--textm)">${totSorties>0?(qte/totSorties*100).toFixed(1):0}%</span></div></td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation ce mois.</div>';
   // Production par formule
   const prodFormule={};
@@ -662,7 +662,7 @@ async function renderBilanProduction(lotsData){
         <div style="font-size:14px;font-weight:700;color:${pctPertes>5?'var(--red)':pctPertes>2?'var(--gold)':'var(--green)'}">${fmt(totalPertes)} kg</div>
         <div style="font-size:10px;color:var(--textm)">Pertes (${pctPertes}%)</div>
       </div>
-      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
         <div style="font-size:14px;font-weight:700">${fmt(totalKgBruts)} kg</div>
         <div style="font-size:10px;color:var(--textm)">Bruts produits</div>
       </div>
@@ -677,7 +677,7 @@ async function renderBilanProduction(lotsData){
           <span style="font-weight:600">${especeIcon[esp]||'🌾'} ${especeLabel[esp]||esp}</span>
           <span style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(Math.round(val.kg/1000*10)/10)} t <span style="color:var(--textm);font-size:10px">(${pct}%)</span></span>
         </div>
-        <div style="background:rgba(30,45,74,.8);border-radius:20px;height:5px;overflow:hidden">
+        <div style="background:var(--card2);border-radius:20px;height:5px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--g4),var(--g6));border-radius:20px"></div>
         </div>
         <div style="font-size:10px;color:var(--textm);margin-top:1px">${val.sacs} sacs · ${val.lots} lot${val.lots>1?'s':''}</div>
@@ -694,9 +694,9 @@ async function renderBilanProduction(lotsData){
       </tr></thead>
       <tbody>
         ${formulesSorted.map(([f,val])=>`<tr>
-          <td style="padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3)">${especeIcon[val.espece]||'🌾'} <span style="font-weight:600">${f}</span></td>
-          <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);font-family:'DM Mono',monospace">${val.sacs}</td>
-          <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);color:var(--g6);font-family:'DM Mono',monospace">${fmt(val.kg)} kg</td>
+          <td style="padding:5px 0;border-bottom:1px solid var(--card2)">${especeIcon[val.espece]||'🌾'} <span style="font-weight:600">${f}</span></td>
+          <td style="text-align:right;padding:5px 0;border-bottom:1px solid var(--card2);font-family:'DM Mono',monospace">${val.sacs}</td>
+          <td style="text-align:right;padding:5px 0;border-bottom:1px solid var(--card2);color:var(--g6);font-family:'DM Mono',monospace">${fmt(val.kg)} kg</td>
         </tr>`).join('')}
         <tr style="font-weight:700">
           <td style="padding:6px 0;border-top:1px solid rgba(22,163,74,.3)">TOTAL</td>

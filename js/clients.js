@@ -137,7 +137,7 @@ function onClientAppelChange(){
     if(client&&telEl){
       telEl.value=client.telephone||client.whatsapp||'';
       telEl.setAttribute('readonly','true');
-      telEl.style.background='rgba(30,45,74,.3)';
+      telEl.style.background='var(--card2)';
       telEl.style.color='var(--textm)';
     }
   } else {
@@ -267,7 +267,7 @@ async function renderClassement(){
     ${sorted.map((c,i)=>{
       const pos=i+1;
       const cls=pos<=15?'client-vert':pos<=30?'client-jaune':'';
-      const seg=pos<=15?'<span class="badge bdg-g">🥇 Top 15</span>':pos<=30?'<span class="badge bdg-gold">🥈 16-30</span>':'<span class="badge" style="background:rgba(30,45,74,.5);color:var(--textm);">Standard</span>';
+      const seg=pos<=15?'<span class="badge bdg-g">🥇 Top 15</span>':pos<=30?'<span class="badge bdg-gold">🥈 16-30</span>':'<span class="badge" style="background:var(--card2);color:var(--textm);">Standard</span>';
       return `<tr class="${cls}"><td style="font-weight:700;color:${pos<=15?'var(--green)':pos<=30?'var(--gold)':'var(--textm)'}">#${pos}</td><td style="font-weight:600">${c.nom}</td><td>${c.tel||'—'}</td><td class="num">${c.nbAchats}</td><td class="num">${fmt(c.totalKg)} kg</td>${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(c.totalCA)} F</td>`:''}  <td>${seg}</td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente enregistrée.</div>';
 }
 // ── MESSAGES WHATSAPP ──────────────────────────────
@@ -534,7 +534,7 @@ function afficherModalTop3(messages){
   if(!modal)return;
   document.getElementById('top3-liste').innerHTML=messages.map((m,i)=>{
     const medals=['🥇','🥈','🥉'];
-    return`<div style="background:rgba(14,20,40,.6);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;margin-bottom:8px">
+    return`<div style="background:var(--card2);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div>
           <span style="font-weight:700;font-size:13px">${medals[i]} ${m.nom}</span>
@@ -545,7 +545,7 @@ function afficherModalTop3(messages){
               style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">
               📲 Envoyer
             </a>`
-          : `<div><input type="tel" id="top3-tel-${i}" placeholder="+228..." style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:130px;margin-bottom:4px">
+          : `<div><input type="tel" id="top3-tel-${i}" placeholder="+228..." style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text);width:130px;margin-bottom:4px">
               <button onclick="envoyerTop3Manuel(${i},'${encodeURIComponent(m.msg)}')" style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;width:100%">📲 Envoyer</button>
             </div>`
         }

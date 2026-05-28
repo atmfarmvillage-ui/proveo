@@ -74,11 +74,11 @@ async function renderBilanDepenses(depData){
         <div style="font-family:'Crimson Pro',serif;font-size:26px;font-weight:700;color:var(--red)">${fmt(totalGeneral)} F</div>
         <div style="font-size:10px;color:var(--textm);text-transform:uppercase">Total dépenses ${mois}</div>
       </div>
-      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
         <div style="font-size:14px;font-weight:700;color:var(--red)">${fmt(totalMP)} F</div>
         <div style="font-size:10px;color:var(--textm)">🛒 Achats MP</div>
       </div>
-      <div style="background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
         <div style="font-size:14px;font-weight:700;color:var(--red)">${fmt(totalSal)} F</div>
         <div style="font-size:10px;color:var(--textm)">👤 Salaires</div>
       </div>
@@ -93,7 +93,7 @@ async function renderBilanDepenses(depData){
           <span style="font-weight:600">${catLabel[cat]||cat}</span>
           <span style="font-family:'DM Mono',monospace;color:var(--red)">${fmt(val)} F <span style="color:var(--textm);font-size:10px">(${pct}%)</span></span>
         </div>
-        <div style="background:rgba(30,45,74,.8);border-radius:20px;height:5px;overflow:hidden">
+        <div style="background:var(--card2);border-radius:20px;height:5px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--red),rgba(239,68,68,.5));border-radius:20px"></div>
         </div>
       </div>`;
@@ -108,9 +108,9 @@ async function renderBilanDepenses(depData){
         <th style="text-align:right;color:var(--textm);padding:4px 0;border-bottom:1px solid var(--border)">%</th>
       </tr></thead>
       <tbody>${pdvSorted.map(([p,v])=>`<tr>
-        <td style="padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);font-weight:600">📍 ${p}</td>
-        <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);color:var(--red);font-family:'DM Mono',monospace">${fmt(v)} F</td>
-        <td style="text-align:right;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);color:var(--textm)">${totalGeneral>0?Math.round(v/totalGeneral*100):0}%</td>
+        <td style="padding:5px 0;border-bottom:1px solid var(--card2);font-weight:600">📍 ${p}</td>
+        <td style="text-align:right;padding:5px 0;border-bottom:1px solid var(--card2);color:var(--red);font-family:'DM Mono',monospace">${fmt(v)} F</td>
+        <td style="text-align:right;padding:5px 0;border-bottom:1px solid var(--card2);color:var(--textm)">${totalGeneral>0?Math.round(v/totalGeneral*100):0}%</td>
       </tr>`).join('')}</tbody>
     </table>`:''} `;
 }
@@ -223,7 +223,7 @@ async function renderBilanVentes(){
           <span style="font-weight:600">${icons[espece]||'🌾'} ${f}</span>
           <span style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(v.kg)} kg · ${fmt(v.ca)} F</span>
         </div>
-        <div style="background:rgba(30,45,74,.8);border-radius:20px;height:4px;overflow:hidden">
+        <div style="background:var(--card2);border-radius:20px;height:4px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--g4),var(--g6));border-radius:20px"></div>
         </div>
       </div>`;
@@ -278,7 +278,7 @@ async function renderClassementPDV(){
       const pct=Math.round(v.ca/maxCA*100);
       const txEnc=v.ca>0?Math.round(v.enc/v.ca*100):0;
       const txColor=txEnc>=80?'var(--green)':txEnc>=50?'var(--gold)':'var(--red)';
-      return`<div style="background:rgba(14,20,40,.5);border:1px solid ${i===0?'rgba(245,158,11,.4)':'rgba(30,45,74,.5)'};border-radius:10px;padding:12px;margin-bottom:8px">
+      return`<div style="background:var(--card2);border:1px solid ${i===0?'rgba(245,158,11,.4)':'var(--card2)'};border-radius:10px;padding:12px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
             <div style="font-size:14px;font-weight:700">${medals[i]||`#${i+1}`} ${p}</div>
@@ -290,7 +290,7 @@ async function renderClassementPDV(){
           </div>
         </div>
         <!-- Barre CA relative -->
-        <div style="background:rgba(30,45,74,.8);border-radius:20px;height:5px;overflow:hidden;margin-bottom:6px">
+        <div style="background:var(--card2);border-radius:20px;height:5px;overflow:hidden;margin-bottom:6px">
           <div style="width:${pct}%;height:100%;background:${i===0?'linear-gradient(90deg,var(--gold),var(--goldd))':'linear-gradient(90deg,var(--g4),var(--g6))'};border-radius:20px"></div>
         </div>
         <!-- Taux encaissement -->

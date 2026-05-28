@@ -256,7 +256,7 @@ async function filtrerIngrFormule(){
     const em = i.energie || 0;
     const hasData = prot > 0 || em > 0;
     return `<div onclick="selectionnerIngrFormule('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
-      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.4);transition:background .15s"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--card2);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
       <div style="font-size:12px;font-weight:600">${i.nom}</div>
       <div style="font-size:10px;color:var(--textm)">
@@ -331,7 +331,7 @@ function _renderMFIngredients(){
     const ingData = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
     const prix = ingData?.prix_actuel || 0;
     const violation = _violationMP(espece, ing.nom, ing.pct);
-    const bg = violation ? 'rgba(239,68,68,.08)' : 'rgba(14,20,40,.4)';
+    const bg = violation ? 'rgba(239,68,68,.08)' : 'var(--card2)';
     const border = violation ? 'rgba(239,68,68,.4)' : 'var(--border)';
     const warn = violation
       ? `<div style="grid-column:1/-1;font-size:9px;color:var(--red);margin-top:3px">⚠ ${violation.type==='max'?'Maximum':'Minimum'} : ${violation.limite}%${violation.note?' — '+violation.note:''}</div>`
@@ -984,14 +984,14 @@ function renderCustomFormules(){
   if(!el) return;
   if(!FORMULES_SADARI.length){
     el.innerHTML = `
-      <div style="font-size:12px;color:var(--textm);padding:14px;text-align:center;background:rgba(14,20,40,.4);border:1px dashed var(--border);border-radius:8px">
+      <div style="font-size:12px;color:var(--textm);padding:14px;text-align:center;background:var(--card2);border:1px dashed var(--border);border-radius:8px">
         Aucune formule encore créée.<br>
         <span style="font-size:10px">Cliquez sur <strong>➕ Nouvelle formule</strong> pour commencer.</span>
       </div>`;
     return;
   }
   el.innerHTML = FORMULES_SADARI.map(f => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(14,20,40,.4);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:12px">${ESPECE_ICON[f.espece]||'📦'} ${f.nom}</div>
         <div style="font-size:10px;color:var(--textm)">${f.stade||'—'} · ${f.ingredients?.length||0} MP · ${fmt(f.prix_defaut)} F/kg</div>

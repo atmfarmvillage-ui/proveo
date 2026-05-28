@@ -120,7 +120,7 @@ async function renderDashboard(){
 
   // Derniers lots
   const derniersLotsHtml=DL.map(l=>`
-    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2);font-size:11px">
       <div>
         <div style="font-weight:600">${ESPECE_ICON[l.espece]||'🌾'} ${l.formule_nom}</div>
         <div style="color:var(--textm)">${l.date} · ${l.ref||''}</div>
@@ -137,7 +137,7 @@ async function renderDashboard(){
 
   // Ventes du jour
   const ventesJourHtml=VJ.map(v=>`
-    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--card2);font-size:11px">
       <div>
         <div style="font-weight:600">${v.client_nom||'Client comptant'}</div>
         <div style="color:var(--textm)">${v.formule_nom||'—'}</div>
@@ -206,31 +206,31 @@ async function renderDashboard(){
       ${isAdmin?`<div class="card">
         <div class="card-title"><div class="ct-left"><span>📊 Bilan ${m}</span></div></div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">CA Provenderie</span>
             <span style="color:var(--gold);font-family:'DM Mono',monospace">${fmt(caMois)} F</span>
           </div>
-          ${caFermeMois>0?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          ${caFermeMois>0?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">🚜 CA Ferme</span>
             <span style="color:var(--g6);font-family:'DM Mono',monospace">${fmt(caFermeMois)} F</span>
           </div>`:''}
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">Encaissé Provenderie</span>
             <span style="color:var(--green);font-family:'DM Mono',monospace">${fmt(encaisseMois)} F</span>
           </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">Achats MP payés</span>
             <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depAchatsMP)} F</span>
           </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">Dépenses courantes</span>
             <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depCourantes)} F</span>
           </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm)">Salaires</span>
             <span style="color:var(--red);font-family:'DM Mono',monospace">− ${fmt(depSalaires)} F</span>
           </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card2)">
             <span style="color:var(--textm);font-weight:600">Total dépenses</span>
             <span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">− ${fmt(depMois)} F</span>
           </div>
@@ -253,7 +253,7 @@ async function renderDashboard(){
               v.recu_imprime ? '🖨️✓' : '🖨️',
               v.wa_envoye ? '📲✓' : (v.sms_envoye ? '💬✓' : '📲'),
             ].join(' ');
-            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:11px">
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--card2);font-size:11px">
               <div style="flex:1;min-width:0">
                 <div style="font-weight:600">${v.client_nom||'Comptant'}</div>
                 <div style="color:var(--textm);font-size:10px">${fmt(v.montant_total)} F · ${statutCom}</div>

@@ -72,7 +72,7 @@ async function renderBilanAvance(){
     .map(([cat,data])=>`
       <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
         <div onclick="toggleDrillDown('dd-${cat.replace(/\s/g,'-')}')"
-          style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:rgba(14,20,40,.6)">
+          style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--card2)">
           <div style="font-weight:600;font-size:12px">${cat}</div>
           <div style="display:flex;align-items:center;gap:10px">
             <span style="color:var(--red);font-weight:700">${fmt(data.total)} F</span>
@@ -81,7 +81,7 @@ async function renderBilanAvance(){
         </div>
         <div id="dd-${cat.replace(/\s/g,'-')}" style="display:none;padding:8px 14px">
           ${data.items.map(i=>`
-            <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.4)">
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid var(--card2)">
               <span style="color:var(--textm)">${i.description||'—'}${i.point_vente?` · ${i.point_vente}`:''}</span>
               <span style="color:var(--red)">${fmt(i.montant)} F</span>
             </div>`).join('')}
@@ -106,7 +106,7 @@ async function renderBilanAvance(){
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Ventes par point de vente</div>
         ${Object.entries(ventesPDV).map(([pv,data])=>`
-          <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(14,20,40,.6);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;padding:10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
             <div>
               <div style="font-weight:600;font-size:12px">📍 ${pv}</div>
               <div style="font-size:10px;color:var(--textm)">${data.count} vente${data.count>1?'s':''}</div>
@@ -116,7 +116,7 @@ async function renderBilanAvance(){
         <div style="margin-top:12px">
           <div style="font-size:11px;font-weight:700;color:var(--g6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Production</div>
           ${lots.map(l=>`
-            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid var(--card2)">
               <span style="font-weight:600">${l.formule_nom}</span>
               <span style="color:var(--g6)">${l.quantite_kg} kg</span>
             </div>`).join('')||'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}
@@ -283,7 +283,7 @@ async function renderRapportProduction(){
     ${Object.entries(parFormule).map(([nom,data])=>`
       <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
         <div onclick="toggleDrillDown('rp-${nom.replace(/\s/g,'-')}')"
-          style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:rgba(14,20,40,.6)">
+          style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--card2)">
           <div style="font-weight:600">${nom}</div>
           <div style="display:flex;gap:16px;align-items:center">
             <span style="font-size:11px;color:var(--g6)">${data.lots.length} lot${data.lots.length>1?'s':''}</span>

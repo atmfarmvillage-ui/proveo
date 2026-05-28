@@ -45,7 +45,7 @@ async function renderStockPF(){
     const rows=items.sort((a,b)=>a.formule_nom.localeCompare(b.formule_nom)).map(item=>{
       const alerte=Number(item.nb_sacs||0)<=Number(item.seuil_alerte||10);
       const epuise=Number(item.nb_sacs||0)===0;
-      return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)">
+      return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--card2)">
         <div>
           <div style="font-size:12px;font-weight:600">${item.formule_nom}</div>
           <div style="font-size:10px;color:var(--textm)">${item.poids_sac} kg/sac · ${fmt(Number(item.nb_sacs||0)*Number(item.poids_sac||25))} kg</div>
@@ -250,14 +250,14 @@ function afficherFeuilleFabrication(lot){
     <div><span style="color:var(--textm)">Pertes</span><br><strong style="color:${pertes>0?'var(--red)':'var(--green)'}">${fmt(pertes)} kg (${qte>0?((pertes/qte)*100).toFixed(1):0}%)</strong></div>
     <div><span style="color:var(--textm)">Opérateur</span><br>
       <input type="text" id="fab-tech" placeholder="Nom technicien" value="${GP_USER?.email?.split('@')[0]||''}"
-        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:100%">
+        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text);width:100%">
     </div>`;
 
   // Ingrédients avec cases à cocher
   const ingrs=f.ingredients||[];
   document.getElementById('fab-ingredients').innerHTML=ingrs.map((ing,i)=>{
     const kg=(ing.pct/100)*qte;
-    return`<div id="fab-ing-${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:4px;background:rgba(14,20,40,.4);border:1px solid rgba(30,45,74,.3);transition:all .2s">
+    return`<div id="fab-ing-${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:4px;background:var(--card2);border:1px solid var(--card2);transition:all .2s">
       <input type="checkbox" id="fab-chk-${i}" onchange="onFabCheck(${i})"
         style="width:22px;height:22px;cursor:pointer;accent-color:var(--g4);flex-shrink:0">
       <div style="flex:1;min-width:0">
@@ -285,8 +285,8 @@ function onFabCheck(idx){
     row.style.borderColor='rgba(22,163,74,.4)';
     if(timeEl)timeEl.textContent='✓ '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   } else {
-    row.style.background='rgba(14,20,40,.4)';
-    row.style.borderColor='rgba(30,45,74,.3)';
+    row.style.background='var(--card2)';
+    row.style.borderColor='var(--card2)';
     if(timeEl)timeEl.textContent='';
   }
   mettreAJourProgression();
@@ -325,7 +325,7 @@ function reinitCoches(){
     const row=document.getElementById('fab-ing-'+i);
     const timeEl=document.getElementById('fab-time-'+i);
     if(chk)chk.checked=false;
-    if(row){row.style.background='rgba(14,20,40,.4)';row.style.borderColor='rgba(30,45,74,.3)';}
+    if(row){row.style.background='var(--card2)';row.style.borderColor='var(--card2)';}
     if(timeEl)timeEl.textContent='';
   }
   mettreAJourProgression();

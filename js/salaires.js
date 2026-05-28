@@ -264,7 +264,7 @@ async function afficherBilanEmploye(nomPrenom){
         <div style="font-size:20px;font-weight:700;color:var(--green)">${fmt(totalPrimes)} F</div>
         <div style="font-size:10px;color:var(--textm)">Total primes</div>
       </div>
-      <div style="text-align:center;background:rgba(14,20,40,.6);border-radius:8px;padding:10px;grid-column:1/-1">
+      <div style="text-align:center;background:var(--card2);border-radius:8px;padding:10px;grid-column:1/-1">
         <div style="font-size:22px;font-weight:700;color:var(--g6)">${fmt(totalPercu+totalPrimes)} F</div>
         <div style="font-size:10px;color:var(--textm)">Total cumulé depuis l'embauche</div>
       </div>

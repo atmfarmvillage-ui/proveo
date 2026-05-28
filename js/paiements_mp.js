@@ -32,14 +32,14 @@ async function renderPaiementsMP(){
     const reste=total-paye;
     const pct=total>0?Math.round(paye/total*100):0;
     const solde=reste<=0;
-    return `<div style="background:rgba(14,20,40,.6);border:1px solid ${solde?'rgba(22,163,74,.3)':'rgba(30,45,74,.7)'};border-radius:10px;padding:14px;margin-bottom:8px">
+    return `<div style="background:var(--card2);border:1px solid ${solde?'rgba(22,163,74,.3)':'var(--card2)'};border-radius:10px;padding:14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:14px;margin-bottom:4px">${a.fournisseur_nom||'—'}
             <span class="badge ${solde?'bdg-g':'bdg-gold'}" style="font-size:9px;margin-left:4px">${solde?'✅ Soldé':'⏳ En cours'}</span>
           </div>
           <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${a.date_commande} · ${a.ref||''} · ${a.condition_paiement}</div>
-          <div style="background:rgba(30,45,74,.8);border-radius:20px;height:6px;margin-bottom:6px">
+          <div style="background:var(--card2);border-radius:20px;height:6px;margin-bottom:6px">
             <div style="width:${pct}%;height:100%;background:${pct>=100?'var(--green)':pct>50?'var(--gold)':'var(--red)'};border-radius:20px"></div>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
@@ -192,7 +192,7 @@ async function saveModalPaiement(){
         📲 Envoyer confirmation WhatsApp
       </a>
       <button onclick="fermerModalPaiement()"
-        style="width:100%;background:rgba(30,45,74,.6);border:1px solid var(--border2);color:var(--textm);padding:11px;border-radius:10px;font-size:13px;cursor:pointer">
+        style="width:100%;background:var(--card2);border:1px solid var(--border2);color:var(--textm);padding:11px;border-radius:10px;font-size:13px;cursor:pointer">
         Fermer sans envoyer
       </button>
     </div>`;
@@ -220,7 +220,7 @@ async function voirHistoPaiements(achatId, fournisseurNom){
   document.getElementById('pmt-modal-form').style.display='none';
   const succes=document.getElementById('pmt-modal-succes');
   succes.innerHTML=`
-    ${(P||[]).map(p=>`<div style="display:flex;justify-content:space-between;padding:10px;background:rgba(14,20,40,.5);border-radius:8px;margin-bottom:6px">
+    ${(P||[]).map(p=>`<div style="display:flex;justify-content:space-between;padding:10px;background:var(--card2);border-radius:8px;margin-bottom:6px">
       <div><div style="font-size:12px;font-weight:600">${p.date_paiement}</div>
       <div style="font-size:10px;color:var(--textm)">${p.mode_paiement} ${p.reference?'· '+p.reference:''}</div></div>
       <div style="font-size:15px;font-weight:700;color:var(--green)">${fmt(p.montant)} F</div>
