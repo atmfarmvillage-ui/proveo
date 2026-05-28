@@ -5,9 +5,23 @@
 
 // ── CHARGER LES CAISSES ───────────────────────────
 async function renderCaisse(){
-  const{data:C}=await SB.from('gp_caisses').select('*')
+  let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
-  const caisses=C||[];
+  let caisses=C||[];
+
+  // Auto-création de la caisse du Siège/Production si aucune caisse "siège" n'existe.
+  // Une caisse de PDV a un point_vente ; la caisse siège/production n'en a pas.
+  // Sans ça, impossible de faire un transfert Production <-> PDV (il faut 2 caisses).
+  if(GP_ROLE==='admin' && !caisses.some(c=>!c.point_vente)){
+    const{data:nouv,error:eNouv}=await SB.from('gp_caisses').insert({
+      admin_id:GP_ADMIN_ID, nom:'Caisse Production', type:'physique',
+      solde_initial:0, solde_actuel:0, couleur:'#16A34A'
+    }).select().maybeSingle();
+    if(!eNouv && nouv){
+      caisses.push(nouv);
+      notify('Caisse "Production" créée automatiquement ✓','gold');
+    }
+  }
 
   // Calculer soldes actuels depuis les mouvements
   const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
@@ -25,18 +39,32 @@ async function renderCaisse(){
     }
   });
 
-  const totalGeneral=Object.values(soldes).reduce((s,v)=>s+v,0);
-  const physique=caisses.filter(c=>c.type==='physique').reduce((s,c)=>s+(soldes[c.id]||0),0);
-  const banque=caisses.filter(c=>c.type==='banque').reduce((s,c)=>s+(soldes[c.id]||0),0);
+  // ── FILTRE PAR CAISSE ──
+  // Remplir le sélecteur (conserve la sélection courante)
+  const filtreEl=document.getElementById('caisse-filtre');
+  const filtreVal=filtreEl?.value||'';
+  if(filtreEl){
+    filtreEl.innerHTML='<option value="">📊 Toutes les caisses</option>'+
+      caisses.map(c=>`<option value="${c.id}" ${c.id===filtreVal?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}</option>`).join('');
+    // Si la caisse sélectionnée a été supprimée, revenir à "Toutes"
+    if(filtreVal && !caisses.some(c=>c.id===filtreVal)) filtreEl.value='';
+  }
+  const filtreActif=filtreEl?.value||'';
+  // Caisses à afficher selon le filtre (toutes, ou une seule)
+  const caissesAff = filtreActif ? caisses.filter(c=>c.id===filtreActif) : caisses;
+
+  const totalGeneral=caissesAff.reduce((s,c)=>s+(soldes[c.id]||0),0);
+  const physique=caissesAff.filter(c=>c.type==='physique').reduce((s,c)=>s+(soldes[c.id]||0),0);
+  const banque=caissesAff.filter(c=>c.type==='banque').reduce((s,c)=>s+(soldes[c.id]||0),0);
 
   document.getElementById('caisse-kpis').innerHTML=`
-    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalGeneral)}</div><div class="econo-lbl">Total général (F)</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalGeneral)}</div><div class="econo-lbl">${filtreActif?'Solde caisse (F)':'Total général (F)'}</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(physique)}</div><div class="econo-lbl">Caisse physique (F)</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(banque)}</div><div class="econo-lbl">En banque (F)</div></div>
-    <div class="econo-box"><div class="econo-val">${caisses.length}</div><div class="econo-lbl">Comptes actifs</div></div>`;
+    <div class="econo-box"><div class="econo-val">${caissesAff.length}</div><div class="econo-lbl">${filtreActif?'Caisse sélectionnée':'Comptes actifs'}</div></div>`;
 
-  // Cartes des caisses
-  document.getElementById('caisses-cartes').innerHTML=caisses.map(c=>{
+  // Cartes des caisses (filtrées)
+  document.getElementById('caisses-cartes').innerHTML=caissesAff.map(c=>{
     const solde=soldes[c.id]||0;
     const couleur=c.couleur||'#16A34A';
     return `<div style="background:var(--card2);border:1px solid var(--card2);border-left:4px solid ${couleur};border-radius:12px;padding:18px">

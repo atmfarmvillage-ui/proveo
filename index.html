@@ -1725,6 +1725,10 @@
 <div class="page" id="page-caisse">
   <div class="page-title">Caisse & Banques</div>
   <div class="page-sub">Caisse physique · Comptes bancaires · Transferts</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <label class="lbl" style="margin:0">Afficher :</label>
+    <select id="caisse-filtre" onchange="renderCaisse()" style="width:auto;min-width:200px"></select>
+  </div>
   <div class="g4" id="caisse-kpis" style="margin-bottom:14px"></div>
   <div class="g2" style="align-items:start;margin-bottom:14px">
     <div class="card">
