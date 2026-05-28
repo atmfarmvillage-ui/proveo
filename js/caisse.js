@@ -39,7 +39,7 @@ async function renderCaisse(){
   document.getElementById('caisses-cartes').innerHTML=caisses.map(c=>{
     const solde=soldes[c.id]||0;
     const couleur=c.couleur||'#16A34A';
-    return `<div style="background:rgba(14,20,40,.8);border:1px solid rgba(30,45,74,.8);border-left:4px solid ${couleur};border-radius:12px;padding:18px">
+    return `<div style="background:var(--card2);border:1px solid var(--card2);border-left:4px solid ${couleur};border-radius:12px;padding:18px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">${c.type==='banque'?'🏦 Banque':'💵 Caisse physique'}</div>
@@ -105,7 +105,7 @@ async function renderCaissesArchivees(){
     return;
   }
   container.innerHTML=arch.map(c=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;opacity:.7">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;opacity:.7">
       <div>
         <span style="font-weight:600">${c.type==='banque'?'🏦':'💵'} ${c.nom}</span>
         ${c.point_vente?`<span style="font-size:10px;color:var(--textm);margin-left:8px">📍 ${c.point_vente}</span>`:''}

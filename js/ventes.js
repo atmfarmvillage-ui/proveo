@@ -23,7 +23,7 @@ function rechercherClientTel(){
   results.innerHTML=liste.map(c=>{
     const detteBadge=Number(c.solde_impaye||0)>0?`<span style="color:var(--red);font-size:9px"> · Dette: ${fmt(c.solde_impaye)} F</span>`:'';
     return`<div onclick="selectionnerClientVente('${c.id}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);transition:background .15s;color:var(--text)"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--card2);transition:background .15s;color:var(--text)"
       onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
       <div style="font-weight:600;font-size:12px;color:var(--text)">${c.nom}${detteBadge}</div>
       <div style="font-size:10px;color:var(--textm)">${c.telephone||'—'} · ${c.nom_ferme||''} ${c.localite?'· '+c.localite:''} · <span class="badge ${c.type_client==='gros'?'bdg-gold':'bdg-b'}" style="font-size:8px">${c.type_client==='gros'?'GROS':'DÉTAIL'}</span></div>
@@ -1117,7 +1117,7 @@ function basculerTypeProduitVente(type){
   const wrapFE = document.getElementById('vt-ferme-wrap');
   const wrapP = document.getElementById('vt-prestation-wrap');
   const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
-  const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
+  const inactif = 'background:var(--card2);border:1px solid var(--border);color:var(--textm)';
   const setActif = (btn, on) => {
     if(!btn) return;
     btn.style.cssText = (on ? btn.style.cssText.replace(inactif,'')+';'+actif
@@ -1161,7 +1161,7 @@ function basculerTypeProduitVente(type){
 function choisirSousTypeFerme(st){
   document.getElementById('vt_sous_type').value = st;
   const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
-  const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
+  const inactif = 'background:var(--card2);border:1px solid var(--border);color:var(--textm)';
   document.querySelectorAll('.vt-ferme-btn').forEach(b=>{
     const on = b.dataset.type === st;
     b.style.cssText = (on ? b.style.cssText.replace(inactif,'')+';'+actif
@@ -1253,7 +1253,7 @@ function filtrerIngrVente(){
       ? `onclick="notify('🚫 ${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')} en rupture — vente impossible','r')"`
       : `onclick="selectionnerIngrVente('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0},${stock})"`;
     return `<div ${onclick}
-      style="padding:9px 12px;${cursorStyle};border-bottom:1px solid rgba(30,45,74,.4);background:${bgColor};transition:background .15s"
+      style="padding:9px 12px;${cursorStyle};border-bottom:1px solid var(--card2);background:${bgColor};transition:background .15s"
       onmouseover="if(${!enRupture})this.style.background='rgba(22,163,74,.1)'"
       onmouseout="this.style.background='${bgColor}'">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">

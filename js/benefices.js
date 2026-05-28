@@ -232,7 +232,7 @@ function afficherDetailBenef(d, periode){
         </div>
         <div style="flex:1;max-width:300px">
           <!-- Jauge bénéfice -->
-          <div style="background:rgba(30,45,74,.8);border-radius:20px;height:12px;overflow:hidden;margin-bottom:6px">
+          <div style="background:var(--card2);border-radius:20px;height:12px;overflow:hidden;margin-bottom:6px">
             <div style="width:${Math.min(100,Math.max(0,+pctBenef))}%;height:100%;background:${sante==='green'?'var(--green)':sante==='gold'?'var(--gold)':'var(--red)'};border-radius:20px;transition:width .5s"></div>
           </div>
           <div style="font-size:10px;color:var(--textm)">
@@ -246,19 +246,19 @@ function afficherDetailBenef(d, periode){
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>🏭 Production</span></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-        <div style="text-align:center;padding:8px;background:rgba(14,20,40,.5);border-radius:8px">
+        <div style="text-align:center;padding:8px;background:var(--card2);border-radius:8px">
           <div style="font-size:18px;font-weight:700;color:var(--g6)">${fmt(d.kgNets)} kg</div>
           <div style="font-size:10px;color:var(--textm)">Produits nets</div>
         </div>
-        <div style="text-align:center;padding:8px;background:rgba(14,20,40,.5);border-radius:8px">
+        <div style="text-align:center;padding:8px;background:var(--card2);border-radius:8px">
           <div style="font-size:18px;font-weight:700;color:var(--textm)">${d.nbLots}</div>
           <div style="font-size:10px;color:var(--textm)">Lots produits</div>
         </div>
-        <div style="text-align:center;padding:8px;background:rgba(14,20,40,.5);border-radius:8px">
+        <div style="text-align:center;padding:8px;background:var(--card2);border-radius:8px">
           <div style="font-size:18px;font-weight:700;color:var(--gold)">${fmt(d.coutRevient)} F</div>
           <div style="font-size:10px;color:var(--textm)">Coût/kg</div>
         </div>
-        <div style="text-align:center;padding:8px;background:rgba(14,20,40,.5);border-radius:8px">
+        <div style="text-align:center;padding:8px;background:var(--card2);border-radius:8px">
           <div style="font-size:18px;font-weight:700;color:${d.prixVenteMoy>d.coutRevient?'var(--green)':'var(--red)'}">${fmt(d.prixVenteMoy-d.coutRevient)} F</div>
           <div style="font-size:10px;color:var(--textm)">Marge/kg</div>
         </div>

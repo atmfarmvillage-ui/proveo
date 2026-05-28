@@ -48,7 +48,7 @@ function filtrerMPStock(){
     else{badge='<span style="background:rgba(22,163,74,.12);color:var(--green);padding:1px 6px;border-radius:10px;font-size:9px">✓ OK</span>';}
     
     return`<div onclick="selectionnerMPStock('${ingr.id}','${ingr.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${ingr.prix_actuel||0})"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(30,45,74,.3);background:${bgColor};transition:background .15s"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--card2);background:${bgColor};transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.08)'" onmouseout="this.style.background='${bgColor}'">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div>

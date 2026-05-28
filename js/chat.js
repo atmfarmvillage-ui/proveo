@@ -78,16 +78,16 @@ async function renderPresence(){
 
 function presenceBadge(m,enLigne){
   const depuis=tempsDepuis(m.derniere_vue);
-  const pal=m.point_vente?pvPalette(m.point_vente):{bg:'rgba(30,45,74,.5)',border:'rgba(100,116,139,.3)',text:'#94A3B8',emoji:'🏭'};
+  const pal=m.point_vente?pvPalette(m.point_vente):{bg:'var(--card2)',border:'rgba(100,116,139,.3)',text:'#94A3B8',emoji:'🏭'};
   const pvHtml=m.point_vente
     ?`<span style="font-size:9px;background:${pal.bg};color:${pal.text};border:1px solid ${pal.border};padding:1px 6px;border-radius:8px;white-space:nowrap">${pal.emoji} ${m.point_vente}</span>`
     :'<span style="font-size:9px;color:var(--textm)">🏭 Siège</span>';
-  return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;margin-bottom:4px;background:rgba(14,20,40,.5)">
+  return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;margin-bottom:4px;background:var(--card2)">
     <div style="width:8px;height:8px;border-radius:50%;background:${enLigne?'#22c55e':'#475569'};flex-shrink:0;margin-top:2px"></div>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:2px">
         <span style="font-size:12px;font-weight:700">${m.nom}</span>
-        <span style="font-size:9px;font-weight:600;color:var(--g6);background:rgba(30,45,74,.8);padding:1px 6px;border-radius:8px">${(m.role||'').toUpperCase()}</span>
+        <span style="font-size:9px;font-weight:600;color:var(--g6);background:var(--card2);padding:1px 6px;border-radius:8px">${(m.role||'').toUpperCase()}</span>
         ${pvHtml}
       </div>
       <div style="font-size:10px;color:var(--textm)">${enLigne?'<span style="color:var(--green);font-weight:600">● En ligne</span>':'<span>● '+depuis+'</span>'}</div>
@@ -133,7 +133,7 @@ async function renderChat(){
       ?`<img src="${m.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${m.message?'6px':'0'}" onclick="window.open('${m.image_url}','_blank')">`
       :'';
     return `<div style="display:flex;flex-direction:${estMoi?'row-reverse':'row'};gap:8px;margin-bottom:10px;align-items:flex-end">
-      <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(m.auteur_nom||'?')[0].toUpperCase()}</div>
+      <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'var(--card2)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(m.auteur_nom||'?')[0].toUpperCase()}</div>
       <div style="max-width:75%">
         ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px;${estMoi?'text-align:right':''}">${m.auteur_nom} <span style="opacity:.6">· ${m.auteur_role||''}</span></div>`:''}
         <div style="background:${estMoi?'var(--g5)':'var(--card2)'};color:${estMoi?'#FFFFFF':'var(--text)'};border:1px solid ${estMoi?'rgba(255,255,255,.15)':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5;word-wrap:break-word">${imgHtml}${m.message||''}</div>
@@ -271,7 +271,7 @@ function ajouterMessageRealtime(msg){
     ?`<img src="${msg.image_url}" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;margin-bottom:${msg.message?'6px':'0'}" onclick="window.open('${msg.image_url}','_blank')">`
     :'';
   div.innerHTML=`
-    <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'rgba(30,45,74,.8)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(msg.auteur_nom||'?')[0].toUpperCase()}</div>
+    <div style="width:28px;height:28px;border-radius:50%;background:${estMoi?'var(--g5)':'var(--card2)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:${estMoi?'#fff':'var(--g6)'}">${(msg.auteur_nom||'?')[0].toUpperCase()}</div>
     <div style="max-width:75%">
       ${!estMoi?`<div style="font-size:10px;color:var(--textm);margin-bottom:2px">${msg.auteur_nom} <span style="opacity:.6">· ${msg.auteur_role||''}</span></div>`:''}
       <div style="background:${estMoi?'var(--g5)':'var(--card2)'};color:${estMoi?'#FFFFFF':'var(--text)'};border:1px solid ${estMoi?'rgba(255,255,255,.15)':'var(--border)'};border-radius:${estMoi?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.5;word-wrap:break-word">${imgHtml}${msg.message||''}</div>

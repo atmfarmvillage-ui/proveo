@@ -381,7 +381,7 @@ async function _renderObjectifs(c, mois){
 
     const couleur = pct >= 100 ? 'var(--green)' : pct >= 50 ? 'var(--gold)' : 'var(--red)';
     return `
-      <div style="background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
           <div style="font-size:12px;font-weight:600;color:var(--text)">${o.libelle}</div>
           <div style="font-size:11px;color:${couleur};font-weight:700">${pct}%</div>
@@ -389,7 +389,7 @@ async function _renderObjectifs(c, mois){
         <div style="font-size:10px;color:var(--textm);margin-bottom:8px">
           ${detail}${o.deadline?` · échéance ${o.deadline}`:''}
         </div>
-        <div style="background:rgba(30,45,74,.6);border-radius:20px;height:8px;overflow:hidden">
+        <div style="background:var(--card2);border-radius:20px;height:8px;overflow:hidden">
           <div style="height:100%;width:${pct}%;background:${couleur};border-radius:20px;transition:width .3s"></div>
         </div>
       </div>`;
@@ -438,9 +438,9 @@ async function _renderCalendrierRapports(contratId, mois){
     const estSoumis = soumis.has(dateStr);
 
     let bg, txt, titre;
-    if(estHorsContrat){ bg='rgba(30,45,74,.2)'; txt='var(--textm)'; titre='Hors période contrat'; }
-    else if(estDimanche && exemptDim){ bg='rgba(30,45,74,.3)'; txt='var(--textm)'; titre='Dimanche (exempt)'; }
-    else if(estFutur){ bg='rgba(30,45,74,.4)'; txt='var(--textm)'; titre='Jour futur'; }
+    if(estHorsContrat){ bg='var(--card2)'; txt='var(--textm)'; titre='Hors période contrat'; }
+    else if(estDimanche && exemptDim){ bg='var(--card2)'; txt='var(--textm)'; titre='Dimanche (exempt)'; }
+    else if(estFutur){ bg='var(--card2)'; txt='var(--textm)'; titre='Jour futur'; }
     else if(estSoumis){ bg='rgba(22,163,74,.2)'; txt='var(--green)'; titre='Rapport soumis ✓'; }
     else { bg='rgba(239,68,68,.15)'; txt='var(--red)'; titre='Rapport manqué — pénalité 500 F'; }
 
@@ -663,7 +663,7 @@ async function renderMesRapports(){
         <input type="month" id="rq-mois" value="${mois}" onchange="renderMesRapports()" style="width:auto;font-size:11px">
       </div>
       ${R.map(r => `
-        <details style="background:rgba(14,20,40,.5);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+        <details style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
           <summary style="cursor:pointer;font-weight:600;font-size:12px">📅 ${r.date_rapport} <span style="font-size:10px;color:var(--textm);font-weight:400">· soumis ${new Date(r.heure_soumission).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span></summary>
           <div style="margin-top:10px;font-size:11px;line-height:1.6">
             ${r.actions_menees?`<div><strong>Actions :</strong> ${r.actions_menees}</div>`:''}

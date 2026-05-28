@@ -312,7 +312,7 @@ function afficherModalMessages(messages){
   }
   document.getElementById('msg-pdv-liste').innerHTML=messages.map((m,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
-    return`<div id="msg-pdv-card-${i}" style="background:rgba(14,20,40,.6);border:1px solid ${m.tel?'rgba(37,211,102,.3)':'rgba(239,68,68,.3)'};border-radius:10px;padding:12px;margin-bottom:8px">
+    return`<div id="msg-pdv-card-${i}" style="background:var(--card2);border:1px solid ${m.tel?'rgba(37,211,102,.3)':'rgba(239,68,68,.3)'};border-radius:10px;padding:12px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div>
           <span style="font-weight:700;font-size:13px">${medal} ${m.pdv}</span>
@@ -328,7 +328,7 @@ function afficherModalMessages(messages){
               </a>`
             : `<div>
                 <input type="tel" class="msg-tel-input" data-idx="${i}" placeholder="+228 90 00 00 00"
-                  style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:rgba(14,20,40,.8);color:var(--text);width:140px;margin-bottom:4px">
+                  style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text);width:140px;margin-bottom:4px">
                 <button class="msg-send-btn" data-idx="${i}" data-pdv="${m.pdv}" data-rang="${m.rang}" data-type="${m.type}" data-periode="${m.periode}" data-ca="${m.ca||0}"
                   style="background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;width:100%">
                   📲 Envoyer

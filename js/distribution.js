@@ -117,7 +117,7 @@ function basculerTypeProduitDist(type){
   const wrapF = document.getElementById('dist-formule-wrap');
   const wrapM = document.getElementById('dist-mp-wrap');
   const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
-  const inactif = 'background:rgba(30,45,74,.4);border:1px solid var(--border);color:var(--textm)';
+  const inactif = 'background:var(--card2);border:1px solid var(--border);color:var(--textm)';
   const qteLabel = document.getElementById('dist-qte-label');
   const prixLabel = document.getElementById('dist-prix-label');
   if(type === 'mp'){
