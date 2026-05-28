@@ -175,19 +175,62 @@ document.addEventListener('click',e=>{
   if(s&&r&&!s.contains(e.target)&&!r.contains(e.target))r.style.display='none';
 });
 
-// Affiche la perte de production = quantité lancée − (sacs obtenus × poids)
-function majPerteLot(){
-  const qte=+document.getElementById('lot_qte')?.value||0;
-  const nbSacs=+document.getElementById('lot_nb_sacs')?.value||0;
-  const poids=+document.getElementById('lot_poids_sac')?.value||25;
-  const el=document.getElementById('lot-perte-affichage');
-  if(!el) return;
-  if(!qte || !nbSacs){ el.value='—'; return; }
-  const reel=nbSacs*poids;
-  const perte=qte-reel;
-  if(perte>0)      el.value=`${fmt(perte)} kg perdus (${fmt(reel)} kg en sacs)`;
-  else if(perte<0) el.value=`⚠ ${fmt(-perte)} kg en trop (vérifier)`;
-  else             el.value=`0 — aucune perte (${fmt(reel)} kg)`;
+// ── SAISIE DES SACS OBTENUS (après production) ──
+let _sacsLot = null;
+async function ouvrirSacsObtenus(lotId){
+  const{data:lot}=await SB.from('gp_lots').select('*').eq('id',lotId).maybeSingle();
+  if(!lot){ notify('Lot introuvable','r'); return; }
+  _sacsLot = lot;
+  const info=document.getElementById('so-lot-info');
+  if(info) info.textContent=`${lot.formule_nom} · ${lot.ref||''} · ${fmt(lot.qte_produite)} kg lancés`;
+  const nbEl=document.getElementById('so-nb-sacs'); if(nbEl) nbEl.value=Number(lot.nb_sacs)>0?lot.nb_sacs:'';
+  const poidsEl=document.getElementById('so-poids'); if(poidsEl) poidsEl.value=String(lot.poids_sac||25);
+  const errEl=document.getElementById('so-err'); if(errEl) errEl.textContent='';
+  majPerteSacsObtenus();
+  document.getElementById('modal-sacs-obtenus').style.display='flex';
+}
+function fermerSacsObtenus(){
+  const m=document.getElementById('modal-sacs-obtenus'); if(m) m.style.display='none';
+  _sacsLot=null;
+}
+function majPerteSacsObtenus(){
+  const el=document.getElementById('so-perte');
+  if(!el||!_sacsLot) return;
+  const nb=+document.getElementById('so-nb-sacs')?.value||0;
+  const poids=+document.getElementById('so-poids')?.value||25;
+  const qte=Number(_sacsLot.qte_produite)||0;
+  if(!nb){ el.textContent='—'; return; }
+  const reel=nb*poids, perte=qte-reel;
+  el.textContent = perte>0 ? `${fmt(perte)} kg de perte (${fmt(reel)} kg en sacs)`
+    : perte<0 ? `⚠ ${fmt(-perte)} kg en trop (vérifier la quantité lancée)`
+    : `Aucune perte (${fmt(reel)} kg)`;
+}
+async function saveSacsObtenus(){
+  if(!_sacsLot) return;
+  const nb=+document.getElementById('so-nb-sacs')?.value||0;
+  const poids=+document.getElementById('so-poids')?.value||25;
+  const err=document.getElementById('so-err');
+  if(!nb||nb<=0){ if(err) err.textContent='Entre le nombre de sacs obtenus.'; return; }
+  const qte=Number(_sacsLot.qte_produite)||0;
+  const reel=nb*poids;
+  const perte=Math.max(0, qte-reel);
+  const ancienReel=Number(_sacsLot.nb_sacs)>0 ? Number(_sacsLot.nb_sacs)*Number(_sacsLot.poids_sac||25) : 0;
+  const ancienSacs=Number(_sacsLot.nb_sacs)||0;
+  const pdvProd=_sacsLot.pdv_production||'Production';
+  // 1. Mettre à jour le lot
+  await SB.from('gp_lots').update({nb_sacs:nb, poids_sac:poids, kg_pertes:perte, stock_mis_a_jour:true}).eq('id',_sacsLot.id);
+  // 2. Créditer le stock de la DIFFÉRENCE (gère la correction si déjà saisi)
+  const deltaKg=reel-ancienReel;
+  if(typeof ajusterStockPDV==='function' && deltaKg!==0){
+    await ajusterStockPDV(pdvProd, _sacsLot.formule_nom, deltaKg);
+  }
+  // 3. Stock PF historique (par poids de sac)
+  if(typeof upsertStockPF==='function'){
+    await upsertStockPF(pdvProd, _sacsLot.formule_nom, poids, nb-ancienSacs);
+  }
+  notify(`✓ ${nb} sacs · stock ${deltaKg>=0?'+':''}${fmt(deltaKg)} kg${perte>0?' · perte '+fmt(perte)+' kg':''}`,'gold');
+  fermerSacsObtenus();
+  renderLots();
 }
 
 function previewLot(){
@@ -298,10 +341,10 @@ async function saveLot(){
   const{data:lot,error}=await SB.from('gp_lots').insert({
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
     qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
-    cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:true,
-    poids_sac:+document.getElementById('lot_poids_sac')?.value||25,
-    nb_sacs:+document.getElementById('lot_nb_sacs')?.value||0,
-    kg_pertes:Math.max(0,qte-(+document.getElementById('lot_nb_sacs')?.value||0)*(+document.getElementById('lot_poids_sac')?.value||25)),
+    cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:false,
+    poids_sac:25,
+    nb_sacs:0,        // saisi après production (bouton 📦 dans la liste)
+    kg_pertes:0,      // calculé à la saisie des sacs obtenus
     pdv_production:document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||null
   }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
@@ -319,12 +362,10 @@ async function saveLot(){
   }
   err.textContent='';
 
-  // Récupérer les valeurs sacs AVANT le reset
-  const nbSacsSaves=+document.getElementById('lot_nb_sacs')?.value||0;
-  const poidsSacSaves=+document.getElementById('lot_poids_sac')?.value||25;
+  // Réf PDV de production (pour la feuille de fab) — le stock sera crédité à la saisie des sacs
   const pdvProdSaves=document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||'Production';
 
-  ['lot_qte','lot_mo','lot_emb','lot_obs','lot_nb_sacs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['lot_qte','lot_mo','lot_emb','lot_obs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('lot_mo').value='0';document.getElementById('lot_emb').value='0';
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
@@ -332,19 +373,11 @@ async function saveLot(){
   LOT_COMPO=[];
   const lmps=document.getElementById('lot_mp_search'); if(lmps)lmps.value='';
 
-  // Alimenter le stock produits finis (détail par poids de sac — historique)
-  if(nbSacsSaves>0&&pdvProdSaves&&typeof upsertStockPF==='function'){
-    await upsertStockPF(pdvProdSaves,nom,poidsSacSaves,nbSacsSaves);
-  }
-  // Alimenter aussi gp_stock_produits_pdv (vérité opérationnelle pour la distribution / blocage) — en KG
-  // Stock réel = sacs obtenus × poids (net de perte) ; à défaut de sacs saisis, on prend la qté lancée
-  const kgProduitReel = nbSacsSaves>0 ? nbSacsSaves*poidsSacSaves : qte;
-  if(pdvProdSaves && kgProduitReel>0 && typeof ajusterStockPDV==='function'){
-    await ajusterStockPDV(pdvProdSaves, nom, kgProduitReel);
-  }
+  // NB : le stock produits finis n'est PAS crédité ici — il le sera à la saisie des sacs obtenus
+  // (bouton 📦 dans la liste des lots), car le nombre réel de sacs n'est connu qu'après production.
 
   // Afficher la feuille de fabrication
-  afficherFeuilleFabrication({nom,qte,poidsSac:poidsSacSaves,nbSacs:nbSacsSaves,ref,date,pdv:pdvProdSaves,lotId:lot?.id});
+  afficherFeuilleFabrication({nom,qte,poidsSac:25,nbSacs:0,ref,date,pdv:pdvProdSaves,lotId:lot?.id});
 
   notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
   // Afficher bouton impression immédiatement
@@ -388,7 +421,13 @@ async function renderLots(){
       <td style="font-size:10px;color:var(--textm)">${l.ref||'—'}</td>
       <td class="num" style="color:var(--g6)">${fmt(l.qte_produite)}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${l.qte_produite>0?fmt(Math.round(Number(l.cout_total||0)/l.qte_produite)):0} F</td>`:''}
-      <td><button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button></td>
+      <td style="white-space:nowrap;display:flex;gap:3px;align-items:center">
+        ${Number(l.nb_sacs)>0
+          ? `<span class="badge bdg-g" style="font-size:9px" title="Cliquer pour corriger">📦 ${l.nb_sacs} sacs${Number(l.kg_pertes)>0?' · perte '+fmt(l.kg_pertes)+' kg':''}</span>
+             <button class="btn btn-out btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:3px 6px" title="Corriger">✏️</button>`
+          : `<button class="btn btn-g btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:4px 8px">📦 Sacs obtenus</button>`}
+        <button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button>
+      </td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}</div>`;
 }
 async function deleteLot(id){
