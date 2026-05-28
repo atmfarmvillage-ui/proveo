@@ -304,7 +304,7 @@ var PAGE_RENDERERS = {
     if(el&&!el.value)el.value=thisMonth();
     renderInventairePhysique();
   },
-  production:    renderLots,
+  production:    function(){ renderLots(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
   rapport:       renderRapport,
   formules:      function(){
     if(typeof populateFournisseurSelect==='function') populateFournisseurSelect();
@@ -312,6 +312,7 @@ var PAGE_RENDERERS = {
       renderPrixFormules();
       if(typeof renderCustomFormules==='function') renderCustomFormules();
       populateSelects();
+      if(typeof ensureFavorisFormules==='function') ensureFavorisFormules();
     });
     loadIngredients().then(()=>{renderIngrAdmin();populateSelects();});
   },
@@ -342,7 +343,7 @@ var PAGE_RENDERERS = {
   fournisseurs:  renderFournisseurs,
   achats:        renderAchats,
   caisse:        renderCaisse,
-  distribution:  renderDistribution,
+  distribution:  function(){ renderDistribution(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
   stock_pf:      renderStockPF,

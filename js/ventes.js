@@ -296,13 +296,23 @@ async function loadFavorisFormules(){
   renderFavorisFormules();
 }
 
+// Affiche les favoris dans TOUS les sélecteurs de formule de l'app
 function renderFavorisFormules(){
-  const wrap = document.getElementById('vt-favoris-formules');
+  renderFavorisInto('vt-favoris-formules',  'vt_formule',  'onVenteFormuleChange');
+  renderFavorisInto('lot-favoris-formules', 'lot_formule', 'onFormuleChange');
+  renderFavorisInto('dist-favoris-formules','dist_formule', null);
+  renderFavorisInto('pf-favoris-formules',  'pf_formule',  null);
+}
+
+// Rend les boutons favoris dans un conteneur donné, ciblant un <select> précis
+function renderFavorisInto(containerId, selectId, cbName){
+  const wrap = document.getElementById(containerId);
   if(!wrap) return;
   if(!GP_FAVORIS_FORMULES.length){ wrap.innerHTML=''; return; }
   wrap.innerHTML = GP_FAVORIS_FORMULES.map(f=>{
-    const nom = (f.nom||'').replace(/'/g,'\\\'');
-    return `<button type="button" onclick="choisirFavoriFormule('${nom}')"
+    const nom = (f.nom||'').replace(/'/g,"\\'");
+    const cb = cbName ? `'${cbName}'` : 'null';
+    return `<button type="button" onclick="choisirFavori('${selectId}','${nom}',${cb})"
       title="Vendu ${fmtKg(f.kg)} kg sur 30j"
       style="font-size:10px;padding:5px 9px;border-radius:14px;background:rgba(232,197,71,.1);border:1px solid rgba(232,197,71,.3);color:var(--gold);cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap">
       ⭐ ${f.nom}
@@ -310,17 +320,28 @@ function renderFavorisFormules(){
   }).join('');
 }
 
-function choisirFavoriFormule(nom){
-  const sel = document.getElementById('vt_formule');
+// Sélectionne une formule favorite dans n'importe quel <select> + déclenche son callback
+function choisirFavori(selectId, nom, cbName){
+  const sel = document.getElementById(selectId);
   if(!sel) return;
   const opt = Array.from(sel.options).find(o=>o.value===nom);
-  if(!opt){ notify('Formule indisponible (stock?)','r'); return; }
+  if(!opt){ notify('Formule indisponible dans cette liste (stock ?)','r'); return; }
   sel.value = nom;
-  const search = document.getElementById('vt_formule_search');
+  // Vider le champ de recherche associé si présent (ex: vt_formule_search)
+  const search = document.getElementById(selectId+'_search');
   if(search) search.value='';
-  onVenteFormuleChange();
-  // Focus sur quantité pour gagner du temps
-  setTimeout(()=>document.getElementById('vt_qte')?.focus(),50);
+  if(cbName && typeof window[cbName]==='function') window[cbName]();
+  // En vente : focus direct sur la quantité
+  if(selectId==='vt_formule') setTimeout(()=>document.getElementById('vt_qte')?.focus(),50);
+}
+
+// Alias rétro-compat
+function choisirFavoriFormule(nom){ choisirFavori('vt_formule', nom, 'onVenteFormuleChange'); }
+
+// Charge les favoris si pas déjà fait, sinon re-render (évite une requête à chaque page)
+function ensureFavorisFormules(){
+  if(GP_FAVORIS_FORMULES && GP_FAVORIS_FORMULES.length) renderFavorisFormules();
+  else if(typeof loadFavorisFormules==='function') loadFavorisFormules();
 }
 
 // Catalogue des prestations (décorticage, mouture…) — alimente le select Service
