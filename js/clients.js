@@ -92,9 +92,9 @@ async function loadRecompenses(){
   let recs=data||[];
   if(GP_ROLE==='admin' && recs.length===0){
     const defauts=[
-      {nom:'1 sac d\'aliment gratuit', points_requis:100, description:'Un sac offert'},
-      {nom:'T-shirt + 1 sac d\'aliment', points_requis:200, description:'T-shirt floqué + un sac'},
-      {nom:'2 sacs + T-shirt + gadgets', points_requis:500, description:'2 sacs + T-shirt + gadgets et cadeaux spéciaux'}
+      {nom:'1 sac aliment Lapin OU 7 500 F', points_requis:100, valeur_reduction:7500, objet_fixe:null, description:'Sac de lapin offert ou bon de 7 500 F'},
+      {nom:'T-shirt + (1 sac Lapin OU 7 500 F)', points_requis:300, valeur_reduction:7500, objet_fixe:'T-shirt', description:'T-shirt + sac (ou bon 7 500 F)'},
+      {nom:'T-shirt + gadgets + (2 sacs OU 15 000 F)', points_requis:600, valeur_reduction:15000, objet_fixe:'T-shirt + gadgets', description:'T-shirt + gadgets + 2 sacs (ou bon 15 000 F)'}
     ];
     try{
       const{data:ins}=await SB.from('gp_fidelite_recompenses')
@@ -124,15 +124,25 @@ async function ouvrirEchangePoints(clientId){
   }
   document.getElementById('ep-liste').innerHTML=GP_RECOMPENSES.map(r=>{
     const ok=pts>=r.points_requis;
+    const aReduction=Number(r.valeur_reduction)>0;
+    let actions;
+    if(!ok){
+      actions=`<span style="font-size:10px;color:var(--textm);white-space:nowrap">manque ${r.points_requis-pts} pts</span>`;
+    } else if(aReduction){
+      actions=`<div style="display:flex;flex-direction:column;gap:4px">
+        <button class="btn btn-out btn-sm" onclick="echangerRecompense('${r.id}','objet')" title="Remettre le sac/objet physiquement">🎁 Donner</button>
+        <button class="btn btn-g btn-sm" onclick="echangerRecompense('${r.id}','reduction')" title="Créditer une réduction sur sa prochaine vente">💵 ${fmt(r.valeur_reduction)} F</button>
+      </div>`;
+    } else {
+      actions=`<button class="btn btn-g btn-sm" onclick="echangerRecompense('${r.id}','objet')">Échanger</button>`;
+    }
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;border-radius:10px;margin-bottom:8px;background:var(--card);border:1px solid ${ok?'rgba(232,197,71,.4)':'var(--border)'};opacity:${ok?1:.55}">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text)">🎁 ${r.nom}</div>
         <div style="font-size:10px;color:var(--textm)">${r.description||''}</div>
         <div style="font-size:11px;color:var(--gold);font-weight:700;margin-top:2px">${r.points_requis} points</div>
       </div>
-      ${ok
-        ? `<button class="btn btn-g btn-sm" onclick="echangerRecompense('${r.id}')">Échanger</button>`
-        : `<span style="font-size:10px;color:var(--textm);white-space:nowrap">manque ${r.points_requis-pts} pts</span>`}
+      ${actions}
     </div>`;
   }).join('');
 }
@@ -142,28 +152,47 @@ function fermerEchangePoints(){
   if(m)m.style.display='none';
 }
 
-async function echangerRecompense(recompenseId){
+async function echangerRecompense(recompenseId, mode){
   const clientId=document.getElementById('ep-client-id').value;
   const client=GP_CLIENTS.find(c=>c.id===clientId);
   const rec=GP_RECOMPENSES.find(r=>r.id===recompenseId);
   if(!client||!rec)return;
   const pts=Number(client.points_fidelite)||0;
   if(pts<rec.points_requis){notify('Points insuffisants','r');return;}
-  if(!confirm(`Confirmer l'échange ?\n\n${client.nom} échange ${rec.points_requis} points contre :\n🎁 ${rec.nom}\n\nSolde après : ${pts-rec.points_requis} points`))return;
-  const nouveauSolde=pts-rec.points_requis;
-  // Journal + mise à jour solde
+
+  const valeur=Number(rec.valeur_reduction)||0;
+  const enReduction = (mode==='reduction' && valeur>0);
+  const objet=rec.objet_fixe?(' + '+rec.objet_fixe):'';
+  // Libellé clair selon le mode choisi
+  const detail = enReduction
+    ? `💵 Bon de ${fmt(valeur)} F${objet} (crédité sur sa prochaine vente)`
+    : `🎁 ${rec.nom} (remis physiquement)`;
+  if(!confirm(`Confirmer l'échange ?\n\n${client.nom} échange ${rec.points_requis} points contre :\n${detail}\n\nSolde points après : ${pts-rec.points_requis}`))return;
+
+  const nouveauSoldePts=pts-rec.points_requis;
   try{
+    // Journal points (déduction)
     await SB.from('gp_fidelite_mouvements').insert({
       admin_id:GP_ADMIN_ID, client_id:clientId,
       points:-rec.points_requis, type:'cadeau',
-      description:'🎁 '+rec.nom
+      description: enReduction ? `Bon ${fmt(valeur)} F${objet}` : rec.nom
     });
-    await SB.from('gp_clients').update({points_fidelite:nouveauSolde})
-      .eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+    const maj={ points_fidelite:nouveauSoldePts };
+    // Si réduction : créditer le compte (cumulable)
+    if(enReduction){
+      const creditAvant=Number(client.credit_fidelite)||0;
+      maj.credit_fidelite=creditAvant+valeur;
+    }
+    await SB.from('gp_clients').update(maj).eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
     const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
-    if(ci>=0) GP_CLIENTS[ci].points_fidelite=nouveauSolde;
+    if(ci>=0){
+      GP_CLIENTS[ci].points_fidelite=nouveauSoldePts;
+      if(enReduction) GP_CLIENTS[ci].credit_fidelite=(Number(client.credit_fidelite)||0)+valeur;
+    }
   }catch(e){notify('Erreur échange: '+(e.message||e),'r');return;}
-  notify(`🎁 Cadeau remis : ${rec.nom} (−${rec.points_requis} pts)`,'gold');
+  notify(enReduction
+    ? `💵 Bon de ${fmt(valeur)} F crédité (−${rec.points_requis} pts)`
+    : `🎁 Cadeau remis : ${rec.nom} (−${rec.points_requis} pts)`, 'gold');
   fermerEchangePoints();
   renderClients();
 }
