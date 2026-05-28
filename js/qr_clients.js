@@ -307,10 +307,17 @@ async function ouvrirScannerQR(){
     return;
   }
   try{
-    _qrScanner = new Html5Qrcode('sqr-reader');
+    // useBarCodeDetectorIfSupported = utilise le scanner NATIF du navigateur (comme WhatsApp Web)
+    // → détection quasi instantanée au lieu du décodeur JS lent
+    _qrScanner = new Html5Qrcode('sqr-reader', {
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      formatsToSupport: (typeof Html5QrcodeSupportedFormats!=='undefined') ? [Html5QrcodeSupportedFormats.QR_CODE] : undefined
+    });
+    // qrbox adaptatif : ~70% du plus petit côté de la vidéo (cadre plus grand = plus facile à viser)
+    const qrboxFn = (vw, vh)=>{ const m=Math.floor(Math.min(vw,vh)*0.7); return {width:m,height:m}; };
     await _qrScanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+      { fps: 15, qrbox: qrboxFn, aspectRatio: 1.0 },
       onScanQRSuccess,
       ()=>{} // erreurs de frame silencieuses
     );
@@ -343,7 +350,9 @@ async function scannerDepuisFichier(event){
   }
   // Créer un scanner temporaire pour fichier
   try{
-    const scannerFile = new Html5Qrcode('sqr-reader');
+    const scannerFile = new Html5Qrcode('sqr-reader', {
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    });
     const decoded = await scannerFile.scanFile(file, false);
     scannerFile.clear();
     await onScanQRSuccess(decoded);
