@@ -59,6 +59,10 @@ function selectionnerClientVente(clientId){
   if(c.derniere_formule){
     infos.push(`🔁 Dernier achat : ${c.derniere_formule}${c.derniere_qte?' · '+fmtKg(c.derniere_qte)+' kg':''}`);
   }
+  // Points de fidélité
+  if(Number(c.points_fidelite)>0){
+    infos.push(`🎁 ${c.points_fidelite} pts fidélité`);
+  }
   if(infoEl)infoEl.innerHTML=infos.join(' · ');
 
   // Masquer nouveau client
@@ -746,6 +750,28 @@ async function saveVente(){
     }catch(e){ /* silencieux — pas critique */ }
   }
 
+  // ── FIDÉLITÉ : 1 point par 2000 F payés (sur le montant encaissé) ──
+  window._lastVentePoints = null;
+  if(clientId && paye > 0){
+    const ptsGagnes = Math.floor(paye / 2000);
+    if(ptsGagnes > 0){
+      try{
+        await SB.from('gp_fidelite_mouvements').insert({
+          admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id,
+          points:ptsGagnes, type:'achat',
+          description:`Achat ${fmt(total)} F`
+        });
+        const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
+        const soldeAvant = ci>=0 ? (Number(GP_CLIENTS[ci].points_fidelite)||0) : 0;
+        const nouveauSolde = soldeAvant + ptsGagnes;
+        await SB.from('gp_clients').update({points_fidelite:nouveauSolde})
+          .eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+        if(ci>=0) GP_CLIENTS[ci].points_fidelite = nouveauSolde;
+        window._lastVentePoints = { gagnes:ptsGagnes, total:nouveauSolde };
+      }catch(e){ /* silencieux — fidélité pas critique pour la vente */ }
+    }
+  }
+
   // Rafraîchir le stock affiché dans le menu des formules
   await loadStockVente();
   populateSelects();
@@ -800,6 +826,13 @@ function afficherActionsApresVente(venteComplete, client, total, remis, paye, mo
         💰 Monnaie à rendre au client : ${fmt(monnaie)} F
       </div>` : '';
 
+  // Bloc fidélité : points gagnés sur cette vente
+  const pts = window._lastVentePoints;
+  const fideliteBlock = (pts && pts.gagnes>0 && client?.id)
+    ? `<div style="background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.4);border-radius:8px;padding:10px;margin-bottom:10px;text-align:center;color:var(--gold);font-size:13px;font-weight:600">
+        🎁 +${pts.gagnes} point${pts.gagnes>1?'s':''} de fidélité · Total : ${pts.total} pts
+      </div>` : '';
+
   block.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
@@ -810,6 +843,7 @@ function afficherActionsApresVente(venteComplete, client, total, remis, paye, mo
         style="background:none;border:none;color:var(--textm);font-size:18px;cursor:pointer;padding:0;margin-left:8px">✕</button>
     </div>
     ${monnaieBlock}
+    ${fideliteBlock}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button id="post-vente-print"
         onclick="actionImprimerVente('${venteComplete.id}')"
