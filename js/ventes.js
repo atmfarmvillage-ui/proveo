@@ -359,6 +359,54 @@ async function loadServices(){
   }catch(e){ GP_SERVICES = []; }
 }
 
+// ── ADMIN PRESTATIONS (page Configuration) ──────────
+async function renderServicesAdmin(){
+  const cont=document.getElementById('svc-admin-liste');
+  if(!cont) return;
+  const{data}=await SB.from('gp_services').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
+  const list=data||[];
+  if(!list.length){ cont.innerHTML='<div style="color:var(--textm);font-size:12px;padding:8px">Aucune prestation. Ajoute-en une ci-dessus.</div>'; return; }
+  cont.innerHTML=list.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px;border-bottom:1px solid var(--border);${s.actif?'':'opacity:.55'}">
+      <div style="flex:1;min-width:120px">
+        <div style="font-weight:600;font-size:12px">${s.nom}</div>
+        <div style="font-size:10px;color:var(--textm)">unité : ${s.unite}</div>
+      </div>
+      <input type="number" value="${s.prix_unitaire||0}" onchange="updateServicePrix('${s.id}',this.value)" style="width:90px;text-align:right;font-size:11px;padding:3px 6px"><span style="font-size:10px;color:var(--textm)">F/${s.unite}</span>
+      <button class="btn btn-out btn-sm" onclick="toggleServiceActif('${s.id}',${s.actif})" style="font-size:10px;padding:3px 8px">${s.actif?'🟢 Actif':'⚪ Inactif'}</button>
+      <button class="btn btn-red btn-sm" onclick="deleteService('${s.id}')" style="padding:3px 7px">✕</button>
+    </div>`).join('');
+}
+async function saveService(){
+  const nom=document.getElementById('svc-nom')?.value.trim();
+  const unite=document.getElementById('svc-unite')?.value||'kg';
+  const prix=+document.getElementById('svc-prix')?.value||0;
+  const err=document.getElementById('svc-err');
+  if(err) err.textContent='';
+  if(!nom){ if(err) err.textContent='Nom de la prestation requis.'; return; }
+  const{error}=await SB.from('gp_services').insert({admin_id:GP_ADMIN_ID,nom,unite,prix_unitaire:prix,actif:true});
+  if(error){ if(err) err.textContent='Erreur: '+error.message; return; }
+  const n=document.getElementById('svc-nom'); if(n)n.value='';
+  const p=document.getElementById('svc-prix'); if(p)p.value='';
+  notify('Prestation ajoutée ✓','gold');
+  renderServicesAdmin();
+}
+async function updateServicePrix(id,val){
+  const prix=+val||0;
+  await SB.from('gp_services').update({prix_unitaire:prix}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  notify('Prix mis à jour ✓','gold');
+}
+async function toggleServiceActif(id,actif){
+  await SB.from('gp_services').update({actif:!actif}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  renderServicesAdmin();
+}
+async function deleteService(id){
+  if(!confirm('Supprimer cette prestation définitivement ?')) return;
+  await SB.from('gp_services').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  notify('Prestation supprimée','r');
+  renderServicesAdmin();
+}
+
 function onVenteServiceChange(){
   const id = document.getElementById('vt_service')?.value;
   const s = GP_SERVICES.find(x=>x.id===id);
