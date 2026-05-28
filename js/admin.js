@@ -1999,7 +1999,7 @@ function membreCard(m){
   // Badge PDV avec couleur
   const pvBadge=m.point_vente
     ?pvBadgeHtml(m.point_vente)
-    :'<span style="font-size:10px;color:var(--textm);background:rgba(30,45,74,.5);padding:2px 8px;border-radius:10px">🏭 Siège principal</span>';
+    :'<span style="font-size:10px;color:var(--textm);background:var(--card);border:1px solid var(--border);padding:2px 8px;border-radius:10px">🏭 Siège principal</span>';
 
   // Statut connexion + actif
   const estActif=m.actif!==false;
@@ -2012,10 +2012,10 @@ function membreCard(m){
   // Badge rôle
   const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='directeur'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
 
-  return `<div style="padding:12px;background:rgba(14,20,40,.5);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
+  return `<div style="padding:12px;background:var(--card2);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${m.nom||'—'}</div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text)">${m.nom||'—'}</div>
         <div style="font-size:10px;color:var(--textm);margin-bottom:6px">${m.email||'—'}${m.telephone?' · '+m.telephone:''}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           <span class="badge ${roleColor}" style="font-size:9px">${(m.role||'secretaire').toUpperCase()}</span>
