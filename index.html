@@ -2126,6 +2126,29 @@
   <div class="page-title">Configuration</div>
   <div class="page-sub">Personnalisez votre provenderie</div>
 
+  <!-- PRESTATIONS / SERVICES (décorticage, mouture, torréfaction, livraison…) -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><div class="ct-left"><span>🛠 Prestations / Services</span></div>
+      <span style="font-size:10px;color:var(--textm);font-weight:400">Vendables dans l'onglet Prestation des ventes</span>
+    </div>
+    <div class="fg2" style="align-items:end">
+      <div class="fr"><label>Nom de la prestation</label><input type="text" id="svc-nom" placeholder="Torréfaction, Livraison…"></div>
+      <div class="fr"><label>Unité</label>
+        <select id="svc-unite">
+          <option value="kg">Au kg</option>
+          <option value="sac">Au sac</option>
+          <option value="forfait">Forfait</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg2" style="align-items:end">
+      <div class="fr"><label>Prix (F)</label><input type="number" id="svc-prix" placeholder="30"></div>
+      <div class="fr"><button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveService()">➕ Ajouter la prestation</button></div>
+    </div>
+    <div class="a-err" id="svc-err"></div>
+    <div id="svc-admin-liste" style="margin-top:8px"></div>
+  </div>
+
   <!-- PUSH NOTIFICATIONS (système, fonctionne app fermée) -->
   <div class="card" style="margin-bottom:14px">
     <div class="card-title"><div class="ct-left"><span>🔔 Notifications système</span></div>

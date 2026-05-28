@@ -359,7 +359,7 @@ var PAGE_RENDERERS = {
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
   licence:       renderPageLicenceClient,
-  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); },
+  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); },
   directeur:     function(){
     const el=document.getElementById('dir-mois');
     if(el&&!el.value)el.value=thisMonth();
