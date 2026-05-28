@@ -75,6 +75,10 @@ function selectionnerClientVente(clientId){
   // ── DEFAULTS INTELLIGENTS : pré-remplir avec le dernier achat du client ──
   prefillDefaultsDernierAchatClient(c);
 
+  // ── BON DE FIDÉLITÉ : afficher si le client a un crédit disponible ──
+  window._bonFidelite = 0; // remis à zéro à chaque changement de client
+  renderBonFidelite(c);
+
   // Charger le prix selon type client et formule + coût de prod
   onVenteFormuleChange();
   calcVente();
@@ -166,6 +170,50 @@ function effacerClientVente(){
   const badge=document.getElementById('vt-client-badge');
   if(badge)badge.style.display='none';
   document.getElementById('vt_client_results').style.display='none';
+  // Réinitialiser le bon de fidélité
+  window._bonFidelite=0;
+  const bon=document.getElementById('vt-bon-fidelite');
+  if(bon)bon.style.display='none';
+  if(typeof calcVente==='function')calcVente();
+}
+
+// ── BON DE FIDÉLITÉ (crédit client appliqué en remise) ──
+function renderBonFidelite(client){
+  const el=document.getElementById('vt-bon-fidelite');
+  if(!el)return;
+  const credit=Number(client?.credit_fidelite)||0;
+  if(credit<=0){ el.style.display='none'; return; }
+  el.style.display='flex';
+  if(window._bonFidelite>0){
+    el.innerHTML=`<span style="font-size:12px;color:var(--gold);font-weight:700">✅ Bon fidélité appliqué : −${fmt(window._bonFidelite)} F</span>
+      <button onclick="retirerBonFidelite()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">Retirer</button>`;
+  } else {
+    el.innerHTML=`<span style="font-size:12px;color:var(--gold);font-weight:700">💳 Bon fidélité disponible : ${fmt(credit)} F</span>
+      <button onclick="appliquerBonFidelite()" class="btn btn-g btn-sm" style="font-size:11px">Appliquer</button>`;
+  }
+}
+
+function appliquerBonFidelite(){
+  const clientId=document.getElementById('vt_client')?.value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const credit=Number(client?.credit_fidelite)||0;
+  if(credit<=0)return;
+  // Total courant (lignes ajoutées ou ligne en cours)
+  const totalActuel=VT_LIGNES.length
+    ? VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0)
+    : Math.round((+document.getElementById('vt_qte')?.value||0)*(+document.getElementById('vt_prix')?.value||0));
+  // Le bon ne dépasse pas le total
+  window._bonFidelite=Math.min(credit, totalActuel||credit);
+  renderBonFidelite(client);
+  calcVente();
+}
+
+function retirerBonFidelite(){
+  window._bonFidelite=0;
+  const clientId=document.getElementById('vt_client')?.value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  renderBonFidelite(client);
+  calcVente();
 }
 
 function ouvrirNouveauClient(){
@@ -484,6 +532,14 @@ function calcVente(){
   const remiseTotauxBloc=document.getElementById('vt-remise-totaux-bloc');
   if(remiseTotauxBloc) remiseTotauxBloc.style.display = remise>0 ? 'block' : 'none';
 
+  // ── BON DE FIDÉLITÉ : appliqué comme réduction globale sur le total ──
+  let bonApplique=Number(window._bonFidelite)||0;
+  if(bonApplique>0){
+    bonApplique=Math.min(bonApplique, total); // jamais plus que le total
+    window._bonFidelite=bonApplique;
+    total=Math.max(0, total-bonApplique);
+  }
+
   // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
   // Si remis < total → reste à payer
   let monnaie=0, reste=0, paye;
@@ -569,6 +625,25 @@ async function onVenteFormuleChange(){
   calcVente();
 }
 
+// Points de fidélité gagnés sur une vente : par sac d'aliment (formules uniquement)
+// 25 kg = 3 pts · 50 kg = 5 pts · vrac = 0,12 pt/kg (3 pts les 25 kg)
+function calcPointsVente(lignes){
+  let pts=0;
+  for(const l of (lignes||[])){
+    if(l.type_produit!=='formule') continue; // points seulement sur l'aliment
+    const cond=String(l.conditionnement||'kg');
+    const qte=Number(l.quantite)||0;
+    if(cond==='25'||cond==='50'){
+      const poids=Number(cond);
+      const sacs=Number(l.nb_sacs)>0 ? Number(l.nb_sacs) : Math.round(qte/poids);
+      pts += sacs * (cond==='25' ? 3 : 5);
+    } else {
+      pts += Math.round(qte * 0.12); // vrac
+    }
+  }
+  return pts;
+}
+
 async function saveVente(){
   let clientId=document.getElementById('vt_client')?.value;
   const note=document.getElementById('vt_note')?.value.trim()||null;
@@ -619,8 +694,12 @@ async function saveVente(){
   }
 
   // montant_ligne = déjà net de remise ; remise_montant = somme des remises de lignes
-  const remiseMontant=VT_LIGNES.reduce((s,l)=>s+Number(l.remise||0),0);
-  const total=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
+  let remiseMontant=VT_LIGNES.reduce((s,l)=>s+Number(l.remise||0),0);
+  const totalBrut=VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0);
+  // ── BON DE FIDÉLITÉ : appliqué en réduction globale ──
+  const bonFidelite=Math.min(Number(window._bonFidelite)||0, totalBrut);
+  const total=Math.max(0, totalBrut - bonFidelite);
+  if(bonFidelite>0) remiseMontant += bonFidelite; // le bon est comptabilisé comme remise
   const remiseValidee=document.getElementById('vt_remise_validee')?.checked||false;
   // Calcul monnaie : si remis >= total, payé conservé = total et rendu = remis - total
   const paye = remis >= total ? total : remis;
@@ -750,16 +829,16 @@ async function saveVente(){
     }catch(e){ /* silencieux — pas critique */ }
   }
 
-  // ── FIDÉLITÉ : 1 point par 2000 F payés (sur le montant encaissé) ──
+  // ── FIDÉLITÉ : points par sac d'aliment (3 pts/sac 25kg, 5 pts/sac 50kg, vrac 0,12 pt/kg) ──
   window._lastVentePoints = null;
-  if(clientId && paye > 0){
-    const ptsGagnes = Math.floor(paye / 2000);
+  if(clientId){
+    const ptsGagnes = calcPointsVente(VT_LIGNES);
     if(ptsGagnes > 0){
       try{
         await SB.from('gp_fidelite_mouvements').insert({
           admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id,
           points:ptsGagnes, type:'achat',
-          description:`Achat ${fmt(total)} F`
+          description:`Achat (${ptsGagnes} pts)`
         });
         const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
         const soldeAvant = ci>=0 ? (Number(GP_CLIENTS[ci].points_fidelite)||0) : 0;
@@ -771,6 +850,25 @@ async function saveVente(){
       }catch(e){ /* silencieux — fidélité pas critique pour la vente */ }
     }
   }
+
+  // ── BON DE FIDÉLITÉ utilisé : déduire du crédit du client ──
+  if(clientId && bonFidelite>0){
+    try{
+      const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
+      const creditAvant=ci>=0 ? (Number(GP_CLIENTS[ci].credit_fidelite)||0) : 0;
+      const nouveauCredit=Math.max(0, creditAvant - bonFidelite);
+      await SB.from('gp_clients').update({credit_fidelite:nouveauCredit})
+        .eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+      if(ci>=0) GP_CLIENTS[ci].credit_fidelite=nouveauCredit;
+      await SB.from('gp_fidelite_mouvements').insert({
+        admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id,
+        points:0, type:'bon_utilise',
+        description:`Bon ${fmt(bonFidelite)} F utilisé`
+      });
+    }catch(e){ /* silencieux */ }
+  }
+  window._bonFidelite=0;
+  const bonEl=document.getElementById('vt-bon-fidelite'); if(bonEl) bonEl.style.display='none';
 
   // Rafraîchir le stock affiché dans le menu des formules
   await loadStockVente();
