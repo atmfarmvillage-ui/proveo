@@ -2390,7 +2390,7 @@
 <div id="modal-carte-qr" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerCarteClient()">
   <div style="background:var(--card2);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:380px;width:100%;max-height:90vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-weight:700;font-size:15px">📲 Carte client QR</div>
+      <div style="font-weight:700;font-size:15px">🎴 Carte de fidélité</div>
       <button onclick="fermerCarteClient()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--text)" id="cqr-client-nom"></div>
@@ -2402,11 +2402,28 @@
         📲 Envoyer via WhatsApp
       </button>
       <button onclick="telechargerCarteQR()" class="btn btn-out" style="flex:1;min-width:140px;justify-content:center">
-        💾 Télécharger PNG
+        💾 Télécharger (recto + verso)
       </button>
     </div>
     <div style="font-size:9px;color:var(--textm);margin-top:10px;text-align:center">
-      Le client conserve cette carte et la présente à chaque visite — la secrétaire scanne pour le retrouver instantanément.
+      Recto = identité du client · Verso = QR. Le client garde sa carte et présente le QR à chaque achat pour cumuler des points 🎁
+    </div>
+  </div>
+</div>
+
+<!-- MODAL : ÉCHANGE DE POINTS FIDÉLITÉ -->
+<div id="modal-echange-points" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerEchangePoints()">
+  <div style="background:var(--card2);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-weight:700;font-size:15px">🎁 Échanger des points</div>
+      <button onclick="fermerEchangePoints()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="ep-client-id">
+    <div style="font-size:13px;font-weight:700;color:var(--text)" id="ep-client-nom"></div>
+    <div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:14px">Solde : <span id="ep-points"></span></div>
+    <div id="ep-liste"></div>
+    <div style="font-size:9px;color:var(--textm);margin-top:8px;text-align:center">
+      L'échange déduit les points et enregistre le cadeau remis dans l'historique.
     </div>
   </div>
 </div>

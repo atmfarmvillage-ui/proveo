@@ -57,7 +57,10 @@ async function renderClients(){
             ${c.localite?' · 📍 '+c.localite:''}
           </div>
         </td>
-        <td><span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span></td>
+        <td>
+          <span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span>
+          ${Number(c.points_fidelite)>0?`<span class="badge bdg-gold" style="font-size:9px;margin-left:3px">🎁 ${c.points_fidelite} pts</span>`:''}
+        </td>
         <td class="num" style="color:var(--gold)">${fmt(c.total_achats||0)} F</td>
         <td class="num" style="color:${montantDu>0?'var(--red)':'var(--green)'}">
           ${montantDu>0?fmt(montantDu)+' F':'✅'}
@@ -67,7 +70,8 @@ async function renderClients(){
             <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${montantDu})" title="Solder la dette">💳</button>
             <button class="btn btn-out btn-sm" onclick="envoyerRappelDette('${c.id}')" title="Envoyer rappel WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>
           `:''}
-          <button class="btn btn-out btn-sm" onclick="ouvrirCarteClient('${c.id}')" title="Envoyer/voir la carte QR" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🪪</button>
+          <button class="btn btn-out btn-sm" onclick="ouvrirCarteClient('${c.id}')" title="Carte de fidélité" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🪪</button>
+          ${Number(c.points_fidelite)>0?`<button class="btn btn-out btn-sm" onclick="ouvrirEchangePoints('${c.id}')" title="Échanger les points (${c.points_fidelite} pts)" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🎁</button>`:''}
           ${c.qr_token?`<button class="btn btn-out btn-sm" onclick="regenererQRClient('${c.id}')" title="Régénérer la carte (perte)" style="color:var(--textm);font-size:10px">↺</button>`:''}
           <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>
         </td>
@@ -76,6 +80,94 @@ async function renderClients(){
     </tbody></table>`
   :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
 }
+// ══════════════════════════════════════════════════
+// FIDÉLITÉ — Catalogue de récompenses + échange de points
+// ══════════════════════════════════════════════════
+let GP_RECOMPENSES = [];
+
+// Charge les récompenses ; auto-crée les 3 paliers par défaut si aucun (admin only)
+async function loadRecompenses(){
+  let{data}=await SB.from('gp_fidelite_recompenses').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('points_requis');
+  let recs=data||[];
+  if(GP_ROLE==='admin' && recs.length===0){
+    const defauts=[
+      {nom:'1 sac d\'aliment gratuit', points_requis:100, description:'Un sac offert'},
+      {nom:'T-shirt + 1 sac d\'aliment', points_requis:200, description:'T-shirt floqué + un sac'},
+      {nom:'2 sacs + T-shirt + gadgets', points_requis:500, description:'2 sacs + T-shirt + gadgets et cadeaux spéciaux'}
+    ];
+    try{
+      const{data:ins}=await SB.from('gp_fidelite_recompenses')
+        .insert(defauts.map(d=>({admin_id:GP_ADMIN_ID,...d}))).select();
+      if(ins) recs=ins.sort((a,b)=>a.points_requis-b.points_requis);
+    }catch(e){}
+  }
+  GP_RECOMPENSES=recs;
+  return recs;
+}
+
+async function ouvrirEchangePoints(clientId){
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  if(!client){notify('Client introuvable','r');return;}
+  const modal=document.getElementById('modal-echange-points');
+  if(!modal)return;
+  modal.style.display='flex';
+  document.getElementById('ep-client-id').value=clientId;
+  document.getElementById('ep-client-nom').textContent=client.nom||'';
+  const pts=Number(client.points_fidelite)||0;
+  document.getElementById('ep-points').textContent=pts+' pts';
+  document.getElementById('ep-liste').innerHTML='<div style="color:var(--textm);font-size:12px;padding:16px">⏳ Chargement…</div>';
+  await loadRecompenses();
+  if(!GP_RECOMPENSES.length){
+    document.getElementById('ep-liste').innerHTML='<div style="color:var(--textm);font-size:12px;padding:16px">Aucune récompense configurée.</div>';
+    return;
+  }
+  document.getElementById('ep-liste').innerHTML=GP_RECOMPENSES.map(r=>{
+    const ok=pts>=r.points_requis;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;border-radius:10px;margin-bottom:8px;background:var(--card);border:1px solid ${ok?'rgba(232,197,71,.4)':'var(--border)'};opacity:${ok?1:.55}">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;color:var(--text)">🎁 ${r.nom}</div>
+        <div style="font-size:10px;color:var(--textm)">${r.description||''}</div>
+        <div style="font-size:11px;color:var(--gold);font-weight:700;margin-top:2px">${r.points_requis} points</div>
+      </div>
+      ${ok
+        ? `<button class="btn btn-g btn-sm" onclick="echangerRecompense('${r.id}')">Échanger</button>`
+        : `<span style="font-size:10px;color:var(--textm);white-space:nowrap">manque ${r.points_requis-pts} pts</span>`}
+    </div>`;
+  }).join('');
+}
+
+function fermerEchangePoints(){
+  const m=document.getElementById('modal-echange-points');
+  if(m)m.style.display='none';
+}
+
+async function echangerRecompense(recompenseId){
+  const clientId=document.getElementById('ep-client-id').value;
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const rec=GP_RECOMPENSES.find(r=>r.id===recompenseId);
+  if(!client||!rec)return;
+  const pts=Number(client.points_fidelite)||0;
+  if(pts<rec.points_requis){notify('Points insuffisants','r');return;}
+  if(!confirm(`Confirmer l'échange ?\n\n${client.nom} échange ${rec.points_requis} points contre :\n🎁 ${rec.nom}\n\nSolde après : ${pts-rec.points_requis} points`))return;
+  const nouveauSolde=pts-rec.points_requis;
+  // Journal + mise à jour solde
+  try{
+    await SB.from('gp_fidelite_mouvements').insert({
+      admin_id:GP_ADMIN_ID, client_id:clientId,
+      points:-rec.points_requis, type:'cadeau',
+      description:'🎁 '+rec.nom
+    });
+    await SB.from('gp_clients').update({points_fidelite:nouveauSolde})
+      .eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+    const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
+    if(ci>=0) GP_CLIENTS[ci].points_fidelite=nouveauSolde;
+  }catch(e){notify('Erreur échange: '+(e.message||e),'r');return;}
+  notify(`🎁 Cadeau remis : ${rec.nom} (−${rec.points_requis} pts)`,'gold');
+  fermerEchangePoints();
+  renderClients();
+}
+
 async function deleteClient(id){
   if(!confirm('Supprimer ce client ?'))return;
   await SB.from('gp_clients').delete().eq('id',id);

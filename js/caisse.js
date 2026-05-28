@@ -79,6 +79,8 @@ async function renderCaisse(){
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--green)" onclick="ouvrirMouvement('${c.id}','${c.nom}','entree')">➕ Entrée</button>
+        <button class="btn btn-sm" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)" onclick="ouvrirMouvement('${c.id}','${c.nom}','sortie')">➖ Sortie</button>
         <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
