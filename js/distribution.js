@@ -412,18 +412,33 @@ async function setStockPDV(pdvNom, formuleNom, kgAbsolu){
   }
 }
 
-// Saisie manuelle du stock (formulaire départ/inventaire)
+// Auto-calcul kg = sacs × poids (déclenché par les inputs sacs/poids_sac)
+function recalcStockSacs(){
+  const sacs = +document.getElementById('sm_sacs')?.value || 0;
+  const poids = +document.getElementById('sm_poids_sac')?.value || 25;
+  if(sacs > 0){
+    document.getElementById('sm_kg').value = sacs * poids;
+  }
+}
+
+// Saisie manuelle du stock (formulaire départ/inventaire) — accepte sacs OU kg
 async function saisirStockManuel(){
   const pdv=document.getElementById('sm_pdv')?.value;
   const formule=document.getElementById('sm_formule')?.value;
-  const kg=+document.getElementById('sm_kg')?.value;
+  const sacs=+document.getElementById('sm_sacs')?.value||0;
+  const poids=+document.getElementById('sm_poids_sac')?.value||25;
+  let kg=+document.getElementById('sm_kg')?.value;
   const err=document.getElementById('sm_err');
   if(err) err.textContent='';
   if(!pdv||!formule){ if(err)err.textContent='Choisis le point de vente et la formule.'; return; }
-  if(isNaN(kg)||kg<0){ if(err)err.textContent='Entre une quantité valide (kg).'; return; }
+  // Si sacs renseigné et kg vide → calculer
+  if(sacs>0 && (!kg||isNaN(kg))) kg = sacs*poids;
+  if(isNaN(kg)||kg<0){ if(err)err.textContent='Entre une quantité valide (sacs ou kg).'; return; }
   await setStockPDV(pdv, formule, kg);
   document.getElementById('sm_kg').value='';
-  notify(`Stock ${formule} à ${pdv} défini à ${fmt(kg)} kg ✓`,'gold');
+  document.getElementById('sm_sacs').value='';
+  const detail = sacs>0 ? `${sacs} sacs × ${poids} kg = ${fmt(kg)} kg` : `${fmt(kg)} kg`;
+  notify(`Stock ${formule} à ${pdv} défini à ${detail} ✓`,'gold');
   await renderStockPDV();
 }
 
