@@ -1033,14 +1033,32 @@ async function saveVente(){
 
   const lignes_a_insert=VT_LIGNES.slice();
   VT_LIGNES=[];renderLignesVente();
-  ['vt_note','vt_paye','vt_remise_valeur','vt_remise_motif']
-    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const rtype=document.getElementById('vt_remise_type');if(rtype)rtype.value='totale';
-  document.getElementById('vt_client').value='';
+  // Nettoyer TOUS les champs du formulaire pour repartir d'une page vierge
+  [
+    'vt_note','vt_paye','vt_remise_valeur','vt_remise_motif',
+    'vt_formule_search','vt_qte','vt_prix','vt_prix_sac','vt_nb_sacs',
+    'vt_tel_search',
+    'vt_cl_nom','vt_cl_tel','vt_cl_ferme','vt_cl_localite'
+  ].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  // Resets sélecteurs
+  const sel = (id,val)=>{const e=document.getElementById(id);if(e)e.value=val;};
+  sel('vt_remise_type','totale');
+  sel('vt_client','');
+  sel('vt_formule','');
+  sel('vt_poids_sac','25');
+  sel('vt_cl_type','detail');
+  sel('vt_cl_parrain','');
+  // Cacher la zone nouveau client + badge + résultats recherche
+  ['vt-nouveau-client','vt-cl-similaires','vt-client-badge','vt_client_results']
+    .forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  const info=document.getElementById('vt-client-info'); if(info) info.innerHTML='';
+  // Checkboxes
   const remiseChk=document.getElementById('vt_remise_validee');
   if(remiseChk)remiseChk.checked=false;
   const remiseParEl=document.getElementById('vt_remise_par');
   if(remiseParEl)remiseParEl.value='';
+  // Fidélité
+  window._bonFidelite=0;
   initRemiseVente();
   err.textContent='';
 
