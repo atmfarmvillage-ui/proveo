@@ -1,7 +1,7 @@
-// Service Worker mini-app Carte SADARI v2.2.0
-const CACHE = 'sadari-carte-v14';
+// Service Worker mini-app Carte SADARI v2.3.0
+const CACHE = 'sadari-carte-v15';
 const ASSETS = [
-  '/carte.html',
+  '/carte',
   '/manifest-carte.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -47,6 +47,6 @@ self.addEventListener('fetch', e=>{
         const cl=r.clone(); caches.open(CACHE).then(c=>c.put(e.request,cl));
       }
       return r;
-    }).catch(()=>caches.match(e.request).then(c=>c||caches.match('/carte.html')))
+    }).catch(()=>caches.match(e.request).then(c=>c||caches.match('/carte')))
   );
 });

@@ -6,6 +6,10 @@
   Cache-Control: no-cache, no-store, must-revalidate
 
 # Mini-app carte : revalider à chaque fois (sinon WhatsApp WebView garde une vieille version)
+/carte
+  Cache-Control: no-cache, must-revalidate
+  X-Frame-Options: SAMEORIGIN
+
 /carte.html
   Cache-Control: no-cache, must-revalidate
   X-Frame-Options: SAMEORIGIN
