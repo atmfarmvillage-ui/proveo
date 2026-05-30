@@ -240,13 +240,17 @@ async function partagerMiniAppCarte(){
     const par = GP_CLIENTS.find(c=>c.id===client.parrain_id);
     if(par) parrainNom = par.nom||'';
   }
+  // _og bump = invalide le cache de preview WhatsApp/Meta quand on change les OG tags.
+  // À incrémenter manuellement si on ré-édite l'image ou le titre.
+  const OG_V = '3';
   const url = location.origin + '/carte.html'
     + '?c=' + encodeURIComponent(client.id)
     + '&t=' + encodeURIComponent(client.qr_token)
     + '&a=' + encodeURIComponent(GP_ADMIN_ID)
     + '&n=' + encodeURIComponent(client.nom||'')
     + '&m=' + encodeURIComponent(num)
-    + (parrainNom ? '&pa=' + encodeURIComponent(client.parrain_id) + '&pn=' + encodeURIComponent(parrainNom) : '');
+    + (parrainNom ? '&pa=' + encodeURIComponent(client.parrain_id) + '&pn=' + encodeURIComponent(parrainNom) : '')
+    + '&_og=' + OG_V;
   const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
   const msg =
     `🌾 Bienvenue ${client.nom||''} chez ${nomProv} !\n\n` +
