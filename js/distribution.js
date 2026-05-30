@@ -412,13 +412,38 @@ async function setStockPDV(pdvNom, formuleNom, kgAbsolu){
   }
 }
 
-// Auto-calcul kg = sacs × poids (déclenché par les inputs sacs/poids_sac)
+// Auto-calcul kg = sacs × poids. Si poids=1 (vrac), le champ "sacs" devient les kg directs.
 function recalcStockSacs(){
   const sacs = +document.getElementById('sm_sacs')?.value || 0;
   const poids = +document.getElementById('sm_poids_sac')?.value || 25;
+  const label = document.getElementById('sm_sacs_label');
+  if(label){
+    label.textContent = poids === 1 ? 'Quantité (kg)' : 'Nombre de sacs';
+  }
   if(sacs > 0){
     document.getElementById('sm_kg').value = sacs * poids;
   }
+}
+
+// MODIFIER une valeur de stock depuis le tableau (input éditable)
+async function mettreAJourStockPDV(stockId, pdvNom, formuleNom, nouvelleValeur){
+  const kg = +nouvelleValeur || 0;
+  if(kg < 0){ notify('Quantité invalide','r'); return; }
+  await SB.from('gp_stock_produits_pdv').update({
+    qte_disponible: kg,
+    updated_at: new Date().toISOString()
+  }).eq('id', stockId);
+  notify(`Stock ${formuleNom} à ${pdvNom} → ${fmt(kg)} kg ✓`,'gold');
+  await renderStockPDV();
+}
+
+// SUPPRIMER une ligne de stock (admin uniquement, avec confirmation)
+async function supprimerStockPDV(stockId, formuleNom, pdvNom){
+  if(!confirm(`Supprimer le stock de ${formuleNom} à ${pdvNom} ?\n\nLa ligne disparaîtra du tableau. Tu pourras la re-saisir via "Saisir un stock".`)) return;
+  const {error} = await SB.from('gp_stock_produits_pdv').delete().eq('id', stockId);
+  if(error){ notify('Erreur : '+error.message,'r'); return; }
+  notify(`Ligne ${formuleNom} à ${pdvNom} supprimée ✓`,'gold');
+  await renderStockPDV();
 }
 
 // Saisie manuelle du stock (formulaire départ/inventaire) — accepte sacs OU kg
@@ -484,10 +509,17 @@ async function renderStockPDV(){
         <button class="btn btn-out btn-sm" onclick="ouvrirSeuilPDV('${pdvNom}')" style="font-size:10px">⚙️ Seuils</button>
       </div>
       <table class="tbl" style="font-size:11px">
-        <thead><tr><th>Produit</th><th class="num">Stock</th><th class="num">Seuil</th><th class="num">Prix local</th><th>Statut</th></tr></thead>
+        <thead><tr><th>Produit</th><th class="num">Stock (kg)</th><th class="num">Seuil</th><th class="num">Prix local</th><th>Statut</th><th></th></tr></thead>
         <tbody>${stocks.map(s=>`<tr>
           <td style="font-weight:600">${s.formule_nom}</td>
-          <td class="num ${s.qte_disponible<=s.seuil_critique?'bad':''}">${fmt(s.qte_disponible)} kg <span style="color:var(--textm);font-size:9px">≈${Math.round(s.qte_disponible/25)} sacs</span></td>
+          <td class="num ${s.qte_disponible<=s.seuil_critique?'bad':''}">
+            ${GP_ROLE==='admin'||GP_ROLE==='secretaire'?
+              `<input type="number" value="${s.qte_disponible}" min="0" step="0.1" style="width:80px;text-align:right;font-size:11px;padding:2px 4px;font-weight:700"
+                onchange="mettreAJourStockPDV('${s.id}','${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}',this.value)"
+                title="Modifier la valeur — écrase l'ancienne">`
+              :`${fmt(s.qte_disponible)} kg`}
+            <div style="color:var(--textm);font-size:9px;margin-top:2px">≈${Math.round(s.qte_disponible/25)} sacs (25kg) · ${Math.round(s.qte_disponible/50)} sacs (50kg)</div>
+          </td>
           <td class="num" style="color:var(--textm)">${fmt(s.seuil_critique)} kg</td>
           <td class="num">
             ${GP_ROLE==='admin'||GP_ROLE==='secretaire'?
@@ -498,6 +530,13 @@ async function renderStockPDV(){
           <td><span class="badge ${s.qte_disponible<=0?'bdg-r':s.qte_disponible<=s.seuil_critique?'bdg-gold':'bdg-g'}" style="font-size:9px">
             ${s.qte_disponible<=0?'❌ Épuisé':s.qte_disponible<=s.seuil_critique?'⚠ Critique':'✅ OK'}
           </span></td>
+          <td>
+            ${GP_ROLE==='admin'?
+              `<button onclick="supprimerStockPDV('${s.id}','${(s.formule_nom||'').replace(/'/g,'')}','${(s.pdv_nom||'').replace(/'/g,'')}')"
+                title="Supprimer cette ligne"
+                style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.6">🗑</button>`
+              :''}
+          </td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
