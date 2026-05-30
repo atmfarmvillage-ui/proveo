@@ -1,7 +1,7 @@
-// PROVENDA Service Worker v4.44.0
+// PROVENDA Service Worker v4.45.0
 // Se met à jour automatiquement + Push notifications
 
-const CACHE_NAME = 'provenda-v4.44.0';
+const CACHE_NAME = 'provenda-v4.45.0';
 
 // Installation — vider l'ancien cache immédiatement
 self.addEventListener('install', e => {
@@ -35,6 +35,11 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(e.request).catch(() =>
       new Response('{"error":"offline"}', {headers:{'Content-Type':'application/json'}})
     ));
+    return;
+  }
+
+  // Ne pas intercepter la mini-app carte (a son propre SW sw-carte.js)
+  if (url.pathname.startsWith('/carte.html') || url.pathname === '/sw-carte.js' || url.pathname === '/manifest-carte.json') {
     return;
   }
 

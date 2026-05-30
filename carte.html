@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#16A34A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SADARI">
+<link rel="manifest" href="manifest-carte.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Ma Carte SADARI</title>
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --vert:#16A34A; --vert-d:#15803D; --vert-l:#22C55E;
+    --or:#F59E0B; --or-l:#FBBF24;
+    --bg:#F0FDF4; --card:#FFFFFF; --text:#0F172A; --muted:#64748B;
+    --shadow:0 10px 30px rgba(15,118,55,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;min-height:100dvh;overflow-x:hidden}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .wrap{max-width:480px;margin:0 auto;padding:16px 16px 32px}
+
+  /* Bandeau promo */
+  .promo{background:linear-gradient(90deg,var(--or) 0%,var(--or-l) 100%);
+    color:#1a1a1a;font-weight:600;font-size:13px;padding:10px 14px;border-radius:12px;
+    text-align:center;margin-bottom:14px;box-shadow:0 4px 12px rgba(245,158,11,.3);
+    display:none}
+  .promo.show{display:block}
+
+  /* Header carte */
+  .card-top{background:linear-gradient(135deg,var(--vert) 0%,var(--vert-d) 100%);
+    color:#fff;border-radius:20px 20px 8px 8px;padding:22px 20px 18px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .card-top::before{content:"";position:absolute;top:-40px;right:-40px;width:160px;height:160px;
+    background:radial-gradient(circle,rgba(255,255,255,.15) 0%,transparent 70%);border-radius:50%}
+  .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative}
+  .logo{width:38px;height:38px;border-radius:10px;background:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .brand{font-size:13px;font-weight:600;opacity:.92;letter-spacing:.5px}
+  .brand b{font-weight:800;letter-spacing:1px}
+  .name{font-size:22px;font-weight:800;margin-bottom:2px;line-height:1.2;position:relative}
+  .meta{font-size:12px;opacity:.85;position:relative}
+  .meta .parrain{display:block;margin-top:4px;font-size:11px;opacity:.95}
+  .meta .parrain b{color:var(--or-l);font-weight:700}
+
+  /* Points box */
+  .pts-box{background:var(--card);border-radius:8px 8px 20px 20px;
+    padding:18px 20px;box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
+  .pts-label{font-size:11px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:1.5px;font-weight:600;margin-bottom:4px}
+  .pts-val{font-size:42px;font-weight:900;color:var(--vert-d);line-height:1;
+    font-variant-numeric:tabular-nums;margin-bottom:2px}
+  .pts-val small{font-size:14px;color:var(--muted);font-weight:600;margin-left:4px}
+  .credit{font-size:13px;color:var(--or);font-weight:700;margin-top:6px}
+  .progress{margin-top:14px}
+  .progress-bar{height:8px;background:#E2E8F0;border-radius:99px;overflow:hidden;margin-bottom:6px}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--vert-l),var(--vert));
+    border-radius:99px;transition:width .6s ease}
+  .progress-txt{font-size:11px;color:var(--muted);font-weight:500}
+  .progress-txt b{color:var(--vert-d);font-weight:700}
+
+  /* Bon dispo */
+  .bon{background:linear-gradient(135deg,var(--or) 0%,var(--or-l) 100%);
+    color:#1a1a1a;padding:14px 16px;border-radius:14px;margin-bottom:14px;
+    display:none;align-items:center;gap:12px;box-shadow:0 6px 18px rgba(245,158,11,.35)}
+  .bon.show{display:flex}
+  .bon-icon{font-size:28px}
+  .bon-txt{flex:1;line-height:1.3}
+  .bon-txt b{display:block;font-size:15px;font-weight:800}
+  .bon-txt span{font-size:12px;opacity:.85}
+
+  /* QR */
+  .qr-box{background:var(--card);border-radius:20px;padding:20px;
+    box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
+  .qr-box canvas{max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px}
+  .qr-hint{font-size:11px;color:var(--muted);margin-top:10px;font-weight:500}
+
+  /* Actions */
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+  .btn-act{background:var(--card);border:none;border-radius:14px;padding:12px 6px;
+    box-shadow:0 4px 12px rgba(15,118,55,.08);font-size:11px;font-weight:600;
+    color:var(--text);cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:4px;transition:transform .15s,box-shadow .15s;
+    text-decoration:none}
+  .btn-act:active{transform:scale(.96)}
+  .btn-act .ico{font-size:22px}
+
+  /* Bouton partage */
+  .share{width:100%;background:linear-gradient(135deg,var(--vert) 0%,var(--vert-d) 100%);
+    color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;
+    cursor:pointer;box-shadow:0 6px 18px rgba(22,163,74,.35);display:flex;
+    align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+  .share:active{transform:scale(.98)}
+
+  /* Install banner */
+  .install{background:#FEF3C7;border:1px solid #FCD34D;color:#78350F;
+    padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.4;
+    display:none;align-items:flex-start;gap:10px;margin-bottom:12px}
+  .install.show{display:flex}
+  .install b{display:block;margin-bottom:2px}
+  .install button{margin-left:auto;background:var(--or);color:#fff;border:none;
+    border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;
+    flex-shrink:0}
+  .install .close{background:transparent;color:#78350F;font-size:18px;padding:0 4px;
+    margin-left:6px;font-weight:700}
+
+  /* Footer */
+  .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:8px;opacity:.6}
+
+  /* Modal carte PDV */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;
+    display:none;align-items:flex-end}
+  .modal.show{display:flex}
+  .modal-inner{background:#fff;width:100%;max-width:480px;margin:0 auto;
+    border-radius:20px 20px 0 0;max-height:85vh;display:flex;flex-direction:column}
+  .modal-head{padding:14px 16px;border-bottom:1px solid #E2E8F0;
+    display:flex;align-items:center;justify-content:space-between}
+  .modal-head h3{margin:0;font-size:16px;font-weight:700}
+  .modal-close{background:transparent;border:none;font-size:22px;cursor:pointer;
+    color:var(--muted);padding:4px 8px}
+  #map{flex:1;min-height:400px;border-radius:0 0 20px 20px}
+  .leaflet-popup-content b{color:var(--vert-d)}
+
+  /* Loading */
+  .skeleton{background:linear-gradient(90deg,#E2E8F0 0%,#F1F5F9 50%,#E2E8F0 100%);
+    background-size:200% 100%;animation:shimmer 1.4s infinite}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Bandeau promo -->
+  <div class="promo" id="promo"></div>
+
+  <!-- Carte top + points -->
+  <div class="card-top">
+    <div class="logo-row">
+      <div class="logo">🌾</div>
+      <div class="brand"><b>SADARI</b> · ATM Farm Village</div>
+    </div>
+    <div class="name" id="nom">Membre SADARI</div>
+    <div class="meta">
+      <span id="num">#–</span>
+      <span class="parrain" id="parrain-row" style="display:none">Parrainé par <b id="parrain-nom">–</b></span>
+    </div>
+  </div>
+
+  <div class="pts-box">
+    <div class="pts-label">Mes points</div>
+    <div class="pts-val"><span id="pts">–</span><small>pts</small></div>
+    <div class="credit" id="credit" style="display:none"></div>
+    <div class="progress">
+      <div class="progress-bar"><div class="progress-fill" id="bar" style="width:0%"></div></div>
+      <div class="progress-txt" id="bar-txt">Chargement…</div>
+    </div>
+  </div>
+
+  <!-- Bon dispo -->
+  <div class="bon" id="bon">
+    <div class="bon-icon">🎁</div>
+    <div class="bon-txt">
+      <b id="bon-titre">Bon disponible</b>
+      <span id="bon-sub">Présentez votre QR à la caisse</span>
+    </div>
+  </div>
+
+  <!-- QR -->
+  <div class="qr-box">
+    <canvas id="qr" width="260" height="260"></canvas>
+    <div class="qr-hint">📲 Présentez ce QR à la caisse SADARI</div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <a class="btn-act" id="btn-tel" href="#"><span class="ico">📞</span>Appeler</a>
+    <a class="btn-act" id="btn-wa" href="#" target="_blank" rel="noopener"><span class="ico">💬</span>WhatsApp</a>
+    <button class="btn-act" id="btn-map"><span class="ico">📍</span>Points vente</button>
+  </div>
+
+  <!-- Partage -->
+  <button class="share" id="btn-share">
+    <span style="font-size:18px">🎁</span>
+    Inviter un proche & gagner des points
+  </button>
+
+  <!-- Install banner -->
+  <div class="install" id="install">
+    <div>
+      <b id="install-titre">Installer ma carte</b>
+      <span id="install-txt">Ajoutez SADARI à votre écran d'accueil pour un accès rapide.</span>
+    </div>
+    <button id="install-btn">Installer</button>
+    <button class="close" id="install-close">×</button>
+  </div>
+
+  <div class="foot">propulsé par PROVENDA</div>
+</div>
+
+<!-- Modal PDV -->
+<div class="modal" id="modal-pdv">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h3>📍 Points de vente SADARI</h3>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div id="map"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ── Config Supabase ─────────────────────────────────
+  const SB_URL = 'https://edvgtxzwpopqflaxbown.supabase.co';
+  const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY';
+  const SB = window.supabase.createClient(SB_URL, SB_KEY);
+
+  // ── URL params ──────────────────────────────────────
+  const P = new URLSearchParams(location.search);
+  const clientId = P.get('c') || '';
+  const token    = P.get('t') || '';
+  const adminId  = P.get('a') || '';
+  const nomParam = P.get('n') ? decodeURIComponent(P.get('n')) : '';
+  const numParam = P.get('m') || '';
+  const parrainId   = P.get('pa') || '';
+  const parrainNom  = P.get('pn') ? decodeURIComponent(P.get('pn')) : '';
+
+  // ── Render header tout de suite (data locale) ──────
+  if(nomParam) document.getElementById('nom').textContent = nomParam;
+  if(numParam) document.getElementById('num').textContent = '#' + numParam;
+  if(parrainNom){
+    document.getElementById('parrain-row').style.display = 'block';
+    document.getElementById('parrain-nom').textContent = parrainNom;
+  }
+
+  // ── QR code ─────────────────────────────────────────
+  if(clientId){
+    const payload = 'provenda:c:' + adminId + ':' + clientId + ':' + token;
+    new QRious({ element:document.getElementById('qr'), value:payload, size:260,
+      foreground:'#15803D', background:'#FFFFFF', level:'M' });
+  }
+
+  // ── Fetch live data ─────────────────────────────────
+  async function loadLive(){
+    if(!clientId) return;
+    try{
+      const { data:cli } = await SB.from('gp_clients')
+        .select('nom,numero_membre,points_fidelite,credit_fidelite,parrain_id,bon_bienvenue_utilise')
+        .eq('id', clientId).maybeSingle();
+      if(cli){
+        if(cli.nom) document.getElementById('nom').textContent = cli.nom;
+        if(cli.numero_membre) document.getElementById('num').textContent = '#' + cli.numero_membre;
+        renderPoints(cli.points_fidelite||0, cli.credit_fidelite||0);
+        if(cli.credit_fidelite && cli.credit_fidelite > 0){
+          showBon('Bon dispo : ' + fmt(cli.credit_fidelite) + ' F',
+                  'À utiliser sur ta prochaine vente');
+        } else if(cli.bon_bienvenue_utilise === false && parrainId){
+          showBon('Bon de bienvenue 1 000 F',
+                  'Débloqué dès 2 sacs sur ta 1re vente');
+        }
+      }
+      const { data:cfg } = await SB.from('gp_config')
+        .select('telephone,promo_message').limit(1).maybeSingle();
+      if(cfg){
+        if(cfg.telephone){
+          document.getElementById('btn-tel').href = 'tel:' + cfg.telephone.replace(/\s/g,'');
+          const wa = cfg.telephone.replace(/[^0-9]/g,'');
+          document.getElementById('btn-wa').href = 'https://wa.me/' + wa;
+        }
+        if(cfg.promo_message){
+          const el = document.getElementById('promo');
+          el.textContent = cfg.promo_message;
+          el.classList.add('show');
+        }
+      }
+    }catch(e){ console.warn('live load failed', e); }
+  }
+
+  function fmt(n){ return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' '); }
+
+  function renderPoints(pts, credit){
+    document.getElementById('pts').textContent = fmt(pts);
+    if(credit && credit > 0){
+      const c = document.getElementById('credit');
+      c.style.display = 'block';
+      c.textContent = '💰 Crédit fidélité : ' + fmt(credit) + ' F';
+    }
+    // Paliers : 100 → bon 1000 F, 300 → bon 3500 F, 600 → bon 8000 F
+    const paliers = [100, 300, 600];
+    let next = paliers.find(p => pts < p);
+    let prev = 0;
+    if(next){
+      const idx = paliers.indexOf(next);
+      prev = idx > 0 ? paliers[idx-1] : 0;
+      const pct = Math.min(100, ((pts - prev) / (next - prev)) * 100);
+      document.getElementById('bar').style.width = pct + '%';
+      document.getElementById('bar-txt').innerHTML =
+        'Plus que <b>' + fmt(next - pts) + ' pts</b> → palier ' + fmt(next) + ' 🎁';
+    }else{
+      document.getElementById('bar').style.width = '100%';
+      document.getElementById('bar-txt').innerHTML = '🏆 <b>Palier max atteint !</b> Continue à profiter de tes bons.';
+    }
+  }
+
+  function showBon(titre, sub){
+    document.getElementById('bon-titre').textContent = titre;
+    document.getElementById('bon-sub').textContent = sub;
+    document.getElementById('bon').classList.add('show');
+  }
+
+  // ── Partage parrainage ─────────────────────────────
+  document.getElementById('btn-share').addEventListener('click', async ()=>{
+    if(!clientId) return;
+    const myName = document.getElementById('nom').textContent;
+    const myNum  = document.getElementById('num').textContent.replace('#','');
+    // URL filleul : pas de client_id (il n'en a pas encore), juste invite param
+    const inviteUrl = location.origin + location.pathname +
+      '?invite=1' +
+      '&pa=' + encodeURIComponent(clientId) +
+      '&pn=' + encodeURIComponent(myName) +
+      '&a='  + encodeURIComponent(adminId);
+    const msg = '🌾 Salut ! Je profite de la carte fidélité SADARI (ATM Farm Village) — alimentation animale au top.\n\n' +
+                'Si tu deviens client avec mon parrainage, tu reçois *1 000 F de bon de bienvenue* dès 2 sacs sur ta 1re vente.\n\n' +
+                'Ouvre ce lien pour avoir ta carte 👉 ' + inviteUrl;
+    if(navigator.share){
+      try{
+        await navigator.share({ title:'Carte SADARI', text:msg, url:inviteUrl });
+        return;
+      }catch(e){ /* user cancelled */ }
+    }
+    // Fallback : copier + ouvrir WhatsApp
+    try{ await navigator.clipboard.writeText(msg); }catch(e){}
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  });
+
+  // ── Carte PDV ───────────────────────────────────────
+  let mapInstance = null;
+  document.getElementById('btn-map').addEventListener('click', async ()=>{
+    document.getElementById('modal-pdv').classList.add('show');
+    if(mapInstance) return;
+    // Attend que Leaflet soit chargé
+    if(typeof L === 'undefined'){
+      setTimeout(()=>document.getElementById('btn-map').click(), 500);
+      document.getElementById('modal-pdv').classList.remove('show');
+      return;
+    }
+    mapInstance = L.map('map').setView([7.54, -5.55], 7); // Côte d'Ivoire
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'© OpenStreetMap', maxZoom:18
+    }).addTo(mapInstance);
+    try{
+      const { data:pdvs } = await SB.from('gp_points_vente')
+        .select('nom,adresse,latitude,longitude,telephone')
+        .not('latitude','is',null);
+      if(pdvs && pdvs.length){
+        const bounds = [];
+        pdvs.forEach(p=>{
+          if(p.latitude && p.longitude){
+            const m = L.marker([p.latitude, p.longitude]).addTo(mapInstance);
+            const tel = p.telephone ? '<br>📞 <a href="tel:' + p.telephone + '">' + p.telephone + '</a>' : '';
+            m.bindPopup('<b>' + p.nom + '</b><br>' + (p.adresse||'') + tel);
+            bounds.push([p.latitude, p.longitude]);
+          }
+        });
+        if(bounds.length > 1) mapInstance.fitBounds(bounds, {padding:[40,40]});
+        else if(bounds.length === 1) mapInstance.setView(bounds[0], 13);
+      }
+    }catch(e){ console.warn('pdv load failed', e); }
+    setTimeout(()=>mapInstance.invalidateSize(), 250);
+  });
+  document.getElementById('modal-close').addEventListener('click', ()=>{
+    document.getElementById('modal-pdv').classList.remove('show');
+  });
+
+  // ── PWA install ─────────────────────────────────────
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                       window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  let deferredPrompt = null;
+
+  if(!isStandalone && localStorage.getItem('sadari-install-dismiss') !== '1'){
+    document.getElementById('install').classList.add('show');
+    if(isIOS){
+      document.getElementById('install-titre').textContent = 'Ajouter à l\'écran d\'accueil';
+      document.getElementById('install-txt').textContent = 'Appuyez sur ⎙ Partager → "Sur l\'écran d\'accueil"';
+      document.getElementById('install-btn').style.display = 'none';
+    }
+  }
+
+  window.addEventListener('beforeinstallprompt', e=>{
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+  document.getElementById('install-btn').addEventListener('click', async ()=>{
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    document.getElementById('install').classList.remove('show');
+  });
+  document.getElementById('install-close').addEventListener('click', ()=>{
+    localStorage.setItem('sadari-install-dismiss','1');
+    document.getElementById('install').classList.remove('show');
+  });
+
+  // ── Service Worker pour offline ────────────────────
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw-carte.js').catch(()=>{});
+  }
+
+  // ── Mode invitation (filleul reçoit le lien) ───────
+  if(P.get('invite') === '1' && !clientId){
+    document.getElementById('nom').textContent = 'Bienvenue 👋';
+    document.getElementById('num').textContent = 'Future carte SADARI';
+    document.getElementById('pts').textContent = '–';
+    document.getElementById('bar-txt').innerHTML =
+      'Présente-toi à SADARI pour activer ta carte. Bon de <b>1 000 F</b> offert dès 2 sacs sur ta 1re vente.';
+    document.getElementById('qr').style.display = 'none';
+    document.querySelector('.qr-hint').innerHTML =
+      '✨ Pour activer ta carte, viens voir l\'équipe SADARI<br>' +
+      (parrainNom ? '<b>Parrain : ' + parrainNom + '</b>' : '');
+    document.getElementById('btn-share').style.display = 'none';
+  }
+
+  // Go
+  loadLive();
+})();
+</script>
+</body>
+</html>

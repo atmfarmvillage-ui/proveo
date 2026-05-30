@@ -748,11 +748,14 @@ async function saveVente(){
       }
     }
     if(clientId==='__nouveau__'){
+      const parrainSel=document.getElementById('vt_cl_parrain')?.value||null;
+      const parrainIdNv = parrainSel && parrainSel!=='' ? parrainSel : null;
       const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
         admin_id:GP_ADMIN_ID,
         nom:nomComplet,telephone:tel,
         type_client:typeNv,total_achats:0,
-        nom_ferme:ferme,localite
+        nom_ferme:ferme,localite,
+        parrain_id:parrainIdNv
       }).select().maybeSingle();
       if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
       clientId=nc?.id||null;
@@ -938,6 +941,89 @@ async function saveVente(){
       });
     }catch(e){ /* silencieux */ }
   }
+
+  // ── PARRAINAGE : récompenses au parrain + bon de bienvenue au filleul ──
+  if(clientId){
+    try{
+      const {data:cli} = await SB.from('gp_clients')
+        .select('parrain_id,parrainage_recompense_1ere,bon_bienvenue_utilise,credit_fidelite')
+        .eq('id',clientId).maybeSingle();
+      if(cli?.parrain_id){
+        // Compter les sacs 25 kg dans la vente
+        let sacs25 = 0;
+        for(const l of VT_LIGNES){
+          if(l.type_produit!=='formule') continue;
+          const cond=String(l.conditionnement||'');
+          if(cond==='25'){
+            sacs25 += Number(l.nb_sacs)>0 ? Number(l.nb_sacs) : Math.round(Number(l.quantite||0)/25);
+          }
+        }
+        const PLAFOND_PARRAIN = 200;
+        const {data:par} = await SB.from('gp_clients')
+          .select('id,nom,points_fidelite,parrain_pts_cumules')
+          .eq('id',cli.parrain_id).maybeSingle();
+        if(par){
+          const cumul = Number(par.parrain_pts_cumules)||0;
+          const ptsPar = Number(par.points_fidelite)||0;
+          const capRest = Math.max(0, PLAFOND_PARRAIN - cumul);
+          let ptsAttribuer = 0;
+          if(!cli.parrainage_recompense_1ere){
+            // 1re vente : seuil 2 sacs 25 kg pour débloquer le bon
+            if(sacs25 >= 2){
+              const WELCOME = 1000;
+              const newCredit = Number(cli.credit_fidelite||0) + WELCOME;
+              await SB.from('gp_clients').update({
+                credit_fidelite:newCredit,
+                parrainage_recompense_1ere:true,
+                bon_bienvenue_utilise:true
+              }).eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
+              const ci=GP_CLIENTS.findIndex(c=>c.id===clientId);
+              if(ci>=0){
+                GP_CLIENTS[ci].credit_fidelite=newCredit;
+                GP_CLIENTS[ci].parrainage_recompense_1ere=true;
+                GP_CLIENTS[ci].bon_bienvenue_utilise=true;
+              }
+              await SB.from('gp_fidelite_mouvements').insert({
+                admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id,
+                points:0, type:'bonus_parrainage',
+                description:`Bon de bienvenue ${WELCOME} F (parrainé par ${par.nom||''})`
+              });
+              ptsAttribuer = Math.min(10, capRest);
+              notify(`🎉 Bon bienvenue ${fmt(WELCOME)} F crédité + ${ptsAttribuer} pts à ${par.nom||'parrain'}`,'gold');
+            }
+          } else {
+            // Ventes suivantes : 1 pt par sac 25 kg, plafonné
+            ptsAttribuer = Math.min(sacs25, capRest);
+          }
+          if(ptsAttribuer > 0){
+            await SB.from('gp_clients').update({
+              points_fidelite: ptsPar + ptsAttribuer,
+              parrain_pts_cumules: cumul + ptsAttribuer
+            }).eq('id',par.id).eq('admin_id',GP_ADMIN_ID);
+            const pi=GP_CLIENTS.findIndex(c=>c.id===par.id);
+            if(pi>=0){
+              GP_CLIENTS[pi].points_fidelite = ptsPar + ptsAttribuer;
+              GP_CLIENTS[pi].parrain_pts_cumules = cumul + ptsAttribuer;
+            }
+            if(cli.parrainage_recompense_1ere){
+              await SB.from('gp_fidelite_mouvements').insert({
+                admin_id:GP_ADMIN_ID, client_id:par.id, vente_id:vente.id,
+                points:ptsAttribuer, type:'parrainage',
+                description:`Parrainage filleul (${ptsAttribuer} pts)`
+              });
+            } else {
+              await SB.from('gp_fidelite_mouvements').insert({
+                admin_id:GP_ADMIN_ID, client_id:par.id, vente_id:vente.id,
+                points:ptsAttribuer, type:'parrainage_1ere',
+                description:`Parrainage 1ʳᵉ vente (${ptsAttribuer} pts)`
+              });
+            }
+          }
+        }
+      }
+    }catch(e){ console.warn('parrainage:', e); }
+  }
+
   window._bonFidelite=0;
   const bonEl=document.getElementById('vt-bon-fidelite'); if(bonEl) bonEl.style.display='none';
 
@@ -1661,6 +1747,22 @@ async function renderLignesVente(){
 async function onClientChange(){
   const val=document.getElementById('vt_client').value;
   document.getElementById('vt-nouveau-client').style.display=val==='__nouveau__'?'block':'none';
+  if(val==='__nouveau__') populateParrainSelect();
+}
+
+function populateParrainSelect(){
+  const sel=document.getElementById('vt_cl_parrain');
+  if(!sel || sel.dataset.filled==='1') return;
+  const opts=['<option value="">— Aucun —</option>'];
+  const list=(GP_CLIENTS||[]).slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  for(const c of list){
+    if(!c?.id || !c?.nom) continue;
+    const nom=c.nom.replace(/</g,'&lt;');
+    const tel=c.telephone?' · '+c.telephone:'';
+    opts.push(`<option value="${c.id}">${nom}${tel}</option>`);
+  }
+  sel.innerHTML=opts.join('');
+  sel.dataset.filled='1';
 }
 
 async function checkPendingRemises(){
