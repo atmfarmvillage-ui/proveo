@@ -220,6 +220,11 @@
     Inviter un proche & gagner des points
   </button>
 
+  <!-- Re-ouvrir les instructions d'installation (toujours visible) -->
+  <button id="btn-reinstall" style="width:100%;background:transparent;border:1px dashed var(--vert);color:var(--vert-d);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;display:none">
+    📲 Installer ma carte sur l'écran d'accueil
+  </button>
+
   <div class="foot">propulsé par PROVENDA</div>
 </div>
 
@@ -457,6 +462,9 @@
   });
 
   // ── PWA install ─────────────────────────────────────
+  // Migration : nettoyer l'ancien flag localStorage (sinon les users qui ont
+  // dismissé hier ne verraient plus jamais la banner).
+  try{ localStorage.removeItem('sadari-install-dismiss'); }catch(e){}
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                        window.navigator.standalone === true;
   const ua = navigator.userAgent;
@@ -469,7 +477,7 @@
     if(isStandalone) return;
     // En mode invite (filleul), TOUJOURS afficher (ignore le dismiss précédent)
     const isInvite = P.get('invite') === '1';
-    if(!isInvite && localStorage.getItem('sadari-install-dismiss') === '1') return;
+    if(!isInvite && sessionStorage.getItem('sadari-install-dismiss') === '1') return;
     document.getElementById('install').classList.add('show');
     const btn = document.getElementById('install-btn');
     const titre = document.getElementById('install-titre');
@@ -514,13 +522,26 @@
     document.getElementById('install').classList.remove('show');
   });
   document.getElementById('install-close').addEventListener('click', ()=>{
-    localStorage.setItem('sadari-install-dismiss','1');
+    sessionStorage.setItem('sadari-install-dismiss','1');
     document.getElementById('install').classList.remove('show');
   });
   window.addEventListener('appinstalled', ()=>{
-    localStorage.setItem('sadari-install-dismiss','1');
+    sessionStorage.setItem('sadari-install-dismiss','1');
     document.getElementById('install').classList.remove('show');
+    const r=document.getElementById('btn-reinstall'); if(r) r.style.display='none';
   });
+
+  // Bouton "réinstaller" : ré-affiche la banner même si fermée
+  const btnReinstall = document.getElementById('btn-reinstall');
+  if(!isStandalone && btnReinstall){
+    btnReinstall.style.display = 'block';
+    btnReinstall.addEventListener('click', ()=>{
+      sessionStorage.removeItem('sadari-install-dismiss');
+      showInstallBanner();
+      // Scroll vers la banner pour qu'on la voie
+      document.getElementById('install').scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  }
 
   // ── Service Worker pour offline ────────────────────
   if('serviceWorker' in navigator){
