@@ -249,40 +249,55 @@
       foreground:'#15803D', background:'#FFFFFF', level:'M' });
   }
 
-  // ── Fetch live data ─────────────────────────────────
+  // ── Fetch live data via RPC (anon-safe, vérifie le qr_token) ────
   async function loadLive(){
-    if(!clientId) return;
+    if(!clientId || !token) return;
     try{
-      const { data:cli } = await SB.from('gp_clients')
-        .select('nom,numero_membre,points_fidelite,credit_fidelite,parrain_id,bon_bienvenue_utilise')
-        .eq('id', clientId).maybeSingle();
-      if(cli){
-        if(cli.nom) document.getElementById('nom').textContent = cli.nom;
-        if(cli.numero_membre) document.getElementById('num').textContent = '#' + cli.numero_membre;
-        renderPoints(cli.points_fidelite||0, cli.credit_fidelite||0);
-        if(cli.credit_fidelite && cli.credit_fidelite > 0){
-          showBon('Bon dispo : ' + fmt(cli.credit_fidelite) + ' F',
-                  'À utiliser sur ta prochaine vente');
-        } else if(cli.bon_bienvenue_utilise === false && parrainId){
-          showBon('Bon de bienvenue 1 000 F',
-                  'Débloqué dès 2 sacs sur ta 1re vente');
-        }
+      const { data, error } = await SB.rpc('get_carte_data', { p_client_id: clientId, p_token: token });
+      if(error){
+        console.warn('rpc err', error);
+        document.getElementById('bar-txt').textContent = '⚠ ' + (error.message||'Erreur de connexion');
+        return;
       }
-      const { data:cfg } = await SB.from('gp_config')
-        .select('telephone,promo_message').limit(1).maybeSingle();
-      if(cfg){
-        if(cfg.telephone){
-          document.getElementById('btn-tel').href = 'tel:' + cfg.telephone.replace(/\s/g,'');
-          const wa = cfg.telephone.replace(/[^0-9]/g,'');
-          document.getElementById('btn-wa').href = 'https://wa.me/' + wa;
-        }
-        if(cfg.promo_message){
-          const el = document.getElementById('promo');
-          el.textContent = cfg.promo_message;
-          el.classList.add('show');
-        }
+      if(!data || data.error){
+        document.getElementById('bar-txt').textContent = 'Carte non reconnue. Demande un nouveau lien à SADARI.';
+        return;
       }
-    }catch(e){ console.warn('live load failed', e); }
+      const cli = data.client || {};
+      const cfg = data.config || {};
+      if(cli.nom) document.getElementById('nom').textContent = cli.nom;
+      if(cli.numero_membre) document.getElementById('num').textContent = '#' + cli.numero_membre;
+      if(data.parrain_nom){
+        document.getElementById('parrain-row').style.display = 'block';
+        document.getElementById('parrain-nom').textContent = data.parrain_nom;
+      }
+      renderPoints(Number(cli.points_fidelite)||0, Number(cli.credit_fidelite)||0);
+      if(Number(cli.credit_fidelite) > 0){
+        showBon('Bon dispo : ' + fmt(cli.credit_fidelite) + ' F',
+                'À utiliser sur ta prochaine vente');
+      } else if(cli.parrain_id && cli.bon_bienvenue_utilise === false){
+        showBon('Bon de bienvenue 1 000 F',
+                'Débloqué dès 2 sacs sur ta 1re vente');
+      }
+      if(cfg.telephone){
+        const telClean = String(cfg.telephone).replace(/\s/g,'');
+        document.getElementById('btn-tel').href = 'tel:' + telClean;
+        const wa = String(cfg.telephone).replace(/[^0-9]/g,'');
+        document.getElementById('btn-wa').href = 'https://wa.me/' + wa;
+      }
+      if(cfg.promo_message){
+        const el = document.getElementById('promo');
+        el.textContent = cfg.promo_message;
+        el.classList.add('show');
+      }
+      if(cfg.nom_provenderie){
+        const brand = document.querySelector('.brand');
+        if(brand) brand.innerHTML = '<b>' + cfg.nom_provenderie + '</b> · ATM Farm Village';
+      }
+    }catch(e){
+      console.warn('live load failed', e);
+      document.getElementById('bar-txt').textContent = '⚠ Connexion impossible. Vérifie ton réseau.';
+    }
   }
 
   function fmt(n){ return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' '); }
@@ -384,21 +399,50 @@
   // ── PWA install ─────────────────────────────────────
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                        window.navigator.standalone === true;
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  const isAndroid = /android/i.test(ua);
+  const isSamsung = /SamsungBrowser/i.test(ua);
   let deferredPrompt = null;
 
-  if(!isStandalone && localStorage.getItem('sadari-install-dismiss') !== '1'){
+  function showInstallBanner(){
+    if(isStandalone) return;
+    if(localStorage.getItem('sadari-install-dismiss') === '1') return;
     document.getElementById('install').classList.add('show');
+    const btn = document.getElementById('install-btn');
+    const titre = document.getElementById('install-titre');
+    const txt = document.getElementById('install-txt');
     if(isIOS){
-      document.getElementById('install-titre').textContent = 'Ajouter à l\'écran d\'accueil';
-      document.getElementById('install-txt').textContent = 'Appuyez sur ⎙ Partager → "Sur l\'écran d\'accueil"';
-      document.getElementById('install-btn').style.display = 'none';
+      titre.textContent = '📲 Ajouter à l\'écran d\'accueil';
+      txt.innerHTML = 'Appuie sur <b>⎙ Partager</b> en bas de Safari → <b>Sur l\'écran d\'accueil</b>.';
+      btn.style.display = 'none';
+    } else if(deferredPrompt){
+      titre.textContent = '📲 Installer ma carte';
+      txt.textContent = 'Garde SADARI toujours sous la main, même hors-ligne.';
+      btn.style.display = '';
+      btn.textContent = 'Installer';
+    } else {
+      // Android Chrome sans beforeinstallprompt (déjà refusé ou pas encore éligible)
+      titre.textContent = '📲 Ajouter à l\'écran d\'accueil';
+      if(isSamsung){
+        txt.innerHTML = 'Menu <b>≡</b> → <b>Ajouter la page à</b> → <b>Écran d\'accueil</b>.';
+      } else if(isAndroid){
+        txt.innerHTML = 'Touche le menu <b>⋮</b> en haut à droite → <b>Ajouter à l\'écran d\'accueil</b>.';
+      } else {
+        txt.innerHTML = 'Menu navigateur → <b>Installer l\'application</b> ou <b>Ajouter à l\'écran d\'accueil</b>.';
+      }
+      btn.style.display = 'none';
     }
   }
+
+  // Affichage initial — Android peut ne jamais émettre beforeinstallprompt
+  showInstallBanner();
 
   window.addEventListener('beforeinstallprompt', e=>{
     e.preventDefault();
     deferredPrompt = e;
+    // Rerender la banner avec le bouton actif
+    showInstallBanner();
   });
   document.getElementById('install-btn').addEventListener('click', async ()=>{
     if(!deferredPrompt) return;
@@ -408,6 +452,10 @@
     document.getElementById('install').classList.remove('show');
   });
   document.getElementById('install-close').addEventListener('click', ()=>{
+    localStorage.setItem('sadari-install-dismiss','1');
+    document.getElementById('install').classList.remove('show');
+  });
+  window.addEventListener('appinstalled', ()=>{
     localStorage.setItem('sadari-install-dismiss','1');
     document.getElementById('install').classList.remove('show');
   });
