@@ -261,7 +261,8 @@ async function partagerMiniAppCarte(){
   // Tentative 1 : Web Share natif (mobile) — l'app de l'utilisateur choisit
   if(navigator.share){
     try{
-      await navigator.share({ title:'Carte SADARI', text:msg, url });
+      // Pas de "url" séparé : il est déjà dans le texte, sinon WhatsApp le répète à la fin.
+      await navigator.share({ title:'Carte '+nomProv, text:msg });
       notify('Lien partagé ✓','gold');
       const errEl=document.getElementById('cqr-err');
       if(errEl) errEl.innerHTML='';
