@@ -11,6 +11,21 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
 <title>Ma Carte SADARI</title>
+
+<!-- Open Graph — pour la preview WhatsApp / Facebook / iMessage -->
+<meta property="og:title" content="Ma carte de fidélité SADARI">
+<meta property="og:description" content="🎁 Cumule des points à chaque achat. Présente ce QR à la caisse SADARI.">
+<meta property="og:image" content="https://provenda.avifarmer.net/icons/logo.png">
+<meta property="og:image:width" content="400">
+<meta property="og:image:height" content="400">
+<meta property="og:image:alt" content="Logo SADARI">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SADARI">
+<meta property="og:url" content="https://provenda.avifarmer.net/carte.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ma carte de fidélité SADARI">
+<meta name="twitter:description" content="🎁 Cumule des points à chaque achat.">
+<meta name="twitter:image" content="https://provenda.avifarmer.net/icons/logo.png">
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -349,7 +364,7 @@
                 'Ouvre ce lien pour avoir ta carte 👉 ' + inviteUrl;
     if(navigator.share){
       try{
-        await navigator.share({ title:'Carte SADARI', text:msg, url:inviteUrl });
+        await navigator.share({ title:'Carte SADARI', text:msg });
         return;
       }catch(e){ /* user cancelled */ }
     }
