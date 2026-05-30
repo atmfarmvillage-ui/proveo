@@ -1,7 +1,7 @@
 {
   "name": "Ma Carte SADARI",
   "short_name": "SADARI",
-  "description": "Carte de fidélité SADARI — ATM Farm Village",
+  "description": "Carte de fidélité SADARI",
   "start_url": "/carte.html",
   "scope": "/carte.html",
   "display": "standalone",
