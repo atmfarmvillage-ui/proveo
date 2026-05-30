@@ -1,5 +1,5 @@
-// Service Worker mini-app Carte SADARI v2.1.0
-const CACHE = 'sadari-carte-v13';
+// Service Worker mini-app Carte SADARI v2.2.0
+const CACHE = 'sadari-carte-v14';
 const ASSETS = [
   '/carte.html',
   '/manifest-carte.json',
