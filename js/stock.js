@@ -224,6 +224,80 @@ async function saveMPEntree(){
   notify('Réception enregistrée ✓ — Stock mis à jour','gold');
   renderStockNiveaux();renderMouvements();
 }
+// ── STOCK INITIAL : saisie de tout l'inventaire d'un coup ──
+function ouvrirStockInitial(){
+  const list = (GP_INGREDIENTS||[]).slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  if(!list.length){ notify('Aucune MP enregistrée — crée-en d\'abord','r'); return; }
+  document.getElementById('si-date').value = today();
+  const tbody = document.getElementById('si-tbody');
+  tbody.innerHTML = list.map(i=>{
+    const prix = Number(i.prix_actuel||0);
+    return `<tr data-id="${i.id}" data-nom="${(i.nom||'').replace(/"/g,'&quot;')}">
+      <td style="font-weight:600">${i.nom||'—'}</td>
+      <td class="num"><input type="number" class="si-qte" placeholder="0" step="0.1" min="0" style="width:100%;text-align:right;font-weight:600" oninput="recalcStockInitial()"></td>
+      <td class="num"><input type="number" class="si-prix" value="${prix||''}" placeholder="${prix}" step="1" min="0" style="width:100%;text-align:right" oninput="recalcStockInitial()"></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('si-err').textContent='';
+  recalcStockInitial();
+  document.getElementById('modal-stock-init').style.display='flex';
+}
+
+function fermerStockInitial(){
+  document.getElementById('modal-stock-init').style.display='none';
+}
+
+function recalcStockInitial(){
+  let n=0, total=0;
+  document.querySelectorAll('#si-tbody tr').forEach(tr=>{
+    const q = +tr.querySelector('.si-qte').value || 0;
+    const p = +tr.querySelector('.si-prix').value || 0;
+    if(q>0){ n++; total += q*p; }
+  });
+  document.getElementById('si-recap').textContent = n+' ligne(s) à enregistrer';
+  document.getElementById('si-valeur').textContent = fmt(total)+' F';
+}
+
+async function saveStockInitial(){
+  const date = document.getElementById('si-date').value || today();
+  const err = document.getElementById('si-err');
+  err.textContent='';
+  const rows = [];
+  document.querySelectorAll('#si-tbody tr').forEach(tr=>{
+    const q = +tr.querySelector('.si-qte').value || 0;
+    const p = +tr.querySelector('.si-prix').value || 0;
+    if(q>0){
+      rows.push({
+        admin_id: GP_ADMIN_ID,
+        saisi_par: GP_USER?.id,
+        type: 'entree',
+        date,
+        ingredient_id: tr.dataset.id,
+        ingredient_nom: tr.dataset.nom,
+        quantite: q,
+        prix_unit: p,
+        ref: 'INV-INIT-'+date
+      });
+    }
+  });
+  if(!rows.length){ err.textContent='Saisis au moins une quantité > 0.'; return; }
+  err.textContent='Enregistrement de '+rows.length+' lignes…';
+  const {error} = await SB.from('gp_stock_mp').insert(rows);
+  if(error){ err.textContent='Erreur : '+error.message; return; }
+  // Mettre à jour le prix actuel des ingrédients si modifié
+  for(const r of rows){
+    if(r.prix_unit > 0){
+      await SB.from('gp_ingredients').update({prix_actuel: r.prix_unit}).eq('id', r.ingredient_id);
+      const idx = GP_INGREDIENTS.findIndex(i=>i.id===r.ingredient_id);
+      if(idx>=0) GP_INGREDIENTS[idx].prix_actuel = r.prix_unit;
+    }
+  }
+  fermerStockInitial();
+  notify(`✓ Stock initial enregistré : ${rows.length} MP`,'gold');
+  if(typeof renderStockNiveaux === 'function') renderStockNiveaux();
+  if(typeof renderMouvements === 'function') renderMouvements();
+}
+
 // ── NOUVELLE MP DEPUIS PAGE STOCK ─────────────────
 function toggleNouvelleMP(){
   const form = document.getElementById('nouvelle-mp-form');

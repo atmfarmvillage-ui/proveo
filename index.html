@@ -290,7 +290,10 @@
   <div class="g2" style="align-items:start">
     <div>
       <div class="card">
-        <div class="card-title"><div class="ct-left"><span>📥 Réception MP</span></div></div>
+        <div class="card-title">
+          <div class="ct-left"><span>📥 Réception MP</span></div>
+          <button class="btn btn-out btn-sm" onclick="ouvrirStockInitial()" title="Saisir tout l'inventaire d'un coup">📋 Stock initial</button>
+        </div>
         <div class="fr"><label>Date réception</label><input type="date" id="mp_date"></div>
         <div class="fr">
           <label>Matière première</label>
@@ -1502,6 +1505,90 @@
     </div>
     <!-- Écran succès + WhatsApp -->
     <div id="pmt-modal-succes" style="display:none"></div>
+  </div>
+</div>
+
+<!-- MODAL STOCK INITIAL MP (saisie en masse de l'inventaire physique) -->
+<div id="modal-stock-init" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerStockInitial()">
+  <div style="background:var(--card2,#0E1A0C);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-weight:700;font-size:16px">📋 Stock initial MP</div>
+      <button onclick="fermerStockInitial()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;line-height:1.45;color:var(--text)">
+      <b>Saisie en masse de ton inventaire physique.</b> Entre la quantité actuellement en stock pour chaque MP. Les lignes vides ou à 0 sont ignorées. Référence auto : <code>INV-INIT-{date}</code>.
+    </div>
+    <div class="fr" style="margin-bottom:10px">
+      <label>Date de l'inventaire</label>
+      <input type="date" id="si-date">
+    </div>
+    <div id="si-table-wrap" style="max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px">
+      <table class="tbl" style="font-size:12px;width:100%">
+        <thead style="position:sticky;top:0;background:var(--card2);z-index:5">
+          <tr>
+            <th>Matière première</th>
+            <th class="num" style="width:120px">Quantité (kg)</th>
+            <th class="num" style="width:100px">Prix/kg (F)</th>
+          </tr>
+        </thead>
+        <tbody id="si-tbody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px">
+      <span style="color:var(--textm)" id="si-recap">0 ligne(s) à enregistrer</span>
+      <span style="font-weight:700">Valeur stock : <span id="si-valeur" style="color:var(--gold)">0 F</span></span>
+    </div>
+    <div class="a-err" id="si-err"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" onclick="saveStockInitial()" style="flex:1;justify-content:center;font-size:14px;min-height:44px">✓ Enregistrer tout l'inventaire</button>
+      <button class="btn btn-out" onclick="fermerStockInitial()" style="padding:0 16px">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODIFIER ACHAT (métadonnées safe — ne touche pas paiements) -->
+<div id="modal-modif-pmt" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalModifPmt()">
+  <div style="background:var(--card2,#0E1A0C);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-weight:700;font-size:15px">✏ Modifier l'achat</div>
+      <button onclick="fermerModalModifPmt()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px;line-height:1.4">
+      ℹ️ Les paiements déjà enregistrés ne sont PAS modifiés. Pour changer les ingrédients/quantités/prix, va sur <b>Achats MP</b>.
+    </div>
+    <input type="hidden" id="mpm-achat-id">
+    <div class="fr"><label>Fournisseur</label>
+      <input type="text" id="mpm-fourn" readonly style="opacity:.6;background:rgba(255,255,255,.03)">
+    </div>
+    <div class="fg2">
+      <div class="fr"><label>Date commande</label>
+        <input type="date" id="mpm-date">
+      </div>
+      <div class="fr"><label>Référence (BC-…)</label>
+        <input type="text" id="mpm-ref" placeholder="BC-123456">
+      </div>
+    </div>
+    <div class="fr"><label>Condition de paiement</label>
+      <select id="mpm-cond">
+        <option value="livraison">À la livraison</option>
+        <option value="comptant">Comptant</option>
+        <option value="credit_30j">Crédit 30j</option>
+        <option value="credit_60j">Crédit 60j</option>
+        <option value="tranches">Tranches</option>
+      </select>
+    </div>
+    <div class="fr"><label>Note logistique</label>
+      <textarea id="mpm-note" rows="2" placeholder="Détails de livraison, contact..." style="resize:vertical"></textarea>
+    </div>
+    <div style="background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:8px;padding:10px;margin:10px 0;font-size:11px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Montant total :</span><b id="mpm-info-total" style="color:var(--gold)">—</b></div>
+      <div style="display:flex;justify-content:space-between"><span>Déjà payé :</span><b id="mpm-info-paye" style="color:var(--green)">—</b></div>
+    </div>
+    <div class="a-err" id="mpm-err"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-g" onclick="saveModifPmt()" style="flex:1;justify-content:center;font-size:14px;min-height:44px">✓ Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerModalModifPmt()" style="padding:0 16px">Annuler</button>
+    </div>
   </div>
 </div>
 
