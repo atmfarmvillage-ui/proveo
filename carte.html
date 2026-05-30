@@ -282,10 +282,17 @@
 
 <script>
 (function(){
-  // ── Config Supabase ─────────────────────────────────
+  // ── Config Supabase (init défensive : ne PAS bloquer si SDK absent / WebView restrictif) ─
   const SB_URL = 'https://edvgtxzwpopqflaxbown.supabase.co';
   const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY';
-  const SB = window.supabase.createClient(SB_URL, SB_KEY);
+  let SB = null;
+  try{
+    if(window.supabase && typeof window.supabase.createClient === 'function'){
+      SB = window.supabase.createClient(SB_URL, SB_KEY);
+    } else {
+      console.warn('⚠ Supabase SDK pas chargé (CDN bloqué ?). Données live indisponibles, install OK.');
+    }
+  }catch(e){ console.warn('SB init err', e); }
 
   // ── DÉCODEUR LIEN COURT (hash base64url) ─────────────
   function _bytesToUuid(b){
@@ -351,16 +358,31 @@
     document.getElementById('parrain-nom').textContent = parrainNom;
   }
 
-  // ── QR code ─────────────────────────────────────────
+  // ── QR code (défensif : ne pas planter si QRious bloqué par WebView) ─
   if(clientId){
-    const payload = 'provenda:c:' + adminId + ':' + clientId + ':' + token;
-    new QRious({ element:document.getElementById('qr'), value:payload, size:260,
-      foreground:'#15803D', background:'#FFFFFF', level:'M' });
+    try{
+      if(typeof QRious === 'function' || typeof QRious === 'object'){
+        const payload = 'provenda:c:' + adminId + ':' + clientId + ':' + token;
+        new QRious({ element:document.getElementById('qr'), value:payload, size:260,
+          foreground:'#15803D', background:'#FFFFFF', level:'M' });
+      } else {
+        const qrEl = document.getElementById('qr');
+        if(qrEl){
+          qrEl.style.display = 'none';
+          const hint = document.querySelector('.qr-hint');
+          if(hint) hint.innerHTML = '⚠ QR indisponible — ouvre ce lien dans Chrome pour voir ton QR.';
+        }
+      }
+    }catch(e){ console.warn('QR err', e); }
   }
 
   // ── Fetch live data via RPC (anon-safe, vérifie le qr_token) ────
   async function loadLive(){
     if(!clientId || !token) return;
+    if(!SB){
+      document.getElementById('bar-txt').innerHTML = '⚠ Ouvre ce lien dans Chrome pour voir tes points en direct.';
+      return;
+    }
     try{
       const { data, error } = await SB.rpc('get_carte_data', { p_client_id: clientId, p_token: token });
       if(error){
@@ -525,6 +547,7 @@
       attribution:'© OpenStreetMap', maxZoom:18
     }).addTo(mapInstance);
     try{
+      if(!SB) return;
       const { data:pdvs } = await SB.from('gp_points_vente')
         .select('nom,adresse,latitude,longitude,telephone')
         .not('latitude','is',null);
