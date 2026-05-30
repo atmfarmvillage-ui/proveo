@@ -15,17 +15,17 @@
 <!-- Open Graph — pour la preview WhatsApp / Facebook / iMessage -->
 <meta property="og:title" content="Ma carte de fidélité SADARI">
 <meta property="og:description" content="🎁 Cumule des points à chaque achat. Présente ce QR à la caisse SADARI.">
-<meta property="og:image" content="https://provenda.avifarmer.net/icons/logo.png">
+<meta property="og:image" content="https://carte.avifarmer.net/icons/logo.png">
 <meta property="og:image:width" content="400">
 <meta property="og:image:height" content="400">
 <meta property="og:image:alt" content="Logo SADARI">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SADARI">
-<meta property="og:url" content="https://provenda.avifarmer.net/carte.html">
+<meta property="og:url" content="https://carte.avifarmer.net/carte.html">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Ma carte de fidélité SADARI">
 <meta name="twitter:description" content="🎁 Cumule des points à chaque achat.">
-<meta name="twitter:image" content="https://provenda.avifarmer.net/icons/logo.png">
+<meta name="twitter:image" content="https://carte.avifarmer.net/icons/logo.png">
 <!-- AUTO-REDIRECT vers Chrome si ouvert dans WhatsApp/FB/IG WebView Android.
      Doit être inline et avant TOUT autre script pour s'exécuter en premier. -->
 <script>
@@ -350,6 +350,36 @@
     if(hasParrain){ const pnLen = buf[o++]; pn = dec.decode(buf.slice(o, o+pnLen)); o += pnLen; }
     const og = buf[o++];
     return {c, t, a, n, m, pa, pn, og: String(og)};
+  }
+
+  // ── PWA support : restaurer les params si lancé depuis l'icône (sans URL) ──
+  // Quand l'utilisateur tape l'icône installée, start_url='/carte.html' → pas de params.
+  // On sauvegarde au 1er chargement, on restaure au 2e+.
+  const LS_KEY = 'sad-carte-last-params';
+  const _hasUrlParams = (location.search && location.search.length > 1) ||
+                       (location.hash && location.hash.length > 1);
+  if(_hasUrlParams){
+    try{ localStorage.setItem(LS_KEY, location.search + location.hash); }catch(e){}
+  } else {
+    // Pas de params → essayer de restaurer
+    try{
+      const saved = localStorage.getItem(LS_KEY);
+      if(saved && saved.length > 5){
+        location.replace(location.pathname + saved);
+        return;
+      }
+    }catch(e){}
+    // Aucun saved → afficher un guide
+    document.getElementById('nom').textContent = 'Carte SADARI';
+    document.getElementById('num').textContent = 'Ouvre ton lien personnel';
+    setTimeout(()=>{
+      const bt = document.getElementById('bar-txt');
+      if(bt) bt.innerHTML = '👋 Pour activer ta carte, ouvre le lien WhatsApp envoyé par SADARI une 1ʳᵉ fois. Ensuite tu pourras la lancer depuis cette icône.';
+      const qh = document.querySelector('.qr-hint');
+      if(qh) qh.innerHTML = '✨ Demande à SADARI ton lien personnel';
+      const qrEl = document.getElementById('qr');
+      if(qrEl) qrEl.style.display = 'none';
+    }, 50);
   }
 
   // ── URL params : hash court prioritaire, fallback query string ──
