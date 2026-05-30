@@ -51,6 +51,7 @@ async function renderPaiementsMP(){
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
           <div style="font-size:16px;font-weight:700;color:var(--gold)">${fmt(total)} F</div>
           ${!solde?`<button class="btn btn-g btn-sm pmt-payer" data-id="${a.id}" data-fourn="${(a.fournisseur_nom||'').replace(/"/g,'')}" data-total="${total}" data-paye="${paye}">💳 Payer</button>`:''}
+          <button class="btn btn-out btn-sm pmt-modif" data-id="${a.id}">✏ Modifier</button>
           <button class="btn btn-out btn-sm pmt-histo" data-id="${a.id}" data-fourn="${(a.fournisseur_nom||'').replace(/"/g,'')}">📋 Historique</button>
         </div>
       </div>
@@ -77,6 +78,53 @@ async function renderPaiementsMP(){
   document.querySelectorAll('.pmt-histo').forEach(btn=>{
     btn.onclick=()=>voirHistoPaiements(btn.dataset.id,btn.dataset.fourn);
   });
+  document.querySelectorAll('.pmt-modif').forEach(btn=>{
+    btn.onclick=()=>ouvrirModalModifPmt(btn.dataset.id);
+  });
+}
+
+// ── MODIFIER MÉTADONNÉES ACHAT (safe : ne touche pas paiements/montants) ──
+async function ouvrirModalModifPmt(achatId){
+  const {data:a, error} = await SB.from('gp_achats').select('*').eq('id',achatId).maybeSingle();
+  if(error||!a){ notify('Achat introuvable','r'); return; }
+  document.getElementById('mpm-achat-id').value = a.id;
+  document.getElementById('mpm-fourn').value = a.fournisseur_nom||'—';
+  document.getElementById('mpm-date').value = a.date_commande||'';
+  document.getElementById('mpm-ref').value = a.ref||'';
+  document.getElementById('mpm-cond').value = a.condition_paiement||'livraison';
+  document.getElementById('mpm-note').value = a.note_logistique||'';
+  document.getElementById('mpm-info-total').textContent = fmt(Number(a.montant_total||0))+' F';
+  document.getElementById('mpm-info-paye').textContent = fmt(Number(a.montant_paye||0))+' F';
+  document.getElementById('mpm-err').textContent='';
+  document.getElementById('modal-modif-pmt').style.display='flex';
+}
+
+function fermerModalModifPmt(){
+  document.getElementById('modal-modif-pmt').style.display='none';
+}
+
+async function saveModifPmt(){
+  const id = document.getElementById('mpm-achat-id').value;
+  const err = document.getElementById('mpm-err');
+  if(!id){ err.textContent='ID achat manquant.'; return; }
+  const date = document.getElementById('mpm-date').value||null;
+  const ref  = document.getElementById('mpm-ref').value.trim()||null;
+  const cond = document.getElementById('mpm-cond').value||'livraison';
+  const note = document.getElementById('mpm-note').value.trim()||null;
+  if(!date){ err.textContent='Date requise.'; return; }
+  if(!ref){ err.textContent='Référence requise.'; return; }
+
+  const {error} = await SB.from('gp_achats').update({
+    date_commande: date,
+    ref: ref,
+    condition_paiement: cond,
+    note_logistique: note
+  }).eq('id', id).eq('admin_id', GP_ADMIN_ID);
+
+  if(error){ err.textContent='Erreur : '+error.message; return; }
+  fermerModalModifPmt();
+  await renderPaiementsMP();
+  notify('Achat modifié ✓ (paiements préservés)','gold');
 }
 
 // ── MODAL PAIEMENT ────────────────────────────────
