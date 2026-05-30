@@ -295,12 +295,7 @@
         showBon('Bon de bienvenue 1 000 F',
                 'Débloqué dès 2 sacs sur ta 1re vente');
       }
-      if(cfg.telephone){
-        const telClean = String(cfg.telephone).replace(/\s/g,'');
-        document.getElementById('btn-tel').href = 'tel:' + telClean;
-        const wa = String(cfg.telephone).replace(/[^0-9]/g,'');
-        document.getElementById('btn-wa').href = 'https://wa.me/' + wa;
-      }
+      setupContactButtons(cfg.telephone, cfg.nom_provenderie || 'SADARI');
       if(cfg.promo_message){
         const el = document.getElementById('promo');
         el.textContent = cfg.promo_message;
@@ -346,6 +341,53 @@
     document.getElementById('bon-titre').textContent = titre;
     document.getElementById('bon-sub').textContent = sub;
     document.getElementById('bon').classList.add('show');
+  }
+
+  // Normalise un numéro de tél en format international (sans +, sans espace, sans 00)
+  // Si commence par 0 et qu'on a un indicatif par défaut → on remplace.
+  function normalizeWhatsAppNumber(raw, defaultCountryCode){
+    if(!raw) return '';
+    let n = String(raw).replace(/[^0-9+]/g,'');
+    if(n.startsWith('+')) n = n.slice(1);
+    if(n.startsWith('00')) n = n.slice(2);
+    // Si toujours un 0 au début et un indicatif par défaut → remplacer
+    if(n.startsWith('0') && defaultCountryCode){
+      n = String(defaultCountryCode) + n.slice(1);
+    }
+    return n;
+  }
+
+  function setupContactButtons(telephoneRaw, nomProv){
+    const btnWA  = document.getElementById('btn-wa');
+    const btnTel = document.getElementById('btn-tel');
+    const tel = telephoneRaw ? String(telephoneRaw).trim() : '';
+    if(!tel){
+      // Pas de numéro → cliquer affiche un message clair
+      [btnWA, btnTel].forEach(b => {
+        if(!b) return;
+        b.style.opacity = '.45';
+        b.removeAttribute('href');
+        b.onclick = e => { e.preventDefault(); alert('Numéro ' + nomProv + ' non configuré.'); };
+      });
+      return;
+    }
+    // Tél : on garde tel quel (le téléphone gère +, espaces, etc.)
+    const telClean = tel.replace(/\s/g,'');
+    btnTel.href = 'tel:' + telClean;
+    // WhatsApp : besoin du format international SANS +, SANS 0 initial.
+    // Indicatif par défaut Togo (228) — change si autre pays.
+    const wa = normalizeWhatsAppNumber(tel, '228');
+    if(wa.length < 8){
+      btnWA.style.opacity = '.45';
+      btnWA.onclick = e => {
+        e.preventDefault();
+        alert('Numéro WhatsApp invalide : ' + tel + '\n(' + nomProv + ' doit le mettre au format international, ex : +228 90 12 34 56)');
+      };
+    } else {
+      const msg = encodeURIComponent('Bonjour ' + nomProv + ' 👋');
+      btnWA.href = 'https://wa.me/' + wa + '?text=' + msg;
+      btnWA.onclick = null;
+    }
   }
 
   // ── Partage parrainage ─────────────────────────────
