@@ -309,7 +309,7 @@ async function partagerMiniAppCarte(){
   });
   // Origine dédiée pour la mini-app carte → PWA totalement isolée de l'admin PROVENDA.
   // /carte (sans .html) car Cloudflare Pages strip l'extension.
-  const CARTE_ORIGIN = 'https://carte.avifarmer.net';
+  const CARTE_ORIGIN = 'https://fidelite.avifarmer.net';
   const url = CARTE_ORIGIN + '/carte#' + token;
   const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
   const msg =
