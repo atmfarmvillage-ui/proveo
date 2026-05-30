@@ -307,7 +307,9 @@ async function partagerMiniAppCarte(){
     pn: parrainNom||'',
     og: OG_V
   });
-  const url = location.origin + '/carte.html#' + token;
+  // ?v=2 : force WhatsApp WebView à ne pas servir du cache pour la nouvelle UI.
+  // Bumper si on change carte.html de manière visible (pour invalider les liens en circulation).
+  const url = location.origin + '/carte.html?v=2#' + token;
   const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
   const msg =
     `🌾 Bienvenue ${client.nom||''} chez ${nomProv} !\n\n` +
