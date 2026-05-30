@@ -46,91 +46,92 @@
 
   /* Bandeau promo */
   .promo{background:linear-gradient(90deg,var(--or) 0%,var(--or-l) 100%);
-    color:#1a1a1a;font-weight:600;font-size:13px;padding:10px 14px;border-radius:12px;
+    color:#1a1a1a;font-weight:700;font-size:15px;padding:12px 16px;border-radius:12px;
     text-align:center;margin-bottom:14px;box-shadow:0 4px 12px rgba(245,158,11,.3);
-    display:none}
+    display:none;line-height:1.35}
   .promo.show{display:block}
 
   /* Header carte */
   .card-top{background:linear-gradient(135deg,var(--vert) 0%,var(--vert-d) 100%);
-    color:#fff;border-radius:20px 20px 8px 8px;padding:22px 20px 18px;
+    color:#fff;border-radius:20px 20px 8px 8px;padding:24px 22px 22px;
     box-shadow:var(--shadow);position:relative;overflow:hidden}
   .card-top::before{content:"";position:absolute;top:-40px;right:-40px;width:160px;height:160px;
     background:radial-gradient(circle,rgba(255,255,255,.15) 0%,transparent 70%);border-radius:50%}
-  .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative}
-  .logo{width:42px;height:42px;border-radius:10px;background:#fff;
+  .logo-row{display:flex;align-items:center;gap:12px;margin-bottom:18px;position:relative}
+  .logo{width:48px;height:48px;border-radius:12px;background:#fff;
     display:flex;align-items:center;justify-content:center;flex-shrink:0;
     box-shadow:0 2px 6px rgba(0,0,0,.15);overflow:hidden}
   .logo img{width:100%;height:100%;object-fit:contain;padding:4px}
-  .brand{font-size:15px;font-weight:800;opacity:.95;letter-spacing:1.5px}
-  .name{font-size:22px;font-weight:800;margin-bottom:2px;line-height:1.2;position:relative}
-  .meta{font-size:12px;opacity:.85;position:relative}
-  .meta .parrain{display:block;margin-top:4px;font-size:11px;opacity:.95}
-  .meta .parrain b{color:var(--or-l);font-weight:700}
+  .brand{font-size:17px;font-weight:800;opacity:.95;letter-spacing:1.5px}
+  .name{font-size:28px;font-weight:800;margin-bottom:4px;line-height:1.15;position:relative}
+  .meta{font-size:15px;opacity:.92;position:relative;font-weight:500}
+  .meta .parrain{display:block;margin-top:6px;font-size:14px;opacity:.98}
+  .meta .parrain b{color:var(--or-l);font-weight:800}
 
   /* Points box */
   .pts-box{background:var(--card);border-radius:8px 8px 20px 20px;
-    padding:18px 20px;box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
-  .pts-label{font-size:11px;color:var(--muted);text-transform:uppercase;
-    letter-spacing:1.5px;font-weight:600;margin-bottom:4px}
-  .pts-val{font-size:42px;font-weight:900;color:var(--vert-d);line-height:1;
+    padding:20px 22px;box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
+  .pts-label{font-size:13px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:1.8px;font-weight:700;margin-bottom:6px}
+  .pts-val{font-size:52px;font-weight:900;color:var(--vert-d);line-height:1;
     font-variant-numeric:tabular-nums;margin-bottom:2px}
-  .pts-val small{font-size:14px;color:var(--muted);font-weight:600;margin-left:4px}
-  .credit{font-size:13px;color:var(--or);font-weight:700;margin-top:6px}
-  .progress{margin-top:14px}
-  .progress-bar{height:8px;background:#E2E8F0;border-radius:99px;overflow:hidden;margin-bottom:6px}
+  .pts-val small{font-size:18px;color:var(--muted);font-weight:700;margin-left:6px}
+  .credit{font-size:16px;color:var(--or);font-weight:800;margin-top:8px}
+  .progress{margin-top:16px}
+  .progress-bar{height:10px;background:#E2E8F0;border-radius:99px;overflow:hidden;margin-bottom:8px}
   .progress-fill{height:100%;background:linear-gradient(90deg,var(--vert-l),var(--vert));
     border-radius:99px;transition:width .6s ease}
-  .progress-txt{font-size:11px;color:var(--muted);font-weight:500}
-  .progress-txt b{color:var(--vert-d);font-weight:700}
+  .progress-txt{font-size:14px;color:var(--muted);font-weight:500;line-height:1.4}
+  .progress-txt b{color:var(--vert-d);font-weight:800}
 
   /* Bon dispo */
   .bon{background:linear-gradient(135deg,var(--or) 0%,var(--or-l) 100%);
-    color:#1a1a1a;padding:14px 16px;border-radius:14px;margin-bottom:14px;
-    display:none;align-items:center;gap:12px;box-shadow:0 6px 18px rgba(245,158,11,.35)}
+    color:#1a1a1a;padding:16px 18px;border-radius:14px;margin-bottom:14px;
+    display:none;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(245,158,11,.35)}
   .bon.show{display:flex}
-  .bon-icon{font-size:28px}
+  .bon-icon{font-size:34px}
   .bon-txt{flex:1;line-height:1.3}
-  .bon-txt b{display:block;font-size:15px;font-weight:800}
-  .bon-txt span{font-size:12px;opacity:.85}
+  .bon-txt b{display:block;font-size:18px;font-weight:800}
+  .bon-txt span{font-size:14px;opacity:.9;font-weight:500}
 
   /* QR */
-  .qr-box{background:var(--card);border-radius:20px;padding:20px;
+  .qr-box{background:var(--card);border-radius:20px;padding:22px;
     box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
   .qr-box canvas{max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px}
-  .qr-hint{font-size:11px;color:var(--muted);margin-top:10px;font-weight:500}
+  .qr-hint{font-size:14px;color:var(--text);margin-top:14px;font-weight:600;line-height:1.4}
 
   /* Actions */
-  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
-  .btn-act{background:var(--card);border:none;border-radius:14px;padding:12px 6px;
-    box-shadow:0 4px 12px rgba(15,118,55,.08);font-size:11px;font-weight:600;
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .btn-act{background:var(--card);border:none;border-radius:14px;padding:16px 8px;
+    box-shadow:0 4px 12px rgba(15,118,55,.08);font-size:14px;font-weight:700;
     color:var(--text);cursor:pointer;display:flex;flex-direction:column;
-    align-items:center;gap:4px;transition:transform .15s,box-shadow .15s;
+    align-items:center;gap:6px;transition:transform .15s,box-shadow .15s;
     text-decoration:none}
   .btn-act:active{transform:scale(.96)}
-  .btn-act .ico{font-size:22px}
+  .btn-act .ico{font-size:28px}
 
   /* Bouton partage */
   .share{width:100%;background:linear-gradient(135deg,var(--vert) 0%,var(--vert-d) 100%);
-    color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;
+    color:#fff;border:none;border-radius:14px;padding:16px;font-size:17px;font-weight:800;
     cursor:pointer;box-shadow:0 6px 18px rgba(22,163,74,.35);display:flex;
-    align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+    align-items:center;justify-content:center;gap:10px;margin-bottom:14px}
   .share:active{transform:scale(.98)}
 
   /* Install banner */
-  .install{background:#FEF3C7;border:1px solid #FCD34D;color:#78350F;
-    padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.4;
-    display:none;align-items:flex-start;gap:10px;margin-bottom:12px}
+  .install{background:#FEF3C7;border:2px solid #FCD34D;color:#78350F;
+    padding:16px 16px;border-radius:14px;font-size:15px;line-height:1.45;
+    display:none;align-items:flex-start;gap:12px;margin-bottom:14px;
+    box-shadow:0 4px 14px rgba(245,158,11,.25)}
   .install.show{display:flex}
-  .install b{display:block;margin-bottom:2px}
+  .install b{display:block;margin-bottom:4px;font-size:16px}
   .install button{margin-left:auto;background:var(--or);color:#fff;border:none;
-    border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;
-    flex-shrink:0}
-  .install .close{background:transparent;color:#78350F;font-size:18px;padding:0 4px;
-    margin-left:6px;font-weight:700}
+    border-radius:10px;padding:12px 16px;font-size:14px;font-weight:800;cursor:pointer;
+    flex-shrink:0;box-shadow:0 2px 6px rgba(245,158,11,.4)}
+  .install .close{background:transparent;color:#78350F;font-size:22px;padding:0 6px;
+    margin-left:6px;font-weight:700;align-self:flex-start}
 
-  /* Footer */
-  .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:8px;opacity:.6}
+  /* Footer — voulu très discret */
+  .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:8px;opacity:.55}
 
   /* Modal carte PDV */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;
@@ -157,6 +158,16 @@
 
   <!-- Bandeau promo -->
   <div class="promo" id="promo"></div>
+
+  <!-- Install banner — en TÊTE pour qu'on la voie en premier -->
+  <div class="install" id="install">
+    <div style="flex:1">
+      <b id="install-titre">📲 Installer ma carte</b>
+      <span id="install-txt">Ajoute SADARI à ton écran d'accueil pour un accès rapide.</span>
+    </div>
+    <button id="install-btn">Installer</button>
+    <button class="close" id="install-close" aria-label="Fermer">×</button>
+  </div>
 
   <!-- Carte top + points -->
   <div class="card-top">
@@ -208,16 +219,6 @@
     <span style="font-size:18px">🎁</span>
     Inviter un proche & gagner des points
   </button>
-
-  <!-- Install banner -->
-  <div class="install" id="install">
-    <div>
-      <b id="install-titre">Installer ma carte</b>
-      <span id="install-txt">Ajoutez SADARI à votre écran d'accueil pour un accès rapide.</span>
-    </div>
-    <button id="install-btn">Installer</button>
-    <button class="close" id="install-close">×</button>
-  </div>
 
   <div class="foot">propulsé par PROVENDA</div>
 </div>
@@ -465,7 +466,9 @@
 
   function showInstallBanner(){
     if(isStandalone) return;
-    if(localStorage.getItem('sadari-install-dismiss') === '1') return;
+    // En mode invite (filleul), TOUJOURS afficher (ignore le dismiss précédent)
+    const isInvite = P.get('invite') === '1';
+    if(!isInvite && localStorage.getItem('sadari-install-dismiss') === '1') return;
     document.getElementById('install').classList.add('show');
     const btn = document.getElementById('install-btn');
     const titre = document.getElementById('install-titre');
