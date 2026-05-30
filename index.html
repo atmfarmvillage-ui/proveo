@@ -1973,7 +1973,7 @@
         <div class="ct-left"><span>📦 Stock produits finis par PDV</span></div>
         <button class="btn btn-out btn-sm" onclick="actualiserStockPDV()">🔄</button>
       </div>
-      <!-- Saisie manuelle : stock initial / inventaire (en kg) -->
+      <!-- Saisie manuelle : stock initial / inventaire (sacs ou kg) -->
       <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
         <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">✏️ Saisir un stock (départ / inventaire)</summary>
         <div style="margin-top:8px">
@@ -1982,10 +1982,19 @@
             <div class="fr"><label>Formule</label><select id="sm_formule"></select></div>
           </div>
           <div class="fg2">
-            <div class="fr"><label>Stock réel (kg)</label><input type="number" id="sm_kg" placeholder="950"></div>
+            <div class="fr"><label>Nombre de sacs</label><input type="number" id="sm_sacs" placeholder="40" min="0" step="1" oninput="recalcStockSacs()"></div>
+            <div class="fr"><label>Poids / sac</label>
+              <select id="sm_poids_sac" onchange="recalcStockSacs()">
+                <option value="25">📦 25 kg / sac</option>
+                <option value="50">📦 50 kg / sac</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg2">
+            <div class="fr"><label>Stock réel (kg) <span style="font-size:9px;color:var(--textm)">auto-calculé · modifiable</span></label><input type="number" id="sm_kg" placeholder="1000" step="0.1"></div>
             <div class="fr" style="display:flex;align-items:flex-end"><button class="btn btn-g" style="width:100%;justify-content:center" onclick="saisirStockManuel()">✓ Enregistrer le stock</button></div>
           </div>
-          <div style="font-size:10px;color:var(--textm)">Définit la valeur exacte (remplace le stock actuel de cette formule à ce point). Idéal pour le démarrage ou après inventaire physique.</div>
+          <div style="font-size:10px;color:var(--textm)">Remplit <b>Nombre de sacs</b> + <b>Poids/sac</b> → kg auto-calculé. Ou saisis directement les kg si tu as du vrac. Définit la valeur exacte (remplace le stock actuel).</div>
           <div class="a-err" id="sm_err"></div>
         </div>
       </details>
