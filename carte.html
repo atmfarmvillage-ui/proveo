@@ -117,18 +117,43 @@
     align-items:center;justify-content:center;gap:10px;margin-bottom:14px}
   .share:active{transform:scale(.98)}
 
-  /* Install banner */
-  .install{background:#FEF3C7;border:2px solid #FCD34D;color:#78350F;
-    padding:16px 16px;border-radius:14px;font-size:15px;line-height:1.45;
-    display:none;align-items:flex-start;gap:12px;margin-bottom:14px;
-    box-shadow:0 4px 14px rgba(245,158,11,.25)}
-  .install.show{display:flex}
-  .install b{display:block;margin-bottom:4px;font-size:16px}
-  .install button{margin-left:auto;background:var(--or);color:#fff;border:none;
-    border-radius:10px;padding:12px 16px;font-size:14px;font-weight:800;cursor:pointer;
-    flex-shrink:0;box-shadow:0 2px 6px rgba(245,158,11,.4)}
-  .install .close{background:transparent;color:#78350F;font-size:22px;padding:0 6px;
-    margin-left:6px;font-weight:700;align-self:flex-start}
+  /* Gros bouton install en haut */
+  .install-cta{width:100%;background:linear-gradient(135deg,var(--or) 0%,var(--or-l) 100%);
+    color:#1a1a1a;border:none;border-radius:14px;padding:18px 16px;font-size:17px;
+    font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    gap:12px;margin-bottom:14px;box-shadow:0 6px 18px rgba(245,158,11,.45);
+    animation:pulse-install 2.4s ease-in-out infinite}
+  .install-cta:active{transform:scale(.98)}
+  .install-cta.hidden{display:none}
+  @keyframes pulse-install{
+    0%,100%{box-shadow:0 6px 18px rgba(245,158,11,.45)}
+    50%{box-shadow:0 8px 24px rgba(245,158,11,.7)}
+  }
+
+  /* Modal instructions install */
+  .install-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1100;
+    display:none;align-items:center;justify-content:center;padding:16px}
+  .install-modal.show{display:flex}
+  .install-modal-inner{background:#fff;border-radius:18px;max-width:420px;width:100%;
+    max-height:85vh;overflow-y:auto;padding:24px 22px;position:relative;
+    box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .install-modal h2{margin:0 0 6px;font-size:20px;color:var(--vert-d);font-weight:800}
+  .install-modal .sub{font-size:14px;color:var(--muted);margin-bottom:18px;line-height:1.4}
+  .install-modal .step{display:flex;align-items:flex-start;gap:12px;
+    margin-bottom:12px;padding:12px;background:#F0FDF4;border-radius:12px;
+    border-left:4px solid var(--vert)}
+  .install-modal .step .num{background:var(--vert);color:#fff;width:28px;height:28px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:14px;flex-shrink:0}
+  .install-modal .step .txt{flex:1;font-size:14px;line-height:1.45;color:var(--text)}
+  .install-modal .step .txt b{color:var(--vert-d)}
+  .install-modal .close-x{position:absolute;top:12px;right:14px;background:transparent;
+    border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:4px 8px}
+  .install-modal .pick{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .install-modal .pick button{flex:1;min-width:90px;padding:10px;border-radius:10px;
+    border:2px solid #E2E8F0;background:#fff;cursor:pointer;font-size:13px;
+    font-weight:700;color:var(--text)}
+  .install-modal .pick button.active{border-color:var(--vert);background:#F0FDF4;color:var(--vert-d)}
 
   /* Footer — voulu très discret */
   .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:8px;opacity:.55}
@@ -159,15 +184,11 @@
   <!-- Bandeau promo -->
   <div class="promo" id="promo"></div>
 
-  <!-- Install banner — en TÊTE pour qu'on la voie en premier -->
-  <div class="install" id="install">
-    <div style="flex:1">
-      <b id="install-titre">📲 Installer ma carte</b>
-      <span id="install-txt">Ajoute SADARI à ton écran d'accueil pour un accès rapide.</span>
-    </div>
-    <button id="install-btn">Installer</button>
-    <button class="close" id="install-close" aria-label="Fermer">×</button>
-  </div>
+  <!-- Bouton install TOUJOURS visible en tête (sauf si déjà installée) -->
+  <button id="btn-install-top" class="install-cta">
+    <span style="font-size:24px">📲</span>
+    <span>Installer l'app sur mon téléphone</span>
+  </button>
 
   <!-- Carte top + points -->
   <div class="card-top">
@@ -220,12 +241,22 @@
     Inviter un proche & gagner des points
   </button>
 
-  <!-- Re-ouvrir les instructions d'installation (toujours visible) -->
-  <button id="btn-reinstall" style="width:100%;background:transparent;border:1px dashed var(--vert);color:var(--vert-d);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;display:none">
-    📲 Installer ma carte sur l'écran d'accueil
-  </button>
-
   <div class="foot">propulsé par PROVENDA</div>
+</div>
+
+<!-- Modal instructions d'installation -->
+<div class="install-modal" id="install-modal">
+  <div class="install-modal-inner">
+    <button class="close-x" id="install-modal-close" aria-label="Fermer">×</button>
+    <h2>📲 Installer SADARI</h2>
+    <div class="sub">Garde ta carte fidélité toujours sous la main, comme une vraie app.</div>
+    <div class="pick">
+      <button data-os="android" id="pick-android">🤖 Android</button>
+      <button data-os="ios" id="pick-ios">🍎 iPhone</button>
+      <button data-os="samsung" id="pick-samsung">📱 Samsung</button>
+    </div>
+    <div id="install-steps"></div>
+  </div>
 </div>
 
 <!-- Modal PDV -->
@@ -462,9 +493,10 @@
   });
 
   // ── PWA install ─────────────────────────────────────
-  // Migration : nettoyer l'ancien flag localStorage (sinon les users qui ont
-  // dismissé hier ne verraient plus jamais la banner).
+  // Nettoyer les vieux flags des versions précédentes
   try{ localStorage.removeItem('sadari-install-dismiss'); }catch(e){}
+  try{ sessionStorage.removeItem('sadari-install-dismiss'); }catch(e){}
+
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                        window.navigator.standalone === true;
   const ua = navigator.userAgent;
@@ -473,75 +505,89 @@
   const isSamsung = /SamsungBrowser/i.test(ua);
   let deferredPrompt = null;
 
-  function showInstallBanner(){
-    if(isStandalone) return;
-    // En mode invite (filleul), TOUJOURS afficher (ignore le dismiss précédent)
-    const isInvite = P.get('invite') === '1';
-    if(!isInvite && sessionStorage.getItem('sadari-install-dismiss') === '1') return;
-    document.getElementById('install').classList.add('show');
-    const btn = document.getElementById('install-btn');
-    const titre = document.getElementById('install-titre');
-    const txt = document.getElementById('install-txt');
-    if(isIOS){
-      titre.textContent = '📲 Ajouter à l\'écran d\'accueil';
-      txt.innerHTML = 'Appuie sur <b>⎙ Partager</b> en bas de Safari → <b>Sur l\'écran d\'accueil</b>.';
-      btn.style.display = 'none';
-    } else if(deferredPrompt){
-      titre.textContent = '📲 Installer ma carte';
-      txt.textContent = 'Garde SADARI toujours sous la main, même hors-ligne.';
-      btn.style.display = '';
-      btn.textContent = 'Installer';
-    } else {
-      // Android Chrome sans beforeinstallprompt (déjà refusé ou pas encore éligible)
-      titre.textContent = '📲 Ajouter à l\'écran d\'accueil';
-      if(isSamsung){
-        txt.innerHTML = 'Menu <b>≡</b> → <b>Ajouter la page à</b> → <b>Écran d\'accueil</b>.';
-      } else if(isAndroid){
-        txt.innerHTML = 'Touche le menu <b>⋮</b> en haut à droite → <b>Ajouter à l\'écran d\'accueil</b>.';
-      } else {
-        txt.innerHTML = 'Menu navigateur → <b>Installer l\'application</b> ou <b>Ajouter à l\'écran d\'accueil</b>.';
-      }
-      btn.style.display = 'none';
-    }
-  }
+  const btnInstall = document.getElementById('btn-install-top');
 
-  // Affichage initial — Android peut ne jamais émettre beforeinstallprompt
-  showInstallBanner();
+  // Cacher si déjà en standalone
+  if(isStandalone) btnInstall.classList.add('hidden');
 
   window.addEventListener('beforeinstallprompt', e=>{
     e.preventDefault();
     deferredPrompt = e;
-    // Rerender la banner avec le bouton actif
-    showInstallBanner();
-  });
-  document.getElementById('install-btn').addEventListener('click', async ()=>{
-    if(!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    document.getElementById('install').classList.remove('show');
-  });
-  document.getElementById('install-close').addEventListener('click', ()=>{
-    sessionStorage.setItem('sadari-install-dismiss','1');
-    document.getElementById('install').classList.remove('show');
-  });
-  window.addEventListener('appinstalled', ()=>{
-    sessionStorage.setItem('sadari-install-dismiss','1');
-    document.getElementById('install').classList.remove('show');
-    const r=document.getElementById('btn-reinstall'); if(r) r.style.display='none';
   });
 
-  // Bouton "réinstaller" : ré-affiche la banner même si fermée
-  const btnReinstall = document.getElementById('btn-reinstall');
-  if(!isStandalone && btnReinstall){
-    btnReinstall.style.display = 'block';
-    btnReinstall.addEventListener('click', ()=>{
-      sessionStorage.removeItem('sadari-install-dismiss');
-      showInstallBanner();
-      // Scroll vers la banner pour qu'on la voie
-      document.getElementById('install').scrollIntoView({behavior:'smooth', block:'center'});
+  window.addEventListener('appinstalled', ()=>{
+    btnInstall.classList.add('hidden');
+    closeInstallModal();
+  });
+
+  btnInstall.addEventListener('click', async ()=>{
+    // 1) Si le navigateur a émis beforeinstallprompt → on déclenche l'install native
+    if(deferredPrompt){
+      try{
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if(choice?.outcome === 'accepted'){
+          btnInstall.classList.add('hidden');
+        }
+        return;
+      }catch(e){ console.warn('install prompt err', e); }
+    }
+    // 2) Sinon → modal avec instructions par OS
+    openInstallModal();
+  });
+
+  // ── Modal d'instructions ──
+  const installModal = document.getElementById('install-modal');
+  const stepsEl = document.getElementById('install-steps');
+
+  const STEPS = {
+    android: [
+      ['Touche le menu <b>⋮</b> en haut à droite de Chrome', '⋮'],
+      ['Sélectionne <b>"Installer l\'application"</b> ou <b>"Ajouter à l\'écran d\'accueil"</b>', '+'],
+      ['Confirme avec <b>"Installer"</b>. L\'icône SADARI apparaît sur ton écran d\'accueil.', '✓']
+    ],
+    ios: [
+      ['Ouvre cette page dans <b>Safari</b> (pas Chrome iOS)', '🌐'],
+      ['Touche le bouton <b>⎙ Partager</b> en bas de l\'écran', '⎙'],
+      ['Fais défiler et choisis <b>"Sur l\'écran d\'accueil"</b>', '⬆'],
+      ['Touche <b>"Ajouter"</b> en haut à droite. C\'est fait !', '✓']
+    ],
+    samsung: [
+      ['Touche le menu <b>≡</b> en bas à droite de Samsung Internet', '≡'],
+      ['Choisis <b>"Ajouter la page à"</b>', '+'],
+      ['Sélectionne <b>"Écran d\'accueil"</b>', '🏠'],
+      ['Confirme — l\'icône SADARI apparaît sur ton écran.', '✓']
+    ]
+  };
+
+  function renderSteps(os){
+    document.querySelectorAll('.install-modal .pick button').forEach(b=>{
+      b.classList.toggle('active', b.dataset.os === os);
     });
+    const list = STEPS[os] || STEPS.android;
+    stepsEl.innerHTML = list.map((s, i) =>
+      `<div class="step"><div class="num">${i+1}</div><div class="txt">${s[0]}</div></div>`
+    ).join('');
   }
+
+  function openInstallModal(){
+    // Détecter l'OS par défaut
+    const defaultOs = isIOS ? 'ios' : (isSamsung ? 'samsung' : 'android');
+    renderSteps(defaultOs);
+    installModal.classList.add('show');
+  }
+  function closeInstallModal(){
+    installModal.classList.remove('show');
+  }
+
+  document.getElementById('install-modal-close').addEventListener('click', closeInstallModal);
+  installModal.addEventListener('click', e=>{
+    if(e.target === installModal) closeInstallModal();
+  });
+  document.querySelectorAll('.install-modal .pick button').forEach(b=>{
+    b.addEventListener('click', ()=> renderSteps(b.dataset.os));
+  });
 
   // ── Service Worker pour offline ────────────────────
   if('serviceWorker' in navigator){
