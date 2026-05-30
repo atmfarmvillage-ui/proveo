@@ -26,6 +26,30 @@
 <meta name="twitter:title" content="Ma carte de fidélité SADARI">
 <meta name="twitter:description" content="🎁 Cumule des points à chaque achat.">
 <meta name="twitter:image" content="https://provenda.avifarmer.net/icons/logo.png">
+<!-- AUTO-REDIRECT vers Chrome si ouvert dans WhatsApp/FB/IG WebView Android.
+     Doit être inline et avant TOUT autre script pour s'exécuter en premier. -->
+<script>
+(function(){
+  try{
+    var ua = navigator.userAgent || '';
+    var isAndroid = /android/i.test(ua);
+    var isInApp = /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|TikTok|Line\/|LinkedInApp|Twitter/i.test(ua) || /;\s*wv\)/i.test(ua);
+    // Anti-boucle : ne tente le redirect qu'une fois par session WebView
+    var tried = false;
+    try{ tried = sessionStorage.getItem('sad-chrome-tried') === '1'; }catch(e){}
+    if(isAndroid && isInApp && !tried){
+      try{ sessionStorage.setItem('sad-chrome-tried','1'); }catch(e){}
+      var target = location.href;
+      var noScheme = target.replace(/^https?:\/\//, '');
+      // S.browser_fallback_url = si Chrome n'est pas installé, on reste sur la même URL HTTPS
+      var intentUrl = 'intent://' + noScheme +
+        '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' +
+        encodeURIComponent(target) + ';end';
+      location.replace(intentUrl);
+    }
+  }catch(e){ /* défensif : ne pas bloquer la page si erreur */ }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
