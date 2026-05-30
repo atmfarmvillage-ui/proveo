@@ -184,6 +184,16 @@
   <!-- Bandeau promo -->
   <div class="promo" id="promo"></div>
 
+  <!-- Bandeau : ce navigateur ne peut PAS installer (WhatsApp/FB/IG) -->
+  <div id="inapp-banner" style="display:none;background:#FEE2E2;border:2px solid #FCA5A5;color:#7F1D1D;padding:14px 16px;border-radius:14px;font-size:15px;line-height:1.45;margin-bottom:14px;box-shadow:0 4px 14px rgba(220,38,38,.2)">
+    <b style="display:block;font-size:16px;margin-bottom:6px">⚠ Ouvre cette page dans Chrome</b>
+    <span>WhatsApp ne permet pas d'installer l'app. Touche le bouton pour rebondir vers Chrome :</span>
+    <button id="btn-open-chrome" style="display:block;width:100%;margin-top:10px;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:800;cursor:pointer">
+      🌐 Ouvrir dans Chrome
+    </button>
+    <div style="font-size:12px;margin-top:8px;opacity:.85">Sinon : touche le menu <b>⋮</b> en haut à droite de WhatsApp → <b>"Ouvrir le lien dans le navigateur"</b>.</div>
+  </div>
+
   <!-- Bouton install TOUJOURS visible en tête (sauf si déjà installée) -->
   <button id="btn-install-top" class="install-cta">
     <span style="font-size:24px">📲</span>
@@ -503,9 +513,44 @@
   const isIOS = /iphone|ipad|ipod/i.test(ua);
   const isAndroid = /android/i.test(ua);
   const isSamsung = /SamsungBrowser/i.test(ua);
+  // Détection navigateurs in-app (WebView) qui ne supportent PAS l'install PWA
+  const isInApp = /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|TikTok|Line\/|LinkedInApp|Twitter/i.test(ua)
+                  || /; wv\)/i.test(ua); // Android WebView générique
   let deferredPrompt = null;
 
   const btnInstall = document.getElementById('btn-install-top');
+  const inappBanner = document.getElementById('inapp-banner');
+
+  // Si in-app browser → afficher le bandeau "Ouvre dans Chrome"
+  if(isInApp && !isStandalone){
+    inappBanner.style.display = 'block';
+    // Click "Ouvrir dans Chrome" → intent URL Android
+    document.getElementById('btn-open-chrome').addEventListener('click', ()=>{
+      const target = location.href;
+      if(isAndroid){
+        // Intent Android : force l'ouverture dans Chrome (ou navigateur par défaut si Chrome absent)
+        const noScheme = target.replace(/^https?:\/\//, '');
+        const intentUrl = 'intent://' + noScheme +
+          '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' +
+          encodeURIComponent(target) + ';end';
+        location.href = intentUrl;
+      } else if(isIOS){
+        // iOS : pas d'intent, on tente le chrome:// scheme (Chrome iOS l'enregistre)
+        const noScheme = target.replace(/^https:\/\//, '');
+        const chromeUrl = 'googlechromes://' + noScheme;
+        // Fallback : on copie le lien et on alerte
+        navigator.clipboard?.writeText(target).catch(()=>{});
+        location.href = chromeUrl;
+        setTimeout(()=>{
+          alert('Lien copié 📋\n\nOuvre Safari (ou Chrome) et colle le lien dans la barre d\'adresse pour installer l\'app.');
+        }, 800);
+      } else {
+        // Desktop / autre → simple copie
+        navigator.clipboard?.writeText(target).catch(()=>{});
+        alert('Lien copié 📋\nColle-le dans Chrome pour installer l\'app.');
+      }
+    });
+  }
 
   // Cacher si déjà en standalone
   if(isStandalone) btnInstall.classList.add('hidden');
