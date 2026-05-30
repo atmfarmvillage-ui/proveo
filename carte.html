@@ -287,15 +287,61 @@
   const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY';
   const SB = window.supabase.createClient(SB_URL, SB_KEY);
 
-  // ── URL params ──────────────────────────────────────
+  // ── DÉCODEUR LIEN COURT (hash base64url) ─────────────
+  function _bytesToUuid(b){
+    const h = Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+  }
+  function _b64UrlDecode(s){
+    const std = s.replace(/-/g,'+').replace(/_/g,'/');
+    const pad = std + '='.repeat((4 - std.length % 4) % 4);
+    const bin = atob(pad);
+    const out = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function decoderLienCarte(b64){
+    const buf = _b64UrlDecode(b64);
+    const dec = new TextDecoder();
+    let o = 0;
+    const version = buf[o++];
+    if(version !== 0x01) throw new Error('version inconnue');
+    const flags = buf[o++];
+    const hasParrain = !!(flags & 1);
+    const c = _bytesToUuid(buf.slice(o, o+16)); o += 16;
+    const t = _bytesToUuid(buf.slice(o, o+16)); o += 16;
+    const a = _bytesToUuid(buf.slice(o, o+16)); o += 16;
+    let pa = null;
+    if(hasParrain){ pa = _bytesToUuid(buf.slice(o, o+16)); o += 16; }
+    const nLen = buf[o++]; const n = dec.decode(buf.slice(o, o+nLen)); o += nLen;
+    const mLen = buf[o++]; const m = dec.decode(buf.slice(o, o+mLen)); o += mLen;
+    let pn = '';
+    if(hasParrain){ const pnLen = buf[o++]; pn = dec.decode(buf.slice(o, o+pnLen)); o += pnLen; }
+    const og = buf[o++];
+    return {c, t, a, n, m, pa, pn, og: String(og)};
+  }
+
+  // ── URL params : hash court prioritaire, fallback query string ──
+  let clientId='', token='', adminId='', nomParam='', numParam='', parrainId='', parrainNom='';
   const P = new URLSearchParams(location.search);
-  const clientId = P.get('c') || '';
-  const token    = P.get('t') || '';
-  const adminId  = P.get('a') || '';
-  const nomParam = P.get('n') ? decodeURIComponent(P.get('n')) : '';
-  const numParam = P.get('m') || '';
-  const parrainId   = P.get('pa') || '';
-  const parrainNom  = P.get('pn') ? decodeURIComponent(P.get('pn')) : '';
+  if(location.hash && location.hash.length > 8){
+    try{
+      const d = decoderLienCarte(location.hash.slice(1));
+      clientId = d.c; token = d.t; adminId = d.a;
+      nomParam = d.n; numParam = d.m;
+      parrainId = d.pa || ''; parrainNom = d.pn || '';
+    }catch(e){ console.warn('hash decode failed', e); }
+  }
+  // Si pas de hash valide → query string (rétrocompat avec anciens liens)
+  if(!clientId){
+    clientId = P.get('c') || '';
+    token    = P.get('t') || '';
+    adminId  = P.get('a') || '';
+    nomParam = P.get('n') ? decodeURIComponent(P.get('n')) : '';
+    numParam = P.get('m') || '';
+    parrainId   = P.get('pa') || '';
+    parrainNom  = P.get('pn') ? decodeURIComponent(P.get('pn')) : '';
+  }
 
   // ── Render header tout de suite (data locale) ──────
   if(nomParam) document.getElementById('nom').textContent = nomParam;

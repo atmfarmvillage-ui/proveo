@@ -225,9 +225,67 @@ function fermerCarteClient(){
   _carteRectoBlob = null; _carteVersoBlob = null; _qrClient = null;
 }
 
+// ── ENCODAGE LIEN COURT (UUIDs en binaire + base64url dans le hash) ──
+// Réduit l'URL de ~280 chars à ~140 chars sans serveur ni DB.
+function _hexToBytes(hex){
+  const out = new Uint8Array(hex.length/2);
+  for(let i=0;i<out.length;i++) out[i] = parseInt(hex.substr(i*2,2),16);
+  return out;
+}
+function _b64UrlEncode(bytes){
+  let s = '';
+  for(let i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function encoderLienCarte({c, t, a, n, m, pa, pn, og}){
+  const enc = new TextEncoder();
+  const nameBytes = enc.encode(String(n||'').slice(0,80));
+  const memBytes  = enc.encode(String(m||'').slice(0,32));
+  const pnBytes   = pa ? enc.encode(String(pn||'').slice(0,80)) : new Uint8Array(0);
+  const hasParrain = !!pa;
+  const ogByte = (parseInt(og,10)||1) & 0xff;
+  let len = 1 /*version*/ + 1 /*flags*/ + 16*3 /*c,t,a*/
+          + (hasParrain ? 16 : 0)
+          + 1 + nameBytes.length
+          + 1 + memBytes.length
+          + (hasParrain ? 1 + pnBytes.length : 0)
+          + 1 /*og*/;
+  const buf = new Uint8Array(len);
+  let o = 0;
+  buf[o++] = 0x01;                          // version
+  buf[o++] = hasParrain ? 0x01 : 0x00;      // flags
+  buf.set(_hexToBytes(c.replace(/-/g,'')), o); o += 16;
+  buf.set(_hexToBytes(t.replace(/-/g,'')), o); o += 16;
+  buf.set(_hexToBytes(a.replace(/-/g,'')), o); o += 16;
+  if(hasParrain){ buf.set(_hexToBytes(pa.replace(/-/g,'')), o); o += 16; }
+  buf[o++] = nameBytes.length; buf.set(nameBytes, o); o += nameBytes.length;
+  buf[o++] = memBytes.length;  buf.set(memBytes, o);  o += memBytes.length;
+  if(hasParrain){ buf[o++] = pnBytes.length; buf.set(pnBytes, o); o += pnBytes.length; }
+  buf[o++] = ogByte;
+  return _b64UrlEncode(buf);
+}
+
+// Normalise un numéro de tél en format international WhatsApp (sans +, sans 0 initial, sans espace)
+// Gère : "+228 90 12 34 56", "00228 90 12 34 56", "0 90 12 34 56", "90 12 34 56", "22890123456"
+// defaultCountry = indicatif par défaut si le numéro est en format national (ex: 228 pour Togo)
+function _normaliserNumWA(raw, defaultCountry){
+  if(!raw) return '';
+  let n = String(raw).replace(/[^0-9+]/g,'');
+  if(n.startsWith('+')) n = n.slice(1);
+  if(n.startsWith('00')) n = n.slice(2);
+  const dc = String(defaultCountry||'228');
+  // Déjà avec indicatif (commence par dc ET longueur cohérente >=10) → on garde
+  if(n.startsWith(dc) && n.length >= dc.length + 8) return n;
+  // Format national avec 0 initial (ex: "090123456") → remplacer 0 par indicatif
+  if(n.startsWith('0')) return dc + n.slice(1);
+  // Format national sans 0 (8 chiffres typique Afrique de l'Ouest) → préfixer
+  if(n.length === 8 || n.length === 9) return dc + n;
+  // Sinon on retourne tel quel (peut-être déjà un autre indicatif)
+  return n;
+}
+
 // ── PARTAGE MINI-APP (URL personnalisée, installable sur téléphone) ──
-// Le client ouvre le lien → carte interactive avec QR, points live, bons, map PDV
-// Plus besoin de carte physique : la mini-app vit dans son téléphone.
+// Ouvre DIRECTEMENT la conversation WhatsApp du client (pas de dialog de partage).
 async function partagerMiniAppCarte(){
   if(!_qrClient){ notify('Génère d\'abord la carte','r'); return; }
   const client = _qrClient;
@@ -240,17 +298,16 @@ async function partagerMiniAppCarte(){
     const par = GP_CLIENTS.find(c=>c.id===client.parrain_id);
     if(par) parrainNom = par.nom||'';
   }
-  // _og bump = invalide le cache de preview WhatsApp/Meta quand on change les OG tags.
-  // À incrémenter manuellement si on ré-édite l'image ou le titre.
+  // Lien court : tout encodé en base64url dans le hash → URL ~140 chars au lieu de ~280.
   const OG_V = '3';
-  const url = location.origin + '/carte.html'
-    + '?c=' + encodeURIComponent(client.id)
-    + '&t=' + encodeURIComponent(client.qr_token)
-    + '&a=' + encodeURIComponent(GP_ADMIN_ID)
-    + '&n=' + encodeURIComponent(client.nom||'')
-    + '&m=' + encodeURIComponent(num)
-    + (parrainNom ? '&pa=' + encodeURIComponent(client.parrain_id) + '&pn=' + encodeURIComponent(parrainNom) : '')
-    + '&_og=' + OG_V;
+  const token = encoderLienCarte({
+    c: client.id, t: client.qr_token, a: GP_ADMIN_ID,
+    n: client.nom||'', m: num,
+    pa: parrainNom ? client.parrain_id : null,
+    pn: parrainNom||'',
+    og: OG_V
+  });
+  const url = location.origin + '/carte.html#' + token;
   const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
   const msg =
     `🌾 Bienvenue ${client.nom||''} chez ${nomProv} !\n\n` +
@@ -261,34 +318,38 @@ async function partagerMiniAppCarte(){
     `• Localise nos points de vente 📍\n` +
     `• Installe-la sur ton écran d'accueil (Android : "Ajouter à l'écran" · iPhone : ⎙ Partager → "Sur l'écran d'accueil")\n\n` +
     `Invite un ami avec ton lien et reçois jusqu'à *200 pts* de parrainage 🤝`;
-  const tel = (client.telephone||'').replace(/\D/g,'');
-  // Tentative 1 : Web Share natif (mobile) — l'app de l'utilisateur choisit
-  if(navigator.share){
-    try{
-      // Pas de "url" séparé : il est déjà dans le texte, sinon WhatsApp le répète à la fin.
-      await navigator.share({ title:'Carte '+nomProv, text:msg });
-      notify('Lien partagé ✓','gold');
-      const errEl=document.getElementById('cqr-err');
-      if(errEl) errEl.innerHTML='';
-      return;
-    }catch(e){ if(e?.name==='AbortError') return; }
-  }
-  // Tentative 2 : copier le message + ouvrir WhatsApp pré-rempli
+  // Numéro WA du client : prendre whatsapp puis telephone en fallback
+  const numWA = _normaliserNumWA(client.whatsapp || client.telephone, '228');
+
+  // Copier le message dans le presse-papier en parallèle (utile si WhatsApp ne pré-remplit pas)
   try{ await navigator.clipboard.writeText(msg); }catch(e){}
-  if(tel){
-    const p = (typeof detecterPays==='function')?detecterPays(tel):{numero_whatsapp:tel};
-    window.open(`https://wa.me/${p.numero_whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
-  } else {
+
+  if(!numWA){
+    // Pas de numéro client → fallback navigator.share ou wa.me sans destinataire
+    if(navigator.share){
+      try{
+        await navigator.share({ title:'Carte '+nomProv, text:msg });
+        notify('Lien partagé ✓','gold');
+        return;
+      }catch(e){ if(e?.name==='AbortError') return; }
+    }
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    notify('⚠ Aucun numéro client — sélectionne le destinataire dans WhatsApp','r');
+    return;
   }
+
+  // Ouvrir DIRECTEMENT la conversation WhatsApp du client (web ou app selon le device)
+  const waUrl = `https://wa.me/${numWA}?text=${encodeURIComponent(msg)}`;
+  window.open(waUrl, '_blank');
+
   const errEl = document.getElementById('cqr-err');
   if(errEl){
     errEl.innerHTML = `<div style="background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.4);color:var(--g6);padding:10px;border-radius:8px;font-size:11px;line-height:1.5">
-      📋 Message copié + WhatsApp ouvert. Le client clique sur le lien → sa carte s'ouvre dans son téléphone.<br>
-      Lien : <code style="font-size:10px">${url}</code>
+      ✅ Conversation WhatsApp de <b>${client.nom||'le client'}</b> ouverte (+${numWA}).<br>
+      Tape <b>Envoyer</b> dans WhatsApp pour valider.
     </div>`;
   }
-  notify('Mini-app envoyée — le client peut l\'installer','gold');
+  notify(`✅ WhatsApp ouvert : +${numWA}`,'gold');
 }
 
 // ── ENVOI WHATSAPP (2 images : recto + verso) ─────
