@@ -2,6 +2,18 @@
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate
 
+/sw-carte.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Mini-app carte : revalider à chaque fois (sinon WhatsApp WebView garde une vieille version)
+/carte.html
+  Cache-Control: no-cache, must-revalidate
+  X-Frame-Options: SAMEORIGIN
+
+/manifest-carte.json
+  Cache-Control: no-cache, must-revalidate
+  Content-Type: application/manifest+json
+
 # Manifest
 /manifest.json
   Cache-Control: public, max-age=86400
