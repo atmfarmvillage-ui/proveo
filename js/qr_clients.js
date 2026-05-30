@@ -225,6 +225,67 @@ function fermerCarteClient(){
   _carteRectoBlob = null; _carteVersoBlob = null; _qrClient = null;
 }
 
+// ── PARTAGE MINI-APP (URL personnalisée, installable sur téléphone) ──
+// Le client ouvre le lien → carte interactive avec QR, points live, bons, map PDV
+// Plus besoin de carte physique : la mini-app vit dans son téléphone.
+async function partagerMiniAppCarte(){
+  if(!_qrClient){ notify('Génère d\'abord la carte','r'); return; }
+  const client = _qrClient;
+  await assurerQRToken(client);
+  // Numéro de membre court basé sur l'id
+  const num = (client.numero_membre || client.id.slice(0,6).toUpperCase());
+  // Trouver le parrain pour affichage
+  let parrainNom = '';
+  if(client.parrain_id){
+    const par = GP_CLIENTS.find(c=>c.id===client.parrain_id);
+    if(par) parrainNom = par.nom||'';
+  }
+  const url = location.origin + '/carte.html'
+    + '?c=' + encodeURIComponent(client.id)
+    + '&t=' + encodeURIComponent(client.qr_token)
+    + '&a=' + encodeURIComponent(GP_ADMIN_ID)
+    + '&n=' + encodeURIComponent(client.nom||'')
+    + '&m=' + encodeURIComponent(num)
+    + (parrainNom ? '&pa=' + encodeURIComponent(client.parrain_id) + '&pn=' + encodeURIComponent(parrainNom) : '');
+  const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
+  const msg =
+    `🌾 Bienvenue ${client.nom||''} chez ${nomProv} !\n\n` +
+    `Voici *ta carte de fidélité numérique* — toujours dans ton téléphone, jamais oubliée :\n` +
+    `👉 ${url}\n\n` +
+    `• Présente le QR à la caisse pour cumuler des points 🎁\n` +
+    `• Vois tes points en direct + bons dispo\n` +
+    `• Localise nos points de vente 📍\n` +
+    `• Installe-la sur ton écran d'accueil (Android : "Ajouter à l'écran" · iPhone : ⎙ Partager → "Sur l'écran d'accueil")\n\n` +
+    `Invite un ami avec ton lien et reçois jusqu'à *200 pts* de parrainage 🤝`;
+  const tel = (client.telephone||'').replace(/\D/g,'');
+  // Tentative 1 : Web Share natif (mobile) — l'app de l'utilisateur choisit
+  if(navigator.share){
+    try{
+      await navigator.share({ title:'Carte SADARI', text:msg, url });
+      notify('Lien partagé ✓','gold');
+      const errEl=document.getElementById('cqr-err');
+      if(errEl) errEl.innerHTML='';
+      return;
+    }catch(e){ if(e?.name==='AbortError') return; }
+  }
+  // Tentative 2 : copier le message + ouvrir WhatsApp pré-rempli
+  try{ await navigator.clipboard.writeText(msg); }catch(e){}
+  if(tel){
+    const p = (typeof detecterPays==='function')?detecterPays(tel):{numero_whatsapp:tel};
+    window.open(`https://wa.me/${p.numero_whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+  } else {
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+  const errEl = document.getElementById('cqr-err');
+  if(errEl){
+    errEl.innerHTML = `<div style="background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.4);color:var(--g6);padding:10px;border-radius:8px;font-size:11px;line-height:1.5">
+      📋 Message copié + WhatsApp ouvert. Le client clique sur le lien → sa carte s'ouvre dans son téléphone.<br>
+      Lien : <code style="font-size:10px">${url}</code>
+    </div>`;
+  }
+  notify('Mini-app envoyée — le client peut l\'installer','gold');
+}
+
 // ── ENVOI WHATSAPP (2 images : recto + verso) ─────
 async function envoyerCarteWhatsApp(){
   if(!_carteRectoBlob || !_carteVersoBlob || !_qrClient){ notify('Génère d\'abord la carte','r'); return; }
