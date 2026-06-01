@@ -932,21 +932,48 @@ async function saveVente(){
     }
   }
 
-  // Mouvement caisse automatique
+  // Mouvement caisse automatique — fallback intelligent en cascade
+  // 1. caisse dédiée au PDV de la vente
+  // 2. fallback : caisse siège (point_vente IS NULL)
+  // 3. fallback : N'IMPORTE quelle caisse physique active
+  // 4. AUCUNE caisse → notification rouge claire à l'admin
+  window._lastVenteCaisseNom = null;
   if(paye>0){
-    const{data:caisses}=await SB.from('gp_caisses').select('id')
-      .eq('admin_id',GP_ADMIN_ID)
-      .eq('point_vente',pv||'').maybeSingle();
-    if(caisses){
+    let caisseTarget = null;
+    if(pv){
+      const{data:cPdv}=await SB.from('gp_caisses').select('id,nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
+        .eq('point_vente',pv).maybeSingle();
+      if(cPdv) caisseTarget = cPdv;
+    }
+    if(!caisseTarget){
+      const{data:cSiege}=await SB.from('gp_caisses').select('id,nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
+        .eq('type','physique').is('point_vente',null).maybeSingle();
+      if(cSiege) caisseTarget = cSiege;
+    }
+    if(!caisseTarget){
+      const{data:cAny}=await SB.from('gp_caisses').select('id,nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
+        .eq('type','physique').limit(1).maybeSingle();
+      if(cAny) caisseTarget = cAny;
+    }
+    if(caisseTarget){
       await SB.from('gp_mouvements_caisse').insert({
-        admin_id:GP_ADMIN_ID,caisse_id:caisses.id,
-        type:'entree',categorie:'vente',
-        montant:paye,date_mouvement:today(),
+        admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
+        type:'entree', categorie:'vente',
+        montant:paye, date_mouvement:today(),
         description:'Vente '+vente.id.slice(0,8),
         vente_id:vente.id,
         enregistre_par:GP_USER?.id,
         enregistre_par_nom:GP_USER?.email?.split('@')[0]
       });
+      window._lastVenteCaisseNom = caisseTarget.nom;
+    } else {
+      // Aucune caisse trouvée → alerte gros et clair
+      if(typeof notify==='function'){
+        notify(`⚠ ${fmt(paye)} F NON crédité — aucune caisse. Crée-en une via Page Caisse.`,'r');
+      }
     }
   }
 
@@ -1152,11 +1179,12 @@ async function saveVente(){
   initRemiseVente();
   err.textContent='';
 
-  // Notification claire (rappel monnaie si applicable)
+  // Notification claire (rappel monnaie si applicable + caisse créditée)
+  const caisseSuffix = window._lastVenteCaisseNom ? ` · 💵 ${window._lastVenteCaisseNom}` : '';
   if(monnaie > 0){
-    notify(`✅ Vente enregistrée — 💰 Rendre ${fmt(monnaie)} F au client`, 'gold');
+    notify(`✅ Vente enregistrée — 💰 Rendre ${fmt(monnaie)} F au client${caisseSuffix}`, 'gold');
   } else {
-    notify('✅ Vente enregistrée', 'gold');
+    notify(`✅ Vente enregistrée${caisseSuffix}`, 'gold');
   }
 
   // Afficher bloc d'actions (Imprimer + WhatsApp) sous le formulaire
