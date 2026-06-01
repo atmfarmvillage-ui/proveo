@@ -143,6 +143,8 @@ function ouvrirModalPaiement(achatId,fournisseurNom,montantTotal,montantPaye){
   document.getElementById('pmt-modal-form').style.display='block';
   document.getElementById('pmt-modal-succes').style.display='none';
   document.getElementById('modal-paiement-mp').style.display='flex';
+  // Remplir le select des caisses accessibles (filtre PDV)
+  if(typeof remplirSelectCaisses === 'function') remplirSelectCaisses('pmt-caisse');
 }
 
 function fermerModalPaiement(){
@@ -178,11 +180,17 @@ async function saveModalPaiement(){
     montant_paye:nouveauPaye,statut_paiement:reste<=0?'solde':'partiel'
   }).eq('id',achatId);
 
-  // Mouvement caisse
-  const{data:caisse}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
-  if(caisse?.length){
+  // Mouvement caisse — utilise la caisse choisie par l'utilisateur (filtrée par PDV)
+  const caisseSel = document.getElementById('pmt-caisse')?.value || null;
+  let caisseId = caisseSel;
+  if(!caisseId){
+    // Fallback : 1ère caisse physique accessible
+    const{data:caisseFb}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+    caisseId = caisseFb?.[0]?.id || null;
+  }
+  if(caisseId){
     await SB.from('gp_mouvements_caisse').insert({
-      admin_id:GP_ADMIN_ID,caisse_id:caisse[0].id,
+      admin_id:GP_ADMIN_ID,caisse_id:caisseId,
       type:'sortie',categorie:'paiement_fournisseur',
       montant,date_mouvement:date,
       description:`Paiement fournisseur · ${ref||mode}`,

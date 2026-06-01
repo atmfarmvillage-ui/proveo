@@ -1,0 +1,256 @@
+// ══════════════════════════════════════════════════
+// PROVENDA — CAISSE EXTRAS
+// Options 1/2/3 : dépense→caisse auto, modif solde initial, filtres PDV
+// ══════════════════════════════════════════════════
+
+// ── HELPER : caisses accessibles selon rôle/PDV ─────
+// Admin/gérant : voit toutes les caisses actives.
+// Autres rôles avec GP_POINT_VENTE : caisses de son PDV + caisses siège (point_vente null).
+async function caissesAccessibles(){
+  const{data}=await SB.from('gp_caisses').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
+  const C = data||[];
+  if(GP_ROLE === 'admin' || GP_EST_GERANT) return C;
+  if(!GP_POINT_VENTE) return C; // pas de scope → tout (fallback safe)
+  return C.filter(c => !c.point_vente || c.point_vente === GP_POINT_VENTE);
+}
+
+// Remplir un <select> avec les caisses accessibles
+async function remplirSelectCaisses(selectId, optionVide){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  const C = await caissesAccessibles();
+  // Garder la sélection courante si elle existe encore
+  const curId = sel.value;
+  // Charger les soldes calculés pour affichage
+  const soldes = await calcSoldesCaisses(C);
+  sel.innerHTML =
+    (optionVide ? `<option value="">${optionVide}</option>` : '') +
+    C.map(c => `<option value="${c.id}" ${c.id===curId?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
+  // Si curId n'existe plus, prendre la 1ère
+  if(curId && !C.some(c=>c.id===curId)) sel.value = C[0]?.id || '';
+}
+
+// Calcule les soldes de toutes les caisses passées (même logique que renderCaisse)
+async function calcSoldesCaisses(caisses){
+  const ids = caisses.map(c=>c.id);
+  if(!ids.length) return {};
+  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID).in('caisse_id', ids);
+  const M = mvts||[];
+  const soldes = {};
+  caisses.forEach(c=>{soldes[c.id] = Number(c.solde_initial||0);});
+  M.forEach(m=>{
+    if(m.type==='entree' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] += Number(m.montant||0);
+    if(m.type==='sortie' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] -= Number(m.montant||0);
+    if(m.type==='ajustement' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] += Number(m.montant||0);
+    if(m.type==='transfert'){
+      if(soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] -= Number(m.montant||0);
+      if(m.caisse_dest_id && soldes[m.caisse_dest_id]!==undefined) soldes[m.caisse_dest_id] += Number(m.montant||0);
+    }
+  });
+  return soldes;
+}
+
+// ── OPTION 1 : DÉPENSE → SORTIE CAISSE AUTO ──────
+// Toggle visuel quand on coche/décoche le checkbox
+function onDepCaisseToggle(){
+  const chk = document.getElementById('dep_sortir_caisse');
+  const wrap = document.getElementById('dep-caisse-select-wrap');
+  if(!chk || !wrap) return;
+  wrap.style.display = chk.checked ? 'block' : 'none';
+}
+
+// Wrapper de saveDep : ajoute le mouvement caisse OU affiche le rappel manuel
+// Override de saveDep — on conserve la fonction d'origine
+if(typeof window._saveDepOriginal === 'undefined' && typeof saveDep === 'function'){
+  window._saveDepOriginal = saveDep;
+}
+
+async function saveDep(){
+  const desc = document.getElementById('dep_desc')?.value.trim();
+  const montant = +document.getElementById('dep_montant')?.value || 0;
+  const date = document.getElementById('dep_date')?.value;
+  const err = document.getElementById('dep_err');
+  if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
+  const sortirCaisse = document.getElementById('dep_sortir_caisse')?.checked;
+  const caisseId = document.getElementById('dep_caisse_id')?.value || null;
+  if(sortirCaisse && !caisseId){ err.textContent = 'Choisis la caisse à débiter.'; notify('⚠ Choisis la caisse à débiter','r'); return; }
+
+  // 1. Insert dépense
+  const{data:dep, error}=await SB.from('gp_depenses').insert({
+    admin_id: GP_ADMIN_ID, saisi_par: GP_USER?.id, date,
+    categorie: document.getElementById('dep_cat').value,
+    description: desc, montant,
+    beneficiaire: document.getElementById('dep_benef').value.trim() || null,
+    point_vente: document.getElementById('dep_pv').value.trim() || null
+  }).select().maybeSingle();
+  if(error){ err.textContent = 'Erreur: '+error.message; return; }
+
+  // 2. Si coché → mouvement caisse auto
+  if(sortirCaisse && caisseId){
+    try{
+      await SB.from('gp_mouvements_caisse').insert({
+        admin_id: GP_ADMIN_ID, caisse_id: caisseId,
+        type: 'sortie', categorie: 'depense',
+        montant, date_mouvement: date,
+        description: `Dépense : ${desc}`,
+        enregistre_par: GP_USER?.id,
+        enregistre_par_nom: GP_USER?.email?.split('@')[0]
+      });
+    }catch(e){ console.warn('Mvt caisse échoué', e); }
+  }
+
+  err.textContent = '';
+  ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+
+  // 3. Si décoché → rappel plein écran
+  if(!sortirCaisse){
+    afficherRappelSortieCash(montant, desc);
+  } else {
+    notify(`✓ Dépense + ${fmt(montant)} F sortis de la caisse`,'gold');
+  }
+  if(typeof renderDep === 'function') await renderDep();
+}
+
+// Overlay de rappel quand la secrétaire dit "j'ai déjà sorti le cash manuellement"
+function afficherRappelSortieCash(montant, desc){
+  const old = document.getElementById('rappel-sortie-cash');
+  if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'rappel-sortie-cash';
+  ov.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);
+    z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px`;
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px 26px;max-width:420px;width:100%;
+      text-align:center;box-shadow:0 25px 70px rgba(0,0,0,.5);border-top:6px solid #F59E0B">
+      <div style="font-size:56px;margin-bottom:6px">⚠</div>
+      <div style="font-size:20px;font-weight:800;color:#0F172A;margin-bottom:8px">N'oublie pas de sortir le cash</div>
+      <div style="font-size:14px;color:#64748B;margin-bottom:18px;line-height:1.5">
+        Tu as enregistré une dépense de <b style="color:#F59E0B">${fmt(montant)} F</b>
+        ${desc?`<br>(${desc.length>40?desc.slice(0,40)+'…':desc})`:''}
+        <br><br>
+        ⚠ Le cash n'a PAS été retiré automatiquement de la caisse.
+        <br>Sors <b style="color:#0F172A">${fmt(montant)} F</b> physiquement OU enregistre une sortie manuelle.
+      </div>
+      <button onclick="document.getElementById('rappel-sortie-cash').remove()"
+        style="background:linear-gradient(135deg,#F59E0B,#FBBF24);color:#1a1a1a;border:none;border-radius:14px;
+        padding:16px 32px;font-size:16px;font-weight:800;cursor:pointer;width:100%;
+        box-shadow:0 6px 18px rgba(245,158,11,.4)">
+        ✓ J'ai bien noté
+      </button>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+// ── OPTION 2 : MODIFIER SOLDE INITIAL (admin only) ──
+async function ouvrirModifSoldeInit(caisseId){
+  if(GP_ROLE !== 'admin' && !GP_EST_GERANT){ notify('Action réservée à l\'admin','r'); return; }
+  const{data:c}=await SB.from('gp_caisses').select('*').eq('id',caisseId).maybeSingle();
+  if(!c){ notify('Caisse introuvable','r'); return; }
+  // Calculer solde actuel
+  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('caisse_id', caisseId);
+  let soldeAct = Number(c.solde_initial||0);
+  (mvts||[]).forEach(m=>{
+    if(m.type==='entree') soldeAct += Number(m.montant||0);
+    if(m.type==='sortie') soldeAct -= Number(m.montant||0);
+    if(m.type==='ajustement') soldeAct += Number(m.montant||0);
+    if(m.type==='transfert'){
+      if(m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
+      if(m.caisse_dest_id===caisseId) soldeAct += Number(m.montant||0);
+    }
+  });
+  document.getElementById('msi-caisse-id').value = caisseId;
+  document.getElementById('msi-caisse-nom').textContent = c.nom;
+  document.getElementById('msi-solde-actuel').textContent = fmt(soldeAct) + ' F';
+  document.getElementById('msi-solde-initial-actuel').textContent = fmt(c.solde_initial||0) + ' F';
+  document.getElementById('msi-nouveau').value = '';
+  document.getElementById('msi-motif').value = '';
+  document.getElementById('msi-err').textContent = '';
+  document.getElementById('modal-modif-solde-init').style.display = 'flex';
+  // Désactiver le bouton tant que motif vide
+  onMsiMotifChange();
+}
+
+function fermerModalModifSoldeInit(){
+  document.getElementById('modal-modif-solde-init').style.display = 'none';
+}
+
+function onMsiMotifChange(){
+  const motif = document.getElementById('msi-motif')?.value.trim() || '';
+  const nouveau = document.getElementById('msi-nouveau')?.value;
+  const btn = document.getElementById('msi-valider');
+  if(!btn) return;
+  const peutValider = motif.length >= 5 && nouveau !== '' && nouveau !== null;
+  btn.disabled = !peutValider;
+  btn.style.opacity = peutValider ? '1' : '.4';
+  btn.style.cursor = peutValider ? 'pointer' : 'not-allowed';
+}
+
+async function saveModifSoldeInit(){
+  const caisseId = document.getElementById('msi-caisse-id').value;
+  const nouveau = +document.getElementById('msi-nouveau').value;
+  const motif = document.getElementById('msi-motif').value.trim();
+  const err = document.getElementById('msi-err');
+  if(!motif || motif.length < 5){ err.textContent = 'Motif obligatoire (5 caractères min)'; notify('⚠ Motif obligatoire','r'); return; }
+  if(isNaN(nouveau)){ err.textContent = 'Entre un nouveau solde valide'; return; }
+
+  // Récupérer l'ancien solde initial pour calculer la différence
+  const{data:c}=await SB.from('gp_caisses').select('solde_initial,nom').eq('id',caisseId).maybeSingle();
+  if(!c){ err.textContent = 'Caisse introuvable'; return; }
+  const ancien = Number(c.solde_initial||0);
+  const diff = nouveau - ancien;
+
+  // 1. Update solde_initial
+  const{error:e1}=await SB.from('gp_caisses').update({solde_initial: nouveau}).eq('id',caisseId);
+  if(e1){ err.textContent = 'Erreur: '+e1.message; return; }
+
+  // 2. Créer un mouvement d'ajustement pour la traçabilité
+  await SB.from('gp_mouvements_caisse').insert({
+    admin_id: GP_ADMIN_ID, caisse_id: caisseId,
+    type: 'ajustement', categorie: 'correction_solde_initial',
+    montant: diff,
+    date_mouvement: today(),
+    description: `Modif solde initial : ${fmt(ancien)} → ${fmt(nouveau)} F. Motif : ${motif}`,
+    enregistre_par: GP_USER?.id,
+    enregistre_par_nom: GP_USER?.email?.split('@')[0]
+  });
+
+  fermerModalModifSoldeInit();
+  notify(`✓ Solde initial de ${c.nom} modifié`,'gold');
+  if(typeof renderCaisse === 'function') await renderCaisse();
+}
+
+// ── HOOK : pré-remplir le select caisse à l'ouverture des formulaires concernés ──
+// Patche les fonctions existantes pour qu'elles peuplent les selects avant affichage
+(function(){
+  // Hook page dépenses : à l'ouverture, peupler le select caisse
+  if(typeof PAGE_RENDERERS !== 'undefined' && PAGE_RENDERERS.depenses){
+    const _origDep = PAGE_RENDERERS.depenses;
+    PAGE_RENDERERS.depenses = async function(){
+      const r = _origDep();
+      if(r && typeof r.then==='function') await r;
+      await remplirSelectCaisses('dep_caisse_id');
+    };
+  }
+  // Hook page paiements MP idem
+  if(typeof PAGE_RENDERERS !== 'undefined' && PAGE_RENDERERS.paiements_mp){
+    const _origPmt = PAGE_RENDERERS.paiements_mp;
+    PAGE_RENDERERS.paiements_mp = async function(){
+      const r = _origPmt();
+      if(r && typeof r.then==='function') await r;
+      await remplirSelectCaisses('pmt-caisse', '— Caisse par défaut —');
+    };
+  }
+})();
+
+// Wrapper pour le paiement MP : ajoute le caisse_id sélectionné au mouvement
+// Override saveModalPaiement pour utiliser la caisse choisie
+if(typeof window._saveModalPaiementOrig === 'undefined' && typeof saveModalPaiement === 'function'){
+  window._saveModalPaiementOrig = saveModalPaiement;
+  // On ne remplace pas — on injecte une variable globale lue par la fonction existante.
+  // En fait on patche directement après ce fichier chargé. Si la fonction n'existe pas encore,
+  // tant pis : le default behavior actuel reste actif.
+}
