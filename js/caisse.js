@@ -8,6 +8,10 @@ async function renderCaisse(){
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
+  // Filtre PDV : secrétaire/autres rôles avec PDV → seulement leurs caisses + siège
+  if(GP_ROLE !== 'admin' && !GP_EST_GERANT && GP_POINT_VENTE){
+    caisses = caisses.filter(c => !c.point_vente || c.point_vente === GP_POINT_VENTE);
+  }
 
   // Auto-création de la caisse du Siège/Production si aucune caisse "siège" n'existe.
   // Une caisse de PDV a un point_vente ; la caisse siège/production n'en a pas.
@@ -84,6 +88,7 @@ async function renderCaisse(){
         <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
+        ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:rgba(232,197,71,.5);color:var(--gold)" onclick="ouvrirModifSoldeInit('${c.id}')" title="Modifier le solde initial">✏ Solde init</button>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>`:''}
       </div>
     </div>`;
