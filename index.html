@@ -569,7 +569,7 @@
         <div id="vt-cl-similaires" style="display:none;background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:8px;padding:8px;margin-bottom:8px"></div>
         <div class="fg2">
           <div class="fr"><label>Nom de la ferme</label><input type="text" id="vt_cl_ferme" placeholder="Ferme Adekou"></div>
-          <div class="fr"><label>Localité</label><input type="text" id="vt_cl_localite" placeholder="Sanguera, Lomé..."></div>
+          <div class="fr"><label>Localité *</label><input type="text" id="vt_cl_localite" placeholder="Sanguera, Lomé..."></div>
         </div>
         <div class="fg2">
           <div class="fr"><label>Téléphone *</label><input type="tel" id="vt_cl_tel" placeholder="+228 90 00 00 00" oninput="chercherClientsSimilairesDebounced()"></div>
@@ -746,8 +746,8 @@
           <span id="vt-montant-total" style="font-weight:700;font-size:15px;color:var(--gold)">0 F</span>
         </div>
         <div class="fr" style="margin-bottom:6px">
-          <label>💵 Montant remis par le client (FCFA)</label>
-          <input type="number" id="vt_paye" placeholder="0" oninput="calcVente()" style="font-size:15px;font-weight:700">
+          <label>💵 Montant remis par le client (FCFA) *</label>
+          <input type="number" id="vt_paye" placeholder="0 si non payé" oninput="calcVente()" style="font-size:15px;font-weight:700">
           <div style="font-size:9px;color:var(--textm);margin-top:2px">Si le client donne plus que le total, la monnaie à rendre est calculée automatiquement.</div>
         </div>
         <div id="vt-reste-row" style="display:flex;justify-content:space-between;font-size:12px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,.08)">

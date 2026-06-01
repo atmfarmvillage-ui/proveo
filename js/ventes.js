@@ -715,8 +715,15 @@ function calcPointsVente(lignes){
 
 async function saveVente(){
   let clientId=document.getElementById('vt_client')?.value;
+  const wasNewClient = clientId === '__nouveau__';   // mémoriser AVANT que le INSERT change clientId
   const note=document.getElementById('vt_note')?.value.trim()||null;
-  const remis=+document.getElementById('vt_paye')?.value||0;
+  // Montant remis OBLIGATOIRE — pas de fallback à 0 sur champ vide
+  const remisRaw = document.getElementById('vt_paye')?.value;
+  if(remisRaw === '' || remisRaw === null || remisRaw === undefined){
+    document.getElementById('vt_err').textContent = 'Entre le montant remis par le client (mets 0 si pas payé).';
+    return;
+  }
+  const remis = +remisRaw || 0;
   const pv=GP_POINT_VENTE||document.getElementById('vt_pv')?.value.trim()||null;
   const err=document.getElementById('vt_err');
 
@@ -731,6 +738,8 @@ async function saveVente(){
     const tel=document.getElementById('vt_cl_tel')?.value.trim()||null;
     const typeNv=document.getElementById('vt_cl_type')?.value||'detail';
     if(!nomComplet){err.textContent='Entrez le nom du nouveau client.';return;}
+    if(!tel){err.textContent='Le numéro de téléphone est obligatoire pour un nouveau client.';return;}
+    if(!localite){err.textContent='La localité est obligatoire pour un nouveau client.';return;}
     // ── ANTI-DOUBLON : vérif finale avant INSERT ──
     const similaires=chercherClientsSimilaires(nomComplet, tel);
     if(similaires.length>0){
@@ -1070,9 +1079,82 @@ async function saveVente(){
   }
 
   // Afficher bloc d'actions (Imprimer + WhatsApp) sous le formulaire
-  afficherActionsApresVente({...vente, lignes: lignes_a_insert}, client, total, remis, paye, monnaie);
+  const clientFinal = GP_CLIENTS.find(c=>c.id===clientId) || client;
+  afficherActionsApresVente({...vente, lignes: lignes_a_insert}, clientFinal, total, remis, paye, monnaie);
+
+  // AUTO-OUVRIR WHATSAPP avec message adapté (nouveau client → + carte fidélité)
+  const reste = Math.max(0, total - paye);
+  autoOuvrirWAApresVente(clientFinal, vente, wasNewClient, lignes_a_insert, total, paye, reste);
 
   renderVentes();
+}
+
+// ── AUTO-WA APRÈS VENTE ─────────────────────────────────
+// Nouveau client : message bienvenue + lien carte fidélité numérique
+// Ancien client : message de remerciement / récap vente
+async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total, paye, reste){
+  if(!client?.id){ return; }
+  const tel = client.whatsapp || client.telephone || '';
+  if(!tel){ notify('Pas de numéro WhatsApp — message non envoyé','gold'); return; }
+  const prov = GP_CONFIG?.nom_provenderie || 'SADARI';
+  const produitsLines = (lignes||[]).map(l=>
+    `• ${l.formule_nom} : ${fmtKg(l.quantite)} kg = ${fmt(l.montant_ligne)} F`
+  ).join('\n');
+  const payeLine = reste > 0
+    ? `💵 Payé : ${fmt(paye)} F · Reste à payer : *${fmt(reste)} F*`
+    : `✓ Payé intégralement`;
+
+  let msg;
+  if(isNewClient){
+    // Construire le lien carte fidélité court
+    let carteUrl = '';
+    try{
+      if(typeof assurerQRToken === 'function') await assurerQRToken(client);
+      if(typeof encoderLienCarte === 'function' && client.qr_token){
+        const num = client.numero_membre || client.id.slice(0,6).toUpperCase();
+        const tok = encoderLienCarte({
+          c: client.id, t: client.qr_token, a: GP_ADMIN_ID,
+          n: client.nom||'', m: num, pa: null, pn:'', og: '3'
+        });
+        carteUrl = 'https://fidelite.avifarmer.net/carte#' + tok;
+      }
+    }catch(e){ console.warn('carte url:', e); }
+
+    msg = `🌾 Bienvenue *${client.nom}* chez *${prov}* !\n\n` +
+          `✅ Ta 1ʳᵉ vente est enregistrée :\n${produitsLines}\n` +
+          `*Total : ${fmt(total)} F*\n` +
+          `${payeLine}\n\n` +
+          (carteUrl
+            ? `🎁 *Ta carte de fidélité numérique* (toujours dans ton téléphone) :\n${carteUrl}\n\n` +
+              `Présente ce QR à chaque achat pour cumuler des points et gagner des cadeaux 🎁\n\n`
+            : '') +
+          `Bienvenue dans la famille ${prov} 🤝`;
+  } else {
+    const pts = window._lastVentePoints;
+    const ptsLine = (pts && pts.gagnes>0)
+      ? `\n🎁 +${pts.gagnes} pts fidélité (total : ${pts.total} pts)`
+      : '';
+    msg = `🌾 Bonjour *${client.nom}*,\n\n` +
+          `✅ Ton achat chez *${prov}* :\n${produitsLines}\n` +
+          `*Total : ${fmt(total)} F*\n` +
+          `${payeLine}${ptsLine}\n\n` +
+          `Merci de ta confiance 🤝`;
+  }
+
+  // Ouvrir WhatsApp
+  const p = (typeof detecterPays === 'function')
+    ? detecterPays(tel)
+    : { numero_whatsapp: String(tel).replace(/[^0-9]/g,'') };
+  const url = 'https://wa.me/' + p.numero_whatsapp + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+
+  // Marquer la vente comme envoyée
+  try{
+    await SB.from('gp_ventes').update({
+      wa_envoye: true,
+      wa_envoye_at: new Date().toISOString()
+    }).eq('id', vente.id);
+  }catch(e){ /* silencieux */ }
 }
 
 // ── BLOC D'ACTIONS APRÈS VENTE (Imprimer + WhatsApp + SMS) ──
