@@ -225,14 +225,34 @@ let _fabNbIngr = 0;
 let _fabDate = null;
 
 function afficherFeuilleFabrication(lot){
-  const{nom,qte,poidsSac,nbSacs,ref,date,pdv,lotId}=lot;
+  const{nom,qte,poidsSac,nbSacs,ref,date,pdv,lotId,composition}=lot;
   const f=FORMULES_SADARI.find(x=>x.nom===nom);
-  if(!f){notify('Formule non trouvée dans SADARI','r');return;}
+
+  // Si une composition RÉELLE est fournie (avec substitutions MP) → on l'utilise
+  // Sinon → fallback sur les ingrédients de la formule SADARI
+  let ingrs;
+  if(Array.isArray(composition) && composition.length){
+    ingrs = composition.map(c=>({
+      nom: c.nom,
+      kg: Number(c.kg)||0,
+      // Pour l'affichage % : calculé sur le poids total composé
+      pct: qte>0 ? ((Number(c.kg)||0)/qte*100) : 0
+    }));
+  } else if(f && Array.isArray(f.ingredients)){
+    ingrs = f.ingredients.map(ing=>({
+      nom: ing.nom,
+      kg: (Number(ing.pct||0)/100)*qte,
+      pct: Number(ing.pct||0)
+    }));
+  } else {
+    notify('Composition introuvable','r');
+    return;
+  }
 
   _fabLotId=lotId||null;
   _fabLotRef=ref;
   _fabFormule=nom;
-  _fabNbIngr=(f.ingredients||[]).length;
+  _fabNbIngr=ingrs.length;
   _fabDate=date;
   window._fabInfosLot={nom,qte,poidsSac,nbSacs,ref,date,pdv};
 
@@ -253,16 +273,16 @@ function afficherFeuilleFabrication(lot){
         style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text);width:100%">
     </div>`;
 
-  // Ingrédients avec cases à cocher
-  const ingrs=f.ingredients||[];
+  // Ingrédients avec cases à cocher — composition réelle (substitutions incluses)
   document.getElementById('fab-ingredients').innerHTML=ingrs.map((ing,i)=>{
-    const kg=(ing.pct/100)*qte;
+    const kg=ing.kg;
+    const pct=Number(ing.pct||0);
     return`<div id="fab-ing-${i}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:4px;background:var(--card2);border:1px solid var(--card2);transition:all .2s">
       <input type="checkbox" id="fab-chk-${i}" onchange="onFabCheck(${i})"
         style="width:22px;height:22px;cursor:pointer;accent-color:var(--g4);flex-shrink:0">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">${ing.nom}</div>
-        <div style="font-size:10px;color:var(--textm);">${ing.pct}% · ${fmtKg(kg)} kg exact</div>
+        <div style="font-size:10px;color:var(--textm);">${pct.toFixed(1)}% · ${fmtKg(kg)} kg exact</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-family:'DM Mono',monospace;font-size:17px;font-weight:700;color:var(--gold)">${Math.round(kg*10)/10} kg</div>

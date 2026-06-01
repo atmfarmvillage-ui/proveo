@@ -63,6 +63,28 @@ function getFormule(nom){
   return FORMULES_SADARI.find(f=>f.nom===nom);
 }
 
+// ── PERMISSIONS GRANULAIRES ────────────────────────
+// canDelete : seulement l'admin (jamais la secrétaire)
+function canDelete(){
+  return GP_ROLE === 'admin' || GP_EST_GERANT;
+}
+// canModify : admin OU créateur (saisi_par) dans les 24h
+function canModify(record){
+  if(GP_ROLE === 'admin' || GP_EST_GERANT) return true;
+  if(GP_ROLE !== 'secretaire') return false;
+  if(!record) return false;
+  const createur = record.saisi_par || record.cree_par || record.enregistre_par;
+  if(createur !== GP_USER?.id) return false;
+  const createdAt = record.created_at || record.cree_le;
+  if(!createdAt) return false;
+  const ageMs = Date.now() - new Date(createdAt).getTime();
+  return ageMs < 24*60*60*1000; // 24h
+}
+// canStockInitial : seulement l'admin
+function canStockInitial(){
+  return GP_ROLE === 'admin' || GP_EST_GERANT;
+}
+
 // ── AUTH ───────────────────────────────────────────
 async function doLogin(){
   if(!SB)return;
@@ -192,6 +214,9 @@ async function bootApp(user){
   });
   // Gérer visibilité nav selon rôle (appel unique)
   applyRoleRestrictions();
+  // Marquer le body avec le rôle effectif → permet aux règles CSS .role-X de cacher/montrer des actions
+  document.body.classList.remove('role-admin','role-secretaire','role-vendeur','role-logistique','role-daf','role-directeur','role-technicien','role-gerant');
+  document.body.classList.add(GP_EST_GERANT?'role-gerant':('role-'+GP_ROLE));
   document.getElementById('main').style.display='block';
   // Set role in topbar
   document.getElementById('tb-role-badge').textContent=GP_EST_GERANT?'GÉRANT':GP_ROLE.toUpperCase();

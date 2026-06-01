@@ -257,8 +257,21 @@ function syncPrixVente(source){
 }
 
 // Stock disponible à la vente (gp_stock_produits_pdv) — pour annoter le menu des formules.
+// + poids_sac par formule (depuis le dernier lot de production) → affichage en sacs.
+var GP_POIDS_SAC_VENTE = {};
 async function loadStockVente(){
   GP_STOCK_VENTE = {};
+  GP_POIDS_SAC_VENTE = {};
+  // Charger les poids/sac depuis le dernier lot de chaque formule
+  try{
+    const{data:lots}=await SB.from('gp_lots').select('formule_nom,poids_sac,date')
+      .eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false});
+    (lots||[]).forEach(l=>{
+      if(!GP_POIDS_SAC_VENTE[l.formule_nom] && l.poids_sac){
+        GP_POIDS_SAC_VENTE[l.formule_nom] = Number(l.poids_sac);
+      }
+    });
+  }catch(e){}
   if(!GP_POINT_VENTE) return; // pas de point de vente → pas d'annotation stock
   try{
     const{data}=await SB.from('gp_stock_produits_pdv').select('formule_nom,qte_disponible')
@@ -267,6 +280,36 @@ async function loadStockVente(){
       GP_STOCK_VENTE[r.formule_nom]=(GP_STOCK_VENTE[r.formule_nom]||0)+Number(r.qte_disponible||0);
     });
   }catch(e){}
+}
+
+// Affiche le stock dispo pour la formule sélectionnée (kg + sacs)
+function afficherStockFormuleVente(formuleNom){
+  const box = document.getElementById('vt-stock-info');
+  if(!box) return;
+  if(!formuleNom){ box.style.display = 'none'; return; }
+  const kg = Number(GP_STOCK_VENTE[formuleNom]||0);
+  const ps = Number(GP_POIDS_SAC_VENTE[formuleNom]||0);
+  box.style.display = 'block';
+  if(kg <= 0){
+    box.style.background = 'rgba(239,68,68,.15)';
+    box.style.border = '2px solid rgba(239,68,68,.5)';
+    box.style.color = 'var(--red)';
+    box.innerHTML = `⛔ <b>STOCK ÉPUISÉ</b> pour <b>${formuleNom}</b><br>
+      <span style="font-size:10px;font-weight:500">Lance une production ou attends une livraison avant de vendre.</span>`;
+  } else if(ps > 0){
+    const nb = Math.round(kg/ps*10)/10;
+    const stockLow = kg < ps; // moins d'un sac → critique
+    box.style.background = stockLow ? 'rgba(245,158,11,.15)' : 'rgba(22,163,74,.12)';
+    box.style.border = stockLow ? '1px solid rgba(245,158,11,.5)' : '1px solid rgba(22,163,74,.4)';
+    box.style.color = stockLow ? 'var(--gold)' : 'var(--green)';
+    box.innerHTML = `${stockLow?'⚠':'✅'} Stock dispo : <b>${fmt(kg)} kg</b> ≈ <b>${nb} sacs (${ps}kg)</b>`;
+  } else {
+    // Pas de production référencée → on n'affiche que les kg
+    box.style.background = 'rgba(22,163,74,.12)';
+    box.style.border = '1px solid rgba(22,163,74,.4)';
+    box.style.color = 'var(--green)';
+    box.innerHTML = `✅ Stock dispo : <b>${fmt(kg)} kg</b>`;
+  }
 }
 
 // Favoris formules — uniquement les formules effectivement vendues (max 8).
@@ -666,6 +709,8 @@ function calcVente(){
 
 async function onVenteFormuleChange(){
   const nom=document.getElementById('vt_formule')?.value;
+  // Affichage du stock dès le choix (toujours, même si nom vide → cache la box)
+  afficherStockFormuleVente(nom);
   if(!nom)return;
 
   // Charger le prix depuis gp_prix_formules ou GP_PRIX
@@ -739,6 +784,28 @@ async function saveVente(){
 
   if(!VT_LIGNES.length){_showErr('Ajoute au moins un produit.');return;}
   if(!clientId){_showErr('Sélectionne un client (recherche ou ➕ Nouveau client).');return;}
+
+  // ── CONTRÔLE STOCK : empêcher de vendre plus qu'on n'a ──
+  if(GP_ROLE !== 'admin'){ // l'admin peut autoriser une vente en surstock (correction)
+    await loadStockVente();
+    const ruptures = [];
+    // Agréger par formule (si plusieurs lignes même formule)
+    const demande = {};
+    for(const l of VT_LIGNES){
+      if(l.type_produit !== 'formule') continue;
+      demande[l.formule_nom] = (demande[l.formule_nom]||0) + Number(l.quantite||0);
+    }
+    for(const [formule, qte] of Object.entries(demande)){
+      const dispo = Number(GP_STOCK_VENTE[formule]||0);
+      if(qte > dispo + 0.001){
+        ruptures.push(`${formule} : demandé ${fmt(qte)} kg · dispo ${fmt(dispo)} kg`);
+      }
+    }
+    if(ruptures.length){
+      _showErr(`Stock insuffisant — vente bloquée :\n${ruptures.join('\n')}`);
+      return;
+    }
+  }
 
   // 🔥 PRÉ-OUVRIR L'ONGLET WHATSAPP MAINTENANT (encore dans le user gesture du click)
   // Sera mis à jour avec l'URL wa.me à la fin. Si validation échoue après → _showErr le ferme.
