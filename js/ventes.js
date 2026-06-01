@@ -714,21 +714,35 @@ function calcPointsVente(lignes){
 }
 
 async function saveVente(){
+  // Popup WhatsApp pré-ouvert pour contourner le bloqueur de pop-up
+  // (les navigateurs interdisent window.open APRÈS un await)
+  let _waPopup = null;
+  // Helper : afficher une grosse erreur visible (notif + texte rouge) + ferme le popup pré-ouvert
+  const _showErr = (msg)=>{
+    const e=document.getElementById('vt_err'); if(e) e.textContent=msg;
+    if(typeof notify === 'function') notify('⚠ '+msg, 'r');
+    if(_waPopup){ try{ _waPopup.close(); }catch(e){} _waPopup = null; }
+  };
+
   let clientId=document.getElementById('vt_client')?.value;
   const wasNewClient = clientId === '__nouveau__';   // mémoriser AVANT que le INSERT change clientId
   const note=document.getElementById('vt_note')?.value.trim()||null;
   // Montant remis OBLIGATOIRE — pas de fallback à 0 sur champ vide
   const remisRaw = document.getElementById('vt_paye')?.value;
   if(remisRaw === '' || remisRaw === null || remisRaw === undefined){
-    document.getElementById('vt_err').textContent = 'Entre le montant remis par le client (mets 0 si pas payé).';
+    _showErr('Entre le montant remis par le client (mets 0 si pas payé).');
     return;
   }
   const remis = +remisRaw || 0;
   const pv=GP_POINT_VENTE||document.getElementById('vt_pv')?.value.trim()||null;
   const err=document.getElementById('vt_err');
 
-  if(!VT_LIGNES.length){err.textContent='Ajoutez au moins un produit.';return;}
-  if(!clientId){err.textContent='Sélectionnez un client (recherche ou ➕ Nouveau client).';return;}
+  if(!VT_LIGNES.length){_showErr('Ajoute au moins un produit.');return;}
+  if(!clientId){_showErr('Sélectionne un client (recherche ou ➕ Nouveau client).');return;}
+
+  // 🔥 PRÉ-OUVRIR L'ONGLET WHATSAPP MAINTENANT (encore dans le user gesture du click)
+  // Sera mis à jour avec l'URL wa.me à la fin. Si validation échoue après → _showErr le ferme.
+  try{ _waPopup = window.open('about:blank', '_blank'); }catch(e){}
 
   // ── NOUVEAU CLIENT ──────────────────────────────
   if(clientId==='__nouveau__'){
@@ -737,9 +751,9 @@ async function saveVente(){
     const localite=document.getElementById('vt_cl_localite')?.value.trim()||null;
     const tel=document.getElementById('vt_cl_tel')?.value.trim()||null;
     const typeNv=document.getElementById('vt_cl_type')?.value||'detail';
-    if(!nomComplet){err.textContent='Entrez le nom du nouveau client.';return;}
-    if(!tel){err.textContent='Le numéro de téléphone est obligatoire pour un nouveau client.';return;}
-    if(!localite){err.textContent='La localité est obligatoire pour un nouveau client.';return;}
+    if(!nomComplet){_showErr('Entre le nom du nouveau client.');return;}
+    if(!tel){_showErr('Le numéro de téléphone est obligatoire pour un nouveau client.');return;}
+    if(!localite){_showErr('La localité est obligatoire pour un nouveau client.');return;}
     // ── ANTI-DOUBLON : vérif finale avant INSERT ──
     const similaires=chercherClientsSimilaires(nomComplet, tel);
     if(similaires.length>0){
@@ -816,7 +830,7 @@ async function saveVente(){
     remise_validee_par:remiseValidee?(document.getElementById('vt_remise_par')?.value.trim()||null):null
   }).select().maybeSingle();
 
-  if(error){err.textContent='Erreur: '+error.message;return;}
+  if(error){_showErr('Erreur enregistrement vente : '+error.message);return;}
 
   // Insérer les lignes
   await SB.from('gp_ventes_lignes').insert(
@@ -1084,7 +1098,7 @@ async function saveVente(){
 
   // AUTO-OUVRIR WHATSAPP avec message adapté (nouveau client → + carte fidélité)
   const reste = Math.max(0, total - paye);
-  autoOuvrirWAApresVente(clientFinal, vente, wasNewClient, lignes_a_insert, total, paye, reste);
+  autoOuvrirWAApresVente(clientFinal, vente, wasNewClient, lignes_a_insert, total, paye, reste, _waPopup);
 
   renderVentes();
 }
@@ -1092,10 +1106,18 @@ async function saveVente(){
 // ── AUTO-WA APRÈS VENTE ─────────────────────────────────
 // Nouveau client : message bienvenue + lien carte fidélité numérique
 // Ancien client : message de remerciement / récap vente
-async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total, paye, reste){
-  if(!client?.id){ return; }
+// prePopup : onglet pré-ouvert (about:blank) qu'on redirige vers wa.me (anti-blocker).
+async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total, paye, reste, prePopup){
+  if(!client?.id){
+    if(prePopup){ try{ prePopup.close(); }catch(e){} }
+    return;
+  }
   const tel = client.whatsapp || client.telephone || '';
-  if(!tel){ notify('Pas de numéro WhatsApp — message non envoyé','gold'); return; }
+  if(!tel){
+    if(prePopup){ try{ prePopup.close(); }catch(e){} }
+    notify('Pas de numéro WhatsApp — message non envoyé','gold');
+    return;
+  }
   const prov = GP_CONFIG?.nom_provenderie || 'SADARI';
   const produitsLines = (lignes||[]).map(l=>
     `• ${l.formule_nom} : ${fmtKg(l.quantite)} kg = ${fmt(l.montant_ligne)} F`
@@ -1141,12 +1163,26 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
           `Merci de ta confiance 🤝`;
   }
 
-  // Ouvrir WhatsApp
+  // Construire l'URL WhatsApp
   const p = (typeof detecterPays === 'function')
     ? detecterPays(tel)
     : { numero_whatsapp: String(tel).replace(/[^0-9]/g,'') };
   const url = 'https://wa.me/' + p.numero_whatsapp + '?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
+
+  // 1. Tentative idéale : rediriger le popup pré-ouvert (préserve le user gesture)
+  let ouverture_ok = false;
+  if(prePopup && !prePopup.closed){
+    try{ prePopup.location.href = url; ouverture_ok = true; }catch(e){ console.warn('prePopup redirect failed', e); }
+  }
+  // 2. Tentative 2 : window.open direct (échouera souvent à cause du bloqueur)
+  if(!ouverture_ok){
+    const fresh = window.open(url, '_blank');
+    if(fresh){ ouverture_ok = true; }
+  }
+  // 3. Fallback : grosse overlay avec gros bouton vert que l'utilisateur peut taper
+  if(!ouverture_ok){
+    afficherOverlayWAManuel(url, client.nom||'le client');
+  }
 
   // Marquer la vente comme envoyée
   try{
@@ -1155,6 +1191,40 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
       wa_envoye_at: new Date().toISOString()
     }).eq('id', vente.id);
   }catch(e){ /* silencieux */ }
+}
+
+// Overlay plein écran avec gros bouton WhatsApp — fallback si le popup a été bloqué
+function afficherOverlayWAManuel(waUrl, clientNom){
+  const existing = document.getElementById('auto-wa-overlay');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'auto-wa-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);
+    z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px`;
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px 26px;max-width:380px;
+      text-align:center;box-shadow:0 25px 70px rgba(0,0,0,.5);width:100%">
+      <div style="font-size:56px;margin-bottom:8px">✅</div>
+      <div style="font-size:20px;font-weight:800;color:#0F172A;margin-bottom:6px">Vente enregistrée</div>
+      <div style="font-size:14px;color:#64748B;margin-bottom:24px;line-height:1.4">
+        Tape sur le bouton pour envoyer la confirmation à <b style="color:#0F172A">${clientNom}</b> via WhatsApp.
+      </div>
+      <a href="${waUrl.replace(/"/g,'&quot;')}" target="_blank" rel="noopener"
+        onclick="setTimeout(()=>{const el=document.getElementById('auto-wa-overlay');if(el)el.remove();},300)"
+        style="display:flex;align-items:center;justify-content:center;gap:12px;
+        background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:none;border-radius:16px;
+        padding:20px;font-size:18px;font-weight:800;text-decoration:none;
+        box-shadow:0 8px 24px rgba(37,211,102,.5);text-transform:uppercase;letter-spacing:.5px">
+        📲 Envoyer WhatsApp
+      </a>
+      <button onclick="document.getElementById('auto-wa-overlay').remove()"
+        style="background:none;border:none;color:#94A3B8;font-size:13px;
+        margin-top:18px;cursor:pointer;font-family:inherit;font-weight:500">
+        Plus tard
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 // ── BLOC D'ACTIONS APRÈS VENTE (Imprimer + WhatsApp + SMS) ──
