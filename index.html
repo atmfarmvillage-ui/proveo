@@ -25,6 +25,10 @@
 <!-- QR Cards : génération (QRious — lib browser fiable) + scan caméra/fichier (html5-qrcode) -->
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Export PDF (jsPDF + autoTable) + Excel (SheetJS) -->
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
   // Applique le thème stocké AVANT le rendu CSS pour éviter le flash
   (function(){
@@ -144,13 +148,13 @@
 
   <!-- ÉTAPE 1 : APPROVISIONNEMENT -->
   <div class="nav-sect">🛒 Approvisionnement</div>
-  <div class="nav-item" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
-  <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
-  <div class="nav-item" onclick="showGP('paiements_mp')" data-page="paiements_mp" data-roles="admin,logistique,daf"><span class="nav-icon">💳</span>Paiements MP</div>
+  <div class="nav-item" onclick="showGP('fournisseurs')" data-page="fournisseurs" data-roles="admin,secretaire,logistique"><span class="nav-icon">🏢</span>Fournisseurs</div>
+  <div class="nav-item" onclick="showGP('achats')" data-page="achats" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">🛒</span>Achats MP</div>
+  <div class="nav-item" onclick="showGP('paiements_mp')" data-page="paiements_mp" data-roles="admin,secretaire,logistique,daf"><span class="nav-icon">💳</span>Paiements MP</div>
 
   <!-- ÉTAPE 2 : MATIÈRES PREMIÈRES & STOCK -->
   <div class="nav-sect">🌾 Matières Premières</div>
-  <div class="nav-item admin-only" onclick="showGP('matieres')" data-page="matieres"><span class="nav-icon">🌾</span>Matières Premières</div>
+  <div class="nav-item" onclick="showGP('matieres')" data-page="matieres" data-roles="admin,secretaire"><span class="nav-icon">🌾</span>Matières Premières</div>
   <div class="nav-item" onclick="showGP('stock')" data-page="stock"><span class="nav-icon">📦</span>Stock MP</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire')" data-page="inventaire"><span class="nav-icon">📋</span>Inventaire mensuel</div>
   <div class="nav-item admin-only" onclick="showGP('inventaire_physique')" data-page="inventaire_physique"><span class="nav-icon">🔍</span>Inventaire physique</div>
@@ -158,16 +162,16 @@
   <!-- ÉTAPE 3 : PRODUCTION -->
   <div class="nav-sect">🏭 Production</div>
   <div class="nav-item" onclick="showGP('production')" data-page="production"><span class="nav-icon">🏭</span>Production <span id="nav-badge-prod" class="nav-badge" style="display:none">0</span></div>
-  <div class="nav-item admin-only" onclick="showGP('formules')" data-page="formules"><span class="nav-icon">🧪</span>Formules & Prix</div>
+  <div class="nav-item" onclick="showGP('formules')" data-page="formules" data-roles="admin,secretaire"><span class="nav-icon">🧪</span>Formules & Prix</div>
 
   <!-- ÉTAPE 4 : DISTRIBUTION -->
   <div class="nav-sect">🚚 Distribution</div>
-  <div class="nav-item admin-only" onclick="showGP('distribution')" data-page="distribution"><span class="nav-icon">🚚</span>Distribution PDV</div>
+  <div class="nav-item" onclick="showGP('distribution')" data-page="distribution" data-roles="admin,secretaire"><span class="nav-icon">🚚</span>Distribution PDV</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
 
   <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
   <div class="nav-sect">💵 Finances</div>
-  <div class="nav-item admin-only" onclick="showGP('caisse')" data-page="caisse"><span class="nav-icon">💵</span>Caisse & Banques</div>
+  <div class="nav-item" onclick="showGP('caisse')" data-page="caisse" data-roles="admin,secretaire"><span class="nav-icon">💵</span>Caisse & Banques</div>
   <div class="nav-item" onclick="showGP('depenses')" data-page="depenses"><span class="nav-icon">💸</span>Dépenses</div>
   <div class="nav-item admin-only" onclick="showGP('salaires')" data-page="salaires"><span class="nav-icon">👤</span>Salaires</div>
   <div class="nav-item admin-only" onclick="showGP('dettes')" data-page="dettes"><span class="nav-icon">💳</span>Dettes secrétaires</div>
@@ -265,8 +269,11 @@
     <div>
       <div class="card">
         <div class="card-title"><div class="ct-left"><span>📋 Historique production</span></div>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <input type="month" id="lot-filtre-mois" onchange="renderLots()" style="font-size:10px;padding:3px 6px;width:auto">
+            <button class="btn btn-out btn-sm" onclick="voirCumulLots()" title="Désactiver le filtre — voir tous les mois" style="font-size:10px;padding:3px 8px">📊 Cumul</button>
+            <button class="btn btn-out btn-sm" onclick="exporterLotsPDF()" title="Télécharger PDF" style="font-size:10px;padding:3px 8px">📄 PDF</button>
+            <button class="btn btn-out btn-sm" onclick="exporterLotsExcel()" title="Télécharger Excel" style="font-size:10px;padding:3px 8px">📊 Excel</button>
           </div>
         </div>
         <div id="lots-liste"></div>
@@ -292,7 +299,7 @@
       <div class="card">
         <div class="card-title">
           <div class="ct-left"><span>📥 Réception MP</span></div>
-          <button class="btn btn-out btn-sm" onclick="ouvrirStockInitial()" title="Saisir tout l'inventaire d'un coup">📋 Stock initial</button>
+          <button class="btn btn-out btn-sm admin-only-action" onclick="ouvrirStockInitial()" title="Saisir tout l'inventaire d'un coup">📋 Stock initial</button>
         </div>
         <div class="fr"><label>Date réception</label><input type="date" id="mp_date"></div>
         <div class="fr">
@@ -645,6 +652,8 @@
           oninput="filtrerFormuleSelect('vt_formule','vt_formule_search')"
           style="margin-bottom:4px;font-size:12px">
         <select id="vt_formule" onchange="onVenteFormuleChange()"><option value="">— Sélectionner —</option></select>
+        <!-- Affichage stock dispo en temps réel (rempli par onVenteFormuleChange) -->
+        <div id="vt-stock-info" style="display:none;margin-top:6px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600"></div>
       </div>
 
       <!-- MATIÈRE PREMIÈRE -->
@@ -1973,8 +1982,8 @@
         <div class="ct-left"><span>📦 Stock produits finis par PDV</span></div>
         <button class="btn btn-out btn-sm" onclick="actualiserStockPDV()">🔄</button>
       </div>
-      <!-- Saisie manuelle : stock initial / inventaire (sacs ou kg) -->
-      <details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+      <!-- Saisie manuelle : stock initial / inventaire (sacs ou kg) — réservé admin -->
+      <details class="admin-only-action" style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
         <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">✏️ Saisir un stock (départ / inventaire)</summary>
         <div style="margin-top:8px">
           <div class="fg2">

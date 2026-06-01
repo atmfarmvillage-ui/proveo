@@ -365,6 +365,9 @@ async function saveLot(){
   // Réf PDV de production (pour la feuille de fab) — le stock sera crédité à la saisie des sacs
   const pdvProdSaves=document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||'Production';
 
+  // 💡 Capturer la composition RÉELLE (avec MP substituées) AVANT de vider LOT_COMPO
+  const _compoReelle = LOT_COMPO.map(c=>({ nom: c.nom, kg: Number(c.kg)||0 }));
+
   ['lot_qte','lot_mo','lot_emb','lot_obs'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('lot_mo').value='0';document.getElementById('lot_emb').value='0';
   document.getElementById('lot_ref').value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
@@ -376,8 +379,8 @@ async function saveLot(){
   // NB : le stock produits finis n'est PAS crédité ici — il le sera à la saisie des sacs obtenus
   // (bouton 📦 dans la liste des lots), car le nombre réel de sacs n'est connu qu'après production.
 
-  // Afficher la feuille de fabrication
-  afficherFeuilleFabrication({nom,qte,poidsSac:25,nbSacs:0,ref,date,pdv:pdvProdSaves,lotId:lot?.id});
+  // Afficher la feuille de fabrication AVEC la composition réelle (substitutions incluses)
+  afficherFeuilleFabrication({nom,qte,poidsSac:25,nbSacs:0,ref,date,pdv:pdvProdSaves,lotId:lot?.id,composition:_compoReelle});
 
   notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
   // Afficher bouton impression immédiatement
@@ -412,8 +415,9 @@ async function renderLots(){
   const L=data||[];
   renderBilanProduction(L);
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const periodeLabel = filtMois ? 'Ce mois' : '📊 Cumul total (tous les mois)';
   document.getElementById('lots-liste').innerHTML=`
-    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Ce mois : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${periodeLabel} : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
     <div style="overflow-x:auto">${L.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th>':''}<th></th></tr></thead><tbody>
     ${L.map(l=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${l.date}</td>
@@ -428,8 +432,147 @@ async function renderLots(){
           : `<button class="btn btn-g btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:4px 8px">📦 Sacs obtenus</button>`}
         <button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button>
       </td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun lot ce mois.</div>'}</div>`;
+    </tr>`).join('')}</tbody></table>`:`<div style="color:var(--textm);font-size:12px">${filtMois?'Aucun lot ce mois.':'Aucun lot enregistré.'}</div>`}</div>`;
 }
+// ── VOIR CUMUL (désactive filtre mois) ─────────────────
+function voirCumulLots(){
+  const el = document.getElementById('lot-filtre-mois');
+  if(el) el.value = '';
+  renderLots();
+}
+
+// Récupère les lots selon le filtre actuel (mois ou cumul)
+async function _fetchLotsExport(){
+  const filtMois = document.getElementById('lot-filtre-mois')?.value || '';
+  let q = SB.from('gp_lots').select('*').eq('admin_id', GP_ADMIN_ID).order('date', {ascending: true});
+  if(filtMois) q = q.gte('date', filtMois+'-01').lte('date', _finMois(filtMois));
+  const {data} = await q;
+  return { lots: data||[], periode: filtMois || 'Cumul total' };
+}
+
+// ── EXPORT PDF ────────────────────────────────
+async function exporterLotsPDF(){
+  if(typeof window.jspdf === 'undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2 sec','r'); return; }
+  const { jsPDF } = window.jspdf;
+  const { lots, periode } = await _fetchLotsExport();
+  if(!lots.length){ notify('Aucun lot à exporter pour cette période','r'); return; }
+
+  const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+  const nomProv = GP_CONFIG?.nom_provenderie || 'SADARI';
+  const tel = GP_CONFIG?.telephone || '';
+
+  // En-tête
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text(nomProv, 14, 18);
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100);
+  doc.text((tel?tel+' · ':'')+'Bilan production', 14, 24);
+  doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(22, 163, 74);
+  doc.text('📋 Historique production — ' + periode, 14, 34);
+  doc.setTextColor(0);
+
+  const totalKg = lots.reduce((s,l)=>s+Number(l.qte_produite||0),0);
+  const totalCout = lots.reduce((s,l)=>s+Number(l.cout_total||0),0);
+  const totalSacs = lots.reduce((s,l)=>s+Number(l.nb_sacs||0),0);
+  const totalPerte = lots.reduce((s,l)=>s+Number(l.kg_pertes||0),0);
+
+  doc.setFontSize(9);
+  doc.text(`Total : ${lots.length} lots · ${fmt(totalKg)} kg produits · ${totalSacs} sacs · perte ${fmt(totalPerte)} kg · coût total ${fmt(totalCout)} F`, 14, 41);
+
+  // Table (jspdf-autotable)
+  doc.autoTable({
+    startY: 46,
+    head: [['Date','Réf','Formule','Qté (kg)','Sacs','Perte (kg)','Coût total (F)','Coût/kg (F)','Prix vente/kg (F)']],
+    body: lots.map(l => [
+      l.date || '—',
+      l.ref || '—',
+      l.formule_nom || '—',
+      fmt(l.qte_produite),
+      l.nb_sacs || '0',
+      fmt(l.kg_pertes||0),
+      fmt(l.cout_total||0),
+      l.qte_produite>0 ? fmt(Math.round(Number(l.cout_total||0)/l.qte_produite)) : '0',
+      fmt(l.prix_vente_kg||0)
+    ]),
+    foot: [[
+      'TOTAL', '', `${lots.length} lots`,
+      fmt(totalKg), String(totalSacs), fmt(totalPerte),
+      fmt(totalCout),
+      lots.length>0 && totalKg>0 ? fmt(Math.round(totalCout/totalKg)) : '0',
+      ''
+    ]],
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [22,163,74], textColor:255, fontStyle:'bold' },
+    footStyles: { fillColor: [232,197,71], textColor:0, fontStyle:'bold' },
+    columnStyles: {
+      3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'},
+      6:{halign:'right'}, 7:{halign:'right'}, 8:{halign:'right'}
+    }
+  });
+
+  // Pied de page : signature
+  const finalY = doc.lastAutoTable.finalY || 60;
+  doc.setFontSize(9); doc.setTextColor(80);
+  doc.text(`Émis le ${new Date().toLocaleDateString('fr-FR')} par ${GP_USER?.email?.split('@')[0]||'admin'}`, 14, finalY + 12);
+  doc.text('Signature responsable : ___________________', 14, finalY + 22);
+  doc.text('Visa direction : ___________________', 130, finalY + 22);
+
+  doc.save(`Production_${periode.replace(/\s/g,'_')}.pdf`);
+  notify('PDF téléchargé ✓','gold');
+}
+
+// ── EXPORT EXCEL ──────────────────────────────
+async function exporterLotsExcel(){
+  if(typeof XLSX === 'undefined'){ notify('Lib Excel pas encore chargée — réessaie dans 2 sec','r'); return; }
+  const { lots, periode } = await _fetchLotsExport();
+  if(!lots.length){ notify('Aucun lot à exporter','r'); return; }
+
+  const rows = lots.map(l => ({
+    'Date': l.date || '',
+    'Référence': l.ref || '',
+    'Formule': l.formule_nom || '',
+    'Espèce': l.espece || '',
+    'Quantité produite (kg)': Number(l.qte_produite)||0,
+    'Sacs obtenus': Number(l.nb_sacs)||0,
+    'Poids/sac (kg)': Number(l.poids_sac)||0,
+    'Perte (kg)': Number(l.kg_pertes)||0,
+    'Coût MP (F)': Number(l.cout_mp)||0,
+    'Coût main-d\'œuvre (F)': Number(l.cout_main_oeuvre)||0,
+    'Coût emballage (F)': Number(l.cout_emballage)||0,
+    'Coût total (F)': Number(l.cout_total)||0,
+    'Coût/kg (F)': l.qte_produite>0 ? Math.round(Number(l.cout_total||0)/l.qte_produite) : 0,
+    'Prix vente/kg (F)': Number(l.prix_vente_kg)||0,
+    'Marge théorique/kg (F)': (Number(l.prix_vente_kg)||0) - (l.qte_produite>0 ? Math.round(Number(l.cout_total||0)/l.qte_produite) : 0),
+    'PDV production': l.pdv_production || '',
+    'Observations': l.observations || ''
+  }));
+
+  // Ligne totaux
+  const tot = (k) => rows.reduce((s,r)=>s+Number(r[k]||0),0);
+  rows.push({
+    'Date':'','Référence':'TOTAL','Formule':`${lots.length} lots`,'Espèce':'',
+    'Quantité produite (kg)': tot('Quantité produite (kg)'),
+    'Sacs obtenus': tot('Sacs obtenus'),
+    'Poids/sac (kg)': '',
+    'Perte (kg)': tot('Perte (kg)'),
+    'Coût MP (F)': tot('Coût MP (F)'),
+    'Coût main-d\'œuvre (F)': tot('Coût main-d\'œuvre (F)'),
+    'Coût emballage (F)': tot('Coût emballage (F)'),
+    'Coût total (F)': tot('Coût total (F)'),
+    'Coût/kg (F)': '', 'Prix vente/kg (F)': '', 'Marge théorique/kg (F)': '',
+    'PDV production': '', 'Observations': ''
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Largeurs auto
+  const cols = Object.keys(rows[0]||{}).map(k=>({wch: Math.max(k.length+2, 14)}));
+  ws['!cols'] = cols;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Production '+periode.slice(0,15));
+  XLSX.writeFile(wb, `Production_${periode.replace(/\s/g,'_')}.xlsx`);
+  notify('Excel téléchargé ✓','gold');
+}
+
 async function deleteLot(id){
   if(!confirm('Supprimer ce lot ? Les sorties de stock associées seront supprimées.'))return;
   await SB.from('gp_stock_mp').delete().eq('lot_id',id);

@@ -215,6 +215,10 @@ html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);fon
 .nav-item.admin-only{opacity:.5}
 .nav-item.admin-only.visible{opacity:1}
 
+/* Actions réservées admin/gérant — cachées pour secrétaire et autres rôles.
+   Marquer un bouton/zone avec class="admin-only-action" pour le cacher automatiquement. */
+body:not(.role-admin):not(.role-gerant) .admin-only-action{display:none !important}
+
 /* Flash doré quand on clique sur un item */
 .nav-item.flash{animation:navFlash .6s ease-out,navEnter 0s}
 @keyframes navFlash{

@@ -486,6 +486,19 @@ async function renderStockPDV(){
     .eq('admin_id',GP_ADMIN_ID).order('pdv_nom').order('formule_nom');
   const S=data||[];
 
+  // Récupérer le poids/sac par formule depuis le DERNIER lot produit
+  // → utilisé pour afficher le bon nombre de sacs (25 ou 50 kg) selon la prod
+  const{data:lotsRecents}=await SB.from('gp_lots')
+    .select('formule_nom,poids_sac,date')
+    .eq('admin_id',GP_ADMIN_ID)
+    .order('date',{ascending:false});
+  const poidsSacParFormule={};
+  (lotsRecents||[]).forEach(l=>{
+    if(!poidsSacParFormule[l.formule_nom] && l.poids_sac){
+      poidsSacParFormule[l.formule_nom] = Number(l.poids_sac);
+    }
+  });
+
   // Grouper par PDV
   const byPDV={};
   S.forEach(s=>{
@@ -518,7 +531,15 @@ async function renderStockPDV(){
                 onchange="mettreAJourStockPDV('${s.id}','${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}',this.value)"
                 title="Modifier la valeur — écrase l'ancienne">`
               :`${fmt(s.qte_disponible)} kg`}
-            <div style="color:var(--textm);font-size:9px;margin-top:2px">≈${Math.round(s.qte_disponible/25)} sacs (25kg) · ${Math.round(s.qte_disponible/50)} sacs (50kg)</div>
+            ${(()=>{
+              const ps = poidsSacParFormule[s.formule_nom];
+              if(ps && ps>0){
+                const nb = Math.round(s.qte_disponible/ps*10)/10; // 1 décimale
+                return `<div style="color:var(--textm);font-size:9px;margin-top:2px">≈ ${nb} sacs (${ps}kg)</div>`;
+              }
+              // Pas encore de prod pour cette formule → afficher les 2 (fallback)
+              return `<div style="color:var(--textm);font-size:9px;margin-top:2px">≈${Math.round(s.qte_disponible/25)} sacs (25kg) · ${Math.round(s.qte_disponible/50)} sacs (50kg)</div>`;
+            })()}
           </td>
           <td class="num" style="color:var(--textm)">${fmt(s.seuil_critique)} kg</td>
           <td class="num">
