@@ -179,7 +179,7 @@
 
   <!-- ÉTAPE 7 : RAPPORTS & CONTRÔLE -->
   <div class="nav-sect">📊 Rapports</div>
-  <div class="nav-item admin-only" onclick="showGP('bilan_jour')" data-page="bilan_jour"><span class="nav-icon">📅</span>Bilan journalier</div>
+  <div class="nav-item" onclick="showGP('bilan_jour')" data-page="bilan_jour" data-roles="admin,secretaire,daf"><span class="nav-icon">📅</span>Bilan journalier</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
 
   <!-- DIRECTION STRATÉGIQUE -->
@@ -2660,6 +2660,7 @@ try{
 <script src="js/ventes.js?v=2.7.0"></script>
 <script src="js/clients.js?v=2.7.0"></script>
 <script src="js/admin.js?v=2.7.0"></script>
+<script src="js/bilan_jour.js?v=2.7.0"></script>
 <script src="js/fournisseurs.js?v=2.7.0"></script>
 <script src="js/achats.js?v=2.7.0"></script>
 <script src="js/caisse.js?v=2.7.0"></script>
