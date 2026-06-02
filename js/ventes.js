@@ -259,6 +259,18 @@ function syncPrixVente(source){
 // Stock disponible à la vente (gp_stock_produits_pdv) — pour annoter le menu des formules.
 // + poids_sac par formule (depuis le dernier lot de production) → affichage en sacs.
 var GP_POIDS_SAC_VENTE = {};
+
+// Détermine le PDV source pour le stock de la vente :
+// 1. GP_POINT_VENTE (rôle avec PDV affecté : secrétaire, vendeur, etc.)
+// 2. Valeur du sélecteur vt_pv_select / vt_pv (admin qui choisit)
+// 3. "Production" par défaut (siège — admin sans PDV)
+function pdvSourceVente(){
+  if(GP_POINT_VENTE) return GP_POINT_VENTE;
+  const sel = document.getElementById('vt_pv_select')?.value;
+  const hidden = document.getElementById('vt_pv')?.value;
+  return sel || hidden || 'Production';
+}
+
 async function loadStockVente(){
   GP_STOCK_VENTE = {};
   GP_POIDS_SAC_VENTE = {};
@@ -272,43 +284,86 @@ async function loadStockVente(){
       }
     });
   }catch(e){}
-  if(!GP_POINT_VENTE) return; // pas de point de vente → pas d'annotation stock
+  // Charger le stock du PDV source (déterminé dynamiquement)
+  const pdvNom = pdvSourceVente();
+  window._STOCK_PDV_NOM_VENTE = pdvNom;
   try{
     const{data}=await SB.from('gp_stock_produits_pdv').select('formule_nom,qte_disponible')
-      .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',GP_POINT_VENTE);
+      .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom);
     (data||[]).forEach(r=>{
       GP_STOCK_VENTE[r.formule_nom]=(GP_STOCK_VENTE[r.formule_nom]||0)+Number(r.qte_disponible||0);
     });
   }catch(e){}
 }
 
-// Affiche le stock dispo pour la formule sélectionnée (kg + sacs)
+// Setup du sélecteur PDV admin (à appeler à l'ouverture de la page Ventes)
+async function setupVentePdvSelector(){
+  const isAdmin = GP_ROLE === 'admin' || GP_EST_GERANT;
+  const staticEl = document.querySelector('.vt-pv-static');
+  const selectEl = document.getElementById('vt_pv_select');
+  const hiddenEl = document.getElementById('vt_pv');
+  // Si secrétaire/vendeur avec PDV affecté → static (déjà géré par auth.js)
+  if(GP_POINT_VENTE){
+    if(selectEl) selectEl.style.display = 'none';
+    if(staticEl) staticEl.style.display = '';
+    if(hiddenEl) hiddenEl.value = GP_POINT_VENTE;
+    return;
+  }
+  // Si admin sans PDV → afficher le sélecteur avec tous les PDV (+ "Production" par défaut)
+  if(isAdmin && selectEl){
+    if(staticEl) staticEl.style.display = 'none';
+    selectEl.style.display = '';
+    // Récupérer tous les PDV
+    const{data:pdvs}=await SB.from('gp_points_vente').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom');
+    const noms = ['Production', ...((pdvs||[]).map(p=>p.nom).filter(n=>n && n!=='Production'))];
+    selectEl.innerHTML = noms.map(n=>`<option value="${n}">${n==='Production'?'🏭 Production (siège)':'📍 '+n}</option>`).join('');
+    selectEl.value = 'Production';
+    if(hiddenEl) hiddenEl.value = 'Production';
+  }
+}
+
+// Handler du changement de PDV (admin sélectionne autre source)
+async function onPdvVenteChange(){
+  const sel = document.getElementById('vt_pv_select');
+  const val = sel?.value || 'Production';
+  const hidden = document.getElementById('vt_pv');
+  if(hidden) hidden.value = val;
+  await loadStockVente();
+  // Re-display stock pour la formule en cours
+  const formuleNom = document.getElementById('vt_formule')?.value;
+  if(formuleNom && typeof afficherStockFormuleVente === 'function'){
+    afficherStockFormuleVente(formuleNom);
+  }
+}
+
+// Affiche le stock dispo pour la formule sélectionnée (kg + sacs + PDV source)
 function afficherStockFormuleVente(formuleNom){
   const box = document.getElementById('vt-stock-info');
   if(!box) return;
   if(!formuleNom){ box.style.display = 'none'; return; }
   const kg = Number(GP_STOCK_VENTE[formuleNom]||0);
   const ps = Number(GP_POIDS_SAC_VENTE[formuleNom]||0);
+  const pdvNom = window._STOCK_PDV_NOM_VENTE || pdvSourceVente();
+  const pdvLabel = `<span style="font-size:10px;font-weight:500;opacity:.85"> · à ${pdvNom}</span>`;
   box.style.display = 'block';
   if(kg <= 0){
     box.style.background = 'rgba(239,68,68,.15)';
     box.style.border = '2px solid rgba(239,68,68,.5)';
     box.style.color = 'var(--red)';
-    box.innerHTML = `⛔ <b>STOCK ÉPUISÉ</b> pour <b>${formuleNom}</b><br>
-      <span style="font-size:10px;font-weight:500">Lance une production ou attends une livraison avant de vendre.</span>`;
+    box.innerHTML = `⛔ <b>STOCK ÉPUISÉ</b> pour <b>${formuleNom}</b> à <b>${pdvNom}</b><br>
+      <span style="font-size:10px;font-weight:500">Lance une production, attends une livraison, ou change la source de vente (📍 en haut).</span>`;
   } else if(ps > 0){
     const nb = Math.round(kg/ps*10)/10;
-    const stockLow = kg < ps; // moins d'un sac → critique
+    const stockLow = kg < ps;
     box.style.background = stockLow ? 'rgba(245,158,11,.15)' : 'rgba(22,163,74,.12)';
     box.style.border = stockLow ? '1px solid rgba(245,158,11,.5)' : '1px solid rgba(22,163,74,.4)';
     box.style.color = stockLow ? 'var(--gold)' : 'var(--green)';
-    box.innerHTML = `${stockLow?'⚠':'✅'} Stock dispo : <b>${fmt(kg)} kg</b> ≈ <b>${nb} sacs (${ps}kg)</b>`;
+    box.innerHTML = `${stockLow?'⚠':'✅'} Stock dispo : <b>${fmt(kg)} kg</b> ≈ <b>${nb} sacs (${ps}kg)</b>${pdvLabel}`;
   } else {
-    // Pas de production référencée → on n'affiche que les kg
     box.style.background = 'rgba(22,163,74,.12)';
     box.style.border = '1px solid rgba(22,163,74,.4)';
     box.style.color = 'var(--green)';
-    box.innerHTML = `✅ Stock dispo : <b>${fmt(kg)} kg</b>`;
+    box.innerHTML = `✅ Stock dispo : <b>${fmt(kg)} kg</b>${pdvLabel}`;
   }
 }
 
@@ -977,9 +1032,9 @@ async function saveVente(){
     }
   }
 
-  // Déduire du stock (formules) — en KG. Production (admin sans PDV) déduit aussi de son stock.
+  // Déduire du stock (formules) — en KG. Utilise le PDV source sélectionné (pdvSourceVente).
   {
-    const pdvStock = GP_POINT_VENTE || 'Production';
+    const pdvStock = typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production');
     for(const l of VT_LIGNES){
       if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
       if(l.type_produit==='ferme') continue; // les produits ferme ne sont pas du stock provenderie

@@ -527,11 +527,15 @@
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>💰 Nouvelle vente</span></div></div>
 
-      <!-- DATE + PDV -->
+      <!-- DATE + PDV (admin : select pour choisir source stock ; non-admin : static) -->
       <div class="fg2" style="margin-bottom:10px">
         <div class="fr"><label>Date</label><input type="date" id="vt_date"></div>
-        <div style="font-size:11px;color:var(--g6);padding:6px 0;display:flex;align-items:center;gap:6px">
-          📍 <strong id="vt-pv-nom">—</strong>
+        <div class="fr">
+          <label>📍 Vendre depuis</label>
+          <!-- non-admin : nom statique de son PDV affecté -->
+          <strong id="vt-pv-nom" class="vt-pv-static" style="font-size:14px;color:var(--g6);padding:6px 0;display:block">—</strong>
+          <!-- admin sans PDV affecté : sélecteur des PDV -->
+          <select id="vt_pv_select" class="vt-pv-admin" style="display:none" onchange="onPdvVenteChange()"></select>
           <input type="hidden" id="vt_pv">
         </div>
       </div>
