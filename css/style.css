@@ -219,6 +219,12 @@ html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);fon
    Marquer un bouton/zone avec class="admin-only-action" pour le cacher automatiquement. */
 body:not(.role-admin):not(.role-gerant) .admin-only-action{display:none !important}
 
+/* KPIs cliquables sur le dashboard — feedback visuel hover */
+.stat-box.kpi-clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;position:relative}
+.stat-box.kpi-clickable:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(22,163,74,.18);border-color:var(--gold)}
+.stat-box.kpi-clickable::after{content:"🔍";position:absolute;top:8px;right:10px;font-size:11px;opacity:0;transition:opacity .15s ease}
+.stat-box.kpi-clickable:hover::after{opacity:.6}
+
 /* Flash doré quand on clique sur un item */
 .nav-item.flash{animation:navFlash .6s ease-out,navEnter 0s}
 @keyframes navFlash{
