@@ -346,6 +346,8 @@ var PAGE_RENDERERS = {
     await loadStockVente();
     await loadServices();
     populateSelects();
+    if(typeof setupVentePdvSelector === 'function') await setupVentePdvSelector();
+    if(typeof loadStockVente === 'function') await loadStockVente();
     if(typeof loadFavorisFormules==='function') loadFavorisFormules();
     await renderVentes();
   },
