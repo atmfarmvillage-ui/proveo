@@ -92,9 +92,9 @@ async function renderDashboard(){
 
   const isAdmin=GP_ROLE==='admin';
 
-  // Helper KPI : icône pastel + libellé + valeur + delta optionnel
-  const kpi=(icon,iconColor,label,value,delta)=>`
-    <div class="stat-box">
+  // Helper KPI : icône pastel + libellé + valeur + delta optionnel + onClick optionnel
+  const kpi=(icon,iconColor,label,value,delta,onClick)=>`
+    <div class="stat-box ${onClick?'kpi-clickable':''}" ${onClick?`onclick="${onClick}" title="Voir le détail"`:''}>
       <div class="kpi-head">
         <div class="kpi-icon ${iconColor}">${icon}</div>
         <div class="stat-lbl">${label}</div>
@@ -105,16 +105,16 @@ async function renderDashboard(){
 
   document.getElementById('dash-kpis').innerHTML=`
     ${isAdmin?`
-    ${kpi('💰','gold','CA Provenderie ce mois',fmt(caMois))}
+    ${kpi('💰','gold','CA Provenderie ce mois',fmt(caMois),null,"dashKpiDrill('ca')")}
     ${kpi('✓','green','Encaissé Provenderie',fmt(encaisseMois),
-      caMois>0?{type:'up',text:`${Math.round(encaisseMois/caMois*100)} % du CA`}:null)}
+      caMois>0?{type:'up',text:`${Math.round(encaisseMois/caMois*100)} % du CA`}:null,"dashKpiDrill('encaisse')")}
     ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),
-      impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'})}
+      impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
     ${kpi('💸','orange','Dépenses ce mois',fmt(depMois),
-      depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'})}
-    ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois)):''}`:''}
+      depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'},"dashKpiDrill('depenses')")}
+    ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}`:''}
     ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,
-      nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
+      nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null,"dashKpiDrill('lots')")}
     ${!isAdmin?kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,
       alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'}):''}`;
 
