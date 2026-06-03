@@ -1604,7 +1604,9 @@ async function renderVentes(){
   initRemiseVente();
   const filtDate=document.getElementById('vt-filtre-date')?.value||'';
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
-  let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).order('created_at',{ascending:false}).limit(50);
+  let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID)
+    .is('deleted_at', null)  // exclure les ventes en corbeille
+    .order('created_at',{ascending:false}).limit(50);
   if(filtDate)q=q.eq('date',filtDate);
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
@@ -2244,12 +2246,195 @@ function onConditionnementChange(){
 }
 
 // ── VENTES — ACTIONS ────────────────────────────
+// ── SUPPRESSION VENTE — revert complet + soft delete + audit log ──
+// Restaure stock, caisse, fidélité, parrainage. Marque deleted_at (récupérable via Corbeille).
 async function supprimerVente(id){
-  if(!confirm('Supprimer cette vente ? Cette action est irréversible.'))return;
-  const{error}=await SB.from('gp_ventes').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
-  if(error){notify('Erreur suppression: '+error.message,'r');return;}
-  await SB.from('gp_ventes_lignes').delete().eq('vente_id',id);
-  renderVentes();notify('Vente supprimée ✓','r');
+  if(GP_ROLE !== 'admin' && !GP_EST_GERANT){ notify('Suppression réservée à l\'admin','r'); return; }
+
+  // 1. Récupérer tous les éléments liés à la vente
+  const {data:vente} = await SB.from('gp_ventes').select('*').eq('id',id).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+  if(!vente){ notify('Vente introuvable','r'); return; }
+  if(vente.deleted_at){ notify('Cette vente est déjà dans la Corbeille','r'); return; }
+
+  const {data:lignes} = await SB.from('gp_ventes_lignes').select('*').eq('vente_id',id);
+  const {data:caisseMvts} = await SB.from('gp_mouvements_caisse').select('*').eq('vente_id',id);
+  const {data:fidMvts} = await SB.from('gp_fidelite_mouvements').select('*').eq('vente_id',id);
+  const L = lignes||[]; const CM = caisseMvts||[]; const FM = fidMvts||[];
+
+  // 2. Construire la liste des reverts à montrer dans la confirmation
+  const reverts = [];
+  for(const l of L){
+    if(l.type_produit === 'formule'){
+      reverts.push(`+${fmt(l.quantite)} kg ${l.formule_nom} → stock`);
+    } else if(l.type_produit === 'mp'){
+      reverts.push(`+${fmt(l.quantite)} kg ${l.formule_nom} → stock MP`);
+    }
+  }
+  const totalCaisse = CM.reduce((s,m)=>s+Number(m.montant||0),0);
+  if(totalCaisse > 0){
+    reverts.push(`−${fmt(totalCaisse)} F retirés des caisses (${CM.length} mouvement(s))`);
+  }
+  const ptsClient = FM.filter(f=>f.type==='achat').reduce((s,f)=>s+Number(f.points||0),0);
+  if(ptsClient > 0) reverts.push(`−${ptsClient} pts fidélité au client`);
+  const ptsParrain = FM.filter(f=>f.type==='parrainage'||f.type==='parrainage_1ere').reduce((s,f)=>s+Number(f.points||0),0);
+  if(ptsParrain > 0) reverts.push(`−${ptsParrain} pts au parrain (parrainage défait)`);
+  const bonUtilise = FM.find(f=>f.type==='bon_utilise');
+  if(bonUtilise){
+    const m = (bonUtilise.description||'').match(/(\d[\d\s]*)\s*F/);
+    const amt = m ? parseInt(m[1].replace(/\s/g,''),10) : 0;
+    if(amt>0) reverts.push(`+${fmt(amt)} F bon fidélité restauré au client`);
+  }
+  const welcome = FM.find(f=>f.type==='bonus_parrainage');
+  if(welcome) reverts.push(`Bon de bienvenue 1000 F retiré du filleul`);
+
+  // 3. Modal de confirmation détaillée
+  const detailHtml = reverts.length
+    ? reverts.map(r=>`• ${r}`).join('<br>')
+    : 'Aucun impact à reverser (vente vide ou sans paiement).';
+  const ok = await confirmDeleteVenteModal(vente, detailHtml);
+  if(!ok) return;
+
+  // 4. EXÉCUTION DES REVERTS
+
+  // 4a. Re-créditer le stock formules (gp_stock_produits_pdv)
+  const pdvStock = vente.point_vente || 'Production';
+  for(const l of L){
+    if(l.type_produit === 'formule'){
+      const {data:stk} = await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock).eq('formule_nom',l.formule_nom).maybeSingle();
+      if(stk){
+        await SB.from('gp_stock_produits_pdv').update({
+          qte_disponible: Number(stk.qte_disponible||0) + Number(l.quantite||0),
+          updated_at: new Date().toISOString()
+        }).eq('id', stk.id);
+      } else {
+        // Pas de ligne stock → en créer une avec la quantité restaurée
+        await SB.from('gp_stock_produits_pdv').insert({
+          admin_id: GP_ADMIN_ID, pdv_nom: pdvStock, formule_nom: l.formule_nom,
+          qte_disponible: Number(l.quantite||0), seuil_critique: 100
+        });
+      }
+    }
+  }
+
+  // 4b. Supprimer les entrées gp_stock_mp de cette vente (par ref)
+  const refVente = 'Vente '+id.slice(0,8);
+  await SB.from('gp_stock_mp').delete()
+    .eq('admin_id',GP_ADMIN_ID).eq('ref',refVente);
+
+  // 4c. Supprimer les mouvements caisse liés à la vente
+  await SB.from('gp_mouvements_caisse').delete().eq('vente_id',id);
+
+  // 4d. Revert fidélité — TRAITER CHAQUE MOUVEMENT INDIVIDUELLEMENT
+  for(const f of FM){
+    const pts = Number(f.points||0);
+    if(pts > 0){
+      // Soustraire les pts (achat, parrainage_1ere, parrainage)
+      const {data:c} = await SB.from('gp_clients').select('points_fidelite,parrain_pts_cumules')
+        .eq('id', f.client_id).maybeSingle();
+      if(c){
+        const upd = { points_fidelite: Math.max(0, Number(c.points_fidelite||0) - pts) };
+        if(f.type === 'parrainage' || f.type === 'parrainage_1ere'){
+          upd.parrain_pts_cumules = Math.max(0, Number(c.parrain_pts_cumules||0) - pts);
+        }
+        await SB.from('gp_clients').update(upd).eq('id', f.client_id);
+      }
+    } else if(f.type === 'bon_utilise'){
+      // Restaurer credit_fidelite du client
+      const m = (f.description||'').match(/(\d[\d\s]*)\s*F/);
+      const amt = m ? parseInt(m[1].replace(/\s/g,''),10) : 0;
+      if(amt > 0){
+        const {data:c} = await SB.from('gp_clients').select('credit_fidelite')
+          .eq('id', f.client_id).maybeSingle();
+        if(c){
+          await SB.from('gp_clients').update({
+            credit_fidelite: Number(c.credit_fidelite||0) + amt
+          }).eq('id', f.client_id);
+        }
+      }
+    } else if(f.type === 'bonus_parrainage'){
+      // Retirer le bon bienvenue du filleul + reset flags parrainage
+      const m = (f.description||'').match(/(\d[\d\s]*)\s*F/);
+      const amt = m ? parseInt(m[1].replace(/\s/g,''),10) : 1000;
+      const {data:c} = await SB.from('gp_clients').select('credit_fidelite')
+        .eq('id', f.client_id).maybeSingle();
+      if(c){
+        await SB.from('gp_clients').update({
+          credit_fidelite: Math.max(0, Number(c.credit_fidelite||0) - amt),
+          parrainage_recompense_1ere: false,
+          bon_bienvenue_utilise: false
+        }).eq('id', f.client_id);
+      }
+    }
+  }
+  // Supprimer les mouvements fidélité
+  await SB.from('gp_fidelite_mouvements').delete().eq('vente_id',id);
+
+  // 4e. Soft-delete la vente
+  await SB.from('gp_ventes').update({
+    deleted_at: new Date().toISOString(),
+    deleted_by: GP_USER?.id,
+    deleted_by_nom: GP_USER?.email?.split('@')[0] || 'admin'
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+
+  // 5. Audit log
+  try{
+    await SB.from('gp_audit_log').insert({
+      admin_id: GP_ADMIN_ID,
+      table_name: 'gp_ventes',
+      record_id: id,
+      action: 'soft_delete',
+      performed_by: GP_USER?.id,
+      performed_by_nom: GP_USER?.email?.split('@')[0] || 'admin',
+      details: {
+        client: vente.client_nom,
+        montant_total: vente.montant_total,
+        montant_paye: vente.montant_paye,
+        reverts: reverts
+      }
+    });
+  }catch(e){ console.warn('audit log err', e); }
+
+  await renderVentes();
+  if(typeof renderCaisse === 'function') await renderCaisse();
+  notify(`Vente supprimée — ${reverts.length} impact(s) reverté(s) ✓`,'gold');
+}
+
+// Modal de confirmation suppression vente
+function confirmDeleteVenteModal(vente, detailHtml){
+  return new Promise(resolve=>{
+    const old = document.getElementById('modal-delete-vente');
+    if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'modal-delete-vente';
+    ov.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);
+      z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px`;
+    ov.innerHTML = `
+      <div style="background:var(--card2,#fff);border:2px solid var(--red);border-radius:16px;padding:24px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto">
+        <div style="font-size:18px;font-weight:800;color:var(--red);margin-bottom:8px">⚠ Supprimer la vente ?</div>
+        <div style="font-size:13px;color:var(--text);margin-bottom:14px">
+          Client : <b>${vente.client_nom||'—'}</b><br>
+          Montant : <b>${fmt(vente.montant_total||0)} F</b> (payé ${fmt(vente.montant_paye||0)} F)<br>
+          Date : ${vente.date||'—'}
+        </div>
+        <div style="background:rgba(232,197,71,.1);border:1px solid rgba(232,197,71,.4);border-radius:10px;padding:12px;margin-bottom:14px">
+          <div style="font-weight:700;color:var(--gold);margin-bottom:6px;font-size:12px">📦 Ceci va RESTAURER :</div>
+          <div style="font-size:12px;color:var(--text);line-height:1.6">${detailHtml}</div>
+        </div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:14px;line-height:1.4">
+          ℹ La vente sera déplacée dans la <b>Corbeille</b> et pourra être restaurée plus tard.
+          Les impacts (stock, caisse, fidélité) sont reversés immédiatement.
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="dvm-confirm" class="btn btn-red" style="flex:1;justify-content:center;font-weight:800">⚠ Confirmer la suppression</button>
+          <button id="dvm-cancel" class="btn btn-out" style="padding:0 18px">Annuler</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    document.getElementById('dvm-confirm').onclick = ()=>{ ov.remove(); resolve(true); };
+    document.getElementById('dvm-cancel').onclick = ()=>{ ov.remove(); resolve(false); };
+    ov.onclick = (e)=>{ if(e.target===ov){ ov.remove(); resolve(false); } };
+  });
 }
 
 async function ouvrirModifierVente(id){

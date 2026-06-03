@@ -10,7 +10,7 @@ async function renderBilanJour(){
 
   // ── 1. Fetch des données du jour ───────────────────
   const [{data:ventes}, {data:depenses}, {data:mvts}] = await Promise.all([
-    SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date).order('created_at'),
+    SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('date',date).order('created_at'),
     SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).eq('date',date).order('created_at'),
     SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID).eq('date_mouvement',date).order('created_at')
   ]);
