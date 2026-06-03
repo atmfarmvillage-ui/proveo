@@ -519,18 +519,18 @@ async function renderStockPDV(){
     return `<div style="border:1px solid ${pal.border};border-radius:10px;overflow:hidden;margin-bottom:10px">
       <div style="background:${pal.bg};padding:10px 14px;font-weight:700;color:${pal.text};display:flex;justify-content:space-between;align-items:center">
         <span>${pal.emoji} ${pdvNom}</span>
-        <button class="btn btn-out btn-sm" onclick="ouvrirSeuilPDV('${pdvNom}')" style="font-size:10px">⚙️ Seuils</button>
+        ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="ouvrirSeuilPDV('${pdvNom}')" style="font-size:10px">⚙️ Seuils</button>`:''}
       </div>
       <table class="tbl" style="font-size:11px">
         <thead><tr><th>Produit</th><th class="num">Stock (kg)</th><th class="num">Seuil</th><th class="num">Prix local</th><th>Statut</th><th></th></tr></thead>
         <tbody>${stocks.map(s=>`<tr>
           <td style="font-weight:600">${s.formule_nom}</td>
           <td class="num ${s.qte_disponible<=s.seuil_critique?'bad':''}">
-            ${GP_ROLE==='admin'||GP_ROLE==='secretaire'?
+            ${GP_ROLE==='admin'?
               `<input type="number" value="${s.qte_disponible}" min="0" step="0.1" style="width:80px;text-align:right;font-size:11px;padding:2px 4px;font-weight:700"
                 onchange="mettreAJourStockPDV('${s.id}','${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}',this.value)"
                 title="Modifier la valeur — écrase l'ancienne">`
-              :`${fmt(s.qte_disponible)} kg`}
+              :`<span style="font-weight:700">${fmt(s.qte_disponible)} kg</span>`}
             ${(()=>{
               const ps = poidsSacParFormule[s.formule_nom];
               if(ps && ps>0){
@@ -543,7 +543,7 @@ async function renderStockPDV(){
           </td>
           <td class="num" style="color:var(--textm)">${fmt(s.seuil_critique)} kg</td>
           <td class="num">
-            ${GP_ROLE==='admin'||GP_ROLE==='secretaire'?
+            ${GP_ROLE==='admin'?
               `<input type="number" value="${s.prix_vente_local||0}" style="width:80px;text-align:right;font-size:10px;padding:2px 4px"
                 onchange="mettreAJourPrixLocal('${s.id}',this.value)">`
               :`${fmt(s.prix_vente_local||0)} F`}
