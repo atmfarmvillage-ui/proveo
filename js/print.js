@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — MODULE IMPRESSION
 // Reçu thermique 58mm + Étiquettes sac A4 (8/page)
 // ══════════════════════════════════════════════════
@@ -233,7 +233,7 @@ function imprimerFiche(formuleNom){
 
 async function imprimerDerniereVente(){
   const res=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
     .order('created_at',{ascending:false})
     .limit(1).maybeSingle();
   if(res.data) printRecu(res.data);

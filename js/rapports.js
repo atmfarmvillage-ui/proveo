@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — MODULE RAPPORTS & BILAN
 // Sprint 4 : Drill-down · Bilan annuel · WhatsApp
 // ══════════════════════════════════════════════════
@@ -17,7 +17,7 @@ async function renderBilanAvance(){
 
   const[ventesRes,depRes,lotsRes,salRes]=await Promise.all([
     SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant,categorie,description,point_vente,date,prix_unitaire,quantite')
       .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_lots').select('formule_nom,quantite_kg,cout_total,date')
@@ -145,7 +145,7 @@ async function renderBilanAnnuel(){
   const donnees=await Promise.all(mois.map(async(m)=>{
     const moisStr=`${annee}-${m}`;
     const[v,d,s]=await Promise.all([
-      SB.from('gp_ventes').select('id,montant_paye').eq('admin_id',GP_ADMIN_ID)
+      SB.from('gp_ventes').select('id,montant_paye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
         .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
       SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
         .gte('date',moisStr+'-01').lte('date',_finMois(moisStr)),
@@ -216,7 +216,7 @@ async function envoyerBilanWhatsApp(mois){
   const cfg=GP_CONFIG||{};
 
   const[ventesRes,depRes,salRes]=await Promise.all([
-    SB.from('gp_ventes').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID)
+    SB.from('gp_ventes').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
       .gte('date',mois+'-01').lte('date',finMois(mois)),
     SB.from('gp_depenses').select('montant').eq('admin_id',GP_ADMIN_ID)
       .gte('date',mois+'-01').lte('date',finMois(mois)),

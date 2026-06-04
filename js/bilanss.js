@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — BILANSS VENTES + DÉPENSES + CLASSEMENT PDV
 // ══════════════════════════════════════════════════
 
@@ -123,7 +123,7 @@ async function renderBilanVentes(){
 
   const[{data:V},{data:VL}]=await Promise.all([
     SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date,formule_nom,client_nom')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',_finMois(mois)),
     SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,type_prix,type_produit,vente_id')
       .eq('admin_id',GP_ADMIN_ID)
   ]);
@@ -238,7 +238,7 @@ async function renderClassementPDV(){
 
   const[{data:V},{data:VL}]=await Promise.all([
     SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,client_nom,date')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',_finMois(mois)),
     SB.from('gp_ventes_lignes').select('formule_nom,quantite,montant_ligne,vente_id,type_produit')
       .eq('admin_id',GP_ADMIN_ID)
   ]);

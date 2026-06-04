@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — DASHBOARD KPI DRILL-DOWN
 // Clic sur un KPI → modal détaillé avec table + PDF/Excel/WhatsApp
 // ══════════════════════════════════════════════════
@@ -68,7 +68,7 @@ function filtrerKpiDrillTable(){
 async function drillCA(){
   const {debut, fin} = _moisRangeCe();
   const{data:V}=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
     .order('date',{ascending:false});
   const ventes = V||[];
   const total = ventes.reduce((s,v)=>s+Number(v.montant_total||0),0);
@@ -94,7 +94,7 @@ async function drillCA(){
 async function drillEncaisse(){
   const {debut, fin} = _moisRangeCe();
   const{data:V}=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
     .gt('montant_paye',0).order('date',{ascending:false});
   const ventes = V||[];
   const total = ventes.reduce((s,v)=>s+Number(v.montant_paye||0),0);
@@ -120,7 +120,7 @@ async function drillEncaisse(){
 async function drillImpayes(){
   const {debut, fin} = _moisRangeCe();
   const{data:V}=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
     .in('statut_paiement',['partiel','impaye']).order('date',{ascending:false});
   const ventes = (V||[]).map(v=>{
     v._reste = Math.max(0, Number(v.montant_total||0) - Number(v.montant_paye||0));
@@ -255,7 +255,7 @@ async function drillLots(){
 async function drillCAFerme(){
   const {debut, fin} = _moisRangeCe();
   const{data:V}=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin);
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin);
   // Filtrer ventes ferme uniquement (espèce non-provenderie)
   const ESPECES_FERME = ['lapin','oeuf','poulet','autre'];
   const ventes = (V||[]).filter(v => {

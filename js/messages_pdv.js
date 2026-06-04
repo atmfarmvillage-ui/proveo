@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — MESSAGES WHATSAPP PDV
 // Motivation · Classement · Reconnaissance
 // ══════════════════════════════════════════════════
@@ -183,7 +183,7 @@ async function preparerMessagesEnvoi(typeHebdo, typeMensuel){
   const mois=now.toISOString().slice(0,7);
   const[{data:V},{data:VL},{data:PDVs}]=await Promise.all([
     SB.from('gp_ventes').select('id,montant_total,montant_paye,point_vente,client_nom,formule_nom')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois)),
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',_finMois(mois)),
     SB.from('gp_ventes_lignes').select('formule_nom,quantite,vente_id')
       .eq('admin_id',GP_ADMIN_ID),
     SB.from('gp_points_vente').select('nom,whatsapp,telephone,responsable')

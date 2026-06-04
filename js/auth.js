@@ -353,6 +353,7 @@ var PAGE_RENDERERS = {
   },
   depenses:      renderDep,
   bilan_jour:    typeof renderBilanJour==="function"?renderBilanJour:(typeof renderBilanAvance==="function"&&renderBilanAvance),
+  corbeille:     typeof renderCorbeille==="function"&&renderCorbeille,
   bilan_avance:  function(){
     const bm=document.getElementById('bilan-mois');
     const rm=document.getElementById('rapport-mois');

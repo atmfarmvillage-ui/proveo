@@ -191,6 +191,7 @@
   <div class="nav-sect">⚙️ Administration</div>
   <div class="nav-item" onclick="showGP('equipe')" data-page="equipe"><span class="nav-icon">📍</span>Équipe & PDV</div>
   <div class="nav-item" onclick="showGP('licence')" data-page="licence"><span class="nav-icon">🪪</span>Ma Licence</div>
+  <div class="nav-item admin-only" onclick="showGP('corbeille')" data-page="corbeille"><span class="nav-icon">🗑</span>Corbeille</div>
   <div class="nav-item admin-only" onclick="showGP('config')" data-page="config"><span class="nav-icon">⚙️</span>Configuration</div>
 
 </div>
@@ -2303,6 +2304,28 @@
   </div>
 </div>
 
+<!-- CORBEILLE (admin only) -->
+<div class="page" id="page-corbeille">
+  <div class="page-title">🗑 Corbeille</div>
+  <div class="page-sub">Ventes supprimées · Restaurables ou à purger définitivement</div>
+  <div class="g4" id="corb-kpis" style="margin-bottom:14px"></div>
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-left"><span>📋 Ventes en corbeille</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="corb-search" placeholder="🔍 Client..." oninput="renderCorbeille()" style="font-size:10px;padding:3px 8px">
+        <input type="month" id="corb-mois" onchange="renderCorbeille()" style="font-size:10px;padding:3px 6px;width:auto" title="Filtrer par mois de suppression">
+        <button class="btn btn-out btn-sm" onclick="document.getElementById('corb-mois').value='';renderCorbeille()" style="font-size:10px">📊 Tout</button>
+      </div>
+    </div>
+    <div id="corb-liste"></div>
+  </div>
+  <div style="font-size:11px;color:var(--textm);margin-top:10px;text-align:center;line-height:1.5">
+    💡 <b>Restaurer</b> : remet la vente active et ré-applique stock/caisse/fidélité.<br>
+    ⛔ <b>Purger</b> : suppression définitive irréversible (les impacts sont déjà reversés).
+  </div>
+</div>
+
 <!-- MA LICENCE -->
 <div class="page" id="page-licence">
   <div class="page-title">Ma Licence</div>
@@ -2740,6 +2763,7 @@ try{
 <script src="js/admin.js?v=2.7.0"></script>
 <script src="js/bilan_jour.js?v=2.7.0"></script>
 <script src="js/caisse_extras.js?v=2.7.0"></script>
+<script src="js/corbeille.js?v=2.7.0"></script>
 <script src="js/dashboard_drill.js?v=2.7.0"></script>
 <script src="js/fournisseurs.js?v=2.7.0"></script>
 <script src="js/achats.js?v=2.7.0"></script>
