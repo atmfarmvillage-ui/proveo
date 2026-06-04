@@ -26,8 +26,94 @@ async function dashKpiDrill(type){
     case 'depenses':   await drillDepenses(); break;
     case 'lots':       await drillLots(); break;
     case 'ca_ferme':   await drillCAFerme(); break;
+    case 'caisse':     await drillSoldeCaisse(); break;
+    case 'dette_fourn':await drillDetteFournisseurs(); break;
+    case 'alertes_mp': await drillAlertesMP(); break;
     default: document.getElementById('kpi-drill-content').innerHTML = '<div>Type inconnu : '+type+'</div>';
   }
+}
+
+// ── DRILL : SOLDE CAISSE TOTAL ─────────────────────
+async function drillSoldeCaisse(){
+  document.getElementById('kpi-drill-title').textContent = '💵 Détail des caisses';
+  const {data:C} = await SB.from('gp_caisses').select('*').eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
+  const caisses = C||[];
+  const {data:M} = await SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID);
+  const soldes = {};
+  caisses.forEach(c=>{ soldes[c.id]=Number(c.solde_initial||0); });
+  (M||[]).forEach(m=>{
+    if(m.type==='entree' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
+    if(m.type==='sortie' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
+    if(m.type==='ajustement' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
+    if(m.type==='transfert'){
+      if(soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
+      if(m.caisse_dest_id && soldes[m.caisse_dest_id]!==undefined) soldes[m.caisse_dest_id]+=Number(m.montant||0);
+    }
+  });
+  const total = Object.values(soldes).reduce((s,v)=>s+v,0);
+  const rows = caisses.map(c=>({
+    nom: (c.type==='banque'?'🏦 ':'💵 ')+c.nom,
+    pdv: c.point_vente||'Siège',
+    solde_initial: fmt(c.solde_initial||0)+' F',
+    solde_actuel: fmt(soldes[c.id]||0)+' F'
+  }));
+  document.getElementById('kpi-drill-summary').innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(232,197,71,.08);border-radius:8px"><span>Total trésorerie</span><b style="font-size:18px;color:var(--gold)">${fmt(total)} F</b></div>`;
+  _renderKpiTable([
+    {label:'Caisse',key:'nom'},
+    {label:'PDV',key:'pdv'},
+    {label:'Solde initial',key:'solde_initial',align:'num'},
+    {label:'Solde actuel',key:'solde_actuel',align:'num',style:'color:var(--gold);font-weight:700'},
+  ], rows, '', '');
+  document.getElementById('kpi-drill-actions').innerHTML =
+    `<button class="btn btn-out btn-sm" onclick="document.getElementById('modal-kpi-drill').style.display='none';showGP('caisse')">🔗 Page Caisse</button>`;
+}
+
+// ── DRILL : DETTE FOURNISSEURS ─────────────────────
+async function drillDetteFournisseurs(){
+  document.getElementById('kpi-drill-title').textContent = '🏢 Dette fournisseurs';
+  const {data:A} = await SB.from('gp_achats').select('id,fournisseur_nom,date_commande,ref,montant_total,montant_paye,condition_paiement').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0).order('date_commande',{ascending:false});
+  const dettes = (A||[]).filter(a=>Number(a.montant_total||0) > Number(a.montant_paye||0));
+  const totalDette = dettes.reduce((s,a)=>s+(Number(a.montant_total||0)-Number(a.montant_paye||0)),0);
+  document.getElementById('kpi-drill-summary').innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(239,68,68,.08);border-radius:8px"><span>${dettes.length} achat(s) non soldé(s)</span><b style="font-size:18px;color:var(--red)">${fmt(totalDette)} F à payer</b></div>`;
+  _renderKpiTable([
+    {label:'Date',key:'date_commande'},
+    {label:'Fournisseur',key:'fournisseur_nom'},
+    {label:'Réf',key:'ref'},
+    {label:'Total',align:'num',render:r=>fmt(r.montant_total||0)+' F'},
+    {label:'Payé',align:'num',render:r=>`<span style="color:var(--green)">${fmt(r.montant_paye||0)} F</span>`},
+    {label:'Reste',align:'num',render:r=>`<span style="color:var(--red);font-weight:700">${fmt((r.montant_total||0)-(r.montant_paye||0))} F</span>`}
+  ], dettes, 'TOTAL DÛ', `<span style="color:var(--red)">${fmt(totalDette)} F</span>`);
+  document.getElementById('kpi-drill-actions').innerHTML =
+    `<button class="btn btn-out btn-sm" onclick="document.getElementById('modal-kpi-drill').style.display='none';showGP('paiements_mp')">🔗 Paiements MP</button>`;
+}
+
+// ── DRILL : ALERTES STOCK MP ───────────────────────
+async function drillAlertesMP(){
+  document.getElementById('kpi-drill-title').textContent = '⚠ Alertes stock MP';
+  const {data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  const stock = S||[];
+  const niveaux = (typeof calcNiveaux==='function')?calcNiveaux(stock):{};
+  const ingrs = (typeof GP_INGREDIENTS!=='undefined')?GP_INGREDIENTS:[];
+  const alertes = Object.entries(niveaux).map(([nom,n])=>{
+    const ingr = ingrs.find(i=>i.nom===nom);
+    const seuil = ingr?.seuil_alerte || 200;
+    return { nom, stock_actuel: n, seuil, manque: Math.max(0, seuil-n), prix: Number(ingr?.prix_actuel||0) };
+  }).filter(a=>a.stock_actuel < a.seuil).sort((a,b)=>a.stock_actuel-b.stock_actuel);
+  const valeurManque = alertes.reduce((s,a)=>s+a.manque*a.prix,0);
+  document.getElementById('kpi-drill-summary').innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(239,68,68,.08);border-radius:8px"><span>${alertes.length} MP sous seuil critique</span><b style="font-size:14px;color:var(--gold)">≈ ${fmt(valeurManque)} F à réapprovisionner</b></div>`;
+  _renderKpiTable([
+    {label:'Matière première',key:'nom'},
+    {label:'Stock actuel (kg)',align:'num',render:r=>`<span style="color:var(--red);font-weight:700">${fmt(r.stock_actuel)}</span>`},
+    {label:'Seuil',align:'num',render:r=>fmt(r.seuil)},
+    {label:'Manque',align:'num',render:r=>fmt(r.manque)+' kg'},
+    {label:'Valeur (F)',align:'num',render:r=>fmt(r.manque*r.prix)}
+  ], alertes, 'VALEUR TOTALE À RÉAPPRO.', fmt(valeurManque)+' F');
+  document.getElementById('kpi-drill-actions').innerHTML =
+    `<button class="btn btn-out btn-sm" onclick="document.getElementById('modal-kpi-drill').style.display='none';showGP('stock')">🔗 Stock MP</button>
+     <button class="btn btn-out btn-sm" onclick="document.getElementById('modal-kpi-drill').style.display='none';showGP('achats')">🔗 Achats MP</button>`;
 }
 
 // Helper : filtrer les périodes (mois courant)

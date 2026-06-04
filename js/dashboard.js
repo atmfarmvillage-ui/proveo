@@ -15,7 +15,7 @@ async function renderDashboard(){
   // Requêtes parallèles avec gestion d'erreur individuelle
   const safe=async(q)=>{try{const r=await q;return r;}catch(e){return {data:[]};}}
   const[
-    r1,r2,r3,r4,r5,r6,r7,r8
+    r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11
   ]=await Promise.all([
     safe(SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_ventes').select('id,client_id,montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date,recu_imprime,wa_envoye,sms_envoye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
@@ -25,11 +25,17 @@ async function renderDashboard(){
     safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
     safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
+    // r9 : caisses actives (pour Solde Caisse Total)
+    safe(SB.from('gp_caisses').select('id,solde_initial,type,actif').eq('admin_id',GP_ADMIN_ID).eq('actif',true)),
+    // r10 : mouvements caisse (pour calculer le solde réel)
+    safe(SB.from('gp_mouvements_caisse').select('caisse_id,caisse_dest_id,type,montant').eq('admin_id',GP_ADMIN_ID)),
+    // r11 : achats fournisseurs avec dette résiduelle (pour Dette Fournisseurs)
+    safe(SB.from('gp_achats').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0)),
   ]);
   // Extraire les tableaux — garantir que c'est toujours un Array
   const toArr=r=>Array.isArray(r?.data)?r.data:(r?.data?Object.values(r.data):[]);
-  const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD]=
-    [r1,r2,r3,r4,r5,r6,r7,r8].map(toArr);
+  const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD,caissesD,mvtsCaisseD,achatsD]=
+    [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11].map(toArr);
   const VMois=ventesMoisD;
   const VJ=toutesVentesD;
   const D=depensesD;
@@ -86,6 +92,29 @@ async function renderDashboard(){
     return n<(ingr?.seuil_alerte||200);
   });
 
+  // ── KPIs SUPPLÉMENTAIRES ─────────────────────────
+  // 1. Solde caisse total (somme des soldes de toutes les caisses actives)
+  const soldesCaisse = {};
+  (caissesD||[]).forEach(c=>{ soldesCaisse[c.id] = Number(c.solde_initial||0); });
+  (mvtsCaisseD||[]).forEach(m=>{
+    if(m.type==='entree' && soldesCaisse[m.caisse_id]!==undefined) soldesCaisse[m.caisse_id] += Number(m.montant||0);
+    if(m.type==='sortie' && soldesCaisse[m.caisse_id]!==undefined) soldesCaisse[m.caisse_id] -= Number(m.montant||0);
+    if(m.type==='ajustement' && soldesCaisse[m.caisse_id]!==undefined) soldesCaisse[m.caisse_id] += Number(m.montant||0);
+    if(m.type==='transfert'){
+      if(soldesCaisse[m.caisse_id]!==undefined) soldesCaisse[m.caisse_id] -= Number(m.montant||0);
+      if(m.caisse_dest_id && soldesCaisse[m.caisse_dest_id]!==undefined) soldesCaisse[m.caisse_dest_id] += Number(m.montant||0);
+    }
+  });
+  const soldeCaisseTotal = Object.values(soldesCaisse).reduce((s,v)=>s+v,0);
+  const nbCaisses = (caissesD||[]).length;
+
+  // 2. Dette fournisseurs (somme des restes à payer sur achats)
+  const detteFournisseurs = (achatsD||[]).reduce((s,a)=>{
+    const reste = Math.max(0, Number(a.montant_total||0) - Number(a.montant_paye||0));
+    return s + reste;
+  },0);
+  const nbAchatsAvecDette = (achatsD||[]).filter(a=>Number(a.montant_total||0) > Number(a.montant_paye||0)).length;
+
   // ── AFFICHAGE ────────────────────────────────────
   document.getElementById('dash-date-sub').textContent=
     `${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — Données temps réel`;
@@ -115,8 +144,15 @@ async function renderDashboard(){
     ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}`:''}
     ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,
       nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null,"dashKpiDrill('lots')")}
-    ${!isAdmin?kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,
-      alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'}):''}`;
+    ${isAdmin?`
+    ${kpi('💵','gold','Solde caisse total',fmt(soldeCaisseTotal),
+      nbCaisses>0?{type:'flat',text:`${nbCaisses} caisse${nbCaisses>1?'s':''}`}:null,"dashKpiDrill('caisse')")}
+    ${kpi('🏢','red','Dette fournisseurs',fmt(detteFournisseurs),
+      detteFournisseurs>0?{type:'down',text:`${nbAchatsAvecDette} à payer`}:{type:'up',text:'soldé'},"dashKpiDrill('dette_fourn')")}
+    ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock MP',alertes.length,
+      alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
+    `:kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,
+      alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}`;
 
   // Derniers lots
   const derniersLotsHtml=DL.map(l=>`
