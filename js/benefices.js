@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — PAGE BÉNÉFICES & RENTABILITÉ
 // ══════════════════════════════════════════════════
 
@@ -49,7 +49,7 @@ async function calculerBenefPeriode(debut, fin){
     {data:lots},{data:stockSorties}
   ]=await Promise.all([
     SB.from('gp_ventes').select('id,montant_total,montant_paye,point_vente')
-      .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin),
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin),
     SB.from('gp_depenses').select('montant,categorie')
       .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin),
     SB.from('gp_achats_paiements').select('montant')

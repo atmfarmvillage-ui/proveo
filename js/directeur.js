@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 // PROVENDA — MODULE DIRECTEUR STRATÉGIQUE
 // Gestion contrat + commissions auto + rapports quotidiens
 // ══════════════════════════════════════════════════
@@ -95,7 +95,7 @@ async function calculerCommissionsMois(contratId, mois){
   // 3. Charger les ventes du mois (filtrées par saisi_par si membre lié)
   let qV = SB.from('gp_ventes')
     .select('id,date,statut_paiement,saisi_par')
-    .eq('admin_id', GP_ADMIN_ID)
+    .eq('admin_id', GP_ADMIN_ID).is('deleted_at',null)
     .gte('date', debutCalc).lte('date', finCalc);
   if(userIdDirecteur) qV = qV.eq('saisi_par', userIdDirecteur);
   const { data: ventes } = await qV;
@@ -342,7 +342,7 @@ async function _renderObjectifs(c, mois){
       // Total kg vendus depuis date_debut jusqu'à la deadline (ou aujourd'hui)
       const fin = o.deadline && o.deadline < today() ? o.deadline : today();
       let qV = SB.from('gp_ventes').select('id')
-        .eq('admin_id', GP_ADMIN_ID)
+        .eq('admin_id', GP_ADMIN_ID).is('deleted_at',null)
         .gte('date', c.date_debut).lte('date', fin);
       if(userIdDir) qV = qV.eq('saisi_par', userIdDir);
       const { data: V } = await qV;
@@ -358,7 +358,7 @@ async function _renderObjectifs(c, mois){
     } else if(o.type === 'lapins_vivants_mois'){
       // Source 1 : ventes ferme sous_type='lapin_vivant' du mois
       let qV = SB.from('gp_ventes').select('id')
-        .eq('admin_id', GP_ADMIN_ID)
+        .eq('admin_id', GP_ADMIN_ID).is('deleted_at',null)
         .gte('date', mois+'-01').lte('date', finMois(mois));
       if(userIdDir) qV = qV.eq('saisi_par', userIdDir);
       const { data: V } = await qV;

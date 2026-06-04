@@ -1,4 +1,4 @@
-// ── CLIENTS ────────────────────────────────────────
+﻿// ── CLIENTS ────────────────────────────────────────
 async function saveClient(){
   const nom=document.getElementById('cl_nom').value.trim();
   const err=document.getElementById('cl_err');
@@ -23,7 +23,7 @@ async function renderClients(){
   // Charger les ventes impayées/partielles pour calculer les dettes
   const mois=new Date().toISOString().slice(0,7);
   const{data:vImpayees}=await SB.from('gp_ventes').select('client_id,montant_total,montant_paye,statut_paiement,date,formule_nom')
-    .eq('admin_id',GP_ADMIN_ID).in('statut_paiement',['impaye','partiel']);
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
 
   // Calculer dette par client
   const dettes={};
@@ -355,7 +355,7 @@ async function saveAppel(){
 // ── CLASSEMENT ─────────────────────────────────────
 async function renderClassement(){
   const periode=document.getElementById('class-filtre-periode')?.value||'all';
-  let q=SB.from('gp_ventes').select('client_id,client_nom,client_tel,qte_vendue,montant_total,date').eq('admin_id',GP_ADMIN_ID);
+  let q=SB.from('gp_ventes').select('client_id,client_nom,client_tel,qte_vendue,montant_total,date').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null);
   const now=new Date();
   if(periode==='month'){const m=thisMonth();q=q.gte('date',m+'-01').lte('date',m+'-31');}
   else if(periode==='3months'){const d=new Date(now);d.setMonth(d.getMonth()-3);q=q.gte('date',d.toISOString().slice(0,10));}
@@ -467,7 +467,7 @@ function previewWA(){
     const detteEl=document.getElementById('wa-preview');
     if(detteEl) detteEl.value='⏳ Calcul de la dette en cours...';
     SB.from('gp_ventes').select('montant_total,montant_paye,formule_nom,date')
-      .eq('admin_id',GP_ADMIN_ID)
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
       .eq('client_id',client.id)
       .neq('statut_paiement','paye')
       .order('date',{ascending:false})
@@ -622,7 +622,7 @@ const TEMPLATES_TOP3=[
 async function envoyerMessagesTop3(){
   const mois=new Date().toISOString().slice(0,7);
   const{data:V}=await SB.from('gp_ventes').select('client_id,client_nom,montant_total,date')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',mois+'-01').lte('date',_finMois(mois));
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',_finMois(mois));
 
   const stats={};
   (V||[]).forEach(v=>{
@@ -720,7 +720,7 @@ async function savePayerDette(){
 
   // Trouver les ventes impayées et partielles de ce client
   const{data:ventes}=await SB.from('gp_ventes').select('id,montant_total,montant_paye')
-    .eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('client_id',clientId)
     .in('statut_paiement',['impaye','partiel']).order('date');
 
   let restePayer=montant;
@@ -745,7 +745,7 @@ async function envoyerRappelDette(clientId){
   if(!c)return;
 
   const{data:ventes}=await SB.from('gp_ventes').select('montant_total,montant_paye,date,formule_nom')
-    .eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId)
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('client_id',clientId)
     .in('statut_paiement',['impaye','partiel']).order('date');
 
   const V=ventes||[];
