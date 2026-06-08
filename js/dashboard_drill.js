@@ -35,7 +35,7 @@ async function dashKpiDrill(type){
 
 // ── DRILL : SOLDE CAISSE TOTAL ─────────────────────
 async function drillSoldeCaisse(){
-  document.getElementById('kpi-drill-title').textContent = '💵 Détail des caisses';
+  document.getElementById('kpi-drill-titre').textContent = '💵 Détail des caisses';
   const {data:C} = await SB.from('gp_caisses').select('*').eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   const caisses = C||[];
   const {data:M} = await SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID);
@@ -71,7 +71,7 @@ async function drillSoldeCaisse(){
 
 // ── DRILL : DETTE FOURNISSEURS ─────────────────────
 async function drillDetteFournisseurs(){
-  document.getElementById('kpi-drill-title').textContent = '🏢 Dette fournisseurs';
+  document.getElementById('kpi-drill-titre').textContent = '🏢 Dette fournisseurs';
   const {data:A} = await SB.from('gp_achats').select('id,fournisseur_nom,date_commande,ref,montant_total,montant_paye,condition_paiement').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0).order('date_commande',{ascending:false});
   const dettes = (A||[]).filter(a=>Number(a.montant_total||0) > Number(a.montant_paye||0));
   const totalDette = dettes.reduce((s,a)=>s+(Number(a.montant_total||0)-Number(a.montant_paye||0)),0);
@@ -91,7 +91,7 @@ async function drillDetteFournisseurs(){
 
 // ── DRILL : ALERTES STOCK MP ───────────────────────
 async function drillAlertesMP(){
-  document.getElementById('kpi-drill-title').textContent = '⚠ Alertes stock MP';
+  document.getElementById('kpi-drill-titre').textContent = '⚠ Alertes stock MP';
   const {data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
   const stock = S||[];
   const niveaux = (typeof calcNiveaux==='function')?calcNiveaux(stock):{};
