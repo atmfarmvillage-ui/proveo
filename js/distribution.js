@@ -44,7 +44,15 @@ async function renderDistribution(){
   const{data:livs}=await SB.from('gp_livraisons_pdv').select('*')
     .eq('admin_id',GP_ADMIN_ID)
     .order('created_at',{ascending:false}).limit(50);
-  const L=livs||[];
+  let L=livs||[];
+
+  // CLOISONNEMENT PDV : un membre non-admin ne voit que les livraisons qui
+  // concernent SON point de vente (entrantes ou sortantes). L'admin voit tout.
+  // GP_POINT_VENTE null = secrétaire central → rattaché à "Production".
+  const monPDV = GP_POINT_VENTE || 'Production';
+  if(GP_ROLE!=='admin'){
+    L = L.filter(l => l.pdv_dest_nom===monPDV || l.pdv_source_nom===monPDV);
+  }
 
   // KPIs
   const totalEnvoye=L.reduce((s,l)=>s+Number(l.montant_total||0),0);
@@ -102,7 +110,10 @@ function statutLivBadge(statut,statutPaiement){
 
 function actionsLivraison(l){
   let btns='';
-  if(l.statut==='envoye'){
+  // Seul le PDV DESTINATAIRE confirme sa propre réception (l'admin peut confirmer partout).
+  const monPDV = GP_POINT_VENTE || 'Production';
+  const peutConfirmer = GP_ROLE==='admin' || l.pdv_dest_nom===monPDV;
+  if(l.statut==='envoye' && peutConfirmer){
     btns+=`<button class="btn btn-g btn-sm" onclick="ouvrirConfirmationReception('${l.id}')">📦 Confirmer</button>`;
   }
   if(l.statut==='confirme'&&l.statut_paiement!=='paye'&&l.type_relation==='vente_gros'){
@@ -302,6 +313,14 @@ async function confirmerReceptionLivraison(){
   const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',livId).maybeSingle();
   if(!l)return;
 
+  // Sécurité : un non-admin ne confirme que les livraisons destinées à SON PDV.
+  const monPDV = GP_POINT_VENTE || 'Production';
+  if(GP_ROLE!=='admin' && l.pdv_dest_nom!==monPDV){
+    notify('Vous ne pouvez confirmer que les livraisons destinées à votre point de vente.','r');
+    document.getElementById('modal-confirm-reception').style.display='none';
+    return;
+  }
+
   const statut=qteConfirmee<l.qte_envoyee?'litige':'confirme';
 
   await SB.from('gp_livraisons_pdv').update({
@@ -484,7 +503,14 @@ function remplirSelectsStockManuel(){
 async function renderStockPDV(){
   const{data}=await SB.from('gp_stock_produits_pdv').select('*')
     .eq('admin_id',GP_ADMIN_ID).order('pdv_nom').order('formule_nom');
-  const S=data||[];
+  let S=data||[];
+
+  // CLOISONNEMENT PDV : un non-admin voit SON stock + celui du point de production
+  // (visibilité appro : le PDV doit pouvoir voir l'état du stock à la Production).
+  const monPDVStock = GP_POINT_VENTE || 'Production';
+  if(GP_ROLE!=='admin'){
+    S = S.filter(s => s.pdv_nom===monPDVStock || s.pdv_nom==='Production');
+  }
 
   // Récupérer le poids/sac par formule depuis le DERNIER lot produit
   // → utilisé pour afficher le bon nombre de sacs (25 ou 50 kg) selon la prod

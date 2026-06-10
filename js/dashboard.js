@@ -37,7 +37,10 @@ async function renderDashboard(){
   const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD,caissesD,mvtsCaisseD,achatsD]=
     [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11].map(toArr);
   const VMois=ventesMoisD;
-  const VJ=toutesVentesD;
+  // CLOISONNEMENT PDV : un non-admin ne voit au dashboard que les ventes de SON point de vente.
+  // (Les cartes Production/Stock MP restent globales : le PDV doit voir l'état du point de production.)
+  const monPDVDash = GP_POINT_VENTE || 'Production';
+  const VJ=(GP_ROLE==='admin')?toutesVentesD:toutesVentesD.filter(v=>v.point_vente===monPDVDash);
   const D=depensesD;
   const PA=paiementsMP;
   const SAL=salairesD;
