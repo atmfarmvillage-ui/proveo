@@ -152,6 +152,60 @@ async function renderStockNiveaux(){
         <td><span class="badge ${n<seuil?n<=0?'bdg-r':'bdg-gold':'bdg-g'}">${statut}</span></td>
       </tr>`;}).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun stock enregistré. Réceptionnez des MP.</div>';
+
+  // File "Entrées MP à confirmer" (achats non encore crédités au stock)
+  if(typeof renderEntreesMPAConfirmer==='function') renderEntreesMPAConfirmer();
+}
+
+// ── FILE « ENTRÉES MP À CONFIRMER » ───────────────────────────────
+// Liste les achats MP enregistrés mais pas encore crédités au stock.
+// La Production (ou l'admin) confirme la quantité telle quelle, ou l'ajuste.
+async function renderEntreesMPAConfirmer(){
+  const container=document.getElementById('stock-mp-pending');
+  if(!container) return;
+  const{data:achats}=await SB.from('gp_achats').select('*')
+    .eq('admin_id',GP_ADMIN_ID).order('created_at',{ascending:false}).limit(100);
+  const A=(achats||[]).filter(a=>!['valide_daf','annule'].includes(a.statut));
+  if(!A.length){ container.innerHTML=''; return; }
+  const{data:lignes}=await SB.from('gp_achats_lignes').select('*').in('achat_id',A.map(a=>a.id));
+  const byAchat={};
+  (lignes||[]).forEach(l=>{(byAchat[l.achat_id]=byAchat[l.achat_id]||[]).push(l);});
+  // Peut confirmer : admin + Production (membre sans point de vente)
+  const peutValider = GP_ROLE==='admin' || !GP_POINT_VENTE;
+  container.innerHTML=`<div style="border:1px solid rgba(245,158,11,.4);background:rgba(245,158,11,.06);border-radius:12px;padding:14px;margin-bottom:14px">
+    <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">🔔 ${A.length} entrée(s) MP à confirmer</div>
+    ${A.map(a=>{
+      const ls=byAchat[a.id]||[];
+      const resume=ls.map(l=>`${l.ingredient_nom} · ${fmtKg(l.qte_recue||l.qte_commandee)} kg`).join(' · ')||'(aucune ligne)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--card2)">
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:600">${resume}</div>
+          <div style="font-size:10px;color:var(--textm)">${a.fournisseur_nom||'—'} · ${a.date_commande||''} · ${typeof statutAchatBadge==='function'?statutAchatBadge(a.statut):a.statut} · par ${a.cree_par_nom||'—'}</div>
+        </div>
+        ${peutValider?`<div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn btn-g btn-sm" onclick="confirmerEntreeMP('${a.id}')">✓ Confirmer</button>
+          <button class="btn btn-out btn-sm" onclick="ajusterEntreeMP('${a.id}')">✏ Ajuster</button>
+        </div>`:`<span style="font-size:9px;color:var(--textm);flex-shrink:0">⏳ attente Production</span>`}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Confirmer l'entrée telle quelle → crédite le stock avec les quantités enregistrées
+async function confirmerEntreeMP(achatId){
+  if(!confirm('Confirmer cette entrée en stock avec les quantités telles quelles ?')) return;
+  if(typeof crediterStockDepuisAchat==='function'){
+    await crediterStockDepuisAchat(achatId);
+    notify('Entrée confirmée — stock crédité ✓','gold');
+    await renderStockNiveaux();
+  }
+}
+
+// Ajuster les quantités reçues avant de créditer → réutilise le modal de réception
+function ajusterEntreeMP(achatId){
+  window._mpAjustCredit=true; // dit à confirmerReception de créditer le stock après l'ajustement
+  if(typeof ouvrirReception==='function') ouvrirReception(achatId);
+  else notify('Module réception indisponible','r');
 }
 
 function editerPrixStock(id){
