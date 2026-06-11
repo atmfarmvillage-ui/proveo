@@ -295,6 +295,7 @@
   <div class="page-title">Stock Matières Premières</div>
   <div class="page-sub">Entrées MP · Sorties automatiques à la production · Niveaux en temps réel</div>
   <div class="g4" id="stock-kpis" style="margin-bottom:14px"></div>
+  <div id="stock-mp-pending"></div>
   <div class="g2" style="align-items:start">
     <div>
       <div class="card">
@@ -832,11 +833,13 @@
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>💸 Nouvelle dépense</span></div></div>
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10.5px;color:var(--textm)">
+        ⚠️ Les <b>achats de matières premières</b> ne se saisissent <b>PAS ici</b> — ils se font dans <b>🛒 Achats MP</b> (sinon ils sont comptés deux fois).
+      </div>
       <div class="fg2">
         <div class="fr"><label>Date</label><input type="date" id="dep_date"></div>
         <div class="fr"><label>Catégorie</label>
           <select id="dep_cat">
-            <option value="matiere_premiere">🌾 Matière première</option>
             <option value="salaire">👤 Salaire</option>
             <option value="transport">🚚 Transport</option>
             <option value="emballage">📦 Emballage</option>
@@ -3068,6 +3071,8 @@ function installPWA(){
         </select>
       </div>
     </div>
+    <div class="fr"><label>Complément en vrac (kg) <span style="font-size:9px;color:var(--textm)">optionnel · sac incomplet / reste</span></label>
+      <input type="number" id="so-vrac-kg" placeholder="0" min="0" step="0.1" oninput="majPerteSacsObtenus()"></div>
     <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">
       Perte : <strong id="so-perte" style="color:var(--red)">—</strong>
     </div>

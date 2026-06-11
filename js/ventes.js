@@ -1674,8 +1674,31 @@ async function renderDep(){
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
+
+  // Achats MP de la période (LECTURE SEULE) : déjà comptés via le module Achats.
+  // Affichés ici pour que la secrétaire voie qu'ils sont pris en compte → évite la re-saisie en dépense (double comptage).
+  let mpRows=[];
+  try{
+    let qa=SB.from('gp_achats_paiements').select('montant,mode_paiement,date_paiement,reference')
+      .eq('admin_id',GP_ADMIN_ID).order('date_paiement',{ascending:false}).limit(100);
+    if(filtMois)qa=qa.gte('date_paiement',filtMois+'-01').lte('date_paiement',finMois(filtMois));
+    const{data:pa}=await qa;
+    mpRows=pa||[];
+  }catch(e){}
+  const totalMP=mpRows.reduce((s,p)=>s+Number(p.montant||0),0);
+  const mpBanner=`<div style="background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.25);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+    <div style="font-weight:700;color:var(--g6);font-size:12px;margin-bottom:4px">🔒 Achats matières premières (module 🛒 Achats MP)</div>
+    <div style="color:var(--textm);font-size:10px;margin-bottom:6px">Déjà comptés dans les dépenses — <b>ne pas les re-saisir ci-dessous.</b>${GP_ROLE==='admin'?` Total payé sur la période : <b style="color:var(--red)">${fmt(totalMP)} F</b>`:''}</div>
+    ${mpRows.length?`<table class="tbl" style="font-size:10px"><tbody>${mpRows.slice(0,8).map(p=>`<tr>
+      <td style="color:var(--textm)">${p.date_paiement}</td>
+      <td>${p.reference||p.mode_paiement||'paiement fournisseur'}</td>
+      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(p.montant)} F</td>`:''}
+    </tr>`).join('')}</tbody></table>${mpRows.length>8?`<div style="font-size:9px;color:var(--textm);margin-top:4px">… et ${mpRows.length-8} autre(s)</div>`:''}`:`<div style="color:var(--textm);font-size:10px">Aucun paiement MP sur la période.</div>`}
+  </div>`;
+
   document.getElementById('dep-liste').innerHTML=`
-    ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
+    ${mpBanner}
+    ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total dépenses (hors achats MP) : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
     <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
     ${D.map(d=>`<tr>
       <td style="font-size:10px">${d.date}</td>

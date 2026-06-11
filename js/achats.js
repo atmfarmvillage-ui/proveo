@@ -12,6 +12,13 @@ async function renderAchats(){
   if(!GP_INGREDIENTS.length) await loadIngredients();
   await populateFournisseurSelect();
 
+  // Niveaux de stock MP (affichés dans la recherche d'ingrédient)
+  try{
+    const{data:Smp}=await SB.from('gp_stock_mp').select('ingredient_nom,type,quantite').eq('admin_id',GP_ADMIN_ID);
+    window._stockNiveaux=Smp||[];
+    window._mpNiveaux=(typeof calcNiveaux==='function')?calcNiveaux(Smp||[]):{};
+  }catch(e){ window._mpNiveaux=window._mpNiveaux||{}; }
+
   const{data}=await SB.from('gp_achats').select('*')
     .eq('admin_id',GP_ADMIN_ID)
     .order('created_at',{ascending:false}).limit(50);
@@ -199,6 +206,18 @@ async function saveAchat(){
   await SB.from('gp_achats_lignes').insert(
     ACHAT_LIGNES.map(l=>({...l,achat_id:achat.id,admin_id:GP_ADMIN_ID}))
   );
+
+  // 🔔 Notifier l'admin + la Production (membres sans point de vente) qu'un achat MP attend confirmation
+  try{
+    const{data:valideurs}=await SB.from('gp_membres').select('user_id')
+      .eq('admin_id',GP_ADMIN_ID).is('point_vente',null);
+    const ids=[...new Set([GP_ADMIN_ID,...(valideurs||[]).map(m=>m.user_id)].filter(Boolean))];
+    if(typeof pushSendToUsers==='function' && ids.length){
+      pushSendToUsers(ids,'🛒 Achat MP à confirmer',
+        `${fournNom||'Fournisseur'} · ${fmt(total)} F — à confirmer dans Stock MP`,
+        {url:'#stock',tag:'achat-mp'});
+    }
+  }catch(e){}
 
   ACHAT_LIGNES=[];
   renderLignesAchat();
@@ -528,6 +547,14 @@ async function confirmerReception(){
     notify('Réception confirmée ✓ — En attente de validation DAF','gold');
   }
   document.getElementById('modal-reception').style.display='none';
+  // Déclenché depuis "Ajuster" sur la page Stock MP → créditer directement le stock
+  if(window._mpAjustCredit){
+    window._mpAjustCredit=false;
+    if(typeof crediterStockDepuisAchat==='function') await crediterStockDepuisAchat(achatId);
+    notify('Entrée ajustée — stock crédité ✓','gold');
+    try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(e){}
+    return;
+  }
   renderAchats();
 }
 
@@ -545,37 +572,39 @@ async function validerAchatDAF(achatId,approuve){
     return;
   }
 
-  // Valider — mettre à jour le stock MP
+  // Valider — créditer le stock MP (logique partagée avec la file "à confirmer" de Stock MP)
+  await crediterStockDepuisAchat(achatId);
+  notify('Achat validé et stock mis à jour ✓','gold');
+  try{ renderAchats(); }catch(e){}
+  try{ renderStockNiveaux(); }catch(e){}
+}
+
+// Crédite le stock MP à partir d'un achat (entrées = qté reçue ou, à défaut, commandée),
+// met à jour le prix des ingrédients et passe l'achat en "validé".
+// Réutilisé par la validation DAF ET par la file "Entrées MP à confirmer" de la page Stock MP.
+async function crediterStockDepuisAchat(achatId){
   const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
   const{data:achat}=await SB.from('gp_achats').select('*').eq('id',achatId).maybeSingle();
+  if(!achat) return;
   const L=lignes||[];
-
-  // Créer les entrées stock
   const stockEntrees=L.map(l=>({
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
     type:'entree',date:achat.date_commande,
     ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
     quantite:l.qte_recue||l.qte_commandee,
     prix_unit:l.prix_unitaire,
-    ref:'Achat '+achat.ref,note:'Validé DAF'
+    ref:'Achat '+achat.ref,note:'Entrée stock validée'
   }));
-  await SB.from('gp_stock_mp').insert(stockEntrees);
-
-  // Mettre à jour le prix actuel des ingrédients
+  if(stockEntrees.length) await SB.from('gp_stock_mp').insert(stockEntrees);
   for(const l of L){
     if(l.ingredient_id){
       await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
     }
   }
-
   await SB.from('gp_achats').update({
     statut:'valide_daf',
     valide_par:GP_USER.id,valide_par_nom:GP_USER.email
   }).eq('id',achatId);
-
-  notify('Achat validé et stock mis à jour ✓','gold');
-  renderAchats();
-  renderStockNiveaux();
 }
 
 // ── DÉTAIL ACHAT ──────────────────────────────────
@@ -654,14 +683,18 @@ function filtrerIngrAchat(){
   }
 
   results.style.display='block';
-  results.innerHTML=filtered.map(i=>`
+  const niv=window._mpNiveaux||{};
+  results.innerHTML=filtered.map(i=>{
+    const stock=Number(niv[i.nom]||0);
+    return `
     <div onclick="selectionnerIngrAchat('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0})"
       style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'"
       onmouseout="this.style.background=''">
       <span style="font-weight:600">${i.nom}</span>
       <span style="color:var(--textm);margin-left:8px">${fmt(i.prix_actuel||0)} F/kg</span>
-    </div>`).join('');
+      <span style="margin-left:8px;color:${stock>0?'var(--g6)':'var(--red)'}">· ${fmtKg(stock)} kg en stock</span>
+    </div>`;}).join('');
 }
 
 function selectionnerIngrAchat(id,nom,prix){
@@ -671,7 +704,8 @@ function selectionnerIngrAchat(id,nom,prix){
   const selected=document.getElementById('achat_ingr_selected');
   if(selected){
     selected.style.display='block';
-    selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg`;
+    const stock=Number((window._mpNiveaux||{})[nom]||0);
+    selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg · <span style="color:${stock>0?'var(--g6)':'var(--red)'}">${fmtKg(stock)} kg en stock</span>`;
   }
   // Pré-remplir le prix/kg et recalculer le prix/sac
   const prixEl=document.getElementById('achat_prix');
