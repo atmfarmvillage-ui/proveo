@@ -185,6 +185,7 @@ async function ouvrirSacsObtenus(lotId){
   if(info) info.textContent=`${lot.formule_nom} · ${lot.ref||''} · ${fmt(lot.qte_produite)} kg lancés`;
   const nbEl=document.getElementById('so-nb-sacs'); if(nbEl) nbEl.value=Number(lot.nb_sacs)>0?lot.nb_sacs:'';
   const poidsEl=document.getElementById('so-poids'); if(poidsEl) poidsEl.value=String(lot.poids_sac||25);
+  const vracEl=document.getElementById('so-vrac-kg'); if(vracEl) vracEl.value=Number(lot.kg_vrac)>0?lot.kg_vrac:'';
   const errEl=document.getElementById('so-err'); if(errEl) errEl.textContent='';
   majPerteSacsObtenus();
   document.getElementById('modal-sacs-obtenus').style.display='flex';
@@ -198,37 +199,41 @@ function majPerteSacsObtenus(){
   if(!el||!_sacsLot) return;
   const nb=+document.getElementById('so-nb-sacs')?.value||0;
   const poids=+document.getElementById('so-poids')?.value||25;
+  const vrac=+document.getElementById('so-vrac-kg')?.value||0;
   const qte=Number(_sacsLot.qte_produite)||0;
-  if(!nb){ el.textContent='—'; return; }
-  const reel=nb*poids, perte=qte-reel;
-  el.textContent = perte>0 ? `${fmt(perte)} kg de perte (${fmt(reel)} kg en sacs)`
+  if(!nb && !vrac){ el.textContent='—'; return; }
+  const reel=nb*poids+vrac, perte=qte-reel;
+  const detail=vrac>0?`${nb} sacs + ${fmt(vrac)} kg vrac`:`${nb} sacs`;
+  el.textContent = perte>0 ? `${fmt(perte)} kg de perte (${fmt(reel)} kg réel = ${detail})`
     : perte<0 ? `⚠ ${fmt(-perte)} kg en trop (vérifier la quantité lancée)`
-    : `Aucune perte (${fmt(reel)} kg)`;
+    : `Aucune perte (${fmt(reel)} kg = ${detail})`;
 }
 async function saveSacsObtenus(){
   if(!_sacsLot) return;
   const nb=+document.getElementById('so-nb-sacs')?.value||0;
   const poids=+document.getElementById('so-poids')?.value||25;
+  const vrac=+document.getElementById('so-vrac-kg')?.value||0;
   const err=document.getElementById('so-err');
-  if(!nb||nb<=0){ if(err) err.textContent='Entre le nombre de sacs obtenus.'; return; }
+  if((!nb||nb<=0) && vrac<=0){ if(err) err.textContent='Entre le nombre de sacs obtenus (et/ou le complément en vrac).'; return; }
   const qte=Number(_sacsLot.qte_produite)||0;
-  const reel=nb*poids;
+  const reel=nb*poids+vrac;
   const perte=Math.max(0, qte-reel);
-  const ancienReel=Number(_sacsLot.nb_sacs)>0 ? Number(_sacsLot.nb_sacs)*Number(_sacsLot.poids_sac||25) : 0;
+  // Ancien réel crédité = anciens sacs (en kg) + ancien vrac → permet de recréditer la seule différence
+  const ancienReel=(Number(_sacsLot.nb_sacs)>0 ? Number(_sacsLot.nb_sacs)*Number(_sacsLot.poids_sac||25) : 0) + (Number(_sacsLot.kg_vrac)||0);
   const ancienSacs=Number(_sacsLot.nb_sacs)||0;
   const pdvProd=_sacsLot.pdv_production||'Production';
   // 1. Mettre à jour le lot
-  await SB.from('gp_lots').update({nb_sacs:nb, poids_sac:poids, kg_pertes:perte, stock_mis_a_jour:true}).eq('id',_sacsLot.id);
-  // 2. Créditer le stock de la DIFFÉRENCE (gère la correction si déjà saisi)
+  await SB.from('gp_lots').update({nb_sacs:nb, poids_sac:poids, kg_vrac:vrac, kg_pertes:perte, stock_mis_a_jour:true}).eq('id',_sacsLot.id);
+  // 2. Créditer le stock de la DIFFÉRENCE (sacs + vrac, en kg ; gère la correction si déjà saisi)
   const deltaKg=reel-ancienReel;
   if(typeof ajusterStockPDV==='function' && deltaKg!==0){
     await ajusterStockPDV(pdvProd, _sacsLot.formule_nom, deltaKg);
   }
-  // 3. Stock PF historique (par poids de sac)
-  if(typeof upsertStockPF==='function'){
+  // 3. Stock PF historique (par poids de sac) — sacs entiers uniquement, le vrac n'y figure pas
+  if(typeof upsertStockPF==='function' && (nb-ancienSacs)!==0){
     await upsertStockPF(pdvProd, _sacsLot.formule_nom, poids, nb-ancienSacs);
   }
-  notify(`✓ ${nb} sacs · stock ${deltaKg>=0?'+':''}${fmt(deltaKg)} kg${perte>0?' · perte '+fmt(perte)+' kg':''}`,'gold');
+  notify(`✓ ${nb} sacs${vrac>0?` + ${fmt(vrac)} kg vrac`:''} · stock ${deltaKg>=0?'+':''}${fmt(deltaKg)} kg${perte>0?' · perte '+fmt(perte)+' kg':''}`,'gold');
   fermerSacsObtenus();
   renderLots();
 }
