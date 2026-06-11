@@ -12,6 +12,13 @@ async function renderAchats(){
   if(!GP_INGREDIENTS.length) await loadIngredients();
   await populateFournisseurSelect();
 
+  // Niveaux de stock MP (affichés dans la recherche d'ingrédient)
+  try{
+    const{data:Smp}=await SB.from('gp_stock_mp').select('ingredient_nom,type,quantite').eq('admin_id',GP_ADMIN_ID);
+    window._stockNiveaux=Smp||[];
+    window._mpNiveaux=(typeof calcNiveaux==='function')?calcNiveaux(Smp||[]):{};
+  }catch(e){ window._mpNiveaux=window._mpNiveaux||{}; }
+
   const{data}=await SB.from('gp_achats').select('*')
     .eq('admin_id',GP_ADMIN_ID)
     .order('created_at',{ascending:false}).limit(50);
@@ -654,14 +661,18 @@ function filtrerIngrAchat(){
   }
 
   results.style.display='block';
-  results.innerHTML=filtered.map(i=>`
+  const niv=window._mpNiveaux||{};
+  results.innerHTML=filtered.map(i=>{
+    const stock=Number(niv[i.nom]||0);
+    return `
     <div onclick="selectionnerIngrAchat('${i.id}','${i.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${i.prix_actuel||0})"
       style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);transition:background .15s"
       onmouseover="this.style.background='rgba(22,163,74,.1)'"
       onmouseout="this.style.background=''">
       <span style="font-weight:600">${i.nom}</span>
       <span style="color:var(--textm);margin-left:8px">${fmt(i.prix_actuel||0)} F/kg</span>
-    </div>`).join('');
+      <span style="margin-left:8px;color:${stock>0?'var(--g6)':'var(--red)'}">· ${fmtKg(stock)} kg en stock</span>
+    </div>`;}).join('');
 }
 
 function selectionnerIngrAchat(id,nom,prix){
@@ -671,7 +682,8 @@ function selectionnerIngrAchat(id,nom,prix){
   const selected=document.getElementById('achat_ingr_selected');
   if(selected){
     selected.style.display='block';
-    selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg`;
+    const stock=Number((window._mpNiveaux||{})[nom]||0);
+    selected.innerHTML=`✓ <strong>${nom}</strong> — Prix habituel : ${fmt(prix)} F/kg · <span style="color:${stock>0?'var(--g6)':'var(--red)'}">${fmtKg(stock)} kg en stock</span>`;
   }
   // Pré-remplir le prix/kg et recalculer le prix/sac
   const prixEl=document.getElementById('achat_prix');
