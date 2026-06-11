@@ -964,7 +964,8 @@ async function saveVente(){
       type_prix:l.type_prix,
       type_produit:l.type_produit||'formule',
       sous_type:l.sous_type||null,
-      ingredient_id:l.ingredient_id||null
+      ingredient_id:l.ingredient_id||null,
+      veto_id:l.veto_id||null
     }))
   );
 
@@ -2350,6 +2351,8 @@ async function supprimerVente(id){
       reverts.push(`+${fmt(l.quantite)} kg ${l.formule_nom} → stock`);
     } else if(l.type_produit === 'mp'){
       reverts.push(`+${fmt(l.quantite)} kg ${l.formule_nom} → stock MP`);
+    } else if(l.type_produit === 'veto'){
+      reverts.push(`+${fmt(l.quantite)} ${l.formule_nom} → stock véto`);
     }
   }
   const totalCaisse = CM.reduce((s,m)=>s+Number(m.montant||0),0);
@@ -2395,6 +2398,10 @@ async function supprimerVente(id){
           admin_id: GP_ADMIN_ID, pdv_nom: pdvStock, formule_nom: l.formule_nom,
           qte_disponible: Number(l.quantite||0), seuil_critique: 100
         });
+      }
+    } else if(l.type_produit === 'veto'){
+      if(typeof recrediterStockVeto==='function' && l.veto_id){
+        await recrediterStockVeto(pdvStock, l.veto_id, l.quantite, l.formule_nom);
       }
     }
   }

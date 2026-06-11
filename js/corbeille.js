@@ -76,6 +76,8 @@ async function restaurerVente(id){
       ops.push(`−${fmt(l.quantite)} kg ${l.formule_nom} ← stock`);
     } else if(l.type_produit === 'mp'){
       ops.push(`−${fmt(l.quantite)} kg ${l.formule_nom} ← stock MP`);
+    } else if(l.type_produit === 'veto'){
+      ops.push(`−${fmt(l.quantite)} ${l.formule_nom} ← stock véto`);
     }
   }
   if(Number(vente.montant_paye)>0){
@@ -97,6 +99,10 @@ async function restaurerVente(id){
           qte_disponible: Math.max(0, Number(stk.qte_disponible||0) - Number(l.quantite||0)),
           updated_at: new Date().toISOString()
         }).eq('id', stk.id);
+      }
+    } else if(l.type_produit === 'veto'){
+      if(typeof deduireStockVeto==='function' && l.veto_id){
+        await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
       }
     }
   }

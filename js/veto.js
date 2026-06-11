@@ -259,6 +259,26 @@ async function vetoDispoPourVente(pdvNom){
   return vetoStockCourant(data||[], pdvNom);
 }
 
+// Re-crédite une quantité (annulation de vente) : remet dans le lot le plus proche de péremption
+// (cohérent avec le FIFO de sortie), sinon crée un lot de restitution.
+async function recrediterStockVeto(pdvNom, produitId, qte, produitNom){
+  const q=Number(qte||0);
+  if(q<=0||!produitId||!pdvNom) return;
+  const{data:lots}=await SB.from('gp_stock_veto').select('id,qte')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('produit_id',produitId)
+    .order('date_peremption',{ascending:true,nullsFirst:false}).limit(1);
+  if(lots&&lots.length){
+    await SB.from('gp_stock_veto').update({qte:Number(lots[0].qte||0)+q}).eq('id',lots[0].id);
+  } else {
+    const prod=(typeof GP_VETO_CATALOGUE!=='undefined'?GP_VETO_CATALOGUE:[]).find(p=>p.id===produitId);
+    await SB.from('gp_stock_veto').insert({
+      admin_id:GP_ADMIN_ID, pdv_nom:pdvNom, produit_id:produitId,
+      produit_nom:prod?.nom||produitNom||'Produit véto', qte:q,
+      unite:prod?.unite||'unité', prix_achat:prod?.prix_achat||0, saisi_par:GP_USER?.id
+    });
+  }
+}
+
 // Déduit une quantité du stock véto d'un PDV en FIFO par date de péremption (les plus proches d'abord)
 async function deduireStockVeto(pdvNom, produitId, qteAVendre){
   let reste=Number(qteAVendre||0);
