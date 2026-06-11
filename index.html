@@ -167,6 +167,7 @@
   <!-- ÉTAPE 4 : DISTRIBUTION -->
   <div class="nav-sect">🚚 Distribution</div>
   <div class="nav-item" onclick="showGP('distribution')" data-page="distribution" data-roles="admin,secretaire"><span class="nav-icon">🚚</span>Distribution PDV</div>
+  <div class="nav-item" onclick="showGP('veto')" data-page="veto" data-roles="admin,secretaire"><span class="nav-icon">💊</span>Produits Véto</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
 
   <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
@@ -2163,6 +2164,69 @@
 </div>
 
 <!-- SALAIRES -->
+<!-- PRODUITS VÉTO -->
+<div class="page" id="page-veto">
+  <div class="page-title">Produits Véto</div>
+  <div class="page-sub">Catalogue · Stock par point de vente · Péremption · Vente (via l'écran Ventes)</div>
+  <div class="g4" id="veto-kpis" style="margin-bottom:14px"></div>
+  <div class="g2" style="align-items:start">
+    <div>
+      <!-- Réception véto -->
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📥 Réception véto</span></div></div>
+        <div class="fg2">
+          <div class="fr"><label>Produit</label><select id="vtk_produit" onchange="onVetoProduitChange()"><option value="">— Produit véto —</option></select></div>
+          <div class="fr"><label>Point de vente</label><select id="vtk_pdv"></select></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Quantité (<span id="vtk_unite_label">unité</span>)</label><input type="number" id="vtk_qte" placeholder="10" min="0" step="0.1"></div>
+          <div class="fr"><label>Date de péremption</label><input type="date" id="vtk_perem"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Prix d'achat / unité (F)</label><input type="number" id="vtk_prix" placeholder="0"></div>
+          <div class="fr"><label>Fournisseur</label><input type="text" id="vtk_fourn" placeholder="Optionnel"></div>
+        </div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEntreeVeto()">✓ Enregistrer l'entrée</button>
+        <div class="a-err" id="vtk_err"></div>
+      </div>
+      <!-- Catalogue (ajout réservé admin) -->
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📋 Catalogue des produits</span></div></div>
+        <details class="admin-only-action" style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+          <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">➕ Nouveau produit véto</summary>
+          <div style="margin-top:8px">
+            <div class="fr"><label>Nom</label><input type="text" id="vcat_nom" placeholder="Ex: Vaccin Newcastle"></div>
+            <div class="fg2">
+              <div class="fr"><label>Catégorie</label><select id="vcat_cat"></select></div>
+              <div class="fr"><label>Unité de vente</label><select id="vcat_unite"></select></div>
+            </div>
+            <div class="fg2">
+              <div class="fr"><label>Prix d'achat / unité</label><input type="number" id="vcat_prix_achat" placeholder="0"></div>
+              <div class="fr"><label>Prix de vente / unité</label><input type="number" id="vcat_prix_vente" placeholder="0"></div>
+            </div>
+            <div class="fg2">
+              <div class="fr"><label>Seuil alerte (unités)</label><input type="number" id="vcat_seuil" value="5"></div>
+              <div class="fr" style="display:flex;align-items:flex-end"><button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveProduitVeto()">✓ Ajouter au catalogue</button></div>
+            </div>
+            <div class="a-err" id="vcat_err"></div>
+          </div>
+        </details>
+        <div id="veto-catalogue-liste"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>⚠ Alertes péremption</span></div></div>
+        <div id="veto-alertes"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📦 Stock par point de vente</span></div></div>
+        <div id="veto-stock-liste"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="page-salaires">
   <div class="page-title">Salaires</div>
   <div class="page-sub">Enregistrer et suivre les salaires</div>
@@ -2783,6 +2847,7 @@ try{
 <script src="js/reversements.js?v=2.7.0"></script>
 <script src="js/paiements_mp.js?v=2.7.0"></script>
 <script src="js/stock_pf.js?v=2.7.0"></script>
+<script src="js/veto.js?v=2.7.0"></script>
 <script src="js/bilanss.js?v=2.7.0"></script>
 <script src="js/benefices.js?v=2.7.0"></script>
 <script src="js/messages_pdv.js?v=2.7.0"></script>
