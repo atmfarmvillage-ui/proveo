@@ -1039,6 +1039,10 @@ async function saveVente(){
       if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
       if(l.type_produit==='ferme') continue; // les produits ferme ne sont pas du stock provenderie
       if(l.type_produit==='prestation') continue; // les prestations ne touchent aucun stock
+      if(l.type_produit==='veto'){ // déduit le stock véto du PDV (FIFO par péremption)
+        if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
+        continue;
+      }
       const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
         .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock)
         .eq('formule_nom',l.formule_nom).maybeSingle();
@@ -1746,10 +1750,12 @@ function basculerTypeProduitVente(type){
   const btnM = document.getElementById('vt_type_mp_btn');
   const btnFE = document.getElementById('vt_type_ferme_btn');
   const btnP = document.getElementById('vt_type_prestation_btn');
+  const btnV = document.getElementById('vt_type_veto_btn');
   const wrapF = document.getElementById('vt-formule-wrap');
   const wrapM = document.getElementById('vt-mp-wrap');
   const wrapFE = document.getElementById('vt-ferme-wrap');
   const wrapP = document.getElementById('vt-prestation-wrap');
+  const wrapV = document.getElementById('vt-veto-wrap');
   const actif = 'background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--g6)';
   const inactif = 'background:var(--card2);border:1px solid var(--border);color:var(--textm)';
   const setActif = (btn, on) => {
@@ -1761,27 +1767,32 @@ function basculerTypeProduitVente(type){
   setActif(btnM, type==='mp');
   setActif(btnFE, type==='ferme');
   setActif(btnP, type==='prestation');
+  setActif(btnV, type==='veto');
   wrapF.style.display  = type==='formule' ? 'block' : 'none';
   wrapM.style.display  = type==='mp' ? 'block' : 'none';
   wrapFE.style.display = type==='ferme' ? 'block' : 'none';
   if(wrapP) wrapP.style.display = type==='prestation' ? 'block' : 'none';
-  // Cacher le conditionnement (sac kg) pour les produits ferme (vendus à l'unité)
+  if(wrapV) wrapV.style.display = type==='veto' ? 'block' : 'none';
+  // Cacher le conditionnement (sac kg) pour ferme et véto (vendus à l'unité)
   const condWrap = document.getElementById('vt_poids_sac')?.closest('.fr');
-  if(condWrap) condWrap.style.display = type==='ferme' ? 'none' : 'block';
+  if(condWrap) condWrap.style.display = (type==='ferme'||type==='veto') ? 'none' : 'block';
   // Adapter les labels Quantité / Prix selon le type
   const qteLbl = document.getElementById('vt-qte-label');
-  if(qteLbl) qteLbl.textContent = type==='ferme' ? 'Quantité (unités)' : type==='prestation' ? 'Quantité travaillée (kg)' : 'Quantité (kg)';
+  if(qteLbl) qteLbl.textContent = (type==='ferme'||type==='veto') ? 'Quantité (unités)' : type==='prestation' ? 'Quantité travaillée (kg)' : 'Quantité (kg)';
   // Le label "Prix/kg" est inline, on cible son texte par parent
   const prixInput = document.getElementById('vt_prix');
   const prixLab = prixInput?.parentElement?.querySelector('label');
-  if(prixLab) prixLab.textContent = type==='ferme' ? 'Prix/unité (FCFA)' : type==='prestation' ? 'Tarif (F/unité)' : 'Prix/kg (FCFA)';
+  if(prixLab) prixLab.textContent = (type==='ferme'||type==='veto') ? 'Prix/unité (FCFA)' : type==='prestation' ? 'Tarif (F/unité)' : 'Prix/kg (FCFA)';
 
   if(type === 'mp') populateSelectMPVente();
   if(type === 'prestation') loadServices();
+  if(type === 'veto' && typeof populateSelectVetoVente==='function') populateSelectVetoVente();
   // Reset champs prix/qté
-  ['vt_qte','vt_nb_sacs','vt_prix','vt_ferme_desc','vt_prestation_detail'].forEach(id => {
+  ['vt_qte','vt_nb_sacs','vt_prix','vt_ferme_desc','vt_prestation_detail','vt_veto'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  const vvId=document.getElementById('vt_veto_id'); if(vvId)vvId.value='';
+  const vvInfo=document.getElementById('vt-veto-stock-info'); if(vvInfo)vvInfo.textContent='';
   const svcSel = document.getElementById('vt_service'); if(svcSel) svcSel.value = '';
   const svcInfo = document.getElementById('vt-prestation-info'); if(svcInfo) svcInfo.textContent = '';
   // Reset boutons sous-type ferme
@@ -1789,6 +1800,42 @@ function basculerTypeProduitVente(type){
     b.style.cssText = b.style.cssText.replace(actif,'')+';'+inactif;
   });
   document.getElementById('vt-cout-info').textContent = '';
+}
+
+// Peuple le sélecteur véto avec les produits disponibles au PDV de vente (stock + prix)
+async function populateSelectVetoVente(){
+  const sel=document.getElementById('vt_veto');
+  if(!sel) return;
+  const pdv=(typeof pdvSourceVente==='function')?pdvSourceVente():(GP_POINT_VENTE||'Production');
+  let dispo={};
+  try{ if(typeof vetoDispoPourVente==='function') dispo=await vetoDispoPourVente(pdv); }catch(e){}
+  // Prix de vente depuis le catalogue
+  const cat={}; (typeof GP_VETO_CATALOGUE!=='undefined'?GP_VETO_CATALOGUE:[]).forEach(p=>{cat[p.id]=p;});
+  const items=Object.values(dispo);
+  if(!items.length){
+    sel.innerHTML='<option value="">— Aucun produit véto en stock à '+pdv+' —</option>';
+    return;
+  }
+  sel.innerHTML='<option value="">— Sélectionner —</option>'+items.map(it=>{
+    const prixV=cat[it.produit_id]?.prix_vente||0;
+    return `<option value="${it.produit_id}" data-nom="${(it.nom||'').replace(/"/g,'&quot;')}" data-stock="${it.qte}" data-prix="${prixV}" data-unite="${it.unite||'unité'}">${it.nom} · ${fmt(it.qte)} ${it.unite||''} dispo</option>`;
+  }).join('');
+}
+
+function onVenteVetoChange(){
+  const sel=document.getElementById('vt_veto');
+  const opt=sel?.selectedOptions?.[0];
+  const info=document.getElementById('vt-veto-stock-info');
+  const idEl=document.getElementById('vt_veto_id');
+  if(!opt||!opt.value){ if(idEl)idEl.value=''; if(info)info.textContent=''; return; }
+  if(idEl) idEl.value=opt.value;
+  const prixEl=document.getElementById('vt_prix');
+  if(prixEl && !prixEl.value) prixEl.value=opt.dataset.prix||0;
+  const stock=Number(opt.dataset.stock||0);
+  if(info){
+    info.style.color = stock>0 ? 'var(--green)' : 'var(--red)';
+    info.textContent = `${stock>0?'✅':'⛔'} ${fmt(stock)} ${opt.dataset.unite||''} en stock`;
+  }
 }
 
 // Sélection d'un sous-type ferme (lapin_vivant / oeuf / poulet / autre_ferme)
@@ -1962,7 +2009,7 @@ function ajouterLigneVente(){
   const sousType = document.getElementById('vt_sous_type')?.value || null;
 
   // Récupérer le produit selon le type
-  let produitNom, ingredientId = null;
+  let produitNom, ingredientId = null, vetoId = null;
   if(typeProduit === 'mp'){
     ingredientId = document.getElementById('vt_mp_id')?.value;
     if(!ingredientId){ err.textContent = 'Sélectionnez une matière première.'; return; }
@@ -1992,12 +2039,23 @@ function ajouterLigneVente(){
     if(!svc){ err.textContent = 'Sélectionnez un service (Décorticage, Mouture…).'; return; }
     const detail = document.getElementById('vt_prestation_detail')?.value.trim();
     produitNom = '🛠 ' + svc.nom + (detail ? ` — ${detail}` : '');
+  } else if(typeProduit === 'veto'){
+    vetoId = document.getElementById('vt_veto_id')?.value || document.getElementById('vt_veto')?.value;
+    if(!vetoId){ err.textContent = 'Sélectionnez un produit véto.'; return; }
+    const opt = document.querySelector(`#vt_veto option[value="${vetoId}"]`);
+    produitNom = opt?.dataset.nom || 'Produit véto';
+    const stockDispo = Number(opt?.dataset.stock || 0);
+    const qteSaisie = +document.getElementById('vt_qte')?.value || 0;
+    if(stockDispo <= 0){ err.textContent = `🚫 ${produitNom} en rupture — vente impossible.`; return; }
+    if(qteSaisie > stockDispo){
+      if(!confirm(`⚠ Stock insuffisant : ${fmt(stockDispo)} dispo, vous voulez vendre ${qteSaisie}.\nContinuer quand même ?`)) return;
+    }
   } else {
     produitNom = document.getElementById('vt_formule')?.value;
     if(!produitNom){ err.textContent = 'Sélectionnez une formule.'; return; }
   }
 
-  const cond = typeProduit==='ferme' ? 'unite' : (document.getElementById('vt_poids_sac')?.value || 'kg');
+  const cond = (typeProduit==='ferme'||typeProduit==='veto') ? 'unite' : (document.getElementById('vt_poids_sac')?.value || 'kg');
   const nbSacs = cond !== 'kg' && cond !== 'unite' ? +document.getElementById('vt_nb_sacs')?.value || 0 : 0;
   let qte = +document.getElementById('vt_qte')?.value || 0;
   if(cond !== 'kg' && cond !== 'unite' && nbSacs > 0 && qte === 0) qte = nbSacs * +cond;
@@ -2024,7 +2082,8 @@ function ajouterLigneVente(){
       ? sousType
       : (typeProduit==='prestation' ? (document.getElementById('vt_prestation_detail')?.value.trim() || null) : null),
     ingredient_id: ingredientId,        // null si formule/ferme/prestation
-    type_prix: typeProduit==='ferme' ? 'unite' : 'detail',
+    veto_id: vetoId,                    // uuid produit véto (en mémoire) — sert à déduire le stock à la vente
+    type_prix: (typeProduit==='ferme'||typeProduit==='veto') ? 'unite' : 'detail',
   };
 
   // Si même produit existe déjà — mise à jour
