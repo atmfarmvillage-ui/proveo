@@ -832,11 +832,13 @@
   <div class="g2" style="align-items:start">
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>💸 Nouvelle dépense</span></div></div>
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10.5px;color:var(--textm)">
+        ⚠️ Les <b>achats de matières premières</b> ne se saisissent <b>PAS ici</b> — ils se font dans <b>🛒 Achats MP</b> (sinon ils sont comptés deux fois).
+      </div>
       <div class="fg2">
         <div class="fr"><label>Date</label><input type="date" id="dep_date"></div>
         <div class="fr"><label>Catégorie</label>
           <select id="dep_cat">
-            <option value="matiere_premiere">🌾 Matière première</option>
             <option value="salaire">👤 Salaire</option>
             <option value="transport">🚚 Transport</option>
             <option value="emballage">📦 Emballage</option>
