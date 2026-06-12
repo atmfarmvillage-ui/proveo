@@ -20,3 +20,9 @@ npm-debug.log
 # Fichiers temporaires
 *.tmp
 *.bak
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
