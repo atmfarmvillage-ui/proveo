@@ -514,7 +514,10 @@ async function loadIngredients(){
   GP_INGREDIENTS=data||[];
 }
 async function loadClients(){
-  const{data}=await SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
+  let q=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
+  // Cloisonnement PDV : un non-admin ne charge que SES clients
+  if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production');
+  const{data}=await q;
   GP_CLIENTS=data||[];
 }
 async function loadPrix(){

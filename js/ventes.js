@@ -897,6 +897,7 @@ async function saveVente(){
       const parrainIdNv = parrainSel && parrainSel!=='' ? parrainSel : null;
       const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
         admin_id:GP_ADMIN_ID,
+        point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
         nom:nomComplet,telephone:tel,
         type_client:typeNv,total_achats:0,
         nom_ferme:ferme,localite,
@@ -1612,6 +1613,7 @@ async function renderVentes(){
   let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID)
     .is('deleted_at', null)  // exclure les ventes en corbeille
     .order('created_at',{ascending:false}).limit(50);
+  if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production'); // cloisonnement PDV
   if(filtDate)q=q.eq('date',filtDate);
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
@@ -1637,7 +1639,9 @@ async function renderVentes(){
 }
 
 async function updateVentesKPIs(){
-  const{data:V}=await SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
+  let qk=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
+  if(GP_ROLE!=='admin') qk=qk.eq('point_vente', GP_POINT_VENTE||'Production'); // cloisonnement PDV
+  const{data:V}=await qk;
   const vd=V||[];
   // Sépare CA provenderie / ferme du jour
   const{provenderie:caProvMap, ferme:caFermeMap} = await separerCAProvFerme(vd.map(v=>v.id));
@@ -1673,8 +1677,12 @@ async function renderDep(){
       dl.innerHTML=[...fourns,...cls].join('');
     }
   }catch(e){}
+  // Cloisonnement PDV : verrouiller le champ "point de vente" sur celui du secrétaire
+  const depPvEl=document.getElementById('dep_pv');
+  if(depPvEl && GP_ROLE!=='admin'){ depPvEl.value=GP_POINT_VENTE||'Production'; depPvEl.readOnly=true; depPvEl.style.opacity='.7'; }
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
   let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
+  if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production'); // ne voit que SES dépenses
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',finMois(filtMois));
   const{data}=await q;
   const D=data||[];
@@ -1683,13 +1691,17 @@ async function renderDep(){
   // Achats MP de la période (LECTURE SEULE) : déjà comptés via le module Achats.
   // Affichés ici pour que la secrétaire voie qu'ils sont pris en compte → évite la re-saisie en dépense (double comptage).
   let mpRows=[];
-  try{
-    let qa=SB.from('gp_achats_paiements').select('montant,mode_paiement,date_paiement,reference')
-      .eq('admin_id',GP_ADMIN_ID).order('date_paiement',{ascending:false}).limit(100);
-    if(filtMois)qa=qa.gte('date_paiement',filtMois+'-01').lte('date_paiement',finMois(filtMois));
-    const{data:pa}=await qa;
-    mpRows=pa||[];
-  }catch(e){}
+  // Les achats MP sont centraux → bloc visible seulement par admin + Production (pas les PDV de vente)
+  const peutVoirMP = GP_ROLE==='admin' || !GP_POINT_VENTE;
+  if(peutVoirMP){
+    try{
+      let qa=SB.from('gp_achats_paiements').select('montant,mode_paiement,date_paiement,reference')
+        .eq('admin_id',GP_ADMIN_ID).order('date_paiement',{ascending:false}).limit(100);
+      if(filtMois)qa=qa.gte('date_paiement',filtMois+'-01').lte('date_paiement',finMois(filtMois));
+      const{data:pa}=await qa;
+      mpRows=pa||[];
+    }catch(e){}
+  }
   const totalMP=mpRows.reduce((s,p)=>s+Number(p.montant||0),0);
   const mpBanner=`<div style="background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.25);border-radius:8px;padding:10px 12px;margin-bottom:12px">
     <div style="font-weight:700;color:var(--g6);font-size:12px;margin-bottom:4px">🔒 Achats matières premières (module 🛒 Achats MP)</div>
@@ -1702,7 +1714,7 @@ async function renderDep(){
   </div>`;
 
   document.getElementById('dep-liste').innerHTML=`
-    ${mpBanner}
+    ${peutVoirMP?mpBanner:''}
     ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total dépenses (hors achats MP) : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
     <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
     ${D.map(d=>`<tr>
@@ -1726,7 +1738,7 @@ async function saveDep(){
     categorie:document.getElementById('dep_cat').value,
     description:desc,montant,
     beneficiaire:document.getElementById('dep_benef').value.trim()||null,
-    point_vente:document.getElementById('dep_pv').value.trim()||null
+    point_vente:(GP_ROLE==='admin' ? (document.getElementById('dep_pv').value.trim()||null) : (GP_POINT_VENTE||'Production'))
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   err.textContent='';

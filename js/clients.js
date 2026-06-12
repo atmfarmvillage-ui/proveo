@@ -5,6 +5,7 @@ async function saveClient(){
   if(!nom){err.textContent='Nom requis.';return;}
   const{error}=await SB.from('gp_clients').insert({
     admin_id:GP_ADMIN_ID,nom,
+    point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
     telephone:document.getElementById('cl_tel').value.trim()||null,
     localisation:document.getElementById('cl_loc').value.trim()||null,
     type_elevage:document.getElementById('cl_type').value,
@@ -287,6 +288,7 @@ async function verifierProspect(){
 
   // Chercher dans les clients existants
   let query=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID);
+  if(GP_ROLE!=='admin') query=query.eq('point_vente', GP_POINT_VENTE||'Production');
   if(tel) query=query.eq('telephone',tel);
   else if(nom) query=query.ilike('nom','%'+nom+'%');
   const{data:clients}=await query.limit(1);
@@ -312,6 +314,7 @@ async function convertirProspectEnClient(){
   if(!nom){notify('Entrez le nom du prospect','r');return;}
   const{error}=await SB.from('gp_clients').insert({
     admin_id:GP_ADMIN_ID,nom,telephone:tel,
+    point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
     type_client:'detail',total_achats:0
   });
   if(error){notify('Erreur: '+error.message,'r');return;}
