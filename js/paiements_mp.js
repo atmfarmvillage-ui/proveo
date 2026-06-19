@@ -8,6 +8,9 @@ var PROVENDA_WA_URL = '';
 // ── LISTE DES ACHATS À PAYER ──────────────────────
 async function renderPaiementsMP(){
   if(!GP_ADMIN_ID)return;
+  const canPay = (typeof peutPayerMP==='function') ? await peutPayerMP() : true;
+  const noteEl = document.getElementById('pmt-restrict-note');
+  if(noteEl) noteEl.style.display = canPay ? 'none' : 'block';
   const{data:achats}=await SB.from('gp_achats').select('*')
     .eq('admin_id',GP_ADMIN_ID)
     .gt('montant_total', 0)  // Tous les achats avec un montant
@@ -50,7 +53,7 @@ async function renderPaiementsMP(){
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
           <div style="font-size:16px;font-weight:700;color:var(--gold)">${fmt(total)} F</div>
-          ${!solde?`<button class="btn btn-g btn-sm pmt-payer" data-id="${a.id}" data-fourn="${(a.fournisseur_nom||'').replace(/"/g,'')}" data-total="${total}" data-paye="${paye}">💳 Payer</button>`:''}
+          ${!solde&&canPay?`<button class="btn btn-g btn-sm pmt-payer" data-id="${a.id}" data-fourn="${(a.fournisseur_nom||'').replace(/"/g,'')}" data-total="${total}" data-paye="${paye}">💳 Payer</button>`:''}
           <button class="btn btn-out btn-sm pmt-modif" data-id="${a.id}">✏ Modifier</button>
           <button class="btn btn-out btn-sm pmt-histo" data-id="${a.id}" data-fourn="${(a.fournisseur_nom||'').replace(/"/g,'')}">📋 Historique</button>
         </div>
@@ -153,6 +156,10 @@ function fermerModalPaiement(){
 }
 
 async function saveModalPaiement(){
+  if(typeof peutPayerMP==='function' && !(await peutPayerMP())){
+    notify('Paiement réservé à la Production et au PDV principal.','r');
+    return;
+  }
   const achatId=document.getElementById('pmt-modal-achat-id').value;
   const montantTotal=+document.getElementById('pmt-modal-total').value;
   const montantPaye=+document.getElementById('pmt-modal-paye').value;
@@ -229,6 +236,16 @@ async function saveModalPaiement(){
     ? 'https://wa.me/'+paysInfo.numero_whatsapp+'?text='+encodeURIComponent(msgText)
     : '';
 
+  // 🔔 Notifier l'admin (DAF absent) : push auto + bouton WhatsApp dédié
+  const _adminMsg=`💳 *Paiement fournisseur*\n${nomFourn||'Fournisseur'} · ${fmt(montant)} F (${modeLabel})\n`+
+    `Commande : ${achat?.ref||achatId.slice(0,8)}\nReste dû : ${fmt(reste)} F\n`+
+    `Par : ${GP_USER?.email?.split('@')[0]||'secrétaire'}\n\n_${provNom}_`;
+  const adminWaUrl=(GP_USER?.id!==GP_ADMIN_ID && typeof _adminWaUrl==='function')?_adminWaUrl(_adminMsg):'';
+  if(GP_USER?.id!==GP_ADMIN_ID && typeof pushSendToUsers==='function' && GP_ADMIN_ID){
+    try{ pushSendToUsers([GP_ADMIN_ID],'💳 Paiement fournisseur',
+      `${fmt(montant)} F → ${nomFourn||'fournisseur'} (reste ${fmt(reste)} F)`,{tag:'paie-mp'}); }catch(e){}
+  }
+
   // Afficher écran succès dans le modal
   document.getElementById('pmt-modal-form').style.display='none';
   const succes=document.getElementById('pmt-modal-succes');
@@ -247,6 +264,10 @@ async function saveModalPaiement(){
         style="width:100%;background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:13px;border-radius:10px;font-size:14px;font-weight:700;text-align:center;text-decoration:none;display:block">
         📲 Envoyer confirmation WhatsApp
       </a>
+      ${adminWaUrl?`<a href="${adminWaUrl}" target="_blank" rel="noopener noreferrer"
+        style="width:100%;background:#1d4ed8;color:white;padding:12px;border-radius:10px;font-size:13px;font-weight:700;text-align:center;text-decoration:none;display:block">
+        📣 Prévenir l'admin (WhatsApp)
+      </a>`:''}
       <button onclick="fermerModalPaiement()"
         style="width:100%;background:var(--card2);border:1px solid var(--border2);color:var(--textm);padding:11px;border-radius:10px;font-size:13px;cursor:pointer">
         Fermer sans envoyer
