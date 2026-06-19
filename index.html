@@ -1017,6 +1017,58 @@
       <div id="clients-liste"></div>
     </div>
   </div>
+
+  <!-- MODAL ÉDITION CLIENT -->
+  <div id="modal-edit-client" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeEditClient()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-weight:700;font-size:15px">✏️ Modifier le client</div>
+        <button onclick="closeEditClient()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <input type="hidden" id="ecl_id">
+      <div class="fg2">
+        <div class="fr"><label>Nom</label><input type="text" id="ecl_nom"></div>
+        <div class="fr"><label>Téléphone</label><input type="tel" id="ecl_tel"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Localisation</label><input type="text" id="ecl_loc"></div>
+        <div class="fr"><label>Type d'élevage</label>
+          <select id="ecl_type">
+            <option value="pondeuse">Pondeuse</option>
+            <option value="chair">Chair</option>
+            <option value="mixte">Mixte</option>
+            <option value="lapin">Lapin</option>
+            <option value="porc">Porc</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Catégorie</label>
+          <select id="ecl_typeclient">
+            <option value="detail">Détaillant</option>
+            <option value="gros">Grossiste</option>
+          </select>
+        </div>
+        <div class="fr"><label>Note</label><input type="text" id="ecl_note"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn btn-g" onclick="saveClientEdit()" style="flex:1;justify-content:center">💾 Enregistrer</button>
+        <button class="btn btn-out" onclick="closeEditClient()" style="flex:1;justify-content:center">Annuler</button>
+      </div>
+      <div class="a-err" id="ecl_err"></div>
+    </div>
+  </div>
+
+  <!-- MODAL FICHE CLIENT -->
+  <div id="modal-client-detail" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeClientDetail()">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:-6px">
+        <button onclick="closeClientDetail()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="cd-content"></div>
+    </div>
+  </div>
 </div>
 
 <!-- SUIVI & APPELS -->
@@ -2865,44 +2917,44 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.8.0"></script>
-<script src="js/print.js?v=2.8.0"></script>
-<script src="js/dashboard.js?v=2.8.0"></script>
-<script src="js/stock.js?v=2.8.0"></script>
-<script src="js/matieres.js?v=2.8.0"></script>
-<script src="js/production.js?v=2.8.0"></script>
-<script src="js/ventes.js?v=2.8.0"></script>
-<script src="js/clients.js?v=2.8.0"></script>
-<script src="js/admin.js?v=2.8.0"></script>
-<script src="js/bilan_jour.js?v=2.8.0"></script>
-<script src="js/caisse_extras.js?v=2.8.0"></script>
-<script src="js/corbeille.js?v=2.8.0"></script>
-<script src="js/dashboard_drill.js?v=2.8.0"></script>
-<script src="js/fournisseurs.js?v=2.8.0"></script>
-<script src="js/achats.js?v=2.8.0"></script>
-<script src="js/caisse.js?v=2.8.0"></script>
-<script src="js/inventaire_physique.js?v=2.8.0"></script>
-<script src="js/distribution.js?v=2.8.0"></script>
-<script src="js/salaires.js?v=2.8.0"></script>
-<script src="js/rapports.js?v=2.8.0"></script>
-<script src="js/dettes.js?v=2.8.0"></script>
-<script src="js/chat.js?v=2.8.0"></script>
-<script src="js/notifications.js?v=2.8.0"></script>
-<script src="js/qr_clients.js?v=2.8.0"></script>
-<script src="js/push.js?v=2.8.0"></script>
-<script src="js/reversements.js?v=2.8.0"></script>
-<script src="js/paiements_mp.js?v=2.8.0"></script>
-<script src="js/stock_pf.js?v=2.8.0"></script>
-<script src="js/veto.js?v=2.8.0"></script>
-<script src="js/bilanss.js?v=2.8.0"></script>
-<script src="js/benefices.js?v=2.8.0"></script>
-<script src="js/messages_pdv.js?v=2.8.0"></script>
-<script src="js/directeur.js?v=2.8.0"></script>
-<script src="js/licences.js?v=2.8.0"></script>
+<script src="js/config.js?v=2.9.0"></script>
+<script src="js/print.js?v=2.9.0"></script>
+<script src="js/dashboard.js?v=2.9.0"></script>
+<script src="js/stock.js?v=2.9.0"></script>
+<script src="js/matieres.js?v=2.9.0"></script>
+<script src="js/production.js?v=2.9.0"></script>
+<script src="js/ventes.js?v=2.9.0"></script>
+<script src="js/clients.js?v=2.9.0"></script>
+<script src="js/admin.js?v=2.9.0"></script>
+<script src="js/bilan_jour.js?v=2.9.0"></script>
+<script src="js/caisse_extras.js?v=2.9.0"></script>
+<script src="js/corbeille.js?v=2.9.0"></script>
+<script src="js/dashboard_drill.js?v=2.9.0"></script>
+<script src="js/fournisseurs.js?v=2.9.0"></script>
+<script src="js/achats.js?v=2.9.0"></script>
+<script src="js/caisse.js?v=2.9.0"></script>
+<script src="js/inventaire_physique.js?v=2.9.0"></script>
+<script src="js/distribution.js?v=2.9.0"></script>
+<script src="js/salaires.js?v=2.9.0"></script>
+<script src="js/rapports.js?v=2.9.0"></script>
+<script src="js/dettes.js?v=2.9.0"></script>
+<script src="js/chat.js?v=2.9.0"></script>
+<script src="js/notifications.js?v=2.9.0"></script>
+<script src="js/qr_clients.js?v=2.9.0"></script>
+<script src="js/push.js?v=2.9.0"></script>
+<script src="js/reversements.js?v=2.9.0"></script>
+<script src="js/paiements_mp.js?v=2.9.0"></script>
+<script src="js/stock_pf.js?v=2.9.0"></script>
+<script src="js/veto.js?v=2.9.0"></script>
+<script src="js/bilanss.js?v=2.9.0"></script>
+<script src="js/benefices.js?v=2.9.0"></script>
+<script src="js/messages_pdv.js?v=2.9.0"></script>
+<script src="js/directeur.js?v=2.9.0"></script>
+<script src="js/licences.js?v=2.9.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.8.0"></script>
-<script src="js/reservations_admin.js?v=2.8.0"></script>
-<script src="js/strategie_mp.js?v=2.8.0"></script>
+<script src="js/auth.js?v=2.9.0"></script>
+<script src="js/reservations_admin.js?v=2.9.0"></script>
+<script src="js/strategie_mp.js?v=2.9.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
