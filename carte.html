@@ -118,6 +118,30 @@
   .bon-txt b{display:block;font-size:18px;font-weight:800}
   .bon-txt span{font-size:14px;opacity:.9;font-weight:500}
 
+  /* Stock & réservation */
+  .stock-card{background:var(--card);border-radius:18px;padding:18px;
+    box-shadow:var(--shadow);margin-bottom:14px}
+  .stock-head{font-size:14px;font-weight:800;color:var(--vert-d);margin-bottom:12px;line-height:1.3}
+  .stk-line{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 12px;border-radius:12px;margin-bottom:8px;background:var(--bg)}
+  .stk-line .stk-info{min-width:0}
+  .stk-line .stk-name{font-size:14px;font-weight:700;color:var(--text)}
+  .stk-line .stk-sub{font-size:12px;margin-top:2px}
+  .stk-ok{color:var(--vert-d);font-weight:700}
+  .stk-ko{color:#DC2626;font-weight:700}
+  .stk-resa{background:var(--vert);color:#fff;border:none;border-radius:10px;
+    padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0}
+  .stk-resa:active{transform:scale(.96)}
+  .stk-tag{font-size:10px;color:var(--muted);font-weight:600}
+  .stk-search-wrap{margin:12px 0 8px}
+  #stk-search{width:100%;padding:11px 14px;border:1px solid #CBD5E1;border-radius:12px;
+    font-size:14px;background:#fff;color:var(--text)}
+  #stk-search:focus{outline:none;border-color:var(--vert)}
+  .stk-res-formule{font-size:13px;font-weight:800;color:var(--text);margin:10px 0 4px}
+  .stk-empty{font-size:12px;color:var(--muted);padding:6px 2px}
+  .stk-link{width:100%;background:transparent;border:none;color:var(--vert-d);
+    font-size:13px;font-weight:700;cursor:pointer;padding:10px 0 2px;text-align:center}
+
   /* QR */
   .qr-box{background:var(--card);border-radius:20px;padding:22px;
     box-shadow:var(--shadow);text-align:center;margin-bottom:14px}
@@ -247,6 +271,17 @@
     </div>
   </div>
 
+  <!-- Stock & réservation -->
+  <div class="stock-card" id="stock-card" style="display:none">
+    <div class="stock-head">🌾 Aliment disponible — réserve avant de te déplacer</div>
+    <div id="stk-habituel"></div>
+    <div class="stk-search-wrap">
+      <input type="search" id="stk-search" placeholder="🔍 Chercher un autre aliment…" autocomplete="off">
+    </div>
+    <div id="stk-results"></div>
+    <button type="button" id="stk-voir-carte" class="stk-link">📍 Voir tous les points de vente sur la carte →</button>
+  </div>
+
   <!-- Bon dispo -->
   <div class="bon" id="bon">
     <div class="bon-icon">🎁</div>
@@ -275,6 +310,13 @@
     Inviter un proche & gagner des points
   </button>
 
+  <!-- Avis & réclamations -->
+  <button id="btn-feedback" style="width:100%;background:var(--card);color:var(--vert-d);
+    border:2px solid var(--vert);border-radius:14px;padding:14px;font-size:15px;font-weight:800;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px">
+    💬 Avis &amp; réclamations
+  </button>
+
   <div class="foot">propulsé par PROVENDA</div>
 </div>
 
@@ -301,6 +343,56 @@
       <button class="modal-close" id="modal-close">×</button>
     </div>
     <div id="map"></div>
+  </div>
+</div>
+
+<!-- Modal Réservation -->
+<div class="modal" id="modal-reserve">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h3 id="rsv-titre">🌾 Réserver</h3>
+      <button class="modal-close" id="rsv-close">×</button>
+    </div>
+    <div style="padding:14px 16px 18px;overflow-y:auto">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.4">
+        Choisis tes sacs. La réservation est valable <b>24 h</b> et sera confirmée par l'équipe SADARI.
+      </div>
+      <div id="rsv-lignes"></div>
+      <div id="rsv-msg" style="font-size:13px;margin:12px 0;min-height:18px;line-height:1.4"></div>
+      <button id="rsv-submit" class="share" style="margin-bottom:0">✅ Confirmer la réservation</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Avis & réclamations -->
+<div class="modal" id="modal-feedback">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h3>💬 Avis &amp; réclamations</h3>
+      <button class="modal-close" id="fb-close">×</button>
+    </div>
+    <div style="padding:14px 16px 18px;overflow-y:auto">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button type="button" class="fb-type-btn" data-type="plainte"
+          style="flex:1;padding:12px;border-radius:10px;border:2px solid #E2E8F0;background:#fff;
+          cursor:pointer;font-size:14px;font-weight:700;color:var(--text)">😟 Réclamation</button>
+        <button type="button" class="fb-type-btn" data-type="suggestion"
+          style="flex:1;padding:12px;border-radius:10px;border:2px solid #E2E8F0;background:#fff;
+          cursor:pointer;font-size:14px;font-weight:700;color:var(--text)">💡 Suggestion</button>
+      </div>
+      <select id="fb-pdv" style="width:100%;padding:11px;border:1px solid #ccc;border-radius:10px;
+        font-size:14px;margin-bottom:10px;background:#fff;color:var(--text)">
+        <option value="">— PDV concerné (optionnel) —</option>
+      </select>
+      <textarea id="fb-message" rows="4" placeholder="Décris ta réclamation ou ta suggestion…"
+        style="width:100%;padding:11px;border:1px solid #ccc;border-radius:10px;font-size:14px;
+        font-family:inherit;resize:vertical;color:var(--text)"></textarea>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:10px 0">
+        <input type="checkbox" id="fb-anonyme" style="width:18px;height:18px"> Envoyer anonymement
+      </label>
+      <div id="fb-msg" style="font-size:13px;margin:8px 0;min-height:18px;line-height:1.4"></div>
+      <button id="fb-submit" class="share" style="margin-bottom:0">📨 Envoyer</button>
+    </div>
   </div>
 </div>
 
@@ -585,45 +677,335 @@
     window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
   });
 
-  // ── Carte PDV ───────────────────────────────────────
+  // ── Carte PDV + stock réel + réservation ────────────
   let mapInstance = null;
-  document.getElementById('btn-map').addEventListener('click', async ()=>{
-    document.getElementById('modal-pdv').classList.add('show');
-    if(mapInstance) return;
-    // Attend que Leaflet soit chargé
-    if(typeof L === 'undefined'){
-      setTimeout(()=>document.getElementById('btn-map').click(), 500);
-      document.getElementById('modal-pdv').classList.remove('show');
-      return;
+  let _stockLayer = null;
+
+  // Marqueur en forme de goutte, coloré selon dispo (vert = stock, rouge = épuisé)
+  function pinIcon(color){
+    return L.divIcon({
+      className:'',
+      html:'<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);'+
+           'background:'+color+';box-shadow:0 2px 6px rgba(0,0,0,.4);border:2px solid #fff"></div>',
+      iconSize:[26,26], iconAnchor:[13,26], popupAnchor:[0,-26]
+    });
+  }
+
+  function popupHtml(p, idx){
+    const tel = p.telephone ? String(p.telephone).replace(/\s/g,'') : '';
+    const rows = (p.formules||[]).map(f=>{
+      const ok = Number(f.sacs_libres) > 0;
+      return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:3px 0">'+
+        '<span>'+f.formule+'</span>'+
+        '<b style="color:'+(ok?'#15803D':'#DC2626')+';white-space:nowrap">'+
+        (ok ? f.sacs_libres+' sac'+(f.sacs_libres>1?'s':'') : 'épuisé')+'</b></div>';
+    }).join('') || '<div style="font-size:12px;color:#888">Pas d\'info stock</div>';
+    const anyStock = (p.formules||[]).some(f=>Number(f.sacs_libres) > 0);
+    const callBtn = tel
+      ? '<a href="tel:'+tel+'" style="flex:1;text-align:center;background:#F0FDF4;color:#15803D;'+
+        'border:1px solid #15803D;border-radius:8px;padding:8px;font-size:12px;font-weight:700;text-decoration:none">📞 Appeler</a>'
+      : '';
+    const rsvBtn = anyStock
+      ? '<button onclick="openReserve('+idx+')" style="flex:1;background:#16A34A;color:#fff;border:none;'+
+        'border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">🌾 Réserver</button>'
+      : '';
+    return '<div style="min-width:210px">'+
+      '<b style="color:#15803D;font-size:14px">'+p.pdv_nom+'</b>'+
+      (p.type_pdv ? ' <span style="font-size:9px;color:#888">('+p.type_pdv+')</span>' : '')+
+      '<div style="margin:8px 0;border-top:1px solid #eee;padding-top:6px">'+rows+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+callBtn+rsvBtn+'</div></div>';
+  }
+
+  // Récupère le stock une fois et le met en cache (réutilisé par l'accueil ET la map)
+  async function fetchStock(force){
+    if(window._pdvData && !force) return window._pdvData;
+    let pdvs = [];
+    if(SB && clientId && token){
+      try{
+        const { data } = await SB.rpc('get_stock_carte', { p_client_id:clientId, p_token:token });
+        pdvs = (data && data.pdvs) || [];
+        window._derniereFormule = (data && data.derniere_formule) || '';
+      }catch(e){ console.warn('stock rpc failed', e); }
     }
-    mapInstance = L.map('map').setView([7.54, -5.55], 7); // Côte d'Ivoire
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution:'© OpenStreetMap', maxZoom:18
-    }).addTo(mapInstance);
-    try{
-      if(!SB) return;
-      const { data:pdvs } = await SB.from('gp_points_vente')
-        .select('nom,adresse,latitude,longitude,telephone')
-        .not('latitude','is',null);
-      if(pdvs && pdvs.length){
-        const bounds = [];
-        pdvs.forEach(p=>{
-          if(p.latitude && p.longitude){
-            const m = L.marker([p.latitude, p.longitude]).addTo(mapInstance);
-            const tel = p.telephone ? '<br>📞 <a href="tel:' + p.telephone + '">' + p.telephone + '</a>' : '';
-            m.bindPopup('<b>' + p.nom + '</b><br>' + (p.adresse||'') + tel);
-            bounds.push([p.latitude, p.longitude]);
-          }
+    window._pdvData = pdvs;
+    return pdvs;
+  }
+
+  async function loadStockAndMarkers(){
+    if(!SB || !mapInstance) return;
+    if(_stockLayer){ _stockLayer.remove(); _stockLayer = null; }
+    _stockLayer = L.layerGroup().addTo(mapInstance);
+    const pdvs = await fetchStock();
+
+    const bounds = [];
+    if(pdvs.length){
+      pdvs.forEach((p, idx)=>{
+        if(p.latitude == null || p.longitude == null) return;
+        const enStock = (p.formules||[]).some(f=>Number(f.sacs_libres) > 0);
+        const m = L.marker([p.latitude, p.longitude], { icon:pinIcon(enStock?'#16A34A':'#DC2626') }).addTo(_stockLayer);
+        m.bindPopup(popupHtml(p, idx), { minWidth:220 });
+        bounds.push([p.latitude, p.longitude]);
+      });
+    } else {
+      // Fallback (mode invité / pas de token) : PDV sans stock
+      try{
+        const { data:raw } = await SB.from('gp_points_vente')
+          .select('nom,adresse,latitude,longitude,telephone').not('latitude','is',null);
+        (raw||[]).forEach(p=>{
+          const m = L.marker([p.latitude, p.longitude]).addTo(_stockLayer);
+          const tel = p.telephone ? '<br>📞 <a href="tel:'+p.telephone+'">'+p.telephone+'</a>' : '';
+          m.bindPopup('<b>'+p.nom+'</b><br>'+(p.adresse||'')+tel);
+          bounds.push([p.latitude, p.longitude]);
         });
-        if(bounds.length > 1) mapInstance.fitBounds(bounds, {padding:[40,40]});
-        else if(bounds.length === 1) mapInstance.setView(bounds[0], 13);
-      }
-    }catch(e){ console.warn('pdv load failed', e); }
+      }catch(e){ console.warn('pdv fallback failed', e); }
+    }
+    if(bounds.length > 1) mapInstance.fitBounds(bounds, {padding:[40,40]});
+    else if(bounds.length === 1) mapInstance.setView(bounds[0], 13);
+  }
+
+  async function buildMap(){
+    if(typeof L === 'undefined'){ setTimeout(buildMap, 400); return; }
+    if(!mapInstance){
+      mapInstance = L.map('map').setView([6.22, 1.11], 11); // Lomé
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:'© OpenStreetMap', maxZoom:18
+      }).addTo(mapInstance);
+    }
+    await loadStockAndMarkers();
     setTimeout(()=>mapInstance.invalidateSize(), 250);
+  }
+
+  document.getElementById('btn-map').addEventListener('click', ()=>{
+    document.getElementById('modal-pdv').classList.add('show');
+    buildMap();
   });
   document.getElementById('modal-close').addEventListener('click', ()=>{
     document.getElementById('modal-pdv').classList.remove('show');
   });
+
+  // ── Réservation ─────────────────────────────────────
+  window.openReserve = function(idx, preselect){
+    const p = (window._pdvData||[])[idx];
+    if(!p) return;
+    window._rsvPdv = p.pdv_nom;
+    document.getElementById('rsv-titre').textContent = '🌾 Réserver — ' + p.pdv_nom;
+    document.getElementById('rsv-msg').textContent = '';
+    document.getElementById('rsv-submit').disabled = false;
+    document.getElementById('rsv-lignes').innerHTML = (p.formules||[]).map(f=>{
+      const ok = Number(f.sacs_libres) > 0;
+      const val = (ok && preselect && f.formule === preselect) ? 1 : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;'+
+        'padding:10px 0;border-bottom:1px solid #eee">'+
+        '<div style="min-width:0"><div style="font-weight:700;font-size:14px">'+f.formule+'</div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+
+        (ok ? '✅ '+f.sacs_libres+' sac(s) dispo' : '⛔ épuisé')+' · '+f.poids_sac+' kg/sac</div></div>'+
+        '<input type="number" inputmode="numeric" min="0" max="'+f.sacs_libres+'" value="'+val+'" '+
+        'data-formule="'+String(f.formule).replace(/"/g,'&quot;')+'" '+(ok?'':'disabled')+' '+
+        'style="width:64px;padding:8px;border:1px solid #ccc;border-radius:8px;font-size:16px;text-align:center">'+
+        '</div>';
+    }).join('');
+    document.getElementById('modal-reserve').classList.add('show');
+  };
+  window.openReserveByName = function(pdvName, preselect){
+    const idx = (window._pdvData||[]).findIndex(p=>p.pdv_nom === pdvName);
+    if(idx >= 0) window.openReserve(idx, preselect);
+  };
+
+  async function submitReservation(){
+    const msgEl = document.getElementById('rsv-msg');
+    const btn = document.getElementById('rsv-submit');
+    if(!clientId || !token){
+      msgEl.innerHTML = '<span style="color:#DC2626">⚠ Ouvre ta carte via ton lien personnel pour réserver.</span>';
+      return;
+    }
+    const items = [];
+    document.querySelectorAll('#rsv-lignes input[data-formule]').forEach(inp=>{
+      const q = parseInt(inp.value, 10) || 0;
+      if(q > 0) items.push({ formule: inp.dataset.formule, nb_sacs: q });
+    });
+    if(!items.length){
+      msgEl.innerHTML = '<span style="color:#DC2626">Choisis au moins 1 sac.</span>';
+      return;
+    }
+    btn.disabled = true;
+    msgEl.innerHTML = 'Envoi…';
+    try{
+      const { data, error } = await SB.rpc('creer_reservation', {
+        p_client_id:clientId, p_token:token, p_pdv:window._rsvPdv, p_items:items
+      });
+      if(error){ msgEl.innerHTML = '<span style="color:#DC2626">⚠ '+error.message+'</span>'; btn.disabled=false; return; }
+      if(data && data.error){ msgEl.innerHTML = '<span style="color:#DC2626">⚠ '+data.error+'</span>'; btn.disabled=false; return; }
+      msgEl.innerHTML = '<span style="color:#15803D">✅ Réservation enregistrée ! Présente ton QR à la caisse. '+
+        'L\'équipe SADARI va confirmer.</span>';
+      setTimeout(()=>{ document.getElementById('modal-reserve').classList.remove('show'); }, 2000);
+      refreshStock(); // rafraîchit accueil + map (le dispo baisse)
+    }catch(e){
+      msgEl.innerHTML = '<span style="color:#DC2626">⚠ Connexion impossible. Réessaie.</span>';
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('rsv-submit').addEventListener('click', submitReservation);
+  document.getElementById('rsv-close').addEventListener('click', ()=>{
+    document.getElementById('modal-reserve').classList.remove('show');
+  });
+
+  // ── Carte d'accueil : stock habituel + recherche tous PDV ──
+  function _norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+
+  // Pour chaque formule en stock → liste des PDV qui en ont (avec sacs + idx)
+  function stockParFormule(){
+    const map = {};
+    (window._pdvData||[]).forEach((p)=>{
+      (p.formules||[]).forEach(f=>{
+        if(Number(f.sacs_libres) <= 0) return;
+        (map[f.formule] = map[f.formule] || []).push({
+          pdv:p.pdv_nom, type:p.type_pdv, sacs:Number(f.sacs_libres)
+        });
+      });
+    });
+    return map;
+  }
+
+  function ligneDispo(item, formule){
+    const pdvEsc = String(item.pdv).replace(/'/g,"\\'");
+    const fEsc   = String(formule).replace(/'/g,"\\'");
+    return '<div class="stk-line"><div class="stk-info">'+
+      '<div class="stk-name">'+item.pdv+(item.type?' <span class="stk-tag">('+item.type+')</span>':'')+'</div>'+
+      '<div class="stk-sub stk-ok">✅ '+item.sacs+' sac'+(item.sacs>1?'s':'')+' dispo</div></div>'+
+      '<button class="stk-resa" onclick="openReserveByName(\''+pdvEsc+'\',\''+fEsc+'\')">Réserver</button></div>';
+  }
+
+  function renderStockCard(){
+    const card = document.getElementById('stock-card');
+    const pdvs = window._pdvData || [];
+    if(!clientId || !token || !pdvs.length){ card.style.display='none'; return; }
+    card.style.display='block';
+    const idxMap = stockParFormule();
+    // Aliment habituel (match insensible à la casse/accents)
+    const hab = window._derniereFormule || '';
+    const habKey = hab ? Object.keys(idxMap).find(k=>_norm(k)===_norm(hab)) : null;
+    const habEl = document.getElementById('stk-habituel');
+    if(habKey){
+      habEl.innerHTML = '<div class="stk-res-formule">'+habKey+' <span class="stk-tag">(ton aliment habituel)</span></div>'+
+        idxMap[habKey].sort((a,b)=>b.sacs-a.sacs).map(it=>ligneDispo(it, habKey)).join('');
+    } else if(hab){
+      habEl.innerHTML = '<div class="stk-res-formule">'+hab+' <span class="stk-tag">(ton aliment habituel)</span></div>'+
+        '<div class="stk-line"><div class="stk-info"><div class="stk-sub stk-ko">⛔ Épuisé partout pour le moment</div>'+
+        '<div class="stk-tag">Cherche un autre aliment ci-dessous 👇</div></div></div>';
+    } else {
+      habEl.innerHTML = '';
+    }
+    renderSearch(document.getElementById('stk-search').value || '');
+  }
+
+  function renderSearch(q){
+    const res = document.getElementById('stk-results');
+    if(!res) return;
+    const idxMap = stockParFormule();
+    const formules = Object.keys(idxMap).sort();
+    const nq = _norm(q);
+    if(!nq){ res.innerHTML=''; return; }
+    const match = formules.filter(f=>_norm(f).includes(nq));
+    if(!match.length){ res.innerHTML = '<div class="stk-empty">Aucun aliment « '+q+' » en stock actuellement.</div>'; return; }
+    res.innerHTML = match.map(f=>
+      '<div class="stk-res-formule">'+f+'</div>'+
+      idxMap[f].sort((a,b)=>b.sacs-a.sacs).map(it=>ligneDispo(it, f)).join('')
+    ).join('');
+  }
+
+  document.getElementById('stk-search').addEventListener('input', e=>renderSearch(e.target.value));
+  document.getElementById('stk-voir-carte').addEventListener('click', ()=>{
+    document.getElementById('modal-pdv').classList.add('show');
+    buildMap();
+  });
+
+  async function refreshStock(){
+    await fetchStock(true);
+    renderStockCard();
+    if(mapInstance) await loadStockAndMarkers();
+  }
+
+  async function loadStockCard(){
+    await fetchStock();
+    renderStockCard();
+  }
+
+  // ── Avis & réclamations ─────────────────────────────
+  let _fbType = 'plainte';
+  let _fbPdvLoaded = false;
+
+  function setFbType(t){
+    _fbType = t;
+    document.querySelectorAll('.fb-type-btn').forEach(b=>{
+      const on = b.dataset.type === t;
+      b.style.borderColor = on ? 'var(--vert)' : '#E2E8F0';
+      b.style.background  = on ? '#F0FDF4' : '#fff';
+      b.style.color       = on ? 'var(--vert-d)' : 'var(--text)';
+    });
+  }
+
+  async function loadFbPdv(){
+    if(_fbPdvLoaded || !SB) return;
+    try{
+      const { data } = await SB.from('gp_points_vente').select('nom').order('nom');
+      const sel = document.getElementById('fb-pdv');
+      (data||[]).forEach(p=>{
+        const o = document.createElement('option');
+        o.value = p.nom; o.textContent = p.nom; sel.appendChild(o);
+      });
+      _fbPdvLoaded = true;
+    }catch(e){ /* optionnel : on ignore */ }
+  }
+
+  document.getElementById('btn-feedback').addEventListener('click', ()=>{
+    document.getElementById('fb-message').value = '';
+    document.getElementById('fb-anonyme').checked = false;
+    document.getElementById('fb-pdv').value = '';
+    document.getElementById('fb-msg').textContent = '';
+    document.getElementById('fb-submit').disabled = false;
+    setFbType('plainte');
+    loadFbPdv();
+    document.getElementById('modal-feedback').classList.add('show');
+  });
+  document.getElementById('fb-close').addEventListener('click', ()=>{
+    document.getElementById('modal-feedback').classList.remove('show');
+  });
+  document.querySelectorAll('.fb-type-btn').forEach(b=>{
+    b.addEventListener('click', ()=>setFbType(b.dataset.type));
+  });
+
+  async function submitFeedback(){
+    const msgEl = document.getElementById('fb-msg');
+    const btn = document.getElementById('fb-submit');
+    if(!clientId || !token){
+      msgEl.innerHTML = '<span style="color:#DC2626">⚠ Ouvre ta carte via ton lien personnel pour envoyer un avis.</span>';
+      return;
+    }
+    const message = document.getElementById('fb-message').value.trim();
+    if(message.length < 3){
+      msgEl.innerHTML = '<span style="color:#DC2626">Écris au moins quelques mots.</span>';
+      return;
+    }
+    const pdv = document.getElementById('fb-pdv').value || null;
+    const anonyme = document.getElementById('fb-anonyme').checked;
+    btn.disabled = true;
+    msgEl.innerHTML = 'Envoi…';
+    try{
+      const { data, error } = await SB.rpc('creer_feedback', {
+        p_client_id:clientId, p_token:token, p_type:_fbType,
+        p_pdv:pdv, p_message:message, p_anonyme:anonyme
+      });
+      if(error){ msgEl.innerHTML = '<span style="color:#DC2626">⚠ '+error.message+'</span>'; btn.disabled=false; return; }
+      if(data && data.error){ msgEl.innerHTML = '<span style="color:#DC2626">⚠ '+data.error+'</span>'; btn.disabled=false; return; }
+      msgEl.innerHTML = '<span style="color:#15803D">✅ Merci ! Ton message a bien été envoyé à SADARI.</span>';
+      setTimeout(()=>{ document.getElementById('modal-feedback').classList.remove('show'); }, 2000);
+    }catch(e){
+      msgEl.innerHTML = '<span style="color:#DC2626">⚠ Connexion impossible. Réessaie.</span>';
+      btn.disabled = false;
+    }
+  }
+  document.getElementById('fb-submit').addEventListener('click', submitFeedback);
 
   // ── PWA install ─────────────────────────────────────
   // Nettoyer les vieux flags des versions précédentes
@@ -778,6 +1160,7 @@
 
   // Go
   loadLive();
+  loadStockCard();
 })();
 </script>
 </body>
