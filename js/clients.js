@@ -17,6 +17,129 @@ async function saveClient(){
   await loadClients();populateSelects();renderClients();
   notify('Client ajouté ✓');
 }
+
+// ── RÉGULARITÉ CLIENT (calculée depuis l'historique des ventes) ──
+let GP_CLIENT_STATS = null;
+async function loadClientStats(force){
+  if(GP_CLIENT_STATS && !force) return GP_CLIENT_STATS;
+  const{data}=await SB.from('gp_ventes')
+    .select('client_id,date,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).not('client_id','is',null);
+  const map={};
+  (data||[]).forEach(v=>{
+    if(!v.client_id)return;
+    const s=map[v.client_id]=map[v.client_id]||{dates:[],formules:{}};
+    if(v.date)s.dates.push(v.date);
+    if(v.formule_nom)s.formules[v.formule_nom]=(s.formules[v.formule_nom]||0)+1;
+  });
+  Object.values(map).forEach(s=>{
+    const ds=[...new Set(s.dates)].sort();           // jours distincts = visites
+    s.nbAchats=ds.length;
+    s.premier=ds[0]||null;
+    s.dernier=ds[ds.length-1]||null;
+    s.freqMoyenne=ds.length>=2
+      ? Math.max(1,Math.round((new Date(ds[ds.length-1])-new Date(ds[0]))/86400000/(ds.length-1)))
+      : null;
+    const fe=Object.entries(s.formules).sort((a,b)=>b[1]-a[1]);
+    s.produitHabituel=fe.length?fe[0][0]:null;
+  });
+  GP_CLIENT_STATS=map;
+  return map;
+}
+
+// Statut auto : 🟢 Régulier · 🟠 En retard · 🔴 Perdu · ⚪ Nouveau
+function clientStatut(s){
+  if(!s||!s.nbAchats) return {key:'aucun',label:'—',color:'var(--textm)',emoji:'⚪',jours:null};
+  if(s.nbAchats===1)  return {key:'nouveau',label:'Nouveau',color:'var(--textm)',emoji:'⚪',jours:null};
+  const jours=Math.floor((Date.now()-new Date(s.dernier))/86400000);
+  const f=s.freqMoyenne||30;
+  if(jours>60 || jours>2*f) return {key:'perdu',label:'Perdu',color:'var(--red)',emoji:'🔴',jours};
+  if(jours>f*1.5)           return {key:'retard',label:'En retard',color:'var(--gold)',emoji:'🟠',jours};
+  return {key:'regulier',label:'Régulier',color:'var(--green)',emoji:'🟢',jours};
+}
+
+// ── ÉDITION CLIENT ─────────────────────────────────
+function openEditClient(id){
+  const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
+  document.getElementById('ecl_id').value=c.id;
+  document.getElementById('ecl_nom').value=c.nom||'';
+  document.getElementById('ecl_tel').value=c.telephone||'';
+  document.getElementById('ecl_loc').value=c.localisation||c.localite||'';
+  document.getElementById('ecl_type').value=c.type_elevage||'autre';
+  document.getElementById('ecl_typeclient').value=c.type_client||'detail';
+  document.getElementById('ecl_note').value=c.note||'';
+  document.getElementById('ecl_err').textContent='';
+  document.getElementById('modal-edit-client').style.display='flex';
+}
+function closeEditClient(){ document.getElementById('modal-edit-client').style.display='none'; }
+async function saveClientEdit(){
+  const id=document.getElementById('ecl_id').value;
+  const nom=document.getElementById('ecl_nom').value.trim();
+  const err=document.getElementById('ecl_err');
+  if(!nom){err.textContent='Nom requis.';return;}
+  const{error}=await SB.from('gp_clients').update({
+    nom,
+    telephone:document.getElementById('ecl_tel').value.trim()||null,
+    localisation:document.getElementById('ecl_loc').value.trim()||null,
+    type_elevage:document.getElementById('ecl_type').value,
+    type_client:document.getElementById('ecl_typeclient').value,
+    note:document.getElementById('ecl_note').value.trim()||null
+  }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){err.textContent='Erreur: '+error.message;return;}
+  closeEditClient();
+  await loadClients();populateSelects();renderClients();
+  notify('Client modifié ✓');
+}
+
+// ── FICHE CLIENT DÉTAILLÉE ─────────────────────────
+async function openClientDetail(id){
+  const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
+  await loadClientStats();
+  const s=GP_CLIENT_STATS[id]||{};
+  const st=clientStatut(s);
+  const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):null;
+
+  const{data:V}=await SB.from('gp_ventes')
+    .select('date,formule_nom,quantite,montant_total,montant_paye,statut_paiement')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null)
+    .order('date',{ascending:false}).limit(50);
+  const hist=(V||[]).length?`<table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th></th>
+    </tr></thead><tbody>${(V||[]).map(v=>`<tr>
+      <td style="font-size:10px">${fmtDate?fmtDate(v.date):v.date}</td>
+      <td style="font-size:10px">${v.formule_nom||'—'}</td>
+      <td class="num">${v.quantite?fmtKg(v.quantite)+' kg':'—'}</td>
+      <td class="num">${fmt(v.montant_total||0)} F</td>
+      <td><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:8px">${v.statut_paiement||'—'}</span></td>
+    </tr>`).join('')}</tbody></table>`
+    :'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
+
+  const telClean=c.telephone?String(c.telephone).replace(/\s/g,''):'';
+  document.getElementById('cd-content').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
+      <div style="min-width:0">
+        <div style="font-weight:800;font-size:16px">${c.nom} <span style="font-size:11px;color:${st.color}">${st.emoji} ${st.label}</span></div>
+        <div style="font-size:11px;color:var(--textm);margin-top:3px">📞 ${c.telephone||'—'}${(c.localisation||c.localite)?' · 📍 '+(c.localisation||c.localite):''}</div>
+      </div>
+      <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')">✏️ Modifier</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
+      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(c.total_achats||0)}</div><div class="econo-lbl">CA total (F)</div></div>
+      <div class="econo-box"><div class="econo-val">${s.nbAchats||0}</div><div class="econo-lbl">Achats</div></div>
+      <div class="econo-box"><div class="econo-val">${s.freqMoyenne?s.freqMoyenne+' j':'—'}</div><div class="econo-lbl">Fréquence moy.</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:${st.color}">${jours!=null?jours+' j':'—'}</div><div class="econo-lbl">Depuis dernier achat</div></div>
+    </div>
+    ${s.produitHabituel?`<div style="font-size:12px;margin-bottom:10px">🌾 Produit habituel : <b>${s.produitHabituel}</b></div>`:''}
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
+      ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
+    </div>
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">🧾 Historique des achats</div>
+    <div style="max-height:240px;overflow:auto">${hist}</div>`;
+  document.getElementById('modal-client-detail').style.display='flex';
+}
+function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
+
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   const filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
@@ -36,6 +159,8 @@ async function renderClients(){
     dettes[v.client_id].ventes.push(v);
   });
 
+  await loadClientStats(true);
+
   document.getElementById('clients-liste').innerHTML=filtered.length?`
     <table class="tbl"><thead><tr>
       <th>Nom & Contact</th><th>Type</th>
@@ -46,16 +171,20 @@ async function renderClients(){
     ${filtered.map(c=>{
       const dette=dettes[c.id];
       const montantDu=dette?.total||0;
-      return`<tr>
+      const s=GP_CLIENT_STATS?.[c.id];
+      const st=clientStatut(s);
+      const dernierTxt=(s&&s.dernier)?' · 🛒 '+(st.jours!=null?'il y a '+st.jours+' j':fmtDate(s.dernier)):'';
+      return`<tr style="cursor:pointer" onclick="openClientDetail('${c.id}')">
         <td>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-weight:700">${c.nom}</span>
+            <span style="font-size:9px;font-weight:700;color:${st.color}">${st.emoji} ${st.label}</span>
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
           </div>
           <div style="font-size:10px;color:var(--textm)">
             ${c.telephone?'📞 '+c.telephone:''}
             ${c.nom_ferme?' · 🏠 '+c.nom_ferme:''}
-            ${c.localite?' · 📍 '+c.localite:''}
+            ${c.localite?' · 📍 '+c.localite:''}${dernierTxt}
           </div>
         </td>
         <td>
@@ -66,11 +195,12 @@ async function renderClients(){
         <td class="num" style="color:${montantDu>0?'var(--red)':'var(--green)'}">
           ${montantDu>0?fmt(montantDu)+' F':'✅'}
         </td>
-        <td style="white-space:nowrap">
+        <td style="white-space:nowrap" onclick="event.stopPropagation()">
           ${montantDu>0?`
             <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${montantDu})" title="Solder la dette">💳</button>
             <button class="btn btn-out btn-sm" onclick="envoyerRappelDette('${c.id}')" title="Envoyer rappel WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>
           `:''}
+          <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')" title="Modifier le client">✏️</button>
           <button class="btn btn-out btn-sm" onclick="ouvrirCarteClient('${c.id}')" title="Carte de fidélité" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🪪</button>
           ${Number(c.points_fidelite)>0?`<button class="btn btn-out btn-sm" onclick="ouvrirEchangePoints('${c.id}')" title="Échanger les points (${c.points_fidelite} pts)" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🎁</button>`:''}
           ${c.qr_token?`<button class="btn btn-out btn-sm" onclick="regenererQRClient('${c.id}')" title="Régénérer la carte (perte)" style="color:var(--textm);font-size:10px">↺</button>`:''}
@@ -205,29 +335,35 @@ async function deleteClient(id){
 }
 
 // ── SUIVI & APPELS ─────────────────────────────────
-function renderSuivi(){
-  const now=new Date();
-  const aRelancer=GP_CLIENTS.filter(c=>{
-    if(!c.dernier_achat||!c.frequence_jours)return false;
-    const last=new Date(c.dernier_achat);
-    const seuil=(c.frequence_jours+7);
-    return Math.ceil((now-last)/86400000)>seuil;
+async function renderSuivi(){
+  await loadClientStats(true);
+  const seg={retard:[],perdu:[]};
+  GP_CLIENTS.forEach(c=>{
+    const s=GP_CLIENT_STATS[c.id]; if(!s||!s.nbAchats)return;
+    const st=clientStatut(s);
+    if(st.key==='retard') seg.retard.push({c,st,s});
+    else if(st.key==='perdu') seg.perdu.push({c,st,s});
   });
-  document.getElementById('clients-relance').innerHTML=aRelancer.length?aRelancer.map(c=>{
-    const joursDepuis=Math.ceil((now-new Date(c.dernier_achat))/86400000);
-    return `<div style="padding:10px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-weight:700;color:var(--text)">${c.nom}</div>
-          <div style="font-size:10px;color:var(--textm);margin-top:2px">📞 ${c.telephone||'—'} · Dernier achat : ${fmtDate(c.dernier_achat)}</div>
-          <div style="font-size:10px;color:var(--red);margin-top:2px">⏰ ${joursDepuis} jours sans achat (fréquence : ${c.frequence_jours}j)</div>
-        </div>
-        <div style="display:flex;gap:5px;flex-shrink:0">
-          <button class="btn btn-out btn-sm" onclick="preFillAppel('${c.id}')" title="Enregistrer un appel">📞</button>
-          <button class="btn btn-g btn-sm" onclick="ouvrirModalWA('${c.id}')" title="Envoyer un message WhatsApp">📲</button>
-        </div>
+  seg.retard.sort((a,b)=>b.st.jours-a.st.jours);
+  seg.perdu.sort((a,b)=>b.st.jours-a.st.jours);
+
+  const ligne=(c,st,s)=>`<div style="padding:10px;background:rgba(239,68,68,${st.key==='perdu'?'.08':'.05'});border:1px solid rgba(239,68,68,.2);border-radius:8px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="min-width:0;cursor:pointer" onclick="openClientDetail('${c.id}')">
+        <div style="font-weight:700;color:var(--text)">${c.nom} <span style="font-size:9px;color:${st.color}">${st.emoji} ${st.label}</span></div>
+        <div style="font-size:10px;color:var(--textm);margin-top:2px">📞 ${c.telephone||'—'} · Dernier achat il y a <b style="color:var(--red)">${st.jours} j</b>${s.freqMoyenne?' (habituel : '+s.freqMoyenne+' j)':''}</div>
       </div>
-    </div>`;}).join(''):'<div style="color:var(--green);font-size:12px">✅ Tous les clients sont dans leur fréquence habituelle.</div>';
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <button class="btn btn-out btn-sm" onclick="event.stopPropagation();preFillAppel('${c.id}')" title="Enregistrer un appel">📞</button>
+        <button class="btn btn-g btn-sm" onclick="event.stopPropagation();ouvrirModalWA('${c.id}')" title="Relancer (WhatsApp)">📲</button>
+      </div>
+    </div>
+  </div>`;
+
+  const html=
+    (seg.retard.length?`<div style="font-size:11px;font-weight:700;color:var(--gold);margin:4px 0 6px">🟠 En retard (${seg.retard.length})</div>`+seg.retard.map(x=>ligne(x.c,x.st,x.s)).join(''):'')+
+    (seg.perdu.length?`<div style="font-size:11px;font-weight:700;color:var(--red);margin:10px 0 6px">🔴 Perdus / à reconquérir (${seg.perdu.length})</div>`+seg.perdu.map(x=>ligne(x.c,x.st,x.s)).join(''):'');
+  document.getElementById('clients-relance').innerHTML=html||'<div style="color:var(--green);font-size:12px">✅ Tous tes clients actifs sont dans leur fréquence habituelle.</div>';
 
   SB.from('gp_appels').select('*').eq('admin_id',GP_ADMIN_ID).order('date_appel',{ascending:false}).limit(30).then(({data})=>{
     const A=data||[];
