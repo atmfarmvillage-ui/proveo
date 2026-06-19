@@ -131,9 +131,9 @@ function actionsAchat(a){
   if(a.statut!=='annule' && gereMP){
     btns+=`<button class="btn btn-red btn-sm" onclick="annulerAchat('${a.id}')" title="Annuler le bon">❌</button>`;
   }
-  // Supprimer — brouillon uniquement, admin seul
-  if(a.statut==='brouillon' && GP_ROLE==='admin'){
-    btns+=`<button class="btn btn-red btn-sm" onclick="supprimerAchat('${a.id}')" title="Supprimer le brouillon">🗑</button>`;
+  // Supprimer définitivement — n'importe quel bon, admin seul
+  if(GP_ROLE==='admin'){
+    btns+=`<button class="btn btn-red btn-sm" onclick="supprimerAchat('${a.id}')" title="Supprimer définitivement">🗑</button>`;
   }
   // Voir détail
   btns+=`<button class="btn btn-out btn-sm" onclick="voirDetailAchat('${a.id}')">👁</button>`;
@@ -695,19 +695,31 @@ async function annulerAchat(id){
   try{ if(typeof renderStockNiveaux==='function') renderStockNiveaux(); }catch(e){}
 }
 
-// ── SUPPRIMER UN BROUILLON (admin uniquement) ─────
+// ── SUPPRIMER DÉFINITIVEMENT UN BON (admin uniquement) ─────
+// Marche pour n'importe quel statut. Reprend le stock si le bon l'avait crédité
+// (bloque si la MP a déjà été consommée). Supprime aussi ses paiements.
 async function supprimerAchat(id){
   if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'admin','r'); return; }
-  const{data:a}=await SB.from('gp_achats').select('statut,ref').eq('id',id).maybeSingle();
+  const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
   if(!a){notify('Bon introuvable','r');return;}
-  if(a.statut!=='brouillon'){
-    notify('Seuls les brouillons peuvent être supprimés. Utilise « Annuler » (❌).','r'); return;
+
+  let msg=`Supprimer DÉFINITIVEMENT le bon ${a.ref||''} (${a.fournisseur_nom||''}) ?`;
+  if(a.statut==='valide_daf') msg+='\n\n• Le stock crédité par ce bon sera retiré.';
+  if(Number(a.montant_paye||0)>0) msg+=`\n• ${fmt(a.montant_paye)} F de paiements seront supprimés (⚠️ les sorties de caisse déjà passées ne sont PAS annulées automatiquement).`;
+  msg+='\n\nCette action est irréversible.';
+  if(!confirm(msg)) return;
+
+  // Reprise du stock si déjà crédité (bloque si MP consommée)
+  if(a.statut==='valide_daf'){
+    const ok=await _retirerStockAchat(id);
+    if(!ok) return;
   }
-  if(!confirm(`Supprimer définitivement le brouillon ${a.ref||''} ?`)) return;
+  await SB.from('gp_achats_paiements').delete().eq('achat_id',id);
   await SB.from('gp_achats_lignes').delete().eq('achat_id',id);
   await SB.from('gp_achats').delete().eq('id',id);
-  notify('Brouillon supprimé','gold');
+  notify('Bon supprimé définitivement','gold');
   await renderAchats();
+  try{ if(typeof renderStockNiveaux==='function') renderStockNiveaux(); }catch(e){}
 }
 
 // Crédite le stock MP à partir d'un achat (entrées = qté reçue ou, à défaut, commandée),
