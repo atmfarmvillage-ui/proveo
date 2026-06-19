@@ -375,7 +375,7 @@ async function savePaiementLivraison(){
     livraison_id:livId,admin_id:GP_ADMIN_ID,montant,mode,date_paiement:today()
   });
 
-  const{data:l}=await SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_dest_nom').eq('id',livId).maybeSingle();
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_source_nom,pdv_dest_nom').eq('id',livId).maybeSingle();
   if(l){
     const nouveauPaye=Number(l.montant_paye||0)+montant;
     const statutPaiement=nouveauPaye>=Number(l.montant_total)?'paye':nouveauPaye>0?'partiel':'impaye';
@@ -386,9 +386,22 @@ async function savePaiementLivraison(){
       statut:statutLiv
     }).eq('id',livId);
 
-    // WhatsApp au PDV
-    const reste=Number(l.montant_total)-nouveauPaye;
-    const cfg=GP_CONFIG||{};
+    // 💵 ENTRÉE en caisse du PDV SOURCE (principal/Production) — l'argent reçu du secondaire
+    const source=l.pdv_source_nom;
+    let cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
+    cq = (source && source!=='Production' && source!=='Siège')
+      ? cq.eq('point_vente', source)
+      : cq.is('point_vente', null);
+    const{data:caisses}=await cq.limit(1);
+    if(caisses?.length){
+      await SB.from('gp_mouvements_caisse').insert({
+        admin_id:GP_ADMIN_ID, caisse_id:caisses[0].id,
+        type:'entree', categorie:'vente_gros',
+        montant, date_mouvement:today(),
+        description:`Règlement livraison → ${l.pdv_dest_nom||''} · ${mode}`,
+        enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
+      });
+    }
     notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
   }
 
@@ -505,10 +518,11 @@ async function renderStockPDV(){
     .eq('admin_id',GP_ADMIN_ID).order('pdv_nom').order('formule_nom');
   let S=data||[];
 
-  // CLOISONNEMENT PDV : un non-admin voit SON stock + celui du point de production
-  // (visibilité appro : le PDV doit pouvoir voir l'état du stock à la Production).
+  // CLOISONNEMENT PDV :
+  // - admin et PDV PRINCIPAL → voient TOUT le réseau (anticiper les commandes des PDV)
+  // - autres PDV → SON stock + celui de la Production (visibilité appro)
   const monPDVStock = GP_POINT_VENTE || 'Production';
-  if(GP_ROLE!=='admin'){
+  if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL){
     S = S.filter(s => s.pdv_nom===monPDVStock || s.pdv_nom==='Production');
   }
 
