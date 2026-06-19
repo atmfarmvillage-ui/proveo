@@ -184,13 +184,14 @@ async function bootApp(user){
     // dans toute l'app (sauf la page Configuration, cachée plus bas).
     GP_EST_GERANT=(membre.role==='gerant');
     if(GP_EST_GERANT)GP_ROLE='admin';
-    // Détecter si ce membre est rattaché à un PDV SECONDAIRE (mode revendeur cloisonné)
-    GP_EST_SECONDAIRE=false;
+    // Détecter le type de PDV du membre (secondaire = revendeur cloisonné ; principal = vue réseau)
+    GP_EST_SECONDAIRE=false; GP_EST_PRINCIPAL=false;
     if(!GP_EST_GERANT && GP_POINT_VENTE){
       try{
         const{data:pv}=await SB.from('gp_points_vente').select('type_pdv')
           .eq('admin_id',GP_ADMIN_ID).eq('nom',GP_POINT_VENTE).maybeSingle();
         GP_EST_SECONDAIRE=(pv?.type_pdv==='secondaire');
+        GP_EST_PRINCIPAL=(pv?.type_pdv==='principal');
       }catch(e){}
     }
   } else {
@@ -199,6 +200,7 @@ async function bootApp(user){
     GP_POINT_VENTE=null;
     GP_EST_GERANT=false;
     GP_EST_SECONDAIRE=false;
+    GP_EST_PRINCIPAL=false;
   }
   // Show UI
   document.getElementById('authScreen').classList.add('hidden');
@@ -302,6 +304,7 @@ const PAGES_TECHNICIEN=['dashboard','achats','matieres','stock','inventaire_phys
 // PDV SECONDAIRE (revendeur cloisonné) : menu restreint à ses propres opérations.
 // 'stock_central' (consultation stock principal/production + réappro) sera ajouté à l'étape 3.
 var GP_EST_SECONDAIRE = false;
+var GP_EST_PRINCIPAL = false;   // secrétaire du PDV principal → vue stock réseau (lecture seule)
 const PAGES_PDV_SECONDAIRE=['dashboard','ventes','reservations','clients','suivi','classement','distribution','equipe','caisse'];
 
 function applyRoleRestrictions(){

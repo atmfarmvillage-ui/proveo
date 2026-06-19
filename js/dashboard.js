@@ -15,7 +15,7 @@ async function renderDashboard(){
   // Requêtes parallèles avec gestion d'erreur individuelle
   const safe=async(q)=>{try{const r=await q;return r;}catch(e){return {data:[]};}}
   const[
-    r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11
+    r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12
   ]=await Promise.all([
     safe(SB.from('gp_ventes').select('id,montant_total,montant_paye,statut_paiement,point_vente,date,client_nom,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_ventes').select('id,client_id,montant_total,montant_paye,statut_paiement,client_nom,formule_nom,qte_vendue,point_vente,date,recu_imprime,wa_envoye,sms_envoye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('date',(typeof today==='function'?today():new Date().toISOString().slice(0,10)))),
@@ -31,12 +31,15 @@ async function renderDashboard(){
     safe(SB.from('gp_mouvements_caisse').select('caisse_id,caisse_dest_id,type,montant').eq('admin_id',GP_ADMIN_ID)),
     // r11 : achats fournisseurs avec dette résiduelle (pour Dette Fournisseurs)
     safe(SB.from('gp_achats').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0)),
+    // r12 : livraisons inter-PDV du mois (ventes en gros) — pour le CA "ventes en gros" par PDV source
+    safe(SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_source_nom,date_livraison').eq('admin_id',GP_ADMIN_ID).gte('date_livraison',mDebut).lte('date_livraison',mFin)),
   ]);
   // Extraire les tableaux — garantir que c'est toujours un Array
   const toArr=r=>Array.isArray(r?.data)?r.data:(r?.data?Object.values(r.data):[]);
-  const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD,caissesD,mvtsCaisseD,achatsD]=
-    [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11].map(toArr);
-  const VMois=ventesMoisD;
+  const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD,caissesD,mvtsCaisseD,achatsD,livMoisD]=
+    [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12].map(toArr);
+  // CLOISONNEMENT : un non-admin ne voit au dashboard que le CA de SON point de vente.
+  const VMois=(GP_ROLE==='admin')?ventesMoisD:ventesMoisD.filter(v=>v.point_vente===(GP_POINT_VENTE||'Production'));
   // CLOISONNEMENT PDV : un non-admin ne voit au dashboard que les ventes de SON point de vente.
   // (Les cartes Production/Stock MP restent globales : le PDV doit voir l'état du point de production.)
   const monPDVDash = GP_POINT_VENTE || 'Production';
@@ -87,6 +90,11 @@ async function renderDashboard(){
 
   // Bénéfice = encaissé - dépenses (pas CA car impayés non reçus)
   const beneficeMois=encaisseMois-depMois;
+
+  // Ventes en gros (livraisons inter-PDV) du PDV source courant — n'entre PAS dans le CA consolidé
+  const LIVG=(GP_ROLE==='admin')?livMoisD:livMoisD.filter(l=>l.pdv_source_nom===(GP_POINT_VENTE||'Production'));
+  const caGros=LIVG.reduce((s,l)=>s+Number(l.montant_total||0),0);
+  const encGros=LIVG.reduce((s,l)=>s+Number(l.montant_paye||0),0);
 
   // Alertes stock
   const niveaux=calcNiveaux(S);
@@ -144,7 +152,13 @@ async function renderDashboard(){
       impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
     ${kpi('💸','orange','Dépenses ce mois',fmt(depMois),
       depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'},"dashKpiDrill('depenses')")}
-    ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}`:''}
+    ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}
+    ${caGros>0?kpi('🚚','blue','Ventes en gros (réseau)',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}`:''}
+    ${!isAdmin?`
+    ${kpi('💰','gold','Mon CA ce mois',fmt(caMois))}
+    ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null)}
+    ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
+    `:''}
     ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,
       nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null,"dashKpiDrill('lots')")}
     ${isAdmin?`
