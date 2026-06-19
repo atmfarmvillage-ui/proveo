@@ -6,11 +6,50 @@
 let ACHAT_LIGNES = []; // lignes du bon en cours
 let MODIF_LIGNES = []; // lignes du bon en cours de modification (modal)
 
+// ── NOTIFIER L'ADMIN (DAF absent) ─────────────────
+// Numéro WhatsApp de l'admin = contact provenderie.
+function _adminWaUrl(msg){
+  const tel = GP_CONFIG?.whatsapp || GP_CONFIG?.telephone || '';
+  if(!tel || typeof detecterPays!=='function') return '';
+  const p = detecterPays(tel);
+  return p.numero_whatsapp ? 'https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg) : '';
+}
+// Push auto à l'admin + (option) ouverture WhatsApp pré-rempli.
+// Ne fait rien si l'acteur EST déjà l'admin (inutile de se notifier soi-même).
+function notifierAdmin(titrePush, corpsPush, msgWa, openWa){
+  const estAdmin = GP_USER?.id === GP_ADMIN_ID;
+  if(estAdmin) return '';
+  if(typeof pushSendToUsers === 'function' && GP_ADMIN_ID){
+    try{ pushSendToUsers([GP_ADMIN_ID], titrePush, corpsPush, {tag:'achat-admin'}); }catch(e){}
+  }
+  const url = _adminWaUrl(msgWa);
+  if(openWa && url){ try{ window.open(url,'_blank'); }catch(e){} }
+  return url;
+}
+
+// ── DROIT DE PAYER LES FOURNISSEURS MP ────────────
+// Autorisé : admin/gérant · Production-siège (sans PDV) · PDV de type 'principal'.
+// Bloqué : secrétaires des PDV secondaires.
+let GP_PEUT_PAYER_MP = null;
+async function peutPayerMP(){
+  if(GP_PEUT_PAYER_MP !== null) return GP_PEUT_PAYER_MP;
+  if(GP_ROLE === 'admin'){ GP_PEUT_PAYER_MP = true; return true; }   // admin + gérant
+  if(!GP_POINT_VENTE){ GP_PEUT_PAYER_MP = true; return true; }       // Production / siège
+  try{
+    const{data}=await SB.from('gp_points_vente').select('type_pdv')
+      .eq('admin_id',GP_ADMIN_ID).eq('nom',GP_POINT_VENTE).maybeSingle();
+    GP_PEUT_PAYER_MP = (data?.type_pdv === 'principal');
+  }catch(e){ GP_PEUT_PAYER_MP = false; }
+  return GP_PEUT_PAYER_MP;
+}
+
 // ── PAGE PRINCIPALE ───────────────────────────────
 async function renderAchats(){
   // Recharger les ingrédients si nécessaire
   if(!GP_INGREDIENTS.length) await loadIngredients();
   await populateFournisseurSelect();
+  // Préchauffer le droit de gestion (utilisé en synchrone par actionsAchat)
+  if(typeof peutPayerMP==='function') await peutPayerMP();
 
   // Niveaux de stock MP (affichés dans la recherche d'ingrédient)
   try{
@@ -60,7 +99,7 @@ function statutAchatBadge(s){
   const labels={
     brouillon:'⏳ Brouillon',confirme:'✅ Confirmé',
     en_livraison:'🚚 En livraison',recu_partiel:'⚠ Reçu partiel',
-    recu_complet:'📦 Reçu complet',valide_daf:'✅ Validé DAF',annule:'❌ Annulé'
+    recu_complet:'📦 Reçu complet',valide_daf:'✅ En stock',annule:'❌ Annulé'
   };
   const colors={
     brouillon:'bdg-gold',confirme:'bdg-b',en_livraison:'bdg-b',
@@ -79,14 +118,22 @@ function actionsAchat(a){
   if(['confirme','en_livraison'].includes(a.statut)&&(GP_ROLE==='secretaire'||GP_ROLE==='admin'||GP_ROLE==='logistique')){
     btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirReception('${a.id}')">📦 Réception</button>`;
   }
-  // DAF/Admin : valider
-  if(['recu_complet','recu_partiel'].includes(a.statut)&&(GP_ROLE==='daf'||GP_ROLE==='admin')){
-    btns+=`<button class="btn btn-g btn-sm" onclick="validerAchatDAF('${a.id}',true)">✅ Valider</button>`;
-    btns+=`<button class="btn btn-red btn-sm" onclick="validerAchatDAF('${a.id}',false)">✕</button>`;
+  // Réception déjà faite mais stock pas encore crédité (anciens bons) : permettre de finaliser
+  if(['recu_complet','recu_partiel'].includes(a.statut)&&(GP_ROLE==='daf'||GP_ROLE==='admin'||GP_ROLE==='secretaire'||GP_ROLE==='logistique')){
+    btns+=`<button class="btn btn-g btn-sm" onclick="validerAchatDAF('${a.id}',true)">✅ Entrer en stock</button>`;
   }
-  // Admin : modifier un achat déjà validé
-  if(a.statut==='valide_daf'&&GP_ROLE==='admin'){
+  const gereMP = (GP_PEUT_PAYER_MP===true); // admin / Production / PDV principal
+  // Modifier — tant que le bon n'est pas annulé
+  if(a.statut!=='annule' && gereMP){
     btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirModificationAchat('${a.id}')" title="Modifier">✏️</button>`;
+  }
+  // Annuler — tant que le bon n'est pas annulé
+  if(a.statut!=='annule' && gereMP){
+    btns+=`<button class="btn btn-red btn-sm" onclick="annulerAchat('${a.id}')" title="Annuler le bon">❌</button>`;
+  }
+  // Supprimer — brouillon uniquement, admin seul
+  if(a.statut==='brouillon' && GP_ROLE==='admin'){
+    btns+=`<button class="btn btn-red btn-sm" onclick="supprimerAchat('${a.id}')" title="Supprimer le brouillon">🗑</button>`;
   }
   // Voir détail
   btns+=`<button class="btn btn-out btn-sm" onclick="voirDetailAchat('${a.id}')">👁</button>`;
@@ -455,31 +502,35 @@ async function saveModificationAchat(){
     }))
   );
 
-  // 3. Supprimer les anciennes entrées de stock → recréer
-  if(ancStock.length){
-    await SB.from('gp_stock_mp').delete().in('id',ancStock.map(s=>s.id));
-  }
-  await SB.from('gp_stock_mp').insert(
-    MODIF_LIGNES.map(l=>({
-      admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:id,
-      type:'entree',date:date,
-      ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
-      quantite:l.qte_commandee,prix_unit:l.prix_unitaire,
-      ref:'Achat '+(achat.ref||id.slice(0,8)),note:'Achat modifié'
-    }))
-  );
-
-  // 4. Ré-appliquer les prix des ingrédients
-  for(const l of MODIF_LIGNES){
-    if(l.ingredient_id){
-      await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+  // 3 & 4 — IMPACT STOCK/PRIX : seulement si le bon est DÉJÀ en stock.
+  // Un brouillon/confirmé/reçu non crédité ne doit PAS toucher le stock.
+  const dejaEnStock = (achat.statut==='valide_daf') || ancStock.length>0;
+  if(dejaEnStock){
+    // Supprimer les anciennes entrées → recréer
+    if(ancStock.length){
+      await SB.from('gp_stock_mp').delete().in('id',ancStock.map(s=>s.id));
+    }
+    await SB.from('gp_stock_mp').insert(
+      MODIF_LIGNES.map(l=>({
+        admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:id,
+        type:'entree',date:date,
+        ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
+        quantite:l.qte_commandee,prix_unit:l.prix_unitaire,
+        ref:'Achat '+(achat.ref||id.slice(0,8)),note:'Achat modifié'
+      }))
+    );
+    // Ré-appliquer les prix des ingrédients
+    for(const l of MODIF_LIGNES){
+      if(l.ingredient_id){
+        await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+      }
     }
   }
 
   fermerModalModif();
   await renderAchats();
   if(typeof renderStockNiveaux==='function')renderStockNiveaux();
-  notify('Achat modifié ✓ — stock recalculé','gold');
+  notify(dejaEnStock?'Achat modifié ✓ — stock recalculé':'Achat modifié ✓','gold');
 }
 
 // ── CONFIRMER ─────────────────────────────────────
@@ -535,27 +586,31 @@ async function confirmerReception(){
   });
   await Promise.all(updates);
 
-  const statut=aDesEcarts?'recu_partiel':'recu_complet';
+  // Tracer la réception (qui / note)
   await SB.from('gp_achats').update({
-    statut,note_reception:note,
+    note_reception:note,
     recu_par:GP_USER.id,recu_par_nom:GP_USER.email
   }).eq('id',achatId);
 
-  if(aDesEcarts){
-    notify('⚠ Des écarts ont été détectés — En attente de validation DAF','gold');
-  } else {
-    notify('Réception confirmée ✓ — En attente de validation DAF','gold');
-  }
+  // 🔓 Plus de validation DAF bloquante : la réception crédite DIRECTEMENT le stock
+  window._mpAjustCredit=false;
+  await crediterStockDepuisAchat(achatId);
   document.getElementById('modal-reception').style.display='none';
-  // Déclenché depuis "Ajuster" sur la page Stock MP → créditer directement le stock
-  if(window._mpAjustCredit){
-    window._mpAjustCredit=false;
-    if(typeof crediterStockDepuisAchat==='function') await crediterStockDepuisAchat(achatId);
-    notify('Entrée ajustée — stock crédité ✓','gold');
-    try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(e){}
-    return;
-  }
+
+  // 🔔 Notifier l'admin (push + WhatsApp) — il garde le contrôle a posteriori
+  const{data:a}=await SB.from('gp_achats').select('fournisseur_nom,ref,montant_total').eq('id',achatId).maybeSingle();
+  const qui=GP_USER?.email?.split('@')[0]||'secrétaire';
+  const ecartTxt=aDesEcarts?' ⚠️ avec écarts':'';
+  notifierAdmin(
+    '📦 Réception MP'+ecartTxt,
+    `${a?.fournisseur_nom||'Fournisseur'} · ${fmt(a?.montant_total||0)} F — reçu par ${qui}${ecartTxt}`,
+    `📦 *Réception MP*${ecartTxt}\nFournisseur : ${a?.fournisseur_nom||'—'}\nRéf : ${a?.ref||'—'}\nMontant : ${fmt(a?.montant_total||0)} F\nReçu par : ${qui}\nStock crédité automatiquement.\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
+    true /* ouvrir WhatsApp admin */
+  );
+
+  notify(aDesEcarts?'Réception (avec écarts) — stock crédité ✓':'Réception confirmée — stock crédité ✓','gold');
   renderAchats();
+  try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(e){}
 }
 
 // ── VALIDATION DAF ────────────────────────────────
@@ -577,6 +632,82 @@ async function validerAchatDAF(achatId,approuve){
   notify('Achat validé et stock mis à jour ✓','gold');
   try{ renderAchats(); }catch(e){}
   try{ renderStockNiveaux(); }catch(e){}
+}
+
+// ── ANNULER UN BON ────────────────────────────────
+// Retire les entrées de stock de cet achat, en BLOQUANT si la MP a déjà été consommée.
+async function _retirerStockAchat(id){
+  let{data:entr}=await SB.from('gp_stock_mp').select('*').eq('achat_id',id);
+  entr=entr||[];
+  if(!entr.length) return true; // rien à retirer
+  // Niveau actuel par ingrédient
+  const{data:tous}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+  const niv={};
+  (tous||[]).forEach(s=>{ if(!s.ingredient_id)return; niv[s.ingredient_id]=(niv[s.ingredient_id]||0)+(s.type==='entree'?1:-1)*Number(s.quantite||0); });
+  // Apport de cet achat
+  const apport={};
+  entr.forEach(s=>{ if(s.ingredient_id) apport[s.ingredient_id]=(apport[s.ingredient_id]||0)+Number(s.quantite||0); });
+  const probl=[];
+  Object.keys(apport).forEach(iid=>{
+    if((niv[iid]||0)-apport[iid] < -0.01){
+      probl.push((GP_INGREDIENTS||[]).find(x=>x.id===iid)?.nom||'ingrédient');
+    }
+  });
+  if(probl.length){
+    notify('🚫 Annulation bloquée — MP déjà consommée : '+probl.join(', '),'r');
+    return false;
+  }
+  await SB.from('gp_stock_mp').delete().in('id',entr.map(s=>s.id));
+  return true;
+}
+
+async function annulerAchat(id){
+  if(typeof peutPayerMP==='function' && !(await peutPayerMP())){
+    notify('Annulation réservée à la Production / PDV principal','r'); return;
+  }
+  const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
+  if(!a){notify('Bon introuvable','r');return;}
+  if(a.statut==='annule'){notify('Bon déjà annulé','gold');return;}
+  if(Number(a.montant_paye||0)>0 &&
+     !confirm(`⚠️ ${fmt(a.montant_paye)} F déjà payés sur ce bon.\nAnnuler quand même ? (les paiements restent tracés)`)) return;
+  const raison=prompt('Raison de l\'annulation :');
+  if(!raison)return;
+  // Si déjà en stock → retirer les entrées (bloque si MP consommée)
+  if(a.statut==='valide_daf'){
+    const ok=await _retirerStockAchat(id);
+    if(!ok) return;
+  }
+  const qui=GP_USER?.email?.split('@')[0]||'admin';
+  await SB.from('gp_achats').update({
+    statut:'annule',
+    note_daf:(a.note_daf?a.note_daf+'\n':'')+`❌ Annulé le ${today()} par ${qui} : ${raison}`,
+    valide_par:GP_USER?.id, valide_par_nom:GP_USER?.email
+  }).eq('id',id);
+  // Notifier l'admin
+  if(typeof notifierAdmin==='function') notifierAdmin(
+    '❌ Bon d\'achat annulé',
+    `${a.fournisseur_nom||'Fournisseur'} · ${fmt(a.montant_total||0)} F annulé par ${qui}`,
+    `❌ *Bon d'achat annulé*\n${a.fournisseur_nom||'—'} · Réf ${a.ref||'—'}\nMontant : ${fmt(a.montant_total||0)} F\nPar : ${qui}\nMotif : ${raison}\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
+    false
+  );
+  notify('Bon annulé','r');
+  await renderAchats();
+  try{ if(typeof renderStockNiveaux==='function') renderStockNiveaux(); }catch(e){}
+}
+
+// ── SUPPRIMER UN BROUILLON (admin uniquement) ─────
+async function supprimerAchat(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'admin','r'); return; }
+  const{data:a}=await SB.from('gp_achats').select('statut,ref').eq('id',id).maybeSingle();
+  if(!a){notify('Bon introuvable','r');return;}
+  if(a.statut!=='brouillon'){
+    notify('Seuls les brouillons peuvent être supprimés. Utilise « Annuler » (❌).','r'); return;
+  }
+  if(!confirm(`Supprimer définitivement le brouillon ${a.ref||''} ?`)) return;
+  await SB.from('gp_achats_lignes').delete().eq('achat_id',id);
+  await SB.from('gp_achats').delete().eq('id',id);
+  notify('Brouillon supprimé','gold');
+  await renderAchats();
 }
 
 // Crédite le stock MP à partir d'un achat (entrées = qté reçue ou, à défaut, commandée),
@@ -723,6 +854,10 @@ document.addEventListener('click',function(e){
 
 // ── PAIEMENT FOURNISSEUR ─────────────────────────
 async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
+  if(typeof peutPayerMP==='function' && !(await peutPayerMP())){
+    notify('Paiement réservé à la Production et au PDV principal.','r');
+    return;
+  }
   const montant=+document.getElementById('pmt_montant')?.value||0;
   const mode=document.getElementById('pmt_mode')?.value||'especes';
   const date=document.getElementById('pmt_date')?.value||today();
@@ -785,6 +920,14 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
       window.open(`https://wa.me/${paysInfo.numero_whatsapp}?text=${msg}`,'_blank');
     }
   }
+
+  // 🔔 Notifier l'admin du paiement (push ; le WhatsApp fournisseur s'ouvre déjà)
+  notifierAdmin(
+    '💳 Paiement fournisseur',
+    `${fmt(montant)} F → ${achat?.fournisseur_nom||'fournisseur'} (reste ${fmt(reste)} F) par ${GP_USER?.email?.split('@')[0]||''}`,
+    `💳 *Paiement fournisseur*\n${achat?.fournisseur_nom||'—'} · ${fmt(montant)} F\nCommande : ${achat?.ref||achatId.slice(0,8)}\nReste dû : ${fmt(reste)} F\nPar : ${GP_USER?.email?.split('@')[0]||'secrétaire'}\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
+    false /* pas d'ouverture auto : le WhatsApp fournisseur occupe déjà l'onglet */
+  );
 
   notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
   document.getElementById('modal-detail-achat').style.display='none';
