@@ -142,7 +142,12 @@ function closeClientDetail(){ document.getElementById('modal-client-detail').sty
 
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
-  const filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
+  let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
+  // Cloisonnement : un PDV (hors admin/principal) ne voit que SES clients (+ clients sans PDV)
+  if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL){
+    const mine=GP_POINT_VENTE||null;
+    filtered=filtered.filter(c=> !c.point_vente || c.point_vente===mine);
+  }
 
   // Charger les ventes impayées/partielles pour calculer les dettes
   const mois=new Date().toISOString().slice(0,7);
@@ -180,6 +185,7 @@ async function renderClients(){
             <span style="font-weight:700">${c.nom}</span>
             <span style="font-size:9px;font-weight:700;color:${st.color}">${st.emoji} ${st.label}</span>
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
+            ${c.point_vente && (GP_ROLE==='admin'||GP_EST_PRINCIPAL||c.point_vente!==GP_POINT_VENTE)?`<span class="badge bdg-b" style="font-size:8px">📍 ${c.point_vente}</span>`:''}
           </div>
           <div style="font-size:10px;color:var(--textm)">
             ${c.telephone?'📞 '+c.telephone:''}
