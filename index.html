@@ -169,6 +169,7 @@
   <!-- ÉTAPE 4 : DISTRIBUTION -->
   <div class="nav-sect">🚚 Distribution</div>
   <div class="nav-item" onclick="showGP('distribution')" data-page="distribution" data-roles="admin,secretaire"><span class="nav-icon">🚚</span>Distribution PDV</div>
+  <div class="nav-item" onclick="showGP('stock_central')" data-page="stock_central" data-roles="admin,secretaire"><span class="nav-icon">🏭</span>Stock central &amp; réappro</div>
   <div class="nav-item" onclick="showGP('veto')" data-page="veto" data-roles="admin,secretaire"><span class="nav-icon">💊</span>Produits Véto</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
 
@@ -956,6 +957,13 @@
   <div class="page-sub">Réservations passées par les clients via la carte de fidélité — confirme, appelle ou marque récupérée</div>
   <div id="resa-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px"></div>
   <div id="resa-liste"></div>
+</div>
+
+<!-- STOCK CENTRAL & RÉAPPRO -->
+<div class="page" id="page-stock_central">
+  <div class="page-title">Stock central &amp; réappro</div>
+  <div class="page-sub">Stock de la Production et du PDV principal · demande / confirmation de réapprovisionnement</div>
+  <div id="sc-content"></div>
 </div>
 
 <!-- AVIS & RÉCLAMATIONS -->
@@ -2921,44 +2929,45 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.13.0"></script>
-<script src="js/print.js?v=2.13.0"></script>
-<script src="js/dashboard.js?v=2.13.0"></script>
-<script src="js/stock.js?v=2.13.0"></script>
-<script src="js/matieres.js?v=2.13.0"></script>
-<script src="js/production.js?v=2.13.0"></script>
-<script src="js/ventes.js?v=2.13.0"></script>
-<script src="js/clients.js?v=2.13.0"></script>
-<script src="js/admin.js?v=2.13.0"></script>
-<script src="js/bilan_jour.js?v=2.13.0"></script>
-<script src="js/caisse_extras.js?v=2.13.0"></script>
-<script src="js/corbeille.js?v=2.13.0"></script>
-<script src="js/dashboard_drill.js?v=2.13.0"></script>
-<script src="js/fournisseurs.js?v=2.13.0"></script>
-<script src="js/achats.js?v=2.13.0"></script>
-<script src="js/caisse.js?v=2.13.0"></script>
-<script src="js/inventaire_physique.js?v=2.13.0"></script>
-<script src="js/distribution.js?v=2.13.0"></script>
-<script src="js/salaires.js?v=2.13.0"></script>
-<script src="js/rapports.js?v=2.13.0"></script>
-<script src="js/dettes.js?v=2.13.0"></script>
-<script src="js/chat.js?v=2.13.0"></script>
-<script src="js/notifications.js?v=2.13.0"></script>
-<script src="js/qr_clients.js?v=2.13.0"></script>
-<script src="js/push.js?v=2.13.0"></script>
-<script src="js/reversements.js?v=2.13.0"></script>
-<script src="js/paiements_mp.js?v=2.13.0"></script>
-<script src="js/stock_pf.js?v=2.13.0"></script>
-<script src="js/veto.js?v=2.13.0"></script>
-<script src="js/bilanss.js?v=2.13.0"></script>
-<script src="js/benefices.js?v=2.13.0"></script>
-<script src="js/messages_pdv.js?v=2.13.0"></script>
-<script src="js/directeur.js?v=2.13.0"></script>
-<script src="js/licences.js?v=2.13.0"></script>
+<script src="js/config.js?v=2.14.0"></script>
+<script src="js/print.js?v=2.14.0"></script>
+<script src="js/dashboard.js?v=2.14.0"></script>
+<script src="js/stock.js?v=2.14.0"></script>
+<script src="js/matieres.js?v=2.14.0"></script>
+<script src="js/production.js?v=2.14.0"></script>
+<script src="js/ventes.js?v=2.14.0"></script>
+<script src="js/clients.js?v=2.14.0"></script>
+<script src="js/admin.js?v=2.14.0"></script>
+<script src="js/bilan_jour.js?v=2.14.0"></script>
+<script src="js/caisse_extras.js?v=2.14.0"></script>
+<script src="js/corbeille.js?v=2.14.0"></script>
+<script src="js/dashboard_drill.js?v=2.14.0"></script>
+<script src="js/fournisseurs.js?v=2.14.0"></script>
+<script src="js/achats.js?v=2.14.0"></script>
+<script src="js/caisse.js?v=2.14.0"></script>
+<script src="js/inventaire_physique.js?v=2.14.0"></script>
+<script src="js/distribution.js?v=2.14.0"></script>
+<script src="js/salaires.js?v=2.14.0"></script>
+<script src="js/rapports.js?v=2.14.0"></script>
+<script src="js/dettes.js?v=2.14.0"></script>
+<script src="js/chat.js?v=2.14.0"></script>
+<script src="js/notifications.js?v=2.14.0"></script>
+<script src="js/qr_clients.js?v=2.14.0"></script>
+<script src="js/push.js?v=2.14.0"></script>
+<script src="js/reversements.js?v=2.14.0"></script>
+<script src="js/paiements_mp.js?v=2.14.0"></script>
+<script src="js/stock_pf.js?v=2.14.0"></script>
+<script src="js/veto.js?v=2.14.0"></script>
+<script src="js/bilanss.js?v=2.14.0"></script>
+<script src="js/benefices.js?v=2.14.0"></script>
+<script src="js/messages_pdv.js?v=2.14.0"></script>
+<script src="js/directeur.js?v=2.14.0"></script>
+<script src="js/licences.js?v=2.14.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.13.0"></script>
-<script src="js/reservations_admin.js?v=2.13.0"></script>
-<script src="js/strategie_mp.js?v=2.13.0"></script>
+<script src="js/auth.js?v=2.14.0"></script>
+<script src="js/reservations_admin.js?v=2.14.0"></script>
+<script src="js/strategie_mp.js?v=2.14.0"></script>
+<script src="js/reappro.js?v=2.14.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
