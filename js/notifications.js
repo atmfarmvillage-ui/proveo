@@ -51,4 +51,30 @@ function startChatBadgePolling(){
 function initNotifications(){
   if(!GP_USER||!GP_ADMIN_ID) return;
   startChatBadgePolling();
+  try{ checkRelanceClients(); }catch(e){}
+}
+
+// Rappel proactif (1×/jour, à l'ouverture) : nb de clients En retard / Perdus à relancer.
+// S'appuie sur la régularité calculée (clients.js). Cloisonné au PDV pour les non-admin.
+async function checkRelanceClients(){
+  if(!GP_USER?.id || !GP_ADMIN_ID) return;
+  if(!['secretaire','admin'].includes(GP_ROLE)) return;
+  const key='gp-relance-vu-'+new Date().toISOString().slice(0,10);
+  try{ if(localStorage.getItem(key)) return; }catch(e){}
+  if(typeof loadClientStats!=='function' || typeof clientStatut!=='function') return;
+  try{
+    if(typeof GP_CLIENTS==='undefined' || !GP_CLIENTS.length){ if(typeof loadClients==='function') await loadClients(); }
+    await loadClientStats(true);
+    let n=0;
+    (GP_CLIENTS||[]).forEach(c=>{
+      if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL && c.point_vente && c.point_vente!==GP_POINT_VENTE) return;
+      const s=GP_CLIENT_STATS?.[c.id]; if(!s) return;
+      const k=clientStatut(s).key;
+      if(k==='retard'||k==='perdu') n++;
+    });
+    try{ localStorage.setItem(key,'1'); }catch(e){}
+    if(n>0 && typeof notify==='function'){
+      setTimeout(()=>notify(`📞 ${n} client(s) à relancer — voir Suivi & Appels`,'gold'), 2500);
+    }
+  }catch(e){ /* silencieux */ }
 }
