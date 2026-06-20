@@ -84,6 +84,19 @@ async function renderStockCentral(){
   // ── SECTION : demandes reçues (source) ──
   if(_scEstSource()){
     const enAttente=R.filter(r=>r.statut==='demande');
+    // Stats réseau (mois en cours)
+    const moisDeb=new Date().toISOString().slice(0,7)+'-01';
+    const mois=R.filter(r=>(r.created_at||'')>=moisDeb);
+    const nbLivre=mois.filter(r=>r.statut==='livre').length;
+    const sacsLivre=mois.filter(r=>r.statut==='livre').reduce((s,r)=>s+(r.items||[]).reduce((a,i)=>a+Number(i.nb_sacs||0),0),0);
+    html+=`<div class="card" style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">📊 Réappros réseau (ce mois)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${enAttente.length}</div><div class="econo-lbl">En attente</div></div>
+        <div class="econo-box"><div class="econo-val" style="color:var(--green)">${nbLivre}</div><div class="econo-lbl">Livrées</div></div>
+        <div class="econo-box"><div class="econo-val">${sacsLivre}</div><div class="econo-lbl">Sacs livrés</div></div>
+      </div>
+    </div>`;
     html+=`<div class="card" style="margin-bottom:12px">
       <div style="font-weight:700;font-size:13px;margin-bottom:8px">📥 Demandes de réappro reçues ${enAttente.length?`<span class="badge bdg-gold" style="font-size:9px">${enAttente.length}</span>`:''}</div>`;
     html+= enAttente.length ? enAttente.map(r=>{
@@ -117,9 +130,38 @@ async function renderStockCentral(){
       </div>`;
     }).join('') : '<div style="color:var(--textm);font-size:12px">Aucune demande pour l\'instant.</div>';
     html+='</div>';
+    html+='<div id="sc-histo"></div>';
   }
 
   cont.innerHTML=html || '<div style="color:var(--textm);font-size:12px;padding:10px">Rien à afficher.</div>';
+  if(_scEstDemandeur()) _scLoadHistorique();
+}
+
+// Historique du stock produit fini du PDV (entrées = réceptions livraisons, sorties = ventes)
+async function _scLoadHistorique(){
+  const el=document.getElementById('sc-histo');
+  if(!el || !GP_POINT_VENTE) return;
+  const pdv=GP_POINT_VENTE;
+  const[{data:liv},{data:ven}]=await Promise.all([
+    SB.from('gp_livraisons_pdv').select('date_livraison,formule_nom,qte_confirmee,qte_envoyee')
+      .eq('admin_id',GP_ADMIN_ID).eq('pdv_dest_nom',pdv).order('date_livraison',{ascending:false}).limit(20),
+    SB.from('gp_ventes').select('date,formule_nom,qte_vendue,quantite')
+      .eq('admin_id',GP_ADMIN_ID).eq('point_vente',pdv).is('deleted_at',null).order('date',{ascending:false}).limit(20)
+  ]);
+  const mv=[];
+  (liv||[]).forEach(l=>mv.push({date:l.date_livraison,t:'+',formule:l.formule_nom,q:(l.qte_confirmee||l.qte_envoyee||0)+' sacs',label:'Réception'}));
+  (ven||[]).forEach(v=>mv.push({date:v.date,t:'-',formule:v.formule_nom,q:fmtKg(v.qte_vendue||v.quantite||0)+' kg',label:'Vente'}));
+  mv.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const rows=mv.slice(0,25);
+  el.innerHTML=`<div class="card"><div style="font-weight:700;font-size:13px;margin-bottom:8px">📦 Mouvements récents de mon stock</div>`+
+    (rows.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Type</th><th>Formule</th><th class="num">Qté</th></tr></thead><tbody>`+
+      rows.map(m=>`<tr>
+        <td style="font-size:10px">${typeof fmtDate==='function'?fmtDate(m.date):m.date}</td>
+        <td><span class="badge ${m.t==='+'?'bdg-g':'bdg-gold'}" style="font-size:8px">${m.t==='+'?'⬆':'⬇'} ${m.label}</span></td>
+        <td>${m.formule||'—'}</td>
+        <td class="num">${m.t}${m.q}</td>
+      </tr>`).join('')+`</tbody></table>`
+    :'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>')+`</div>`;
 }
 
 // ── Demander un réappro (PDV secondaire) ──────────
@@ -165,18 +207,22 @@ async function confirmerReappro(id){
   for(const it of (r.items||[])){
     const poids=Number(it.poids_sac)||25;
     const kg=Number(it.nb_sacs)*poids;
-    // Prix : prix de vente local de la source (par kg) → montant + prix/sac
+    // Prix gros au sac : prix de vente local (×poids) ; si non renseigné → saisie
     const{data:st}=await SB.from('gp_stock_produits_pdv').select('prix_vente_local')
       .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',r.source).eq('formule_nom',it.formule).maybeSingle();
-    const prixKg=Number(st?.prix_vente_local||0);
-    const montant=Math.round(kg*prixKg);
+    let prixSac=Math.round(Number(st?.prix_vente_local||0)*poids);
+    if(prixSac<=0){
+      const p=prompt(`Prix gros AU SAC pour ${it.formule} (${it.nb_sacs} sac(s) de ${poids}kg) :`,'');
+      prixSac=Math.round(Number(p)||0);
+    }
+    const montant=prixSac*Number(it.nb_sacs);
     await SB.from('gp_livraisons_pdv').insert({
       admin_id:GP_ADMIN_ID,
       ref:'REAP-'+Date.now().toString().slice(-6),
       pdv_source_nom:r.source, pdv_dest_nom:r.pdv_demandeur,
       type_relation:'vente_gros', formule_nom:it.formule, type_produit:'formule',
       qte_envoyee:it.nb_sacs, qte_confirmee:0, poids_sac:poids,
-      prix_gros_unitaire: poids>0 ? Math.round(prixKg*poids) : prixKg,
+      prix_gros_unitaire: prixSac,
       montant_total:montant, montant_paye:0,
       statut:'envoye', statut_paiement:'impaye',
       envoye_par:GP_USER?.id, date_livraison:today()

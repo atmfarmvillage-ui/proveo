@@ -661,6 +661,28 @@ async function _retirerStockAchat(id){
   return true;
 }
 
+// Remboursement caisse : crée une ENTRÉE compensatoire (annulation d'un achat déjà payé).
+// Restaure le solde, dans la caisse physique du PDV (ou siège).
+async function _rembourserCaisseAchat(montant, ref){
+  if(!montant || montant<=0) return;
+  let cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
+  cq = GP_POINT_VENTE ? cq.eq('point_vente',GP_POINT_VENTE) : cq.is('point_vente',null);
+  let{data:caisses}=await cq.limit(1);
+  if(!caisses?.length){
+    const r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+    caisses=r.data;
+  }
+  if(caisses?.length){
+    await SB.from('gp_mouvements_caisse').insert({
+      admin_id:GP_ADMIN_ID, caisse_id:caisses[0].id,
+      type:'entree', categorie:'annulation_achat',
+      montant, date_mouvement:today(),
+      description:`Remboursement annulation achat ${ref||''}`.trim(),
+      enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
+    });
+  }
+}
+
 async function annulerAchat(id){
   if(typeof peutPayerMP==='function' && !(await peutPayerMP())){
     notify('Annulation réservée à la Production / PDV principal','r'); return;
@@ -669,7 +691,7 @@ async function annulerAchat(id){
   if(!a){notify('Bon introuvable','r');return;}
   if(a.statut==='annule'){notify('Bon déjà annulé','gold');return;}
   if(Number(a.montant_paye||0)>0 &&
-     !confirm(`⚠️ ${fmt(a.montant_paye)} F déjà payés sur ce bon.\nAnnuler quand même ? (les paiements restent tracés)`)) return;
+     !confirm(`⚠️ ${fmt(a.montant_paye)} F déjà payés sur ce bon.\nAnnuler quand même ? (un remboursement sera ajouté en caisse)`)) return;
   const raison=prompt('Raison de l\'annulation :');
   if(!raison)return;
   // Si déjà en stock → retirer les entrées (bloque si MP consommée)
@@ -677,6 +699,8 @@ async function annulerAchat(id){
     const ok=await _retirerStockAchat(id);
     if(!ok) return;
   }
+  // Remboursement caisse des montants déjà payés
+  if(Number(a.montant_paye||0)>0) await _rembourserCaisseAchat(Number(a.montant_paye), a.ref);
   const qui=GP_USER?.email?.split('@')[0]||'admin';
   await SB.from('gp_achats').update({
     statut:'annule',
@@ -705,7 +729,7 @@ async function supprimerAchat(id){
 
   let msg=`Supprimer DÉFINITIVEMENT le bon ${a.ref||''} (${a.fournisseur_nom||''}) ?`;
   if(a.statut==='valide_daf') msg+='\n\n• Le stock crédité par ce bon sera retiré.';
-  if(Number(a.montant_paye||0)>0) msg+=`\n• ${fmt(a.montant_paye)} F de paiements seront supprimés (⚠️ les sorties de caisse déjà passées ne sont PAS annulées automatiquement).`;
+  if(Number(a.montant_paye||0)>0) msg+=`\n• ${fmt(a.montant_paye)} F de paiements supprimés + remboursement ajouté en caisse.`;
   msg+='\n\nCette action est irréversible.';
   if(!confirm(msg)) return;
 
@@ -714,6 +738,8 @@ async function supprimerAchat(id){
     const ok=await _retirerStockAchat(id);
     if(!ok) return;
   }
+  // Remboursement caisse des montants déjà payés
+  if(Number(a.montant_paye||0)>0) await _rembourserCaisseAchat(Number(a.montant_paye), a.ref);
   await SB.from('gp_achats_paiements').delete().eq('achat_id',id);
   await SB.from('gp_achats_lignes').delete().eq('achat_id',id);
   await SB.from('gp_achats').delete().eq('id',id);
@@ -901,9 +927,14 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
     statut_paiement:statutPaiement
   }).eq('id',achatId);
 
-  // Mouvement caisse automatique
-  const{data:caisses}=await SB.from('gp_caisses').select('id')
-    .eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+  // Mouvement caisse automatique — caisse du PDV (ou siège), pas une caisse au hasard
+  let _cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
+  _cq = GP_POINT_VENTE ? _cq.eq('point_vente',GP_POINT_VENTE) : _cq.is('point_vente',null);
+  let{data:caisses}=await _cq.limit(1);
+  if(!caisses?.length){
+    const _r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+    caisses=_r.data;
+  }
   if(caisses?.length){
     await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,

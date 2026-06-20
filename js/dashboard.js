@@ -237,6 +237,8 @@ async function renderDashboard(){
     }
   },100);
 
+  try{ _renderDashChart(); }catch(e){}
+
   document.getElementById('dash-body').innerHTML=`
     <div>
       <div class="card">
@@ -350,4 +352,45 @@ async function renderDashboard(){
       }
     },50);
   }
+}
+
+// Graphe CA des 6 derniers mois (barres CSS, sans librairie) — cloisonné par PDV
+async function _renderDashChart(){
+  const el=document.getElementById('dash-chart');
+  if(!el) return;
+  const now=new Date();
+  const debut=new Date(now.getFullYear(), now.getMonth()-5, 1).toISOString().slice(0,10);
+  let q=SB.from('gp_ventes').select('montant_total,date,point_vente')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut);
+  const{data}=await q;
+  let V=data||[];
+  if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL){
+    V=V.filter(v=>v.point_vente===(GP_POINT_VENTE||'Production'));
+  }
+  // 6 buckets mensuels
+  const mois=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+    mois.push({k:d.toISOString().slice(0,7), lbl:d.toLocaleDateString('fr-FR',{month:'short'}), val:0});
+  }
+  V.forEach(v=>{
+    const k=(v.date||'').slice(0,7);
+    const b=mois.find(m=>m.k===k);
+    if(b) b.val+=Number(v.montant_total||0);
+  });
+  const max=Math.max(1,...mois.map(m=>m.val));
+  const barres=mois.map(m=>{
+    const h=Math.round(m.val/max*100);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="font-size:9px;color:var(--textm);font-family:'DM Mono',monospace">${m.val>0?fmt(Math.round(m.val/1000))+'k':''}</div>
+      <div style="width:60%;height:90px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${h}%;min-height:2px;background:linear-gradient(180deg,var(--g4),var(--g6));border-radius:4px 4px 0 0"></div>
+      </div>
+      <div style="font-size:10px;color:var(--textm)">${m.lbl}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="card">
+    <div style="font-weight:700;font-size:13px;margin-bottom:10px">📈 CA des 6 derniers mois${(GP_ROLE!=='admin'&&!GP_EST_PRINCIPAL)?' (mon PDV)':''}</div>
+    <div style="display:flex;align-items:flex-end;gap:6px;padding:4px 2px">${barres}</div>
+  </div>`;
 }
