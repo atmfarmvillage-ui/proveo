@@ -5,6 +5,24 @@
 
 const IA_WORKER = 'https://proveo-ia.atm-farmvillage.workers.dev';
 
+// Icône : tête de robot SADARI avec cerveau IA visible (vert marque)
+const IA_ICON = `<svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <line x1="32" y1="5" x2="32" y2="13" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="5" r="3.4" fill="#FBBF24"/>
+  <rect x="5" y="25" width="5" height="13" rx="2.5" fill="#fff"/>
+  <rect x="54" y="25" width="5" height="13" rx="2.5" fill="#fff"/>
+  <rect x="12" y="13" width="40" height="39" rx="11" fill="rgba(255,255,255,.15)" stroke="#fff" stroke-width="3"/>
+  <rect x="17" y="19" width="30" height="21" rx="7.5" fill="#fff"/>
+  <g stroke="#15803D" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="32" y1="22.5" x2="32" y2="36.5"/>
+    <path d="M32 24.5c-3-3-8.5-1-8.5 3.2 -3 .2-3 5 0 6 .2 3 4.2 4 6.2 1.8"/>
+    <path d="M32 24.5c3-3 8.5-1 8.5 3.2 3 .2 3 5 0 6 -.2 3-4.2 4-6.2 1.8"/>
+  </g>
+  <circle cx="26.5" cy="28.5" r="1.3" fill="#FBBF24"/>
+  <circle cx="37.5" cy="31" r="1.3" fill="#FBBF24"/>
+  <rect x="24" y="44" width="16" height="3.6" rx="1.8" fill="#fff"/>
+</svg>`;
+
 let _iaPersona = 'comptable';
 let _iaTier = 'eco';
 let _iaCtx = null;           // contexte chargé (cache par ouverture)
@@ -25,7 +43,7 @@ function initIA(){
   const fab = document.createElement('button');
   fab.id = 'ia-fab';
   fab.title = 'Assistant IA SADARI';
-  fab.innerHTML = '🤖';
+  fab.innerHTML = `<span style="display:block;width:34px;height:34px">${IA_ICON}</span>`;
   fab.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:1200;width:56px;height:56px;border-radius:50%;border:none;'
     + 'background:linear-gradient(135deg,var(--g4,#16A34A),var(--g6,#15803D));color:#fff;font-size:26px;cursor:pointer;'
     + 'box-shadow:0 6px 18px rgba(22,163,74,.45);display:flex;align-items:center;justify-content:center';
@@ -39,7 +57,7 @@ function initIA(){
   panel.innerHTML = `
     <div onclick="event.stopPropagation()" style="background:var(--card2,#fff);width:100%;max-width:440px;height:100%;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.2)">
       <div style="padding:14px 16px;border-bottom:1px solid var(--border,#e2e8f0);display:flex;align-items:center;justify-content:space-between">
-        <div style="font-weight:800;font-size:15px;color:var(--text)">🤖 Assistant SADARI</div>
+        <div style="font-weight:800;font-size:15px;color:var(--text);display:flex;align-items:center;gap:7px"><span style="display:inline-flex;width:24px;height:24px;background:linear-gradient(135deg,var(--g4,#16A34A),var(--g6,#15803D));border-radius:6px;padding:2px">${IA_ICON}</span> Assistant SADARI</div>
         <button onclick="closeIA()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--textm,#64748b)">×</button>
       </div>
       <div style="padding:10px 14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border,#e2e8f0);flex-wrap:wrap">
