@@ -224,28 +224,24 @@ async function drillImpayes(){
       📞 Relancer tous par WhatsApp (${ventes.length})
     </button>`;
 
-  // Récup numéros clients
-  const ids = [...new Set(ventes.map(v=>v.client_id).filter(Boolean))];
-  let clientsMap = {};
-  if(ids.length){
-    const{data:cli}=await SB.from('gp_clients').select('id,nom,telephone,whatsapp').in('id',ids);
-    (cli||[]).forEach(c=>{clientsMap[c.id]=c;});
-  }
-  window._kpiDrillClientsMap = clientsMap;
+  // Récup numéros clients : par client_id OU par nom (les ventes "au nom" n'ont pas de client_id)
+  const idMap={}, nameMap={};
+  try{
+    const{data:cli}=await SB.from('gp_clients').select('id,nom,telephone,whatsapp').eq('admin_id',GP_ADMIN_ID);
+    (cli||[]).forEach(c=>{ idMap[c.id]=c; if(c.nom) nameMap[c.nom.trim().toLowerCase()]=c; });
+  }catch(e){}
+  const _resolveCli=(r)=> idMap[r.client_id] || nameMap[(r.client_nom||'').trim().toLowerCase()] || null;
+  ventes.forEach(v=>{ const c=_resolveCli(v); v._tel=c?(c.whatsapp||c.telephone||''):''; v._cnom=c?.nom||v.client_nom||''; });
 
   const cols = [
     {key:'date', label:'Date'},
-    {key:'client_nom', label:'Client', render:r=>{
-      const tel = clientsMap[r.client_id]?.whatsapp || clientsMap[r.client_id]?.telephone || '';
-      return `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${tel||'(sans tél)'}</div>`;
-    }},
+    {key:'client_nom', label:'Client', render:r=>
+      `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${r._tel||'(sans tél)'}</div>`},
     {key:'montant_total', label:'Total', align:'num', render:r=>fmt(r.montant_total||0)+' F'},
     {key:'montant_paye', label:'Payé', align:'num', style:'color:var(--green)', render:r=>fmt(r.montant_paye||0)+' F'},
     {key:'_reste', label:'Reste dû', align:'num', style:'color:var(--red);font-weight:700', render:r=>fmt(r._reste||0)+' F'},
-    {key:'_action', label:'', render:r=>{
-      const tel = clientsMap[r.client_id]?.whatsapp || clientsMap[r.client_id]?.telephone || '';
-      return tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}','${r.client_id||''}','${r._reste}')">📞</button>` : '';
-    }}
+    {key:'_action', label:'', render:r=>
+      r._tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}')">📞</button>` : ''}
   ];
   _renderKpiTable(cols, ventes, `TOTAL DÛ`, fmt(total)+' F');
   _renderKpiFooter('Voir Suivi & Appels', "showGP('suivi');fermerKpiDrill();");
@@ -253,15 +249,15 @@ async function drillImpayes(){
   window._kpiDrillData = { type:'impayes', titre:'Impayés du mois', rows:ventes, columns:cols, total };
 }
 
-// Relancer UN impayé par WhatsApp (pop-up wa.me avec message)
-function relancerImpayeWA(venteId, clientId, reste){
-  const c = window._kpiDrillClientsMap?.[clientId];
-  if(!c){ notify('Client introuvable','r'); return; }
-  const tel = (c.whatsapp || c.telephone || '').replace(/[^0-9]/g,'');
-  if(!tel){ notify('Pas de téléphone pour '+(c.nom||'ce client'),'r'); return; }
+// Relancer UN impayé par WhatsApp (pop-up wa.me avec message) — tél résolu par id OU nom
+function relancerImpayeWA(venteId){
+  const r = (window._kpiDrillData?.rows||[]).find(x=>String(x.id)===String(venteId));
+  if(!r){ notify('Vente introuvable','r'); return; }
+  const tel = (r._tel||'').replace(/[^0-9]/g,'');
+  if(!tel){ notify('Pas de téléphone pour '+(r._cnom||r.client_nom||'ce client'),'r'); return; }
   const prov = GP_CONFIG?.nom_provenderie || 'SADARI';
-  const msg = `🌾 Bonjour ${c.nom||''},\n\n` +
-              `Petit rappel amical : il vous reste *${fmt(reste)} F* à régler chez ${prov} sur votre achat récent.\n\n` +
+  const msg = `🌾 Bonjour ${r._cnom||r.client_nom||''},\n\n` +
+              `Petit rappel amical : il vous reste *${fmt(r._reste)} F* à régler chez ${prov} sur votre achat récent.\n\n` +
               `Quand pouvez-vous passer pour le règlement ? Merci 🙏`;
   const p = (typeof detecterPays==='function')?detecterPays(tel):{numero_whatsapp:tel};
   window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg), '_blank');
@@ -270,16 +266,12 @@ function relancerImpayeWA(venteId, clientId, reste){
 // Relancer TOUS les impayés visibles dans la table (ouvre 1 onglet WA par client)
 async function relancerTousImpayes(){
   const rows = (window._kpiDrillData?.rows)||[];
-  const map = window._kpiDrillClientsMap||{};
-  const avecTel = rows.filter(r=>{
-    const c = map[r.client_id];
-    return c && (c.whatsapp || c.telephone);
-  });
+  const avecTel = rows.filter(r=>r._tel);
   if(!avecTel.length){ notify('Aucun client avec téléphone trouvé','r'); return; }
-  if(!confirm(`Ouvrir ${avecTel.length} fenêtres WhatsApp ?\n(une par client à relancer)`)) return;
+  if(!confirm(`Ouvrir ${avecTel.length} fenêtre(s) WhatsApp ?\n(une par client à relancer)`)) return;
   for(const r of avecTel){
-    relancerImpayeWA(r.id, r.client_id, r._reste);
-    await new Promise(res=>setTimeout(res, 300)); // espacer un peu pour pas que le navigateur bloque
+    relancerImpayeWA(r.id);
+    await new Promise(res=>setTimeout(res, 300)); // espacer pour éviter le blocage navigateur
   }
 }
 
