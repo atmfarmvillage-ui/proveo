@@ -141,6 +141,24 @@ async function openClientDetail(id){
 }
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
 
+// Relance rédigée par l'IA (marketing) → ouvre la modale WhatsApp pré-remplie
+async function redigerRelanceIA(id){
+  const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
+  if(typeof iaGenerate!=='function'){ notify('Assistant IA indisponible','r'); return; }
+  await loadClientStats();
+  const s=GP_CLIENT_STATS[id]||{};
+  const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):'?';
+  notify('✍️ Rédaction du message…','gold');
+  try{
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et personnalisé pour relancer le client "${c.nom}" qui n'a pas acheté depuis ${jours} jours${s.produitHabituel?` (son aliment habituel : ${s.produitHabituel})`:''}. Objectif : le faire revenir acheter chez SADARI. Termine par la signature SADARI. Donne seulement le message, sans commentaire.`;
+    const txt=await iaGenerate('marketing', q, 'eco');
+    if(typeof ouvrirModalWA==='function'){
+      ouvrirModalWA(id);
+      setTimeout(()=>{ const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt; }, 60);
+    } else { alert(txt); }
+  }catch(e){ notify('Échec rédaction IA : '+(e.message||e),'r'); }
+}
+
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
@@ -362,6 +380,7 @@ async function renderSuivi(){
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
         <button class="btn btn-out btn-sm" onclick="event.stopPropagation();preFillAppel('${c.id}')" title="Enregistrer un appel">📞</button>
+        <button class="btn btn-out btn-sm" onclick="event.stopPropagation();redigerRelanceIA('${c.id}')" title="Rédiger la relance (IA)">✍️</button>
         <button class="btn btn-g btn-sm" onclick="event.stopPropagation();ouvrirModalWA('${c.id}')" title="Relancer (WhatsApp)">📲</button>
       </div>
     </div>

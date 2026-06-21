@@ -238,6 +238,7 @@ async function renderDashboard(){
   },100);
 
   try{ _renderDashChart(); }catch(e){}
+  try{ _renderIABriefing(); }catch(e){}
 
   document.getElementById('dash-body').innerHTML=`
     <div>
@@ -352,6 +353,40 @@ async function renderDashboard(){
       }
     },50);
   }
+}
+
+// Briefing IA du jour (1×/jour, cache localStorage) — couvre résumé + alertes + actions
+function _iaEscDash(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function _renderIABriefing(){
+  const el = document.getElementById('dash-ia');
+  if(!el) return;
+  if(typeof _iaAllowed!=='function' || !_iaAllowed() || typeof iaGenerate!=='function'){ el.innerHTML=''; return; }
+  const key = 'gp-briefing-' + (GP_POINT_VENTE||'R') + '-' + new Date().toISOString().slice(0,10);
+  const render = (txt, loading) => {
+    el.innerHTML = `<div class="card" style="border-left:3px solid var(--g4,#16A34A)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:800;font-size:13px;color:var(--g6,#15803D)">🤖 Briefing du jour</div>
+        <button class="btn btn-out btn-sm" onclick="_briefingRefresh()" ${loading?'disabled':''} title="Régénérer">↻</button>
+      </div>
+      <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)">${loading?'Génération du briefing…':_iaEscDash(txt)}</div>
+    </div>`;
+  };
+  let cached=null; try{ cached=localStorage.getItem(key); }catch(e){}
+  if(cached){ render(cached,false); return; }
+  render('', true);
+  try{
+    const q = "Fais-moi le BRIEFING DU JOUR, très concis (puces) : 1) l'essentiel (CA et encaissé du mois, tendance) ; 2) les ALERTES à surveiller (impayés, caisse basse, dettes fournisseurs) ; 3) les 3 ACTIONS prioritaires aujourd'hui. 6 lignes maximum.";
+    const txt = await iaGenerate('comptable', q, 'eco');
+    try{ localStorage.setItem(key, txt); }catch(e){}
+    render(txt, false);
+  }catch(e){
+    el.innerHTML = `<div class="card" style="font-size:12px;color:var(--textm)">🤖 Briefing indisponible — ${_iaEscDash(String(e.message||e))}</div>`;
+  }
+}
+function _briefingRefresh(){
+  const key = 'gp-briefing-' + (GP_POINT_VENTE||'R') + '-' + new Date().toISOString().slice(0,10);
+  try{ localStorage.removeItem(key); }catch(e){}
+  _renderIABriefing();
 }
 
 // Graphe CA des 6 derniers mois (barres CSS, sans librairie) — cloisonné par PDV
