@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROVENDA — Aperçu thèmes</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   APERÇU — 3 THÈMES :
+   data-theme="dark-current"  → ton thème sombre actuel
+   data-theme="dark-new"      → nouveau thème sombre (lisible)
+   data-theme="light-new"     → nouveau thème clair (style Mixx)
+   ========================================================= */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* ───────── SOMBRE ACTUEL (= tel quel) ───────── */
+:root[data-theme="dark-current"]{
+  --g0:#050A02;--g1:#0A100A;--g2:#11180F;--g3:#1A2616;
+  --g4:#16A34A;--g5:#1A8A2A;--g6:#B8F566;
+  --gold:#E8C547;--goldd:#C9A93C;
+  --red:#ef4444;--green:#25C23A;
+  --text:#F0EDE6;--textm:#9A9E8F;--textl:#5C6150;
+  --border:#1E3320;--border2:#2E4A30;
+  --card:#0E1A0C;--card2:#11180F;
+  --body-bg:#050A02;
+  --body-font-weight:400;
+}
+:root[data-theme="dark-current"] .stat-val{font-family:'DM Serif Display',serif;font-size:36px;font-weight:700;color:var(--g6)}
+:root[data-theme="dark-current"] .stat-lbl{font-size:10px;color:var(--textm);text-transform:uppercase;letter-spacing:.8px;margin-top:6px;font-weight:400}
+:root[data-theme="dark-current"] .card{background:linear-gradient(135deg,rgba(14,26,12,.95),rgba(10,18,8,.98));border:1px solid rgba(30,51,32,.7)}
+:root[data-theme="dark-current"] .stat-box{background:rgba(14,26,12,.8);border:1px solid rgba(30,51,32,.6)}
+
+/* ───────── SOMBRE NOUVEAU (charbon doux, lisible) ───────── */
+:root[data-theme="dark-new"]{
+  --g0:#0D120E;        /* fond charbon vert doux, pas noir */
+  --g1:#131A14;
+  --g2:#172218;        /* cartes niveau 1 */
+  --g3:#1E2A1F;        /* cartes niveau 2 */
+  --g4:#16A34A;
+  --g5:#1A8A2A;
+  --g6:#7EE090;        /* vert accent doux (au lieu de criard) */
+  --gold:#D4B95E;
+  --goldd:#B89E3F;
+  --red:#F87171;
+  --green:#4ADE80;
+  --orange:#FB923C;
+  --blue:#60A5FA;
+  --text:#F5F7F2;      /* presque blanc, lisible */
+  --textm:#C4CDBF;     /* WCAG AA sur fond #172218 */
+  --textl:#8A9385;
+  --border:#3A5A3D;        /* bordure plus marquée */
+  --border2:#4A6E50;
+  --card:#172218;
+  --card2:#1E2A1F;
+  --body-bg:linear-gradient(180deg,#0D120E 0%,#0B1010 100%);
+  --body-font-weight:500;
+  --kpi-num-color:#FFFFFF;        /* KPI EN BLANC, pas vert sur vert */
+  --kpi-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 16px rgba(0,0,0,.35);
+}
+:root[data-theme="dark-new"] .stat-box{
+  background:var(--card);
+  border:1.5px solid var(--border);
+  box-shadow:var(--kpi-shadow);
+  text-align:left;
+  padding:18px 20px;
+  display:flex;flex-direction:column;gap:10px;
+}
+:root[data-theme="dark-new"] .stat-box .kpi-head{
+  display:flex;align-items:center;gap:10px;
+}
+:root[data-theme="dark-new"] .kpi-icon{
+  width:36px;height:36px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+:root[data-theme="dark-new"] .stat-lbl{
+  font-size:10px;color:var(--textm);
+  text-transform:uppercase;letter-spacing:.08em;
+  font-weight:600;margin:0;
+}
+:root[data-theme="dark-new"] .stat-val{
+  font-family:'Plus Jakarta Sans','Outfit',sans-serif;
+  font-size:28px;font-weight:800;
+  color:var(--kpi-num-color);
+  line-height:1.05;letter-spacing:-.6px;
+}
+:root[data-theme="dark-new"] .kpi-delta{
+  font-size:11px;font-weight:600;
+  display:inline-flex;align-items:center;gap:3px;
+}
+:root[data-theme="dark-new"] .kpi-delta.up{color:var(--green)}
+:root[data-theme="dark-new"] .kpi-delta.down{color:var(--red)}
+:root[data-theme="dark-new"] .kpi-delta.flat{color:var(--textm)}
+:root[data-theme="dark-new"] .card{
+  background:var(--card);
+  border:1.5px solid var(--border);
+  box-shadow:var(--kpi-shadow);
+}
+
+/* ───────── CLAIR NOUVEAU (style Mixx, blanc cassé) ───────── */
+:root[data-theme="light-new"]{
+  --g0:#F4F6F1;        /* fond blanc cassé légèrement vert */
+  --g1:#FFFFFF;
+  --g2:#FFFFFF;
+  --g3:#F9FBF6;
+  --g4:#16A34A;
+  --g5:#15803D;
+  --g6:#15803D;
+  --gold:#A88E2E;
+  --goldd:#856E1F;
+  --red:#DC2626;
+  --green:#15803D;
+  --orange:#EA580C;
+  --blue:#1D4ED8;
+  --text:#0F1B14;      /* presque noir, parfaitement lisible */
+  --textm:#4B5560;
+  --textl:#8A9385;
+  --border:#E2E8DC;
+  --border2:#CBD5C3;
+  --card:#FFFFFF;
+  --card2:#F9FBF6;
+  --body-bg:#F4F6F1;
+  --body-font-weight:500;
+  --kpi-num-color:#0F1B14;
+  --kpi-shadow:0 1px 2px rgba(15,27,20,.04),0 4px 16px rgba(15,27,20,.05);
+}
+:root[data-theme="light-new"] .stat-box{
+  background:var(--card);
+  border:2px solid var(--border);
+  box-shadow:var(--kpi-shadow);
+  text-align:left;
+  padding:20px 22px;
+  display:flex;flex-direction:column;gap:12px;
+}
+:root[data-theme="light-new"] .stat-box .kpi-head{
+  display:flex;align-items:center;gap:10px;
+}
+:root[data-theme="light-new"] .kpi-icon{
+  width:36px;height:36px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+:root[data-theme="light-new"] .stat-lbl{
+  font-size:10px;color:var(--textm);
+  text-transform:uppercase;letter-spacing:.08em;
+  font-weight:700;margin:0;
+}
+:root[data-theme="light-new"] .stat-val{
+  font-family:'Plus Jakarta Sans','Outfit',sans-serif;
+  font-size:32px;font-weight:800;
+  color:var(--kpi-num-color);
+  line-height:1.05;letter-spacing:-.8px;
+}
+:root[data-theme="light-new"] .kpi-delta{
+  font-size:11px;font-weight:600;
+  display:inline-flex;align-items:center;gap:3px;
+}
+:root[data-theme="light-new"] .kpi-delta.up{color:var(--green)}
+:root[data-theme="light-new"] .kpi-delta.down{color:var(--red)}
+:root[data-theme="light-new"] .kpi-delta.flat{color:var(--textm)}
+:root[data-theme="light-new"] .card{
+  background:var(--card);
+  border:2px solid var(--border);
+  box-shadow:var(--kpi-shadow);
+}
+:root[data-theme="light-new"]{
+  --border:#D5DECE;        /* bordure plus marquée */
+  --border2:#B8C5AA;
+}
+
+/* ───────── BASE COMMUNE ───────── */
+html,body{
+  height:100%;
+  background:var(--body-bg);
+  color:var(--text);
+  font-family:'Plus Jakarta Sans','Outfit',sans-serif;
+  font-size:14px;
+  font-weight:var(--body-font-weight);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+.preview-bar{
+  position:sticky;top:0;z-index:10;
+  background:rgba(0,0,0,.4);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:10px 18px;display:flex;align-items:center;gap:10px;
+}
+:root[data-theme="light-new"] .preview-bar{background:rgba(255,255,255,.85);border-bottom-color:#E2E8DC}
+.preview-bar h1{font-size:13px;font-weight:600;color:var(--text);margin-right:auto}
+.theme-btn{
+  background:transparent;border:1px solid var(--border2);
+  color:var(--text);padding:7px 14px;border-radius:8px;
+  cursor:pointer;font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;
+  transition:all .2s;
+}
+.theme-btn:hover{border-color:var(--g4);color:var(--g6)}
+.theme-btn.active{background:linear-gradient(135deg,var(--g4),var(--g5));color:white;border-color:transparent}
+
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 60px)}
+.sidebar{
+  background:var(--card);
+  border-right:1px solid var(--border);
+  padding:14px 8px;
+}
+:root[data-theme="light-new"] .sidebar{background:linear-gradient(180deg,#FFFFFF,#FAFBF8)}
+.nav-sect{
+  font-size:12px;font-weight:800;color:var(--g6);
+  text-transform:uppercase;letter-spacing:.10em;
+  padding:18px 12px 8px;
+  text-shadow:0 0 8px rgba(126,224,144,.25);
+}
+:root[data-theme="light-new"] .nav-sect{
+  color:var(--g5);
+  text-shadow:none;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:8px;
+  font-size:13px;color:var(--textm);
+  cursor:pointer;margin:1px 0;font-weight:500;
+  transition:transform .25s cubic-bezier(.2,.7,.3,1),
+              background .22s ease,
+              color .22s ease,
+              padding-left .25s cubic-bezier(.2,.7,.3,1);
+  position:relative;overflow:hidden;
+}
+
+/* Glow doré qui balaie au hover (shimmer) */
+.nav-item::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(110deg,
+    transparent 0%,
+    rgba(232,197,71,.10) 45%,
+    rgba(255,224,130,.20) 50%,
+    rgba(232,197,71,.10) 55%,
+    transparent 100%);
+  transform:translateX(-120%);
+  transition:transform .65s ease;
+  pointer-events:none;
+}
+.nav-item:hover::before{transform:translateX(120%)}
+
+/* Petite barre dorée qui se dessine en bas au hover */
+.nav-item::after{
+  content:'';position:absolute;
+  left:14px;right:14px;bottom:4px;
+  height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--gold),transparent);
+  transform:scaleX(0);transform-origin:left;
+  transition:transform .35s cubic-bezier(.2,.7,.3,1);
+  opacity:.85;
+}
+.nav-item:hover::after{transform:scaleX(1)}
+
+.nav-item:hover{
+  background:rgba(232,197,71,.06);
+  color:var(--text);
+  transform:translateX(4px);
+  padding-left:14px;
+}
+.nav-item:hover .nav-icon{
+  transform:scale(1.18) rotate(-4deg);
+  filter:drop-shadow(0 0 6px rgba(232,197,71,.55));
+}
+
+/* Active : barre verte avec pulsation dorée */
+.nav-item.active{
+  background:rgba(126,224,144,.10);
+  color:var(--g6);font-weight:700;
+  transform:translateX(2px);
+}
+:root[data-theme="light-new"] .nav-item.active{background:rgba(22,163,74,.10);color:var(--g5)}
+.nav-item.active::after{transform:scaleX(0)}  /* on cache la barre hover quand actif */
+
+/* Barre verticale gauche — pulsation dorée subtile sur l'item actif */
+.nav-item .left-bar{
+  content:'';position:absolute;left:0;top:20%;bottom:20%;
+  width:3px;border-radius:0 3px 3px 0;
+  background:transparent;
+  transition:all .3s ease;
+}
+.nav-item.active .left-bar{
+  background:linear-gradient(180deg,var(--g4),var(--g6));
+  box-shadow:
+    0 0 8px var(--gold),
+    0 0 16px rgba(232,197,71,.5);
+  animation:activeBarPulse 2.2s ease-in-out infinite;
+}
+@keyframes activeBarPulse{
+  0%,100%{
+    box-shadow:
+      0 0 6px var(--gold),
+      0 0 14px rgba(232,197,71,.35);
+  }
+  50%{
+    box-shadow:
+      0 0 12px var(--gold),
+      0 0 24px rgba(232,197,71,.65),
+      0 0 36px rgba(255,224,130,.35);
+  }
+}
+.nav-item.active .nav-icon{
+  filter:drop-shadow(0 0 8px rgba(232,197,71,.45));
+  transform:scale(1.08);
+}
+
+.nav-icon{
+  font-size:16px;width:22px;text-align:center;
+  transition:transform .25s cubic-bezier(.2,.7,.3,1),filter .25s ease;
+}
+
+/* CASCADE D'ENTRÉE — items qui slident depuis la gauche */
+.sidebar .nav-item,
+.sidebar .nav-sect{
+  animation: navEnter .5s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes navEnter{
+  from{opacity:0;transform:translateX(-18px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+/* Petit flash doré quand on clique sur un item */
+.nav-item.flash{
+  animation: navFlash .6s ease-out;
+}
+@keyframes navFlash{
+  0%{background:rgba(232,197,71,.35);box-shadow:0 0 24px rgba(232,197,71,.5)}
+  100%{background:rgba(126,224,144,.10);box-shadow:none}
+}
+
+.main{padding:24px 28px;overflow-y:auto}
+
+/* ═══════ ANIMATION D'ENTRÉE DE PAGE ═══════ */
+.page-anim{
+  animation: pageEnter .55s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes pageEnter{
+  from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(4px)}
+  to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
+}
+
+/* Titre — léger glow flash à l'entrée */
+.page-anim .page-title{
+  animation: titleGlow 1.2s ease-out both;
+}
+@keyframes titleGlow{
+  0%{opacity:0;transform:translateY(8px);text-shadow:0 0 0 transparent}
+  50%{opacity:1;transform:translateY(0);text-shadow:0 0 24px rgba(232,197,71,.35)}
+  100%{opacity:1;transform:translateY(0);text-shadow:0 0 0 transparent}
+}
+
+/* Barre néon — se DESSINE de 0 à 80px puis prend le relais avec la pulsation */
+.page-anim .page-title::after{
+  animation:
+    neonDraw .85s cubic-bezier(.2,.7,.3,1) .25s both,
+    neonPulse 2.4s ease-in-out 1.1s infinite;
+}
+@keyframes neonDraw{
+  from{width:0;opacity:0;box-shadow:none}
+  60%{opacity:1}
+  to{width:80px;opacity:1}
+}
+
+/* Sous-titre — apparition retardée */
+.page-anim .page-sub{
+  animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) .5s both;
+}
+
+/* KPI : entrée en cascade (stagger) */
+.page-anim .stat-box{
+  animation: cardIn .55s cubic-bezier(.2,.7,.3,1) both;
+}
+.page-anim .g4 .stat-box:nth-child(1){animation-delay:.55s}
+.page-anim .g4 .stat-box:nth-child(2){animation-delay:.65s}
+.page-anim .g4 .stat-box:nth-child(3){animation-delay:.75s}
+.page-anim .g4 .stat-box:nth-child(4){animation-delay:.85s}
+.page-anim .g1 .stat-box{animation-delay:.95s}
+
+/* Cartes du bas en cascade aussi */
+.page-anim .g2 .card{animation: cardIn .55s cubic-bezier(.2,.7,.3,1) both}
+.page-anim .g2:nth-of-type(2) .card:nth-child(1){animation-delay:1.05s}
+.page-anim .g2:nth-of-type(2) .card:nth-child(2){animation-delay:1.15s}
+.page-anim .g2:nth-of-type(3) .card:nth-child(1){animation-delay:1.25s}
+.page-anim .g2:nth-of-type(3) .card:nth-child(2){animation-delay:1.35s}
+
+@keyframes cardIn{
+  from{opacity:0;transform:translateY(20px) scale(.97)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Reduce-motion : on coupe tout sauf opacity */
+@media (prefers-reduced-motion: reduce){
+  .page-anim, .page-anim *{animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
+.page-title{
+  font-family:'Plus Jakarta Sans','Outfit',sans-serif;
+  font-size:44px;font-weight:800;
+  color:var(--text);margin-bottom:0;
+  letter-spacing:-1.4px;line-height:1.05;
+  position:relative;
+}
+.page-title::after{
+  content:'';
+  display:block;
+  width:80px;height:5px;
+  margin-top:16px;
+  background:linear-gradient(90deg, #E8C547, #FFE082 60%, transparent);
+  border-radius:4px;
+  box-shadow:
+    0 0 14px #E8C547,
+    0 0 28px rgba(232,197,71,.65),
+    0 0 44px rgba(255,224,130,.45);
+  animation:neonPulse 2.4s ease-in-out infinite;
+}
+@keyframes neonPulse{
+  0%,100%{
+    box-shadow:
+      0 0 12px #E8C547,
+      0 0 24px rgba(232,197,71,.45),
+      0 0 32px rgba(255,224,130,.25);
+    width:80px;
+  }
+  50%{
+    box-shadow:
+      0 0 20px #E8C547,
+      0 0 42px rgba(232,197,71,.80),
+      0 0 60px rgba(255,224,130,.55);
+    width:110px;
+  }
+}
+:root[data-theme="light-new"] .page-title::after{
+  background:linear-gradient(90deg, #B89026, #E8C547 60%, transparent);
+  box-shadow:
+    0 0 12px rgba(232,197,71,.55),
+    0 0 26px rgba(184,144,38,.35);
+}
+.page-sub{
+  color:var(--textm);
+  font-size:16px;
+  margin-top:14px;
+  margin-bottom:30px;
+  font-weight:500;
+  letter-spacing:.01em;
+}
+
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.g1{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:18px}
+
+.card{
+  border-radius:14px;padding:20px;margin-bottom:0;
+  transition:transform .22s,box-shadow .22s,border-color .22s;
+}
+.card:hover{transform:translateY(-1px)}
+.card-title{
+  font-size:10px;font-weight:700;color:var(--textm);
+  text-transform:uppercase;letter-spacing:.08em;
+  margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;
+}
+.card-title .ct-left{display:flex;align-items:center;gap:8px}
+.card-title .ct-left span{
+  background:rgba(22,163,74,.12);
+  border:1px solid rgba(22,163,74,.25);
+  border-radius:6px;padding:3px 10px;color:var(--g6);
+}
+:root[data-theme="light-new"] .card-title .ct-left span{color:var(--g5);background:rgba(22,163,74,.08)}
+
+/* ICÔNES KPI COLORÉES (style Mixx) */
+.kpi-icon.green{background:rgba(74,222,128,.15);color:#4ADE80}
+.kpi-icon.blue{background:rgba(96,165,250,.15);color:#60A5FA}
+.kpi-icon.gold{background:rgba(212,185,94,.15);color:var(--gold)}
+.kpi-icon.red{background:rgba(248,113,113,.15);color:var(--red)}
+.kpi-icon.orange{background:rgba(251,146,60,.15);color:var(--orange)}
+.kpi-icon.purple{background:rgba(168,85,247,.15);color:#A855F7}
+
+.stat-val.gold{color:var(--gold)!important}
+.stat-val.red{color:var(--red)!important}
+.stat-val.green{color:var(--green)!important}
+
+/* BOUTONS */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:9px;font-size:12px;
+  font-weight:600;cursor:pointer;border:none;
+  font-family:'Outfit',sans-serif;transition:all .2s;
+}
+.btn-g{
+  background:linear-gradient(135deg,var(--g4),var(--g5));
+  color:white;
+  box-shadow:0 2px 8px rgba(22,163,74,.3);
+  width:100%;justify-content:center;padding:12px;
+}
+.btn-g:hover{box-shadow:0 4px 16px rgba(22,163,74,.45);transform:translateY(-1px)}
+
+/* TABLE BILAN */
+.bilan-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;
+}
+.bilan-row:last-child{border-bottom:none;font-weight:700;padding-top:14px;border-top:2px solid var(--border)}
+.bilan-row .lbl{color:var(--textm);font-weight:500}
+.bilan-row .val{color:var(--text);font-family:'DM Mono',monospace;font-weight:600}
+.bilan-row .val.neg{color:var(--red)}
+.bilan-row .val.pos{color:var(--green)}
+
+/* TOPBAR */
+.topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:0 20px;height:60px;
+  background:var(--card);border-bottom:1px solid var(--border);
+}
+.tb-logo{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--g4),var(--g5));
+  display:flex;align-items:center;justify-content:center;font-size:18px;color:white;
+}
+.tb-name{font-family:'DM Serif Display',serif;font-size:18px;font-weight:600;color:var(--text);letter-spacing:1px}
+.tb-sub{font-size:9px;color:var(--textl);font-family:'DM Mono',monospace;text-transform:uppercase}
+.tb-tag{padding:3px 10px;border-radius:20px;font-size:9px;font-weight:700;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.3);color:var(--g6)}
+:root[data-theme="light-new"] .tb-tag{color:var(--g5)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tb-user{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textm);font-weight:500}
+.tb-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--g4),var(--g5));color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.tb-role{padding:3px 10px;border-radius:20px;font-size:9px;font-weight:700;background:rgba(212,185,94,.15);color:var(--gold);border:1px solid rgba(212,185,94,.35);letter-spacing:.05em}
+
+@media(max-width:768px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .g4{grid-template-columns:1fr 1fr}
+  .g2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Barre de sélection de thème -->
+<div class="preview-bar">
+  <h1>Aperçu thèmes — Dashboard Provéo</h1>
+  <button class="theme-btn" data-set="dark-current">Sombre actuel</button>
+  <button class="theme-btn active" data-set="dark-new">✨ Sombre nouveau</button>
+  <button class="theme-btn" data-set="light-new">☀️ Clair nouveau</button>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="tb-logo">🌾</div>
+  <div>
+    <div class="tb-name">SADARI</div>
+    <div class="tb-sub">Gestion provenderie · ATM Farm Village</div>
+  </div>
+  <span class="tb-tag">GP</span>
+  <div class="tb-right">
+    <div class="tb-user">
+      <div class="tb-avatar">A</div>
+      armel.atchou
+    </div>
+    <span class="tb-role">ADMIN</span>
+  </div>
+</div>
+
+<!-- Layout principal -->
+<div class="layout">
+
+  <!-- Sidebar (extrait) -->
+  <div class="sidebar">
+    <div class="nav-sect">Tableau de bord</div>
+    <div class="nav-item active"><span class="nav-icon">📊</span>Dashboard</div>
+    <div class="nav-sect">Approvisionnement</div>
+    <div class="nav-item"><span class="nav-icon">🏢</span>Fournisseurs</div>
+    <div class="nav-item"><span class="nav-icon">🛒</span>Achats MP</div>
+    <div class="nav-item"><span class="nav-icon">💳</span>Paiements MP</div>
+    <div class="nav-sect">Production</div>
+    <div class="nav-item"><span class="nav-icon">🏭</span>Production</div>
+    <div class="nav-item"><span class="nav-icon">🧪</span>Formules &amp; Prix</div>
+    <div class="nav-sect">Ventes</div>
+    <div class="nav-item"><span class="nav-icon">💰</span>Ventes</div>
+    <div class="nav-item"><span class="nav-icon">👥</span>Clients</div>
+  </div>
+
+  <!-- Contenu -->
+  <div class="main">
+   <div class="page-anim" id="pageContent">
+    <div class="page-title" id="pageTitle">Tableau de bord</div>
+    <div class="page-sub" id="pageSub">mercredi 20 mai 2026 — Données temps réel</div>
+
+    <!-- KPIs -->
+    <div class="g4">
+      <div class="stat-box">
+        <div class="kpi-head">
+          <div class="kpi-icon gold">💰</div>
+          <div class="stat-lbl">CA Provenderie ce mois</div>
+        </div>
+        <div class="stat-val">1 245 800 F</div>
+        <div class="kpi-delta up">↑ 12 % vs mois dernier</div>
+      </div>
+      <div class="stat-box">
+        <div class="kpi-head">
+          <div class="kpi-icon green">✓</div>
+          <div class="stat-lbl">Encaissé Provenderie</div>
+        </div>
+        <div class="stat-val">980 500 F</div>
+        <div class="kpi-delta up">↑ 78 % du CA</div>
+      </div>
+      <div class="stat-box">
+        <div class="kpi-head">
+          <div class="kpi-icon red">⚠</div>
+          <div class="stat-lbl">Impayés du mois</div>
+        </div>
+        <div class="stat-val">265 300 F</div>
+        <div class="kpi-delta down">7 clients en retard</div>
+      </div>
+      <div class="stat-box">
+        <div class="kpi-head">
+          <div class="kpi-icon orange">💸</div>
+          <div class="stat-lbl">Dépenses ce mois</div>
+        </div>
+        <div class="stat-val">412 200 F</div>
+        <div class="kpi-delta flat">stable vs hier</div>
+      </div>
+    </div>
+
+    <!-- KPI plein largeur -->
+    <div class="g1">
+      <div class="stat-box">
+        <div class="kpi-head">
+          <div class="kpi-icon blue">📦</div>
+          <div class="stat-lbl">Produits ce mois</div>
+        </div>
+        <div class="stat-val">8 540 kg · 171 sacs de 50 kg</div>
+        <div class="kpi-delta up">↑ 9 % vs objectif</div>
+      </div>
+    </div>
+
+    <!-- Deux cartes côte à côte -->
+    <div class="g2" style="margin-bottom:18px">
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>🏭 Dernière production</span></div>
+        </div>
+        <div style="color:var(--textm);font-size:13px;margin-bottom:14px;font-weight:500">
+          Aucune production aujourd'hui. → Enregistrer
+        </div>
+        <button class="btn btn-g">+ Nouveau lot</button>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>💰 Ventes du jour</span></div>
+        </div>
+        <div style="color:var(--textm);font-size:13px;margin-bottom:14px;font-weight:500">
+          Aucune vente aujourd'hui.
+        </div>
+        <button class="btn btn-g">+ Nouvelle vente</button>
+      </div>
+    </div>
+
+    <!-- Alertes + Bilan -->
+    <div class="g2" style="margin-bottom:18px">
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>⚠ Alertes stock MP</span></div>
+        </div>
+        <div style="color:var(--green);font-size:13px;font-weight:600">
+          ✓ Tous les stocks sont suffisants.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          <div class="ct-left"><span>📊 Bilan 2026-05</span></div>
+        </div>
+        <div class="bilan-row"><span class="lbl">CA Provenderie</span><span class="val">1 245 800 F</span></div>
+        <div class="bilan-row"><span class="lbl">Encaissé Provenderie</span><span class="val pos">+ 980 500 F</span></div>
+        <div class="bilan-row"><span class="lbl">Achats MP payés</span><span class="val neg">− 425 100 F</span></div>
+        <div class="bilan-row"><span class="lbl">Dépenses courantes</span><span class="val neg">− 412 200 F</span></div>
+        <div class="bilan-row"><span class="lbl">Solde net</span><span class="val pos">+ 143 200 F</span></div>
+      </div>
+    </div>
+
+   </div>
+  </div>
+</div>
+
+<script>
+const html = document.documentElement;
+html.setAttribute('data-theme','dark-new');
+document.querySelectorAll('.theme-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.theme-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    html.setAttribute('data-theme', btn.dataset.set);
+  });
+});
+
+/* ─── Injection de la barre gauche + cascade entrée sidebar ─── */
+document.querySelectorAll('.sidebar .nav-item').forEach((el,i)=>{
+  const bar = document.createElement('span');
+  bar.className='left-bar';
+  el.prepend(bar);
+});
+function staggerSidebar(){
+  const els = document.querySelectorAll('.sidebar .nav-item, .sidebar .nav-sect');
+  els.forEach((el,i)=>{
+    el.style.animation='none';
+    void el.offsetWidth;
+    el.style.animation='';
+    el.style.animationDelay = (i*0.045)+'s';
+  });
+}
+staggerSidebar();
+
+/* ─── Simulation navigation entre pages ─── */
+const mockPages = {
+  'Dashboard':       {title:'Tableau de bord',     sub:'mercredi 20 mai 2026 — Données temps réel'},
+  'Fournisseurs':    {title:'Fournisseurs',         sub:'8 fournisseurs actifs · 2 nouveaux ce mois'},
+  'Achats MP':       {title:'Achats Matières Premières', sub:'12 commandes en cours · 4 à régler'},
+  'Paiements MP':    {title:'Paiements MP',         sub:'Suivi des règlements aux fournisseurs'},
+  'Production':      {title:'Production',           sub:'Aucun lot enregistré aujourd\'hui'},
+  'Formules & Prix': {title:'Formules &amp; Prix',  sub:'7 formules actives · dernier ajustement il y a 3 j'},
+  'Ventes':          {title:'Ventes',               sub:'14 ventes ce mois · CA en hausse de 12%'},
+  'Clients':         {title:'Clients',              sub:'126 clients actifs · 7 en retard de paiement'},
+};
+
+function replayAnimation(){
+  const el = document.getElementById('pageContent');
+  el.classList.remove('page-anim');
+  void el.offsetWidth; // force reflow
+  el.classList.add('page-anim');
+}
+
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item').forEach(i=>{
+      i.classList.remove('active');
+      i.classList.remove('flash');
+    });
+    item.classList.add('active');
+    item.classList.add('flash');
+    const label = item.textContent.trim();
+    const data = mockPages[label] || {title:label, sub:''};
+    document.getElementById('pageTitle').innerHTML = data.title;
+    document.getElementById('pageSub').textContent = data.sub;
+    replayAnimation();
+  });
+});
+
+/* Aussi : rejouer quand on change de thème (pour montrer l'effet) */
+document.querySelectorAll('.theme-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    setTimeout(replayAnimation,50);
+    setTimeout(staggerSidebar,50);
+  });
+});
+</script>
+</body>
+</html>
