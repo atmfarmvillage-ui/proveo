@@ -280,6 +280,7 @@ async function bootApp(user){
   try{checkPendingRemises();}catch(e){}
   try{if(typeof initNotifications==='function') initNotifications();}catch(e){}
   try{if(typeof initReservationsRealtime==='function') initReservationsRealtime();}catch(e){}
+  try{if(typeof initIA==='function') initIA();}catch(e){}
   const lotRef=document.getElementById('lot_ref');
   if(lotRef)lotRef.value='LOT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
   // Auto refresh page entière toutes les 3 min (était 30s, trop agressif).
