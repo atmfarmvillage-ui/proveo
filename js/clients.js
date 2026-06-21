@@ -73,6 +73,35 @@ function openEditClient(id){
   document.getElementById('modal-edit-client').style.display='flex';
 }
 function closeEditClient(){ document.getElementById('modal-edit-client').style.display='none'; }
+
+// ── FUSION DE DOUBLONS CLIENTS ─────────────────────
+function openFusion(){
+  const opts=(GP_CLIENTS||[]).slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''))
+    .map(c=>`<option value="${c.id}">${(c.nom||'—').replace(/</g,'&lt;')}${c.telephone?' · '+c.telephone:' · (sans n°)'}</option>`).join('');
+  document.getElementById('fus-garde').innerHTML='<option value="">— Fiche à GARDER —</option>'+opts;
+  document.getElementById('fus-doublon').innerHTML='<option value="">— Doublon à fusionner —</option>'+opts;
+  document.getElementById('fus-err').textContent='';
+  document.getElementById('modal-fusion').style.display='flex';
+}
+function closeFusion(){ document.getElementById('modal-fusion').style.display='none'; }
+async function saveFusion(){
+  const garde=document.getElementById('fus-garde').value;
+  const doublon=document.getElementById('fus-doublon').value;
+  const err=document.getElementById('fus-err');
+  if(!garde||!doublon){ err.textContent='Choisis les deux fiches.'; return; }
+  if(garde===doublon){ err.textContent='Choisis deux fiches différentes.'; return; }
+  const gNom=GP_CLIENTS.find(c=>c.id===garde)?.nom||'?';
+  const dNom=GP_CLIENTS.find(c=>c.id===doublon)?.nom||'?';
+  if(!confirm(`Fusionner « ${dNom} » dans « ${gNom} » ?\n\nToutes les ventes/relances du doublon iront sur la fiche gardée, le n° manquant sera récupéré, et le doublon sera supprimé.\nIrréversible.`)) return;
+  err.textContent='Fusion…';
+  const{data,error}=await SB.rpc('fusionner_clients',{p_garde:garde,p_doublon:doublon});
+  if(error){ err.textContent='Erreur: '+error.message; return; }
+  if(data&&data.error){ err.textContent='⚠ '+data.error; return; }
+  closeFusion();
+  GP_CLIENT_STATS=null;
+  await loadClients(); populateSelects(); renderClients();
+  notify('Fusion effectuée ✓');
+}
 async function saveClientEdit(){
   const id=document.getElementById('ecl_id').value;
   const nom=document.getElementById('ecl_nom').value.trim();
