@@ -229,13 +229,13 @@ async function drillImpayes(){
   const _norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
   const idMap={}, nameMap={};
   try{
-    const{data:cli}=await SB.from('gp_clients').select('id,nom,telephone,whatsapp').eq('admin_id',GP_ADMIN_ID);
-    (cli||[]).forEach(c=>{ idMap[c.id]=c; const k=_norm(c.nom); if(k && (c.telephone||c.whatsapp)) nameMap[k]=c; });
+    const{data:cli}=await SB.from('gp_clients').select('id,nom,telephone').eq('admin_id',GP_ADMIN_ID);
+    (cli||[]).forEach(c=>{ idMap[c.id]=c; const k=_norm(c.nom); if(k && c.telephone) nameMap[k]=c; });
   }catch(e){}
   const _resolveCli=(r)=> idMap[r.client_id] || nameMap[_norm(r.client_nom)] || null;
   ventes.forEach(v=>{
     const c=_resolveCli(v);
-    v._tel=(c?(c.whatsapp||c.telephone):'') || v.telephone || v.client_tel || v.tel || v.whatsapp || '';
+    v._tel=(c?c.telephone:'') || v.telephone || v.client_tel || v.tel || '';
     v._cnom=c?.nom||v.client_nom||'';
   });
 
