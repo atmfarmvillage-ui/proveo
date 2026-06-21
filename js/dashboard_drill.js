@@ -214,18 +214,7 @@ async function drillImpayes(){
   }).filter(v=>v._reste > 0);
   const total = ventes.reduce((s,v)=>s+v._reste,0);
 
-  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés — ${ventes.length} dettes à relancer`;
-  document.getElementById('kpi-drill-summary').innerHTML =
-    `<b style="color:var(--red);font-size:18px">${fmt(total)} F</b> à recouvrer sur le mois`;
-
-  // Action : Relancer tous par WhatsApp
-  document.getElementById('kpi-drill-actions').innerHTML =
-    `<button class="btn btn-g" onclick="relancerTousImpayes()" style="background:#25D366;color:#FFF;border:none">
-      📞 Relancer tous par WhatsApp (${ventes.length})
-    </button>`;
-
-  // Récup numéros clients : par client_id OU par nom normalisé (accents/ponctuation/casse ignorés),
-  // avec repli sur un éventuel numéro stocké sur la vente elle-même.
+  // Numéros clients : par client_id OU par nom normalisé ; repli sur la vente
   const _norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
   const idMap={}, nameMap={};
   try{
@@ -233,11 +222,30 @@ async function drillImpayes(){
     (cli||[]).forEach(c=>{ idMap[c.id]=c; const k=_norm(c.nom); if(k && c.telephone) nameMap[k]=c; });
   }catch(e){}
   const _resolveCli=(r)=> idMap[r.client_id] || nameMap[_norm(r.client_nom)] || null;
+
+  // Agrégation par CLIENT : un débiteur = total dû + détail de ses factures
+  const byCli = {};
   ventes.forEach(v=>{
     const c=_resolveCli(v);
     v._tel=(c?c.telephone:'') || v.telephone || v.client_tel || v.tel || '';
     v._cnom=c?.nom||v.client_nom||'';
+    const key = v.client_id || ('nom:'+_norm(v.client_nom));
+    v._cliKey = key;
+    if(!byCli[key]) byCli[key]={ nom:v._cnom, tel:v._tel, total:0, lignes:[] };
+    if(!byCli[key].tel && v._tel) byCli[key].tel=v._tel;
+    if(!byCli[key].nom && v._cnom) byCli[key].nom=v._cnom;
+    byCli[key].total += v._reste;
+    byCli[key].lignes.push({ date:v.date, formule:v.formule_nom, reste:v._reste });
   });
+  window._kpiDrillDebiteurs = byCli;
+  const nbAvecTel = Object.values(byCli).filter(d=>d.tel).length;
+
+  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés — ${ventes.length} factures · ${Object.keys(byCli).length} clients`;
+  document.getElementById('kpi-drill-summary').innerHTML =
+    `<b style="color:var(--red);font-size:18px">${fmt(total)} F</b> à recouvrer sur le mois`;
+  document.getElementById('kpi-drill-actions').innerHTML = nbAvecTel
+    ? `<button class="btn btn-g" onclick="relancerTousImpayes()" style="background:#25D366;color:#FFF;border:none">📞 Relancer ${nbAvecTel} client(s) par WhatsApp</button>`
+    : '';
 
   const cols = [
     {key:'date', label:'Date'},
@@ -247,38 +255,43 @@ async function drillImpayes(){
     {key:'montant_paye', label:'Payé', align:'num', style:'color:var(--green)', render:r=>fmt(r.montant_paye||0)+' F'},
     {key:'_reste', label:'Reste dû', align:'num', style:'color:var(--red);font-weight:700', render:r=>fmt(r._reste||0)+' F'},
     {key:'_action', label:'', render:r=>
-      r._tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}')">📞</button>` : ''}
+      r._tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}')" title="Relancer ce client (total + détail)">📞</button>` : ''}
   ];
   _renderKpiTable(cols, ventes, `TOTAL DÛ`, fmt(total)+' F');
   _renderKpiFooter('Voir Suivi & Appels', "showGP('suivi');fermerKpiDrill();");
-
   window._kpiDrillData = { type:'impayes', titre:'Impayés du mois', rows:ventes, columns:cols, total };
 }
 
-// Relancer UN impayé par WhatsApp (pop-up wa.me avec message) — tél résolu par id OU nom
-function relancerImpayeWA(venteId){
-  const r = (window._kpiDrillData?.rows||[]).find(x=>String(x.id)===String(venteId));
-  if(!r){ notify('Vente introuvable','r'); return; }
-  const tel = (r._tel||'').replace(/[^0-9]/g,'');
-  if(!tel){ notify('Pas de téléphone pour '+(r._cnom||r.client_nom||'ce client'),'r'); return; }
+// Message de relance agrégé : total dû + détail des factures du client
+function _msgRelanceDeb(d){
   const prov = GP_CONFIG?.nom_provenderie || 'SADARI';
-  const msg = `🌾 Bonjour ${r._cnom||r.client_nom||''},\n\n` +
-              `Petit rappel amical : il vous reste *${fmt(r._reste)} F* à régler chez ${prov} sur votre achat récent.\n\n` +
-              `Quand pouvez-vous passer pour le règlement ? Merci 🙏`;
-  const p = (typeof detecterPays==='function')?detecterPays(tel):{numero_whatsapp:tel};
-  window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg), '_blank');
+  let detail = (d.lignes||[]).slice(0,8).map(l=>`• ${l.date||''}${l.formule?' '+l.formule:''} : ${fmt(l.reste)} F`).join('\n');
+  if((d.lignes||[]).length>8) detail += `\n• … (+${d.lignes.length-8} autres)`;
+  return `🌾 Bonjour ${d.nom||''},\n\n` +
+         `Petit rappel amical : votre solde à régler chez ${prov} est de *${fmt(d.total)} F*.\n\n` +
+         `Détail :\n${detail}\n\n` +
+         `Quand pouvez-vous passer pour le règlement ? Merci 🙏`;
 }
-
-// Relancer TOUS les impayés visibles dans la table (ouvre 1 onglet WA par client)
-async function relancerTousImpayes(){
-  const rows = (window._kpiDrillData?.rows)||[];
-  const avecTel = rows.filter(r=>r._tel);
-  if(!avecTel.length){ notify('Aucun client avec téléphone trouvé','r'); return; }
-  if(!confirm(`Ouvrir ${avecTel.length} fenêtre(s) WhatsApp ?\n(une par client à relancer)`)) return;
-  for(const r of avecTel){
-    relancerImpayeWA(r.id);
-    await new Promise(res=>setTimeout(res, 300)); // espacer pour éviter le blocage navigateur
-  }
+function _ouvrirWADeb(d){
+  const tel=(d.tel||'').replace(/[^0-9]/g,''); if(!tel) return false;
+  const p=(typeof detecterPays==='function')?detecterPays(tel):{numero_whatsapp:tel};
+  window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(_msgRelanceDeb(d)),'_blank');
+  return true;
+}
+// Relancer UN client (depuis sa ligne) — message agrégé total + détail
+function relancerImpayeWA(venteId){
+  const r=(window._kpiDrillData?.rows||[]).find(x=>String(x.id)===String(venteId));
+  const d = r && window._kpiDrillDebiteurs?.[r._cliKey];
+  if(!d){ notify('Client introuvable','r'); return; }
+  if(!_ouvrirWADeb(d)) notify('Pas de téléphone pour '+(d.nom||'ce client'),'r');
+}
+// Relancer TOUS : 1 onglet par client (synchrone → autoriser les pop-ups)
+function relancerTousImpayes(){
+  const debs = Object.values(window._kpiDrillDebiteurs||{}).filter(d=>d.tel);
+  if(!debs.length){ notify('Aucun client avec téléphone','r'); return; }
+  if(!confirm(`Ouvrir ${debs.length} fenêtre(s) WhatsApp (1 par client) ?\n\n⚠ Autorise les pop-ups pour ce site, sinon le navigateur n'en ouvrira qu'une. Sinon, utilise le bouton 📞 ligne par ligne.`)) return;
+  let n=0; debs.forEach(d=>{ if(_ouvrirWADeb(d)) n++; });
+  if(n>1) notify(n+' fenêtres WhatsApp ouvertes ✓','gold');
 }
 
 // ── 4. DÉPENSES ────────────────────────────────────
