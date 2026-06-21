@@ -1083,23 +1083,6 @@
     </div>
   </div>
 
-  <!-- MODAL FUSION DOUBLONS -->
-  <div id="modal-fusion" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeFusion()">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-weight:700;font-size:15px">🔗 Fusionner des doublons</div>
-        <button onclick="closeFusion()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--textm)">✕</button>
-      </div>
-      <div style="font-size:12px;color:var(--textm);margin-bottom:14px;line-height:1.4">Les ventes et relances du <b>doublon</b> seront transférées sur la <b>fiche à garder</b>, le n° manquant récupéré, puis le doublon supprimé.</div>
-      <div class="fr"><label>✅ Fiche à GARDER</label><select id="fus-garde"></select></div>
-      <div class="fr"><label>🗑 Doublon à fusionner (supprimé)</label><select id="fus-doublon"></select></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-g" onclick="saveFusion()" style="flex:1;justify-content:center">🔗 Fusionner</button>
-        <button class="btn btn-out" onclick="closeFusion()" style="flex:1;justify-content:center">Annuler</button>
-      </div>
-      <div class="a-err" id="fus-err"></div>
-    </div>
-  </div>
 </div>
 
 <!-- SUIVI & APPELS -->
@@ -1672,6 +1655,24 @@
     </div>
     <!-- Écran succès + WhatsApp -->
     <div id="pmt-modal-succes" style="display:none"></div>
+  </div>
+</div>
+
+<!-- MODAL FUSION DOUBLONS (niveau racine) -->
+<div id="modal-fusion" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeFusion()">
+  <div style="background:var(--card2,#fff);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-weight:700;font-size:15px">🔗 Fusionner des doublons</div>
+      <button onclick="closeFusion()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--textm)">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:14px;line-height:1.4">Les ventes et relances du <b>doublon</b> seront transférées sur la <b>fiche à garder</b>, le n° manquant récupéré, puis le doublon supprimé.</div>
+    <div class="fr"><label>✅ Fiche à GARDER</label><select id="fus-garde"></select></div>
+    <div class="fr"><label>🗑 Doublon à fusionner (supprimé)</label><select id="fus-doublon"></select></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-g" onclick="saveFusion()" style="flex:1;justify-content:center">🔗 Fusionner</button>
+      <button class="btn btn-out" onclick="closeFusion()" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+    <div class="a-err" id="fus-err"></div>
   </div>
 </div>
 
@@ -2952,46 +2953,46 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.23.0"></script>
-<script src="js/print.js?v=2.23.0"></script>
-<script src="js/dashboard.js?v=2.23.0"></script>
-<script src="js/stock.js?v=2.23.0"></script>
-<script src="js/matieres.js?v=2.23.0"></script>
-<script src="js/production.js?v=2.23.0"></script>
-<script src="js/ventes.js?v=2.23.0"></script>
-<script src="js/clients.js?v=2.23.0"></script>
-<script src="js/admin.js?v=2.23.0"></script>
-<script src="js/bilan_jour.js?v=2.23.0"></script>
-<script src="js/caisse_extras.js?v=2.23.0"></script>
-<script src="js/corbeille.js?v=2.23.0"></script>
-<script src="js/dashboard_drill.js?v=2.23.0"></script>
-<script src="js/fournisseurs.js?v=2.23.0"></script>
-<script src="js/achats.js?v=2.23.0"></script>
-<script src="js/caisse.js?v=2.23.0"></script>
-<script src="js/inventaire_physique.js?v=2.23.0"></script>
-<script src="js/distribution.js?v=2.23.0"></script>
-<script src="js/salaires.js?v=2.23.0"></script>
-<script src="js/rapports.js?v=2.23.0"></script>
-<script src="js/dettes.js?v=2.23.0"></script>
-<script src="js/chat.js?v=2.23.0"></script>
-<script src="js/notifications.js?v=2.23.0"></script>
-<script src="js/qr_clients.js?v=2.23.0"></script>
-<script src="js/push.js?v=2.23.0"></script>
-<script src="js/reversements.js?v=2.23.0"></script>
-<script src="js/paiements_mp.js?v=2.23.0"></script>
-<script src="js/stock_pf.js?v=2.23.0"></script>
-<script src="js/veto.js?v=2.23.0"></script>
-<script src="js/bilanss.js?v=2.23.0"></script>
-<script src="js/benefices.js?v=2.23.0"></script>
-<script src="js/messages_pdv.js?v=2.23.0"></script>
-<script src="js/directeur.js?v=2.23.0"></script>
-<script src="js/licences.js?v=2.23.0"></script>
+<script src="js/config.js?v=2.24.0"></script>
+<script src="js/print.js?v=2.24.0"></script>
+<script src="js/dashboard.js?v=2.24.0"></script>
+<script src="js/stock.js?v=2.24.0"></script>
+<script src="js/matieres.js?v=2.24.0"></script>
+<script src="js/production.js?v=2.24.0"></script>
+<script src="js/ventes.js?v=2.24.0"></script>
+<script src="js/clients.js?v=2.24.0"></script>
+<script src="js/admin.js?v=2.24.0"></script>
+<script src="js/bilan_jour.js?v=2.24.0"></script>
+<script src="js/caisse_extras.js?v=2.24.0"></script>
+<script src="js/corbeille.js?v=2.24.0"></script>
+<script src="js/dashboard_drill.js?v=2.24.0"></script>
+<script src="js/fournisseurs.js?v=2.24.0"></script>
+<script src="js/achats.js?v=2.24.0"></script>
+<script src="js/caisse.js?v=2.24.0"></script>
+<script src="js/inventaire_physique.js?v=2.24.0"></script>
+<script src="js/distribution.js?v=2.24.0"></script>
+<script src="js/salaires.js?v=2.24.0"></script>
+<script src="js/rapports.js?v=2.24.0"></script>
+<script src="js/dettes.js?v=2.24.0"></script>
+<script src="js/chat.js?v=2.24.0"></script>
+<script src="js/notifications.js?v=2.24.0"></script>
+<script src="js/qr_clients.js?v=2.24.0"></script>
+<script src="js/push.js?v=2.24.0"></script>
+<script src="js/reversements.js?v=2.24.0"></script>
+<script src="js/paiements_mp.js?v=2.24.0"></script>
+<script src="js/stock_pf.js?v=2.24.0"></script>
+<script src="js/veto.js?v=2.24.0"></script>
+<script src="js/bilanss.js?v=2.24.0"></script>
+<script src="js/benefices.js?v=2.24.0"></script>
+<script src="js/messages_pdv.js?v=2.24.0"></script>
+<script src="js/directeur.js?v=2.24.0"></script>
+<script src="js/licences.js?v=2.24.0"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.23.0"></script>
-<script src="js/reservations_admin.js?v=2.23.0"></script>
-<script src="js/strategie_mp.js?v=2.23.0"></script>
-<script src="js/reappro.js?v=2.23.0"></script>
-<script src="js/ia.js?v=2.23.0"></script>
+<script src="js/auth.js?v=2.24.0"></script>
+<script src="js/reservations_admin.js?v=2.24.0"></script>
+<script src="js/strategie_mp.js?v=2.24.0"></script>
+<script src="js/reappro.js?v=2.24.0"></script>
+<script src="js/ia.js?v=2.24.0"></script>
 
 <script>
 // Enregistrement Service Worker PWA
