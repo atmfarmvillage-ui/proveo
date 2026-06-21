@@ -802,10 +802,19 @@
     </div>
     <div>
       <div class="card">
-        <div class="card-title">
+        <style>
+          .vt-per-btn{font-size:11px;padding:5px 11px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:8px;cursor:pointer;font-weight:700}
+          .vt-per-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
+        </style>
+        <div class="card-title" style="flex-wrap:wrap;gap:8px">
           <div class="ct-left"><span>📋 Historique ventes</span></div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">
-            <input type="date" id="vt-filtre-date" onchange="renderVentes()" style="font-size:10px;padding:3px 6px;width:auto">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <div style="display:flex;gap:4px">
+              <button class="vt-per-btn on" data-per="jour" onclick="setVtPeriode('jour')">Jour</button>
+              <button class="vt-per-btn" data-per="semaine" onclick="setVtPeriode('semaine')">Semaine</button>
+              <button class="vt-per-btn" data-per="mois" onclick="setVtPeriode('mois')">Mois</button>
+              <button class="vt-per-btn" data-per="annee" onclick="setVtPeriode('annee')">Année</button>
+            </div>
             <select id="vt-filtre-statut" onchange="renderVentes()" style="font-size:10px;padding:3px 6px;width:auto">
               <option value="">Tous statuts</option>
               <option value="paye">Payés</option>
@@ -814,6 +823,7 @@
             </select>
           </div>
         </div>
+        <div id="ventes-sum"></div>
         <div id="ventes-liste" style="overflow-x:auto"></div>
       </div>
     </div>
@@ -2953,46 +2963,46 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.1"></script>
-<script src="js/print.js?v=2.24.1"></script>
-<script src="js/dashboard.js?v=2.24.1"></script>
-<script src="js/stock.js?v=2.24.1"></script>
-<script src="js/matieres.js?v=2.24.1"></script>
-<script src="js/production.js?v=2.24.1"></script>
-<script src="js/ventes.js?v=2.24.1"></script>
-<script src="js/clients.js?v=2.24.1"></script>
-<script src="js/admin.js?v=2.24.1"></script>
-<script src="js/bilan_jour.js?v=2.24.1"></script>
-<script src="js/caisse_extras.js?v=2.24.1"></script>
-<script src="js/corbeille.js?v=2.24.1"></script>
-<script src="js/dashboard_drill.js?v=2.24.1"></script>
-<script src="js/fournisseurs.js?v=2.24.1"></script>
-<script src="js/achats.js?v=2.24.1"></script>
-<script src="js/caisse.js?v=2.24.1"></script>
-<script src="js/inventaire_physique.js?v=2.24.1"></script>
-<script src="js/distribution.js?v=2.24.1"></script>
-<script src="js/salaires.js?v=2.24.1"></script>
-<script src="js/rapports.js?v=2.24.1"></script>
-<script src="js/dettes.js?v=2.24.1"></script>
-<script src="js/chat.js?v=2.24.1"></script>
-<script src="js/notifications.js?v=2.24.1"></script>
-<script src="js/qr_clients.js?v=2.24.1"></script>
-<script src="js/push.js?v=2.24.1"></script>
-<script src="js/reversements.js?v=2.24.1"></script>
-<script src="js/paiements_mp.js?v=2.24.1"></script>
-<script src="js/stock_pf.js?v=2.24.1"></script>
-<script src="js/veto.js?v=2.24.1"></script>
-<script src="js/bilanss.js?v=2.24.1"></script>
-<script src="js/benefices.js?v=2.24.1"></script>
-<script src="js/messages_pdv.js?v=2.24.1"></script>
-<script src="js/directeur.js?v=2.24.1"></script>
-<script src="js/licences.js?v=2.24.1"></script>
+<script src="js/config.js?v=2.24.2"></script>
+<script src="js/print.js?v=2.24.2"></script>
+<script src="js/dashboard.js?v=2.24.2"></script>
+<script src="js/stock.js?v=2.24.2"></script>
+<script src="js/matieres.js?v=2.24.2"></script>
+<script src="js/production.js?v=2.24.2"></script>
+<script src="js/ventes.js?v=2.24.2"></script>
+<script src="js/clients.js?v=2.24.2"></script>
+<script src="js/admin.js?v=2.24.2"></script>
+<script src="js/bilan_jour.js?v=2.24.2"></script>
+<script src="js/caisse_extras.js?v=2.24.2"></script>
+<script src="js/corbeille.js?v=2.24.2"></script>
+<script src="js/dashboard_drill.js?v=2.24.2"></script>
+<script src="js/fournisseurs.js?v=2.24.2"></script>
+<script src="js/achats.js?v=2.24.2"></script>
+<script src="js/caisse.js?v=2.24.2"></script>
+<script src="js/inventaire_physique.js?v=2.24.2"></script>
+<script src="js/distribution.js?v=2.24.2"></script>
+<script src="js/salaires.js?v=2.24.2"></script>
+<script src="js/rapports.js?v=2.24.2"></script>
+<script src="js/dettes.js?v=2.24.2"></script>
+<script src="js/chat.js?v=2.24.2"></script>
+<script src="js/notifications.js?v=2.24.2"></script>
+<script src="js/qr_clients.js?v=2.24.2"></script>
+<script src="js/push.js?v=2.24.2"></script>
+<script src="js/reversements.js?v=2.24.2"></script>
+<script src="js/paiements_mp.js?v=2.24.2"></script>
+<script src="js/stock_pf.js?v=2.24.2"></script>
+<script src="js/veto.js?v=2.24.2"></script>
+<script src="js/bilanss.js?v=2.24.2"></script>
+<script src="js/benefices.js?v=2.24.2"></script>
+<script src="js/messages_pdv.js?v=2.24.2"></script>
+<script src="js/directeur.js?v=2.24.2"></script>
+<script src="js/licences.js?v=2.24.2"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.1"></script>
-<script src="js/reservations_admin.js?v=2.24.1"></script>
-<script src="js/strategie_mp.js?v=2.24.1"></script>
-<script src="js/reappro.js?v=2.24.1"></script>
-<script src="js/ia.js?v=2.24.1"></script>
+<script src="js/auth.js?v=2.24.2"></script>
+<script src="js/reservations_admin.js?v=2.24.2"></script>
+<script src="js/strategie_mp.js?v=2.24.2"></script>
+<script src="js/reappro.js?v=2.24.2"></script>
+<script src="js/ia.js?v=2.24.2"></script>
 
 <script>
 // Enregistrement Service Worker PWA
