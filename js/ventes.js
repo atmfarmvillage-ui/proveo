@@ -1606,18 +1606,52 @@ async function envoyerWAPreview(){
   fermerPreviewWA();
 }
 
+var VT_PERIODE='jour';
+function _vtPad(n){return String(n).padStart(2,'0');}
+function _vtISO(dt){return dt.getFullYear()+'-'+_vtPad(dt.getMonth()+1)+'-'+_vtPad(dt.getDate());}
+function vtPeriodeRange(p){
+  const now=new Date();
+  if(p==='semaine'){
+    const day=(now.getDay()+6)%7; // 0=lundi
+    const start=new Date(now); start.setDate(now.getDate()-day);
+    return {from:_vtISO(start),to:_vtISO(now),label:'cette semaine'};
+  }
+  if(p==='mois'){
+    return {from:_vtISO(new Date(now.getFullYear(),now.getMonth(),1)),to:_vtISO(now),label:'ce mois'};
+  }
+  if(p==='annee'){
+    return {from:_vtISO(new Date(now.getFullYear(),0,1)),to:_vtISO(now),label:'cette année'};
+  }
+  const d=_vtISO(now); return {from:d,to:d,label:"aujourd'hui"}; // jour
+}
+function setVtPeriode(p){
+  VT_PERIODE=p;
+  document.querySelectorAll('.vt-per-btn').forEach(b=>b.classList.toggle('on', b.dataset.per===p));
+  renderVentes();
+}
 async function renderVentes(){
   initRemiseVente();
-  const filtDate=document.getElementById('vt-filtre-date')?.value||'';
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
+  const r=vtPeriodeRange(VT_PERIODE);
   let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID)
     .is('deleted_at', null)  // exclure les ventes en corbeille
-    .order('created_at',{ascending:false}).limit(50);
+    .gte('date',r.from).lte('date',r.to)
+    .order('date',{ascending:false}).order('created_at',{ascending:false}).limit(2000);
   if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production'); // cloisonnement PDV
-  if(filtDate)q=q.eq('date',filtDate);
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
   const V=data||[];
+  // Totaux de la période
+  const totCA=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
+  const totKg=V.reduce((s,v)=>s+Number(v.qte_vendue||0),0);
+  const totImp=V.reduce((s,v)=>s+(v.statut_paiement!=='paye'?Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)):0),0);
+  const sumEl=document.getElementById('ventes-sum');
+  if(sumEl) sumEl.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px">
+    <div class="econo-box"><div class="econo-val">${V.length}</div><div class="econo-lbl">Ventes (${r.label})</div></div>
+    ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totCA)} F</div><div class="econo-lbl">CA total</div></div>`:''}
+    <div class="econo-box"><div class="econo-val">${fmtKg(totKg)}</div><div class="econo-lbl">Kg vendus</div></div>
+    ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:${totImp>0?'var(--red)':'var(--green)'}">${fmt(totImp)} F</div><div class="econo-lbl">Impayés</div></div>`:''}
+  </div>`;
   document.getElementById('ventes-liste').innerHTML=V.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th>Statut</th><th></th></tr></thead><tbody>
     ${V.map(v=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${v.date}</td>
@@ -1635,7 +1669,7 @@ async function renderVentes(){
           <button class="btn btn-red btn-sm" onclick="supprimerVente('${v.id}')" style="padding:4px 7px">✕</button>
         `:''}
       </td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente.</div>';
+    </tr>`).join('')}</tbody></table>`:`<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente ${r.label}.</div>`;
 }
 
 async function updateVentesKPIs(){
