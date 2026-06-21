@@ -75,13 +75,19 @@ function openEditClient(id){
 function closeEditClient(){ document.getElementById('modal-edit-client').style.display='none'; }
 
 // ── FUSION DE DOUBLONS CLIENTS ─────────────────────
-function openFusion(){
-  const opts=(GP_CLIENTS||[]).slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''))
-    .map(c=>`<option value="${c.id}">${(c.nom||'—').replace(/</g,'&lt;')}${c.telephone?' · '+c.telephone:' · (sans n°)'}</option>`).join('');
-  document.getElementById('fus-garde').innerHTML='<option value="">— Fiche à GARDER —</option>'+opts;
-  document.getElementById('fus-doublon').innerHTML='<option value="">— Doublon à fusionner —</option>'+opts;
-  document.getElementById('fus-err').textContent='';
-  document.getElementById('modal-fusion').style.display='flex';
+async function openFusion(){
+  try{
+    if(typeof GP_CLIENTS==='undefined' || !GP_CLIENTS.length){ if(typeof loadClients==='function') await loadClients(); }
+    const list=(GP_CLIENTS||[]).slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+    if(!list.length){ notify('Aucun client à fusionner','r'); return; }
+    const opts=list.map(c=>`<option value="${c.id}">${(c.nom||'—').replace(/</g,'&lt;')}${c.telephone?' · '+c.telephone:' · (sans n°)'}</option>`).join('');
+    const g=document.getElementById('fus-garde'), d=document.getElementById('fus-doublon'), m=document.getElementById('modal-fusion');
+    if(!g||!d||!m){ notify('Modale fusion absente — recharge fort (Ctrl+Shift+R)','r'); return; }
+    g.innerHTML='<option value="">— Fiche à GARDER —</option>'+opts;
+    d.innerHTML='<option value="">— Doublon à fusionner —</option>'+opts;
+    document.getElementById('fus-err').textContent='';
+    m.style.display='flex';
+  }catch(e){ notify('Erreur ouverture fusion : '+(e.message||e),'r'); }
 }
 function closeFusion(){ document.getElementById('modal-fusion').style.display='none'; }
 async function saveFusion(){
