@@ -23,14 +23,15 @@ let GP_CLIENT_STATS = null;
 async function loadClientStats(force){
   if(GP_CLIENT_STATS && !force) return GP_CLIENT_STATS;
   const{data}=await SB.from('gp_ventes')
-    .select('client_id,date,formule_nom')
+    .select('client_id,date,formule_nom,montant_total')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).not('client_id','is',null);
   const map={};
   (data||[]).forEach(v=>{
     if(!v.client_id)return;
-    const s=map[v.client_id]=map[v.client_id]||{dates:[],formules:{}};
+    const s=map[v.client_id]=map[v.client_id]||{dates:[],formules:{},totalCA:0};
     if(v.date)s.dates.push(v.date);
     if(v.formule_nom)s.formules[v.formule_nom]=(s.formules[v.formule_nom]||0)+1;
+    s.totalCA+=Number(v.montant_total||0);
   });
   Object.values(map).forEach(s=>{
     const ds=[...new Set(s.dates)].sort();           // jours distincts = visites
@@ -124,7 +125,7 @@ async function openClientDetail(id){
       <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')">✏️ Modifier</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
-      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(c.total_achats||0)}</div><div class="econo-lbl">CA total (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt((s.totalCA)||c.total_achats||0)}</div><div class="econo-lbl">CA total (F)</div></div>
       <div class="econo-box"><div class="econo-val">${s.nbAchats||0}</div><div class="econo-lbl">Achats</div></div>
       <div class="econo-box"><div class="econo-val">${s.freqMoyenne?s.freqMoyenne+' j':'—'}</div><div class="econo-lbl">Fréquence moy.</div></div>
       <div class="econo-box"><div class="econo-val" style="color:${st.color}">${jours!=null?jours+' j':'—'}</div><div class="econo-lbl">Depuis dernier achat</div></div>
@@ -197,7 +198,7 @@ async function renderClients(){
           <span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span>
           ${Number(c.points_fidelite)>0?`<span class="badge bdg-gold" style="font-size:9px;margin-left:3px">🎁 ${c.points_fidelite} pts</span>`:''}
         </td>
-        <td class="num" style="color:var(--gold)">${fmt(c.total_achats||0)} F</td>
+        <td class="num" style="color:var(--gold)">${fmt((GP_CLIENT_STATS?.[c.id]?.totalCA)||c.total_achats||0)} F</td>
         <td class="num" style="color:${montantDu>0?'var(--red)':'var(--green)'}">
           ${montantDu>0?fmt(montantDu)+' F':'✅'}
         </td>
