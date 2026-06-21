@@ -136,7 +136,7 @@ async function openClientDetail(id){
   const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):null;
 
   const{data:V}=await SB.from('gp_ventes')
-    .select('date,formule_nom,quantite,montant_total,montant_paye,statut_paiement')
+    .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement')
     .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null)
     .order('date',{ascending:false}).limit(50);
   const hist=(V||[]).length?`<table class="tbl" style="font-size:11px"><thead><tr>
@@ -144,7 +144,7 @@ async function openClientDetail(id){
     </tr></thead><tbody>${(V||[]).map(v=>`<tr>
       <td style="font-size:10px">${fmtDate?fmtDate(v.date):v.date}</td>
       <td style="font-size:10px">${v.formule_nom||'—'}</td>
-      <td class="num">${v.quantite?fmtKg(v.quantite)+' kg':'—'}</td>
+      <td class="num">${v.qte_vendue?fmtKg(v.qte_vendue)+' kg':'—'}</td>
       <td class="num">${fmt(v.montant_total||0)} F</td>
       <td><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:8px">${v.statut_paiement||'—'}</span></td>
     </tr>`).join('')}</tbody></table>`
