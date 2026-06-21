@@ -151,3 +151,20 @@ async function sendIA(){
   _iaBusy=false;
   const sb=document.getElementById('ia-send'); if(sb) sb.disabled=false;
 }
+
+// Appel IA réutilisable (briefing, relance auto…) — renvoie le texte, gère son propre contexte
+async function iaGenerate(persona, question, tier='eco'){
+  const { data:{ session } } = await SB.auth.getSession();
+  const token = session?.access_token;
+  if(!token) throw new Error('Session expirée');
+  let ctx = {};
+  try{ const { data } = await SB.rpc('get_ia_contexte'); ctx = data || {}; }catch(e){}
+  const res = await fetch(IA_WORKER, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token },
+    body: JSON.stringify({ persona, question, contexte:ctx, tier })
+  });
+  const j = await res.json();
+  if(!res.ok || j.error) throw new Error(j.error || ('Erreur '+res.status));
+  return j.reply || '';
+}
