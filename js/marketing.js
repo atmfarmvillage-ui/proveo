@@ -279,6 +279,7 @@ async function renderMarketingSegments(){
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
+    <div id="mkt-campagne-zone"></div>
     <div id="mkt-relance-stats"></div>
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
@@ -291,7 +292,90 @@ async function renderMarketingSegments(){
   mktRenderCycle();
   mktRenderDowntrade();
   mktRenderCrossSell();
+  mktRenderCampagne();
   mktRenderRelanceStats();
+}
+
+// ── CAMPAGNE GROUPÉE (segment → 1 message → envoi en série) ──
+var MKT_CAMP_SEG='contacter';
+function mktCampDestinataires(){
+  if(!_MKT_SEGS) return [];
+  let liste = (MKT_CAMP_SEG==='contacter')
+    ? [..._MKT_SEGS.retard, ..._MKT_SEGS.perdu]
+    : (_MKT_SEGS[MKT_CAMP_SEG]||[]);
+  // uniquement ceux qui ont un numéro
+  return liste.filter(x=> (x.c.telephone||'').replace(/\D/g,'').length>=6);
+}
+function mktRenderCampagne(){
+  const zone=document.getElementById('mkt-campagne-zone');
+  if(!zone) return;
+  const opt=(v,l)=>`<option value="${v}"${MKT_CAMP_SEG===v?' selected':''}>${l}</option>`;
+  zone.innerHTML=`<div class="card">
+    <div class="card-title"><div class="ct-left"><span>📢 Campagne groupée</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Un segment → un message (avec <b>{nom}</b> personnalisé) → envoi WhatsApp en série.</div>
+    <div class="fr"><label>Segment cible</label>
+      <select id="mkt-camp-seg" onchange="MKT_CAMP_SEG=this.value;mktCampMaj()">
+        ${opt('contacter','🎯 À contacter (en retard + perdus)')}
+        ${opt('nouveau','🆕 Nouveaux')}
+        ${opt('regulier','🟢 Fidèles')}
+        ${opt('retard','🟠 En retard')}
+        ${opt('perdu','🔴 Perdus')}
+      </select>
+    </div>
+    <div id="mkt-camp-count" style="font-size:12px;color:var(--g6);font-weight:700;margin-bottom:8px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="btn btn-g btn-sm" onclick="genCampagneIA('eco')" title="DeepSeek">🚀 Pro</button>
+      <button class="btn btn-out btn-sm" onclick="genCampagneIA('pro')" title="Claude">💎 Premium</button>
+    </div>
+    <div class="fr"><label>Message (utilise {nom} pour personnaliser)</label>
+      <textarea id="mkt-camp-msg" rows="6" style="font-size:12px;line-height:1.5;width:100%;resize:vertical" placeholder="Ex: Bonjour {nom}, ..."></textarea>
+    </div>
+    <button class="btn btn-g" style="width:100%;justify-content:center" onclick="envoyerCampagne()">📲 Envoyer la campagne</button>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">⚠ Le navigateur ouvre un onglet WhatsApp par client : autorise les pop-ups. Idéal pour des lots raisonnables.</div>
+  </div>`;
+  mktCampMaj();
+}
+function mktCampMaj(){
+  const el=document.getElementById('mkt-camp-count');
+  if(el){ const n=mktCampDestinataires().length; el.textContent=`${n} destinataire(s) avec numéro`; }
+}
+async function genCampagneIA(tier){
+  tier=tier||'eco';
+  const out=document.getElementById('mkt-camp-msg');
+  if(!out) return;
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  const angles={
+    contacter:'pour relancer des clients inactifs et les faire revenir acheter',
+    nouveau:'de bienvenue pour de nouveaux clients, incitant à une 2e commande',
+    regulier:'de remerciement pour des clients fidèles, avec invitation à se réapprovisionner',
+    retard:'de relance douce pour des clients en retard sur leur rythme habituel',
+    perdu:'de reconquête pour des clients perdus, avec une raison forte de revenir',
+  };
+  out.value=`⏳ Rédaction (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…`;
+  try{
+    const q=`Rédige UNIQUEMENT un message WhatsApp de campagne pour la provenderie SADARI (aliments volaille/élevage, Togo) ${angles[MKT_CAMP_SEG]||'commercial'}. IMPORTANT : commence par "Bonjour {nom}," en gardant EXACTEMENT le marqueur {nom} (il sera remplacé par le prénom de chaque client). Court, chaleureux, une seule version générique. Termine par la signature SADARI. Donne seulement le message.`;
+    const txt=await iaGenerate('marketing', q, tier);
+    out.value = txt || '';
+    if(out.value && !/\{nom\}/.test(out.value)) out.value='Bonjour {nom},\n\n'+out.value; // garantir le marqueur
+  }catch(e){ out.value=''; notify('Échec IA : '+(e.message||e),'r'); }
+}
+function envoyerCampagne(){
+  const tpl=(document.getElementById('mkt-camp-msg')?.value||'').trim();
+  if(!tpl){ notify('Rédige d\'abord le message','r'); return; }
+  const dests=mktCampDestinataires();
+  if(!dests.length){ notify('Aucun destinataire avec numéro dans ce segment','r'); return; }
+  if(!confirm(`Envoyer la campagne à ${dests.length} client(s) ? ${dests.length} onglets WhatsApp vont s'ouvrir.`)) return;
+  let n=0;
+  dests.forEach(x=>{
+    const prenom=(x.c.nom||'').split(' ')[0]||'';
+    const msg=tpl.replace(/\{nom\}/g,prenom);
+    const tel=(x.c.telephone||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+    if(!tel) return;
+    window.open('https://wa.me/228'+tel+'?text='+encodeURIComponent(msg),'_blank');
+    if(typeof logRelance==='function') logRelance(x.c.id, 'campagne:'+MKT_CAMP_SEG, x.c.nom);
+    n++;
+  });
+  notify(`📢 Campagne lancée vers ${n} client(s)`,'gold');
 }
 
 // ── DÉTECTION DE BAISSE (downtrade) ───────────────
