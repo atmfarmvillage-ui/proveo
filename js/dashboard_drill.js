@@ -37,7 +37,11 @@ async function dashKpiDrill(type){
 async function drillSoldeCaisse(){
   document.getElementById('kpi-drill-titre').textContent = '💵 Détail des caisses';
   const {data:C} = await SB.from('gp_caisses').select('*').eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
-  const caisses = C||[];
+  let caisses = C||[];
+  // Cloisonnement PDV : un membre scopé ne voit que les caisses de son périmètre (+ sans PDV)
+  if(typeof appartientAuPDV==='function'){
+    caisses = caisses.filter(c=> appartientAuPDV(c.point_vente));
+  }
   const {data:M} = await SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID);
   const soldes = {};
   caisses.forEach(c=>{ soldes[c.id]=Number(c.solde_initial||0); });
@@ -116,6 +120,11 @@ async function drillAlertesMP(){
      <button class="btn btn-out btn-sm" onclick="document.getElementById('modal-kpi-drill').style.display='none';showGP('achats')">🔗 Achats MP</button>`;
 }
 
+// Cloisonnement PDV : un membre scopé ne voit le détail que de SON périmètre
+function _drillScopePV(q){
+  return (typeof scopeQueryPDV==='function') ? scopeQueryPDV(q) : q;
+}
+
 // Helper : filtrer les périodes (mois courant)
 function _moisRangeCe(){
   const m = thisMonth(); // "2026-06"
@@ -153,9 +162,9 @@ function filtrerKpiDrillTable(){
 // ── 1. CA (Ventes du mois) ─────────────────────────
 async function drillCA(){
   const {debut, fin} = _moisRangeCe();
-  const{data:V}=await SB.from('gp_ventes').select('*')
+  const{data:V}=await _drillScopePV(SB.from('gp_ventes').select('*')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
-    .order('date',{ascending:false});
+    .order('date',{ascending:false}));
   const ventes = V||[];
   const total = ventes.reduce((s,v)=>s+Number(v.montant_total||0),0);
 
@@ -179,9 +188,9 @@ async function drillCA(){
 // ── 2. ENCAISSÉ (paiements reçus) ──────────────────
 async function drillEncaisse(){
   const {debut, fin} = _moisRangeCe();
-  const{data:V}=await SB.from('gp_ventes').select('*')
+  const{data:V}=await _drillScopePV(SB.from('gp_ventes').select('*')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
-    .gt('montant_paye',0).order('date',{ascending:false});
+    .gt('montant_paye',0).order('date',{ascending:false}));
   const ventes = V||[];
   const total = ventes.reduce((s,v)=>s+Number(v.montant_paye||0),0);
 
@@ -205,9 +214,9 @@ async function drillEncaisse(){
 // ── 3. IMPAYÉS (dettes clients) ────────────────────
 async function drillImpayes(){
   const {debut, fin} = _moisRangeCe();
-  const{data:V}=await SB.from('gp_ventes').select('*')
+  const{data:V}=await _drillScopePV(SB.from('gp_ventes').select('*')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
-    .in('statut_paiement',['partiel','impaye']).order('date',{ascending:false});
+    .in('statut_paiement',['partiel','impaye']).order('date',{ascending:false}));
   const ventes = (V||[]).map(v=>{
     v._reste = Math.max(0, Number(v.montant_total||0) - Number(v.montant_paye||0));
     return v;
