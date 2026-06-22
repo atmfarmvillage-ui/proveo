@@ -215,6 +215,33 @@ html,body{height:100%;overflow:hidden;background:var(--g0);color:var(--text);fon
 .nav-item.admin-only{opacity:.5}
 .nav-item.admin-only.visible{opacity:1}
 
+/* ── MENU ACCORDÉON ─────────────────────────────────
+   Titres de groupe gros, colorés, imposants + cliquables.
+   Préfixés #sidebar pour battre les règles thème clair / mobile. */
+#sidebar .nav-sect-toggle{
+  cursor:pointer;
+  font-size:15px;font-weight:900;letter-spacing:.02em;text-transform:none;
+  color:#fff;
+  padding:13px 15px;margin:9px 6px 3px;border-radius:12px;
+  background:linear-gradient(135deg,var(--g4,#16A34A),var(--g6,#15803D));
+  box-shadow:0 4px 12px rgba(22,163,74,.32);
+  text-shadow:0 1px 2px rgba(0,0,0,.28);
+  justify-content:space-between;
+  transition:filter .2s ease,transform .15s ease;
+}
+#sidebar .nav-sect-toggle:hover{filter:brightness(1.07);transform:translateX(2px)}
+#sidebar .nav-sect-toggle::before{display:none}
+#sidebar .nav-sect-toggle::after{
+  content:'⌄';flex:none;width:auto;height:auto;background:none;
+  font-size:19px;line-height:1;opacity:.95;transition:transform .25s ease;transform:rotate(0deg)
+}
+#sidebar .nav-sect-toggle.collapsed::after{transform:rotate(-90deg)}
+.nav-group-items{overflow:hidden}
+.nav-group-items.collapsed{display:none}
+/* Texte des items agrandi */
+#sidebar .nav-item{font-size:15px;padding:10px 12px}
+#sidebar .nav-icon{font-size:18px;width:24px}
+
 /* Actions réservées admin/gérant — cachées pour secrétaire et autres rôles.
    Marquer un bouton/zone avec class="admin-only-action" pour le cacher automatiquement. */
 body:not(.role-admin):not(.role-gerant) .admin-only-action{display:none !important}

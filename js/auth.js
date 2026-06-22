@@ -226,6 +226,8 @@ async function bootApp(user){
   });
   // Gérer visibilité nav selon rôle (appel unique)
   applyRoleRestrictions();
+  // Transformer le menu en accordéon (groupes repliés par défaut)
+  if(typeof initNavAccordion==='function') initNavAccordion();
   // Marquer le body avec le rôle effectif → permet aux règles CSS .role-X de cacher/montrer des actions
   document.body.classList.remove('role-admin','role-secretaire','role-vendeur','role-logistique','role-daf','role-directeur','role-technicien','role-gerant');
   document.body.classList.add(GP_EST_GERANT?'role-gerant':('role-'+GP_ROLE));
@@ -342,6 +344,52 @@ function applyRoleRestrictions(){
     el.style.display='flex';
   });
 }
+// ── MENU ACCORDÉON ────────────────────────────────
+// Regroupe dynamiquement les .nav-item sous chaque .nav-sect, rend le titre
+// cliquable, replie tout par défaut, ouvre le groupe de la page active.
+function initNavAccordion(){
+  const sb=document.getElementById('sidebar');
+  if(!sb || sb.dataset.accordion) return;
+  const sects=Array.prototype.slice.call(sb.querySelectorAll('.nav-sect'));
+  sects.forEach((sect,i)=>{
+    const gid='g'+i;
+    const items=[];
+    let n=sect.nextElementSibling;
+    while(n && !n.classList.contains('nav-sect')){ const next=n.nextElementSibling; items.push(n); n=next; }
+    const wrap=document.createElement('div');
+    wrap.className='nav-group-items collapsed';
+    wrap.dataset.gid=gid;
+    sect.parentNode.insertBefore(wrap, sect.nextSibling);
+    items.forEach(it=>wrap.appendChild(it));
+    sect.classList.add('nav-sect-toggle','collapsed');
+    sect.dataset.gid=gid;
+    sect.setAttribute('role','button');
+    sect.onclick=function(){ toggleNavGroup(gid); };
+    // Masquer le groupe entier si tous ses items sont cachés par le rôle
+    const visible=items.some(it=>it.style.display!=='none');
+    if(!visible){ sect.style.display='none'; wrap.style.display='none'; }
+  });
+  sb.dataset.accordion='1';
+  openActiveNavGroup();
+}
+function toggleNavGroup(gid){
+  const sect=document.querySelector('.nav-sect-toggle[data-gid="'+gid+'"]');
+  const wrap=document.querySelector('.nav-group-items[data-gid="'+gid+'"]');
+  if(!sect||!wrap) return;
+  const willOpen=sect.classList.contains('collapsed');
+  sect.classList.toggle('collapsed',!willOpen);
+  wrap.classList.toggle('collapsed',!willOpen);
+}
+function openActiveNavGroup(){
+  const act=document.querySelector('#sidebar .nav-item.active');
+  if(!act) return;
+  const wrap=act.closest('.nav-group-items');
+  if(!wrap) return;
+  wrap.classList.remove('collapsed');
+  const sect=document.querySelector('.nav-sect-toggle[data-gid="'+wrap.dataset.gid+'"]');
+  if(sect) sect.classList.remove('collapsed');
+}
+
 // ── ROUTER COMPLET ────────────────────────────────
 var PAGE_RENDERERS = {
   dashboard:     renderDashboard,
@@ -451,6 +499,7 @@ function showGP(page){
   if(pageEl)pageEl.classList.add('active');
   const navEl=document.querySelector(`[data-page="${page}"]`);
   if(navEl)navEl.classList.add('active');
+  if(typeof openActiveNavGroup==='function')openActiveNavGroup(); // ouvrir le groupe de la page active
   if(typeof PAGE_RENDERERS!=='undefined'&&PAGE_RENDERERS[page]){
     try{
       const r=PAGE_RENDERERS[page]();

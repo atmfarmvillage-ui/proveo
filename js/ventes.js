@@ -1626,13 +1626,17 @@ function vtPeriodeRange(p){
 }
 function setVtPeriode(p){
   VT_PERIODE=p;
+  const di=document.getElementById('vt-filtre-date'); if(di) di.value=''; // période prime → on vide la date fixe
   document.querySelectorAll('.vt-per-btn').forEach(b=>b.classList.toggle('on', b.dataset.per===p));
   renderVentes();
 }
 async function renderVentes(){
   initRemiseVente();
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
-  const r=vtPeriodeRange(VT_PERIODE);
+  const filtDate=document.getElementById('vt-filtre-date')?.value||'';
+  // Une date fixe sélectionnée prime sur les boutons période
+  const r = filtDate ? {from:filtDate,to:filtDate,label:'le '+fmtDate(filtDate)} : vtPeriodeRange(VT_PERIODE);
+  document.querySelectorAll('.vt-per-btn').forEach(b=>b.classList.toggle('on', !filtDate && b.dataset.per===VT_PERIODE));
   let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID)
     .is('deleted_at', null)  // exclure les ventes en corbeille
     .gte('date',r.from).lte('date',r.to)
