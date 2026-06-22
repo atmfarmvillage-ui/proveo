@@ -142,6 +142,7 @@ async function doLogout(){
   GP_USER=null;GP_ROLE='secretaire';GP_ADMIN_ID=null;
   document.getElementById('authScreen').classList.remove('hidden');
   ['topbar','sidebar','main'].forEach(id=>document.getElementById(id).style.display='none');
+  document.body.classList.remove('app-ready');
 }
 
 // ── BOOT & INIT ─────────────────────────────────────
@@ -174,6 +175,7 @@ async function bootApp(user){
       await SB.auth.signOut();
       document.getElementById('authScreen').classList.remove('hidden');
       ['topbar','sidebar','main'].forEach(id=>document.getElementById(id).style.display='none');
+      document.body.classList.remove('app-ready');
       document.getElementById('a_err').textContent='Votre compte a été désactivé. Contactez votre administrateur.';
       return;
     }
@@ -228,6 +230,9 @@ async function bootApp(user){
   applyRoleRestrictions();
   // Transformer le menu en accordéon (groupes repliés par défaut)
   if(typeof initNavAccordion==='function') initNavAccordion();
+  // Barre d'onglets mobile (role-aware) + activer son affichage
+  if(typeof initMobileTabbar==='function') initMobileTabbar();
+  document.body.classList.add('app-ready');
   // Marquer le body avec le rôle effectif → permet aux règles CSS .role-X de cacher/montrer des actions
   document.body.classList.remove('role-admin','role-secretaire','role-vendeur','role-logistique','role-daf','role-directeur','role-technicien','role-gerant');
   document.body.classList.add(GP_EST_GERANT?'role-gerant':('role-'+GP_ROLE));
@@ -390,6 +395,14 @@ function openActiveNavGroup(){
   if(sect) sect.classList.remove('collapsed');
 }
 
+// ── BARRE D'ONGLETS MOBILE ────────────────────────
+// Masque les onglets dont la page est interdite au rôle (« Plus » reste).
+function initMobileTabbar(){
+  document.querySelectorAll('#mobile-tabbar .mtab[data-page]').forEach(t=>{
+    t.style.display = (typeof pageAutoriseePourRole!=='function' || pageAutoriseePourRole(t.dataset.page)) ? 'flex' : 'none';
+  });
+}
+
 // ── ROUTER COMPLET ────────────────────────────────
 var PAGE_RENDERERS = {
   dashboard:     renderDashboard,
@@ -500,6 +513,7 @@ function showGP(page){
   const navEl=document.querySelector(`[data-page="${page}"]`);
   if(navEl)navEl.classList.add('active');
   if(typeof openActiveNavGroup==='function')openActiveNavGroup(); // ouvrir le groupe de la page active
+  document.querySelectorAll('#mobile-tabbar .mtab').forEach(t=>t.classList.toggle('active', t.dataset.page===page)); // surligner l'onglet mobile
   if(typeof PAGE_RENDERERS!=='undefined'&&PAGE_RENDERERS[page]){
     try{
       const r=PAGE_RENDERERS[page]();
@@ -611,17 +625,21 @@ function populateSelects(){
     const el=document.getElementById(id);if(!el)return;
     const groups={};
     allF.forEach(f=>{const esp=f.espece||'autre';if(!groups[esp])groups[esp]=[];groups[esp].push(f);});
-    let html=allF.length
-      ? '<option value="">— Sélectionner une formule —</option>'
-      : '<option value="">— Aucune formule enregistrée —</option>';
+    const filtrerStock = id==='vt_formule' && typeof vtFiltrerStockActif==='function' && vtFiltrerStockActif();
+    let nbOpt=0, corps='';
     Object.entries(groups).forEach(([esp,fs])=>{
-      html+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
-      const liste=id==='vt_formule'
-        ? fs.slice().sort((a,b)=>((GP_STOCK_VENTE?.[b.nom]||0)>0?1:0)-((GP_STOCK_VENTE?.[a.nom]||0)>0?1:0))
-        : fs;
-      liste.forEach(f=>{html+=`<option value="${f.nom}">${id==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;});
-      html+='</optgroup>';
+      const liste=(id==='vt_formule' && typeof vtFormulesPourVente==='function') ? vtFormulesPourVente(fs) : fs;
+      if(!liste.length) return; // ne pas afficher d'optgroup vide
+      corps+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
+      liste.forEach(f=>{corps+=`<option value="${f.nom}">${id==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;nbOpt++;});
+      corps+='</optgroup>';
     });
+    const placeholder = !allF.length
+      ? '<option value="">— Aucune formule enregistrée —</option>'
+      : (filtrerStock && nbOpt===0
+          ? '<option value="">— Aucune formule en stock à ce PDV —</option>'
+          : '<option value="">— Sélectionner une formule —</option>');
+    let html = placeholder + corps;
     // Raccourci de création — sur le select de production uniquement
     if(id==='lot_formule')html+='<option value="__creer__">➕ Créer une formule…</option>';
     el.innerHTML=html;
@@ -929,16 +947,22 @@ function filtrerFormuleSelect(selectId, searchId){
       groups[f.espece].push(f);
     }
   });
-  let html='<option value="">— Sélectionner une formule —</option>';
   const icons={pondeuse:'🐔',chair:'🐔',lapin:'🐰',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
+  const filtrerStock = selectId==='vt_formule' && typeof vtFiltrerStockActif==='function' && vtFiltrerStockActif();
+  let corps='', flat=[];
   Object.entries(groups).forEach(([esp,fs])=>{
-    html+=`<optgroup label="${icons[esp]||'🌾'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
-    fs.forEach(f=>{html+=`<option value="${f.nom}">${selectId==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;});
-    html+='</optgroup>';
+    const liste=(selectId==='vt_formule' && typeof vtFormulesPourVente==='function') ? vtFormulesPourVente(fs) : fs;
+    if(!liste.length) return;
+    corps+=`<optgroup label="${icons[esp]||'🌾'} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
+    liste.forEach(f=>{corps+=`<option value="${f.nom}">${selectId==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;flat.push(f);});
+    corps+='</optgroup>';
   });
-  sel.innerHTML=html;
-  if(search&&Object.values(groups).flat().length===1){
-    sel.value=Object.values(groups).flat()[0].nom;
+  const placeholder = (filtrerStock && !flat.length)
+    ? '<option value="">— Aucune formule en stock à ce PDV —</option>'
+    : '<option value="">— Sélectionner une formule —</option>';
+  sel.innerHTML=placeholder+corps;
+  if(search && flat.length===1){
+    sel.value=flat[0].nom;
   }
 }
 

@@ -271,6 +271,20 @@ function pdvSourceVente(){
   return sel || hidden || 'Production';
 }
 
+// Production (siège) produit tout → propose toutes les formules.
+// Un PDV principal/secondaire ne vend QUE ce qu'il a reçu en stock.
+function vtFiltrerStockActif(){
+  const pdv = pdvSourceVente();
+  return !!pdv && pdv !== 'Production';
+}
+// Filtre (si PDV ≠ Production) + tri « en stock d'abord » d'une liste de formules.
+function vtFormulesPourVente(fs){
+  let liste = (fs||[]).slice();
+  if(vtFiltrerStockActif()) liste = liste.filter(f=>(GP_STOCK_VENTE?.[f.nom]||0)>0);
+  liste.sort((a,b)=>((GP_STOCK_VENTE?.[b.nom]||0)>0?1:0)-((GP_STOCK_VENTE?.[a.nom]||0)>0?1:0));
+  return liste;
+}
+
 async function loadStockVente(){
   GP_STOCK_VENTE = {};
   GP_POIDS_SAC_VENTE = {};
@@ -329,6 +343,12 @@ async function onPdvVenteChange(){
   const hidden = document.getElementById('vt_pv');
   if(hidden) hidden.value = val;
   await loadStockVente();
+  // Rafraîchir la liste des formules selon le stock du nouveau PDV
+  // (Production = toutes ; principal/secondaire = seulement celles en stock)
+  if(typeof filtrerFormuleSelect === 'function'){
+    filtrerFormuleSelect('vt_formule','vt_formule_search');
+  }
+  if(typeof renderFavorisFormules === 'function') renderFavorisFormules(); // favoris cohérents avec le stock
   // Re-display stock pour la formule en cours
   const formuleNom = document.getElementById('vt_formule')?.value;
   if(formuleNom && typeof afficherStockFormuleVente === 'function'){
@@ -406,8 +426,13 @@ function renderFavorisFormules(){
 function renderFavorisInto(containerId, selectId, cbName){
   const wrap = document.getElementById(containerId);
   if(!wrap) return;
-  if(!GP_FAVORIS_FORMULES.length){ wrap.innerHTML=''; return; }
-  wrap.innerHTML = GP_FAVORIS_FORMULES.map(f=>{
+  let favoris = GP_FAVORIS_FORMULES;
+  // En vente, PDV ≠ Production → ne montrer que les favoris réellement en stock
+  if(selectId==='vt_formule' && typeof vtFiltrerStockActif==='function' && vtFiltrerStockActif()){
+    favoris = favoris.filter(f=>(GP_STOCK_VENTE?.[f.nom]||0)>0);
+  }
+  if(!favoris.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = favoris.map(f=>{
     const nom = (f.nom||'').replace(/'/g,"\\'");
     const cb = cbName ? `'${cbName}'` : 'null';
     return `<button type="button" onclick="choisirFavori('${selectId}','${nom}',${cb})"
