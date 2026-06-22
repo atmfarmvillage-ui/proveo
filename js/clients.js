@@ -32,6 +32,8 @@ async function loadClientStats(force){
     if(v.date)s.dates.push(v.date);
     if(v.formule_nom)s.formules[v.formule_nom]=(s.formules[v.formule_nom]||0)+1;
     s.totalCA+=Number(v.montant_total||0);
+    // Formule du dernier achat (pour le cycle d'élevage)
+    if(v.date && (!s._ld || v.date>s._ld)){ s._ld=v.date; if(v.formule_nom) s.derniereFormule=v.formule_nom; }
   });
   Object.values(map).forEach(s=>{
     const ds=[...new Set(s.dates)].sort();           // jours distincts = visites
@@ -202,7 +204,19 @@ async function redigerRelanceIA(id, tier){
       ouvrirModalWA(id);
       setTimeout(()=>{ const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt; }, 60);
     } else { alert(txt); }
+    logRelance(id, st.key, c.nom); // tracer pour la boucle d'apprentissage
   }catch(e){ notify('Échec rédaction IA : '+(e.message||e),'r'); }
+}
+
+// Journalise une relance (boucle d'apprentissage : mesurer le rachat ensuite)
+async function logRelance(clientId, segment, clientNom){
+  if(!clientId) return;
+  try{
+    await SB.from('gp_relances').insert({
+      admin_id:GP_ADMIN_ID, client_id:clientId,
+      client_nom: clientNom||null, segment: segment||null, canal:'whatsapp'
+    });
+  }catch(e){ /* table absente → silencieux, suivi désactivé */ }
 }
 
 // Réécrit l'aperçu de la modale WA via l'IA selon la circonstance choisie
