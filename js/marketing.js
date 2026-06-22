@@ -277,6 +277,7 @@ async function renderMarketingSegments(){
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
     <div id="mkt-cycle-zone"></div>
+    <div id="mkt-crosssell-zone"></div>
     <div id="mkt-relance-stats"></div>
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
@@ -287,7 +288,84 @@ async function renderMarketingSegments(){
     ${_mktFicheCard()}`;
   _mktRenderListe();
   mktRenderCycle();
+  mktRenderCrossSell();
   mktRenderRelanceStats();
+}
+
+// ── CROSS-SELL : produits manquants du cycle ──────
+// Détecte les TROUS internes : un client qui achète plusieurs stades d'une
+// espèce mais en saute un (= il l'achète ailleurs) → on lui propose le manquant.
+function mktCrossSellOpps(){
+  const clients = (typeof GP_CLIENTS!=='undefined'?GP_CLIENTS:[]) || [];
+  const cats = (typeof GP_CATEGORIES!=='undefined'?GP_CATEGORIES:[]) || [];
+  const opps = [];
+  clients.forEach(c=>{
+    const s=(GP_CLIENT_STATS||{})[c.id]; if(!s||!s.formules) return;
+    const byEsp={};
+    Object.keys(s.formules).forEach(fn=>{
+      const f=(typeof getFormule==='function'?getFormule(fn):null)||(FORMULES_SADARI||[]).find(x=>x.nom===fn);
+      if(!f||!f.espece||!f.stade) return;
+      const cat=cats.find(x=>x.espece===f.espece&&x.categorie===f.stade);
+      if(!cat) return;
+      byEsp[f.espece]=byEsp[f.espece]||{ordres:new Set(),stades:new Set()};
+      byEsp[f.espece].ordres.add(Number(cat.ordre||0));
+      byEsp[f.espece].stades.add(f.stade);
+    });
+    Object.entries(byEsp).forEach(([esp,info])=>{
+      if(info.stades.size<2) return; // besoin d'au moins 2 stades pour parler de cycle
+      const ec=cats.filter(x=>x.espece===esp).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+      const minO=Math.min(...info.ordres), maxO=Math.max(...info.ordres);
+      ec.forEach(cat=>{
+        if((cat.ordre||0)>minO && (cat.ordre||0)<maxO && !info.stades.has(cat.categorie)){
+          const fn=_formulePourStade(esp,cat.categorie);
+          opps.push({c, espece:esp, manque:(cat.categorie_label||cat.categorie), formule: fn?fn.nom:null, ca:Number(s.totalCA||0)});
+        }
+      });
+    });
+  });
+  return opps.sort((a,b)=>b.ca-a.ca);
+}
+
+function mktRenderCrossSell(){
+  const zone=document.getElementById('mkt-crosssell-zone');
+  if(!zone) return;
+  const opps=mktCrossSellOpps();
+  if(!opps.length){
+    zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>🔗 Cross-sell — produits manquants</span></div></div>
+      <div style="color:var(--textm);font-size:12px;padding:6px">Aucun trou de cycle détecté. (On repère les clients qui achètent plusieurs stades d'une espèce mais en sautent un.)</div></div>`;
+    return;
+  }
+  const top=opps.slice(0,30);
+  zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>🔗 Cross-sell — produits manquants (${opps.length})</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Ces clients achètent leur cycle chez nous… sauf une étape. Récupère-la.</div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Client</th><th>Espèce</th><th>Manque</th><th>Formule à proposer</th><th></th>
+    </tr></thead><tbody>
+    ${top.map(o=>`<tr>
+      <td><b>${(o.c.nom||'—').replace(/</g,'&lt;')}</b></td>
+      <td style="font-size:10px;text-transform:capitalize">${o.espece}</td>
+      <td><span style="color:var(--gold);font-weight:700;font-size:10px">${o.manque}</span></td>
+      <td style="font-size:10px;color:var(--g6)">${o.formule||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-g btn-sm" style="padding:4px 7px" title="DeepSeek" onclick="relanceCrossSellIA('${o.c.id}','${(o.formule||o.manque).replace(/'/g,"\\'")}','eco')">🚀</button>
+        <button class="btn btn-out btn-sm" style="padding:4px 7px" title="Claude" onclick="relanceCrossSellIA('${o.c.id}','${(o.formule||o.manque).replace(/'/g,"\\'")}','pro')">💎</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+async function relanceCrossSellIA(clientId, produit, tier){
+  tier=tier||'eco';
+  const c=(GP_CLIENTS||[]).find(x=>x.id===clientId); if(!c) return;
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
+  try{
+    const q=`Rédige UNIQUEMENT un message WhatsApp court et malin pour le client "${c.nom}" de la provenderie SADARI. Ce client achète déjà chez nous mais ne prend pas "${produit}" (il l'achète sûrement ailleurs). Propose-lui naturellement de prendre aussi "${produit}" chez nous — avantage : tout au même endroit, qualité homogène sur tout le cycle. Reste subtil, pas agressif. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt=await iaGenerate('marketing', q, tier);
+    if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
+    else alert(txt);
+    if(typeof logRelance==='function') logRelance(clientId, 'cross-sell', c.nom);
+  }catch(e){ notify('Échec IA : '+(e.message||e),'r'); }
 }
 
 // ── SCORE RFM (Récence × Fréquence × Montant) ─────
