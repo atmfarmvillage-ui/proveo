@@ -277,6 +277,7 @@ async function renderMarketingSegments(){
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
     <div id="mkt-cycle-zone"></div>
+    <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
     <div id="mkt-relance-stats"></div>
     <div class="card">
@@ -288,8 +289,80 @@ async function renderMarketingSegments(){
     ${_mktFicheCard()}`;
   _mktRenderListe();
   mktRenderCycle();
+  mktRenderDowntrade();
   mktRenderCrossSell();
   mktRenderRelanceStats();
+}
+
+// ── DÉTECTION DE BAISSE (downtrade) ───────────────
+// Fenêtre glissante : 60 derniers jours vs 60 précédents.
+// Alerte si baisse de volume ≥30% OU descente en gamme (prix/kg ↓ ≥10%).
+const _MKT_DT_FEN = 60;
+async function mktRenderDowntrade(){
+  const zone=document.getElementById('mkt-downtrade-zone');
+  if(!zone) return;
+  const J=86400000, now=Date.now();
+  const d2=new Date(now-2*_MKT_DT_FEN*J).toISOString().slice(0,10);
+  let q=SB.from('gp_ventes').select('client_id,client_nom,date,qte_vendue,montant_total')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).not('client_id','is',null).gte('date',d2);
+  if(typeof scopeQueryPDV==='function') q=scopeQueryPDV(q);
+  const{data}=await q;
+  const V=data||[];
+  const cut=now-_MKT_DT_FEN*J;
+  const agg={};
+  V.forEach(v=>{
+    const t=new Date(v.date+'T12:00:00').getTime();
+    const a=agg[v.client_id]=agg[v.client_id]||{nom:v.client_nom,kgR:0,kgP:0,caR:0,caP:0};
+    const kg=Number(v.qte_vendue||0), ca=Number(v.montant_total||0);
+    if(t>=cut){ a.kgR+=kg; a.caR+=ca; } else { a.kgP+=kg; a.caP+=ca; }
+  });
+  const opps=[];
+  Object.entries(agg).forEach(([id,a])=>{
+    if(a.kgP<=0) return; // pas actif sur la période précédente → pas un décrochage
+    const volDrop=(a.kgP-a.kgR)/a.kgP;
+    const pmR=a.kgR>0?a.caR/a.kgR:0, pmP=a.kgP>0?a.caP/a.kgP:0;
+    const gammeDrop = pmR>0 && pmP>0 && pmR < pmP*0.9;
+    if(volDrop>=0.3 || (gammeDrop && a.kgR>0)){
+      opps.push({id,nom:a.nom,kgR:a.kgR,kgP:a.kgP,volDrop,pmR,pmP,gammeDrop});
+    }
+  });
+  opps.sort((x,y)=>(y.kgP-y.kgR)-(x.kgP-x.kgR)); // plus grosse perte de volume d'abord
+  if(!opps.length){
+    zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>📉 Clients en perte de vitesse</span></div></div>
+      <div style="color:var(--textm);font-size:12px;padding:6px">Aucune baisse détectée (60 derniers jours vs 60 précédents).</div></div>`;
+    return;
+  }
+  const top=opps.slice(0,30);
+  zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>📉 Clients en perte de vitesse (${opps.length})</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Baisse de volume ≥30% ou descente en gamme — 60 derniers jours vs 60 précédents.</div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Client</th><th class="num">Kg avant→après</th><th class="num">Baisse</th><th>Signal</th><th></th>
+    </tr></thead><tbody>
+    ${top.map(o=>`<tr>
+      <td><b>${(o.nom||'—').replace(/</g,'&lt;')}</b></td>
+      <td class="num">${fmtKg(o.kgP)} → ${fmtKg(o.kgR)}</td>
+      <td class="num" style="color:var(--red);font-weight:700">${o.volDrop>0?'-'+Math.round(o.volDrop*100)+'%':'—'}</td>
+      <td style="font-size:10px">${o.volDrop>=0.3?'📉 volume':''}${o.gammeDrop?' ⬇ gamme':''}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-g btn-sm" style="padding:4px 7px" title="DeepSeek" onclick="relanceDowntradeIA('${o.id}','eco')">🚀</button>
+        <button class="btn btn-out btn-sm" style="padding:4px 7px" title="Claude" onclick="relanceDowntradeIA('${o.id}','pro')">💎</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+async function relanceDowntradeIA(clientId, tier){
+  tier=tier||'eco';
+  const c=(GP_CLIENTS||[]).find(x=>x.id===clientId); if(!c) return;
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
+  try{
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, attentionné et non culpabilisant pour le client "${c.nom}" de la provenderie SADARI. On a remarqué que ses commandes ont BAISSÉ ces derniers temps. Prends de ses nouvelles avec tact, demande si tout va bien dans son élevage, et propose discrètement de l'aider à reprendre (dispo, qualité, petit geste commercial si pertinent). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt=await iaGenerate('marketing', q, tier);
+    if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
+    else alert(txt);
+    if(typeof logRelance==='function') logRelance(clientId, 'downtrade', c.nom);
+  }catch(e){ notify('Échec IA : '+(e.message||e),'r'); }
 }
 
 // ── CROSS-SELL : produits manquants du cycle ──────
