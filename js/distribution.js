@@ -414,8 +414,11 @@ async function savePaiementLivraison(){
 // Table unique gp_stock_produits_pdv = vérité opérationnelle (Production = pseudo-PDV). Tout en KG.
 async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
   if(!pdvNom || !formuleNom) return;
-  const{data:st}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).maybeSingle();
+  // TOUTES les lignes (gère les doublons) : on met à jour la 1re, on n'en crée pas une nouvelle s'il en existe déjà
+  const{data:rows}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom)
+    .order('qte_disponible',{ascending:false});
+  const st=(rows&&rows.length)?rows[0]:null;
   if(st){
     await SB.from('gp_stock_produits_pdv').update({
       qte_disponible:Math.max(0,Number(st.qte_disponible||0)+deltaKg),
@@ -432,8 +435,10 @@ async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
 // Définit la valeur ABSOLUE du stock d'un PDV/formule (init départ ou inventaire). kg.
 async function setStockPDV(pdvNom, formuleNom, kgAbsolu){
   if(!pdvNom||!formuleNom) return;
-  const{data:st}=await SB.from('gp_stock_produits_pdv').select('id')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).maybeSingle();
+  // TOUTES les lignes (gère les doublons) : on garde la 1re et on n'en crée pas de nouvelle s'il en existe
+  const{data:rows}=await SB.from('gp_stock_produits_pdv').select('id')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).limit(1);
+  const st=(rows&&rows.length)?rows[0]:null;
   if(st){
     await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,kgAbsolu),updated_at:new Date().toISOString()}).eq('id',st.id);
   } else {

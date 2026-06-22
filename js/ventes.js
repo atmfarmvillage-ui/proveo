@@ -1070,18 +1070,29 @@ async function saveVente(){
         if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
         continue;
       }
-      const{data:stock}=await SB.from('gp_stock_produits_pdv').select('*')
+      // Récupérer TOUTES les lignes (gère les doublons éventuels) — surtout au point Production
+      const{data:stocks}=await SB.from('gp_stock_produits_pdv').select('*')
         .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock)
-        .eq('formule_nom',l.formule_nom).maybeSingle();
-      if(stock){
-        // quantite est en KG (sacs : nb_sacs×poids ; vrac : kg direct)
-        const newQte=Math.max(0,Number(stock.qte_disponible)-Number(l.quantite||0));
-        await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()})
-          .eq('id',stock.id);
-        // Vérifier seuil critique
-        if(newQte<=stock.seuil_critique){
-          envoyerAlerteSeuil(pdvStock,l.formule_nom,newQte,stock.seuil_critique);
+        .eq('formule_nom',l.formule_nom).order('qte_disponible',{ascending:false});
+      const rows=stocks||[];
+      if(rows.length){
+        // Déduire la quantité (KG) à travers les lignes, en commençant par la plus garnie
+        let reste=Number(l.quantite||0);
+        for(const st of rows){
+          if(reste<=0) break;
+          const dispo=Number(st.qte_disponible||0);
+          const pris=Math.min(dispo,reste);
+          const newQte=Math.max(0,dispo-pris);
+          reste-=pris;
+          await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()}).eq('id',st.id);
         }
+        // Seuil critique sur le stock total restant
+        const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-Number(l.quantite||0);
+        const seuil=Number(rows[0].seuil_critique||0);
+        if(totalRestant<=seuil){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
+      } else {
+        // Aucune ligne de stock → ne pas échouer en silence : alerter
+        if(typeof notify==='function') notify(`⚠ Stock introuvable : "${l.formule_nom}" à ${pdvStock} — non décrémenté`,'r');
       }
     }
   }
