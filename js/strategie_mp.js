@@ -6,6 +6,8 @@
 
 let GP_STRAT_PARAMS = {};   // { formule_nom: { mode, tonnes } }
 let _STRAT = null;          // données chargées (prod mensuelle, niveaux stock, labels)
+let _STRAT_ROWS = [];       // dernier besoin MP calculé (pour l'IA)
+let _STRAT_TOTAUX = {};     // { nbManq, cout }
 
 // Niveaux stock MP (fallback si calcNiveaux absent)
 function _stratNiveaux(S){
@@ -152,6 +154,11 @@ function _stratRenderUI(){
   const totalManq = rows.filter(r=>r.manq>0).length;
   const totalCout = rows.reduce((s,r)=>s + r.cout, 0);
 
+  // Mémoriser pour le conseiller IA
+  _STRAT_ROWS = rows;
+  _STRAT_TOTAUX = { nbManq: totalManq, cout: Math.round(totalCout) };
+  _stratRenderIA();
+
   const kpis = document.getElementById('strat-kpis');
   if(kpis) kpis.innerHTML = `
     <div class="econo-box"><div class="econo-val">${rows.length}</div><div class="econo-lbl">Matières concernées</div></div>
@@ -179,6 +186,59 @@ function _stratRenderUI(){
     </tr></tfoot></table>`
     : '<div class="card" style="text-align:center;color:var(--textm);font-size:13px;padding:20px">Configure tes paramètres ci-dessus (tonnes manuelles ou base mensuelle) pour voir le besoin en matières premières.</div>';
   }
+}
+
+// ── CONSEILLER IA ACHATS (admin uniquement) ───────
+function _stratRenderIA(){
+  const zone = document.getElementById('strat-ia-zone');
+  if(!zone) return;
+  if(GP_ROLE !== 'admin'){ zone.innerHTML = ''; return; } // IA réservée à l'admin
+  zone.innerHTML = `<div class="card">
+    <div class="card-title"><div class="ct-left"><span>🧠 Conseiller IA — stratégie d'achat</span></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g btn-sm" id="strat-ia-pro" onclick="analyserStrategieMpIA('eco')" title="DeepSeek — rapide & éco">🚀 Pro</button>
+        <button class="btn btn-out btn-sm" id="strat-ia-prem" onclick="analyserStrategieMpIA('pro')" title="Claude — qualité max">💎 Premium</button>
+      </div>
+    </div>
+    <div id="strat-ia-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)">
+      <span style="color:var(--textm)">Clique <b>🚀 Pro</b> (DeepSeek) ou <b>💎 Premium</b> (Claude) : l'IA priorise tes achats, anticipe les ruptures et optimise ton budget.</span>
+    </div>
+  </div>`;
+}
+
+async function analyserStrategieMpIA(tier){
+  tier = tier || 'eco';
+  const out = document.getElementById('strat-ia-result');
+  const bPro = document.getElementById('strat-ia-pro'), bPrem = document.getElementById('strat-ia-prem');
+  if(!out) return;
+  if(typeof iaGenerate !== 'function'){ out.textContent = '⚠ Assistant IA indisponible.'; return; }
+  const rows = (_STRAT_ROWS||[]).filter(r=>r.ant>0);
+  if(!rows.length){ out.textContent = 'Configure d\'abord ta production anticipée ci-dessus.'; return; }
+  if(bPro) bPro.disabled = true; if(bPrem) bPrem.disabled = true;
+  out.innerHTML = `<span style="color:var(--textm)">⏳ Analyse des achats (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
+
+  const lignes = rows.map(r=>
+    `- ${r.nom} : besoin ${fmt(Math.round(r.ant))} kg, stock ${fmt(Math.round(r.stk))} kg, manquant ${r.manq>0?fmt(Math.round(r.manq))+' kg':'0 (OK)'}, coût estimé ${r.manq>0?fmt(Math.round(r.cout))+' F':'0'}`
+  ).join('\n');
+
+  const q = `Tu es le responsable des achats matières premières de la provenderie SADARI (Togo). Voici le besoin RÉEL en MP pour la production anticipée (chiffres calculés) :
+${lignes}
+
+Budget d'achat total estimé : ${fmt(_STRAT_TOTAUX.cout||0)} F · ${_STRAT_TOTAUX.nbManq||0} matières en manque.
+
+Donne un plan d'achat CONCRET et chiffré :
+1) Quelles MP acheter EN PRIORITÉ (risque de rupture / impact production) et dans quel ordre.
+2) Comment optimiser le budget (regroupement de commandes, quantités, ce qui peut attendre).
+3) Conseils de négociation/timing (saisonnalité des prix des MP locales si pertinent).
+Cite les matières et les chiffres. Sois bref et actionnable.`;
+
+  try{
+    const txt = await iaGenerate('comptable', q, tier); // moteur : Pro=DeepSeek, Premium=Claude
+    out.textContent = txt || 'Réponse vide.';
+  }catch(e){
+    out.innerHTML = '⚠ ' + (e.message||e);
+  }
+  if(bPro) bPro.disabled = false; if(bPrem) bPrem.disabled = false;
 }
 
 // ── Handlers ──────────────────────────────────────

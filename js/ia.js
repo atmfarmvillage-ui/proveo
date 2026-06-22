@@ -30,7 +30,8 @@ let _iaHistory = [];         // [{role, content}]
 let _iaBusy = false;
 
 function _iaAllowed(){
-  return ['admin','secretaire','daf','directeur'].includes(GP_ROLE);
+  // IA réservée à l'admin (le gérant a GP_ROLE='admin')
+  return GP_ROLE==='admin';
 }
 
 function initIA(){
