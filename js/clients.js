@@ -250,9 +250,9 @@ async function redigerMsgWAIA(tier){
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
-  // Cloisonnement : seul un revendeur secondaire ne voit que SES clients (+ clients sans PDV)
+  // Cloisonnement : un membre scopé ne voit que SES clients (+ clients sans PDV)
   if(typeof estCloisonnePDV==='function' && estCloisonnePDV()){
-    const mine=GP_POINT_VENTE||null;
+    const mine=(typeof pdvCourant==='function')?pdvCourant():(GP_POINT_VENTE||'Production');
     filtered=filtered.filter(c=> !c.point_vente || c.point_vente===mine);
   }
 
@@ -538,7 +538,7 @@ async function verifierProspect(){
 
   // Chercher dans les clients existants
   let query=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID);
-  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()) query=query.eq('point_vente', GP_POINT_VENTE);
+  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()) query=query.eq('point_vente', (typeof pdvCourant==='function')?pdvCourant():(GP_POINT_VENTE||'Production'));
   if(tel) query=query.eq('telephone',tel);
   else if(nom) query=query.ilike('nom','%'+nom+'%');
   const{data:clients}=await query.limit(1);

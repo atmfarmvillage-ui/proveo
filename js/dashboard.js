@@ -42,8 +42,9 @@ async function renderDashboard(){
   // Seul un revendeur de PDV secondaire est cloisonné à son point de vente.
   const vueComplete = !(typeof estCloisonnePDV==='function' && estCloisonnePDV());
   const monPDVDash = GP_POINT_VENTE || 'Production';
-  const VMois = vueComplete ? ventesMoisD : ventesMoisD.filter(v=>v.point_vente===monPDVDash);
-  const VJ = vueComplete ? toutesVentesD : toutesVentesD.filter(v=>v.point_vente===monPDVDash);
+  const _matchPV = v => (typeof appartientAuPDV==='function') ? appartientAuPDV(v.point_vente) : (vueComplete || v.point_vente===monPDVDash);
+  const VMois = vueComplete ? ventesMoisD : ventesMoisD.filter(_matchPV);
+  const VJ = vueComplete ? toutesVentesD : toutesVentesD.filter(_matchPV);
   const D=depensesD;
   const PA=paiementsMP;
   const SAL=salairesD;
@@ -91,8 +92,8 @@ async function renderDashboard(){
   // Bénéfice = encaissé - dépenses (pas CA car impayés non reçus)
   const beneficeMois=encaisseMois-depMois;
 
-  // Ventes en gros (livraisons inter-PDV) — vue complète = réseau ; revendeur secondaire = son PDV source
-  const LIVG=vueComplete?livMoisD:livMoisD.filter(l=>l.pdv_source_nom===monPDVDash);
+  // Ventes en gros (livraisons inter-PDV) — vue complète = réseau ; sinon, gros du PDV source du membre
+  const LIVG=vueComplete?livMoisD:livMoisD.filter(l=>(typeof appartientAuPDV==='function')?appartientAuPDV(l.pdv_source_nom):l.pdv_source_nom===monPDVDash);
   const caGros=LIVG.reduce((s,l)=>s+Number(l.montant_total||0),0);
   const encGros=LIVG.reduce((s,l)=>s+Number(l.montant_paye||0),0);
 
@@ -118,8 +119,8 @@ async function renderDashboard(){
   });
   const soldeCaisseTotal = Object.values(soldesCaisse).reduce((s,v)=>s+v,0);
   const nbCaisses = (caissesD||[]).length;
-  // Solde caisse du PDV courant (pour un revendeur secondaire) : caisses du PDV + caisses sans PDV
-  const caissesPDV = (caissesD||[]).filter(c=> !c.point_vente || c.point_vente===monPDVDash);
+  // Solde caisse du PDV courant : caisses du périmètre du membre (+ caisses sans PDV)
+  const caissesPDV = (caissesD||[]).filter(c=> (typeof appartientAuPDV==='function') ? appartientAuPDV(c.point_vente) : (!c.point_vente || c.point_vente===monPDVDash));
   const soldeCaissePDV = caissesPDV.reduce((s,c)=>s+(soldesCaisse[c.id]||0),0);
   const nbCaissesPDV = caissesPDV.length;
   // Total des ventes (montant_total brut, provenderie+ferme) du périmètre visible
@@ -169,13 +170,13 @@ async function renderDashboard(){
     ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock MP',alertes.length,
       alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
     `:`
-    ${kpi('💰','gold','Mon CA ce mois',fmt(caMois))}
-    ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null)}
-    ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois))}
-    ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'})}
+    ${kpi('💰','gold','Mon CA ce mois',fmt(caMois),null,"dashKpiDrill('ca')")}
+    ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null,"dashKpiDrill('encaisse')")}
+    ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois),null,"dashKpiDrill('ca')")}
+    ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
     ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
     ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
-    ${kpi('💵','gold','Solde caisse PDV',fmt(soldeCaissePDV),nbCaissesPDV>0?{type:'flat',text:`${nbCaissesPDV} caisse${nbCaissesPDV>1?'s':''}`}:null)}
+    ${kpi('💵','gold','Solde caisse PDV',fmt(soldeCaissePDV),nbCaissesPDV>0?{type:'flat',text:`${nbCaissesPDV} caisse${nbCaissesPDV>1?'s':''}`}:null,"dashKpiDrill('caisse')")}
     ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}
     `}`;
 

@@ -1666,7 +1666,7 @@ async function renderVentes(){
     .is('deleted_at', null)  // exclure les ventes en corbeille
     .gte('date',r.from).lte('date',r.to)
     .order('date',{ascending:false}).order('created_at',{ascending:false}).limit(2000);
-  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()) q=q.eq('point_vente', GP_POINT_VENTE); // seul un revendeur secondaire est cloisonné
+  if(typeof scopeQueryPDV==='function') q=scopeQueryPDV(q); // chaque PDV ne voit que ses ventes
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
   const V=data||[];
@@ -1703,7 +1703,7 @@ async function renderVentes(){
 
 async function updateVentesKPIs(){
   let qk=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',today()).lte('date',today());
-  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()) qk=qk.eq('point_vente', GP_POINT_VENTE); // seul un revendeur secondaire est cloisonné
+  if(typeof scopeQueryPDV==='function') qk=scopeQueryPDV(qk); // chaque PDV ne voit que ses ventes
   const{data:V}=await qk;
   const vd=V||[];
   // Sépare CA provenderie / ferme du jour

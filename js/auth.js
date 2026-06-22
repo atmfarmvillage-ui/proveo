@@ -603,16 +603,33 @@ async function loadIngredients(){
   const{data}=await SB.from('gp_ingredients').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   GP_INGREDIENTS=data||[];
 }
-// Cloisonnement PDV pour la LECTURE des données centrales (ventes, clients) :
-// SEUL un revendeur de PDV secondaire est cloisonné à son PDV.
-// Admin, gérant, principal (vue réseau) et secrétaire du siège → accès complet.
+// Cloisonnement PDV : CHAQUE PDV ne voit QUE ses propres données/KPI.
+// Seuls l'admin/gérant (et le principal = vue réseau) voient tout le réseau.
+// Tout autre membre (secrétaire, vendeur, revendeur secondaire) est scopé à SON PDV.
 function estCloisonnePDV(){
-  return GP_EST_SECONDAIRE === true && !!GP_POINT_VENTE;
+  return GP_ROLE!=='admin' && !GP_EST_PRINCIPAL;
+}
+// PDV du membre connecté (repli "Production" pour le siège)
+function pdvCourant(){
+  return (typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) ? GP_POINT_VENTE : 'Production';
+}
+// Une ligne (point_vente) appartient-elle au périmètre du membre connecté ?
+// Siège (sans PDV) : voit le non-assigné (null) + "Production". PDV réel : son PDV exact.
+function appartientAuPDV(pv){
+  if(!estCloisonnePDV()) return true;
+  if(GP_POINT_VENTE) return pv===GP_POINT_VENTE;
+  return !pv || pv==='Production';
+}
+// Applique le cloisonnement PDV à une requête Supabase sur une table ayant "point_vente".
+function scopeQueryPDV(q){
+  if(!estCloisonnePDV()) return q;
+  if(GP_POINT_VENTE) return q.eq('point_vente', GP_POINT_VENTE);
+  return q.or('point_vente.is.null,point_vente.eq.Production'); // siège
 }
 async function loadClients(){
   let q=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
-  // Cloisonnement PDV : seul un revendeur secondaire ne charge que SES clients (+ non assignés)
-  if(estCloisonnePDV()) q=q.or(`point_vente.is.null,point_vente.eq.${GP_POINT_VENTE}`);
+  // Cloisonnement PDV : un membre scopé ne charge que SES clients (+ clients sans PDV)
+  if(estCloisonnePDV()) q=q.or(`point_vente.is.null,point_vente.eq.${pdvCourant()}`);
   const{data}=await q;
   GP_CLIENTS=data||[];
 }
