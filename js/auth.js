@@ -480,6 +480,7 @@ var PAGE_RENDERERS = {
     showDirecteur();
   },
   mes_rapports:  showMesRapports,
+  marketing:     typeof renderMarketing==="function" && renderMarketing,
 };
 
 // Renvoie true si le rôle courant a le droit d'ouvrir cette page.

@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.24.5">
+<link rel="stylesheet" href="css/style.css?v=2.24.6">
 <!-- QR Cards : génération (QRious — lib browser fiable) + scan caméra/fichier (html5-qrcode) -->
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -189,6 +189,7 @@
   <!-- DIRECTION STRATÉGIQUE -->
   <div class="nav-sect">🎯 Direction</div>
   <div class="nav-item" onclick="showGP('directeur')" data-page="directeur" data-roles="admin,daf,directeur"><span class="nav-icon">🎯</span>Directeur Stratégique</div>
+  <div class="nav-item" onclick="showGP('marketing')" data-page="marketing" data-roles="admin,daf,directeur"><span class="nav-icon">📈</span>Directeur Marketing IA</div>
   <div class="nav-item" onclick="showGP('avis')" data-page="avis" data-roles="admin,daf,directeur"><span class="nav-icon">💬</span>Avis &amp; réclamations <span id="nav-badge-avis" class="nav-badge" style="display:none">0</span></div>
   <div class="nav-item" onclick="showGP('mes_rapports')" data-page="mes_rapports" data-roles="directeur"><span class="nav-icon">📝</span>Mon rapport du jour</div>
 
@@ -2681,6 +2682,23 @@
   <div id="dir-content"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
 </div>
 
+<!-- DIRECTEUR MARKETING IA -->
+<div class="page" id="page-marketing">
+  <div class="page-title">Directeur Marketing IA</div>
+  <div class="page-sub">Marges par formule · Où concentrer · Diagnostic stratégique</div>
+  <style>
+    .mkt-per-btn{font-size:11px;padding:5px 11px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:8px;cursor:pointer;font-weight:700}
+    .mkt-per-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
+  </style>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="mkt-per-btn" data-per="semaine" onclick="mktSetPeriode('semaine')">Semaine</button>
+    <button class="mkt-per-btn on" data-per="mois" onclick="mktSetPeriode('mois')">Mois</button>
+    <button class="mkt-per-btn" data-per="annee" onclick="mktSetPeriode('annee')">Année</button>
+    <button class="btn btn-out btn-sm" onclick="renderMarketing()" style="margin-left:auto">🔄 Actualiser</button>
+  </div>
+  <div id="mkt-content"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
+</div>
+
 <!-- MON RAPPORT QUOTIDIEN (directeur) -->
 <div class="page" id="page-mes_rapports">
   <div class="page-title">Mon rapport quotidien</div>
@@ -2972,46 +2990,47 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.5"></script>
-<script src="js/print.js?v=2.24.5"></script>
-<script src="js/dashboard.js?v=2.24.5"></script>
-<script src="js/stock.js?v=2.24.5"></script>
-<script src="js/matieres.js?v=2.24.5"></script>
-<script src="js/production.js?v=2.24.5"></script>
-<script src="js/ventes.js?v=2.24.5"></script>
-<script src="js/clients.js?v=2.24.5"></script>
-<script src="js/admin.js?v=2.24.5"></script>
-<script src="js/bilan_jour.js?v=2.24.5"></script>
-<script src="js/caisse_extras.js?v=2.24.5"></script>
-<script src="js/corbeille.js?v=2.24.5"></script>
-<script src="js/dashboard_drill.js?v=2.24.5"></script>
-<script src="js/fournisseurs.js?v=2.24.5"></script>
-<script src="js/achats.js?v=2.24.5"></script>
-<script src="js/caisse.js?v=2.24.5"></script>
-<script src="js/inventaire_physique.js?v=2.24.5"></script>
-<script src="js/distribution.js?v=2.24.5"></script>
-<script src="js/salaires.js?v=2.24.5"></script>
-<script src="js/rapports.js?v=2.24.5"></script>
-<script src="js/dettes.js?v=2.24.5"></script>
-<script src="js/chat.js?v=2.24.5"></script>
-<script src="js/notifications.js?v=2.24.5"></script>
-<script src="js/qr_clients.js?v=2.24.5"></script>
-<script src="js/push.js?v=2.24.5"></script>
-<script src="js/reversements.js?v=2.24.5"></script>
-<script src="js/paiements_mp.js?v=2.24.5"></script>
-<script src="js/stock_pf.js?v=2.24.5"></script>
-<script src="js/veto.js?v=2.24.5"></script>
-<script src="js/bilanss.js?v=2.24.5"></script>
-<script src="js/benefices.js?v=2.24.5"></script>
-<script src="js/messages_pdv.js?v=2.24.5"></script>
-<script src="js/directeur.js?v=2.24.5"></script>
-<script src="js/licences.js?v=2.24.5"></script>
+<script src="js/config.js?v=2.24.6"></script>
+<script src="js/print.js?v=2.24.6"></script>
+<script src="js/dashboard.js?v=2.24.6"></script>
+<script src="js/stock.js?v=2.24.6"></script>
+<script src="js/matieres.js?v=2.24.6"></script>
+<script src="js/production.js?v=2.24.6"></script>
+<script src="js/ventes.js?v=2.24.6"></script>
+<script src="js/clients.js?v=2.24.6"></script>
+<script src="js/admin.js?v=2.24.6"></script>
+<script src="js/bilan_jour.js?v=2.24.6"></script>
+<script src="js/caisse_extras.js?v=2.24.6"></script>
+<script src="js/corbeille.js?v=2.24.6"></script>
+<script src="js/dashboard_drill.js?v=2.24.6"></script>
+<script src="js/fournisseurs.js?v=2.24.6"></script>
+<script src="js/achats.js?v=2.24.6"></script>
+<script src="js/caisse.js?v=2.24.6"></script>
+<script src="js/inventaire_physique.js?v=2.24.6"></script>
+<script src="js/distribution.js?v=2.24.6"></script>
+<script src="js/salaires.js?v=2.24.6"></script>
+<script src="js/rapports.js?v=2.24.6"></script>
+<script src="js/dettes.js?v=2.24.6"></script>
+<script src="js/chat.js?v=2.24.6"></script>
+<script src="js/notifications.js?v=2.24.6"></script>
+<script src="js/qr_clients.js?v=2.24.6"></script>
+<script src="js/push.js?v=2.24.6"></script>
+<script src="js/reversements.js?v=2.24.6"></script>
+<script src="js/paiements_mp.js?v=2.24.6"></script>
+<script src="js/stock_pf.js?v=2.24.6"></script>
+<script src="js/veto.js?v=2.24.6"></script>
+<script src="js/bilanss.js?v=2.24.6"></script>
+<script src="js/benefices.js?v=2.24.6"></script>
+<script src="js/messages_pdv.js?v=2.24.6"></script>
+<script src="js/directeur.js?v=2.24.6"></script>
+<script src="js/licences.js?v=2.24.6"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.5"></script>
-<script src="js/reservations_admin.js?v=2.24.5"></script>
-<script src="js/strategie_mp.js?v=2.24.5"></script>
-<script src="js/reappro.js?v=2.24.5"></script>
-<script src="js/ia.js?v=2.24.5"></script>
+<script src="js/auth.js?v=2.24.6"></script>
+<script src="js/reservations_admin.js?v=2.24.6"></script>
+<script src="js/strategie_mp.js?v=2.24.6"></script>
+<script src="js/reappro.js?v=2.24.6"></script>
+<script src="js/ia.js?v=2.24.6"></script>
+<script src="js/marketing.js?v=2.24.6"></script>
 
 <script>
 // Enregistrement Service Worker PWA
