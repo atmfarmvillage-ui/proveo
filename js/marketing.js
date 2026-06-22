@@ -52,14 +52,19 @@ async function renderMarketing(){
     : {from:'2000-01-01', to:'2999-12-31', label:'toute la période'};
 
   // Ventes sur la période + lots (coût réel) en parallèle
-  const [ventesRes, lotsRes] = await Promise.all([
-    SB.from('gp_ventes').select('formule_nom,qte_vendue,montant_total')
-      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
-      .gte('date',r.from).lte('date',r.to).limit(5000),
+  const [lignesRes, lotsRes] = await Promise.all([
+    // LIGNES de vente (1 ligne = 1 vraie formule) — pas gp_ventes.formule_nom qui concatène
+    SB.from('gp_ventes_lignes')
+      .select('formule_nom,quantite,montant_ligne,prix_unitaire,type_produit,gp_ventes!inner(date,deleted_at,admin_id)')
+      .eq('admin_id',GP_ADMIN_ID)
+      .gte('gp_ventes.date',r.from).lte('gp_ventes.date',r.to)
+      .is('gp_ventes.deleted_at',null)
+      .limit(20000),
     SB.from('gp_lots').select('formule_nom,cout_total,nb_sacs,poids_sac,qte_produite')
       .eq('admin_id',GP_ADMIN_ID)
   ]);
-  const ventes = ventesRes.data || [];
+  // Garder uniquement les lignes de formules (exclure MP, ferme, prestation, véto)
+  const lignes = (lignesRes.data || []).filter(l=> !['mp','ferme','prestation','veto'].includes(l.type_produit));
   const lots = lotsRes.data || [];
 
   // Coût/kg RÉEL par formule (depuis les lots de production, toutes périodes pour la stabilité)
@@ -74,14 +79,14 @@ async function renderMarketing(){
   const coutKgReel = {};
   Object.keys(lotAgg).forEach(f=>{ if(lotAgg[f].kg>0) coutKgReel[f] = Math.round(lotAgg[f].cout/lotAgg[f].kg); });
 
-  // Agréger les ventes par formule
+  // Agréger les ventes par formule (depuis les lignes)
   const agg = {};
-  ventes.forEach(v=>{
-    const f = v.formule_nom;
+  lignes.forEach(l=>{
+    const f = l.formule_nom;
     if(!f) return;
     if(!agg[f]) agg[f] = {kg:0, ca:0, n:0};
-    agg[f].kg += Number(v.qte_vendue||0);
-    agg[f].ca += Number(v.montant_total||0);
+    agg[f].kg += Number(l.quantite||0);
+    agg[f].ca += Number(l.montant_ligne|| (Number(l.quantite||0)*Number(l.prix_unitaire||0)) ||0);
     agg[f].n  += 1;
   });
 
@@ -277,6 +282,7 @@ async function renderMarketingSegments(){
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
     ${_mktBulletinCard()}
+    ${_mktFicheCard()}
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
@@ -287,8 +293,7 @@ async function renderMarketingSegments(){
       ${chips}
       <div id="mkt-seg-liste"></div>
     </div>
-    ${_mktNouveauContactCard()}
-    ${_mktFicheCard()}`;
+    ${_mktNouveauContactCard()}`;
   _mktRenderListe();
   mktRenderCycle();
   mktRenderDowntrade();
