@@ -67,7 +67,7 @@ async function checkRelanceClients(){
     await loadClientStats(true);
     let n=0;
     (GP_CLIENTS||[]).forEach(c=>{
-      if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL && c.point_vente && c.point_vente!==GP_POINT_VENTE) return;
+      if(typeof estCloisonnePDV==='function' && estCloisonnePDV() && c.point_vente && c.point_vente!==GP_POINT_VENTE) return;
       const s=GP_CLIENT_STATS?.[c.id]; if(!s) return;
       const k=clientStatut(s).key;
       if(k==='retard'||k==='perdu') n++;
