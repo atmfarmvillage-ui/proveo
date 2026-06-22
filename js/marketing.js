@@ -276,6 +276,7 @@ async function renderMarketingSegments(){
       .mkt-seg-btn{font-size:11px;padding:5px 10px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:14px;cursor:pointer;font-weight:600}
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
+    ${_mktBulletinCard()}
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
@@ -376,6 +377,67 @@ function envoyerCampagne(){
     n++;
   });
   notify(`📢 Campagne lancée vers ${n} client(s)`,'gold');
+}
+
+// ── BULLETIN MARKETING HEBDO ──────────────────────
+function _mktBulletinCard(){
+  return `<div class="card">
+    <div class="card-title"><div class="ct-left"><span>📰 Bulletin marketing de la semaine</span></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g btn-sm" onclick="genBulletinHebdo('eco')" title="DeepSeek">🚀 Pro</button>
+        <button class="btn btn-out btn-sm" onclick="genBulletinHebdo('pro')" title="Claude">💎 Premium</button>
+      </div>
+    </div>
+    <div id="mkt-bulletin-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)"><span style="color:var(--textm)">Génère le bilan de la semaine + les 3 actions prioritaires.</span></div>
+  </div>`;
+}
+async function genBulletinHebdo(tier){
+  tier=tier||'eco';
+  const out=document.getElementById('mkt-bulletin-result');
+  if(!out) return;
+  if(typeof iaGenerate!=='function'){ out.textContent='⚠ IA indisponible.'; return; }
+  out.innerHTML=`<span style="color:var(--textm)">⏳ Rédaction du bulletin (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
+  // Données réelles agrégées
+  const top=(MKT_ROWS||[]).slice(0,5).map(r=>`${r.f}: marge ${fmt(r.marge)} F (${r.margePct}%), ${fmtKg(r.kg)} kg`).join(' | ') || 'n/a';
+  const seg=_MKT_SEGS||{};
+  const nbRetard=(seg.retard||[]).length, nbPerdu=(seg.perdu||[]).length, nbNouveau=(seg.nouveau||[]).length;
+  const cs=(typeof mktCrossSellOpps==='function')?mktCrossSellOpps().length:0;
+  let cycle=0;
+  [...(seg.nouveau||[]),...(seg.regulier||[]),...(seg.retard||[]),...(seg.perdu||[])].forEach(x=>{
+    const cy=(typeof mktCycleNext==='function')?mktCycleNext(x.s):null;
+    if(cy && cy.jours<=7 && cy.jours>=-30) cycle++;
+  });
+  const q=`Tu es le Directeur Marketing de la provenderie SADARI. Rédige le BULLETIN MARKETING de la semaine à partir de ces données RÉELLES (n'invente rien) :
+- Top formules par marge : ${top}
+- Clients à relancer : ${nbRetard+nbPerdu} (dont ${nbRetard} en retard, ${nbPerdu} perdus) · ${nbNouveau} nouveaux
+- Clients dont le cycle d'élevage arrive à échéance (≤ 7 j) : ${cycle}
+- Opportunités cross-sell (produit manquant du cycle) : ${cs}
+
+Structure :
+1) Chiffres clés de la semaine.
+2) Ce qui marche / ce qu'il faut surveiller.
+3) LES 3 ACTIONS PRIORITAIRES de la semaine (concrètes, chiffrées).
+Bref, percutant, orienté action.`;
+  try{ out.textContent = await iaGenerate('marketing', q, tier) || '—'; }
+  catch(e){ out.innerHTML='⚠ '+(e.message||e); }
+}
+
+// ── ARGUMENTAIRE DE VENTE PAR FORMULE ─────────────
+async function argumentaireIA(tier){
+  tier=tier||'eco';
+  const nom=document.getElementById('mkt-ft-formule')?.value;
+  const out=document.getElementById('mkt-ft-result');
+  if(!out) return;
+  if(!nom){ notify('Choisis une formule','r'); return; }
+  if(typeof iaGenerate!=='function'){ out.textContent='⚠ IA indisponible.'; return; }
+  const p=_mktProfilFormule(nom);
+  out.innerHTML=`<span style="color:var(--textm)">⏳ Rédaction de l'argumentaire (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
+  const vals=p?Object.keys(_MKT_NUTRI_LBL).map(k=>`${_MKT_NUTRI_LBL[k].l} ${p.n[k]} ${_MKT_NUTRI_LBL[k].u}`).join(', '):'';
+  const q=`Tu es vendeur expert à la provenderie SADARI (Togo). Rédige un ARGUMENTAIRE DE VENTE convaincant et court pour l'aliment "${nom}"${p&&p.f.espece?` (${p.f.espece}${p.f.stade?' — '+p.f.stade:''})`:''}, à dire à un éleveur au comptoir.
+${vals?`Valeurs nutritionnelles réelles : ${vals}.`:''}
+Mets en avant : bénéfices concrets pour l'éleveur (croissance/ponte, ROI, résultats), pourquoi choisir SADARI (qualité locale, régularité), et termine par une phrase qui pousse à l'achat. 3-5 arguments percutants, ton commercial mais honnête. Ne donne que l'argumentaire.`;
+  try{ out.textContent = await iaGenerate('marketing', q, tier) || '—'; }
+  catch(e){ out.innerHTML='⚠ '+(e.message||e); }
 }
 
 // ── DÉTECTION DE BAISSE (downtrade) ───────────────
@@ -728,9 +790,13 @@ function _mktFicheCard(){
       <select id="mkt-ft-formule" onchange="mktFichePreview()">${opts?'<option value="">— Choisir une formule —</option>'+opts:'<option value="">Aucune formule</option>'}</select>
     </div>
     <div id="mkt-ft-nutri"></div>
-    <div style="display:flex;gap:6px;margin:8px 0">
+    <div style="display:flex;gap:6px;margin:8px 0;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10px;color:var(--textm)">Fiche :</span>
       <button class="btn btn-g btn-sm" onclick="ficheTechniqueIA('eco')" title="DeepSeek">🚀 Pro</button>
       <button class="btn btn-out btn-sm" onclick="ficheTechniqueIA('pro')" title="Claude">💎 Premium</button>
+      <span style="font-size:10px;color:var(--textm);margin-left:8px">Argumentaire vente :</span>
+      <button class="btn btn-g btn-sm" onclick="argumentaireIA('eco')" title="DeepSeek">🚀 Pro</button>
+      <button class="btn btn-out btn-sm" onclick="argumentaireIA('pro')" title="Claude">💎 Premium</button>
     </div>
     <div id="mkt-ft-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)"></div>
   </div>`;
