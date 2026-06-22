@@ -177,21 +177,60 @@ async function openClientDetail(id){
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
 
 // Relance rédigée par l'IA (marketing) → ouvre la modale WhatsApp pré-remplie
-async function redigerRelanceIA(id){
+// tier : 'eco' = 🚀 Pro (DeepSeek, défaut) · 'pro' = 💎 Premium (Claude)
+async function redigerRelanceIA(id, tier){
+  tier = tier || 'eco';
   const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
   if(typeof iaGenerate!=='function'){ notify('Assistant IA indisponible','r'); return; }
   await loadClientStats();
   const s=GP_CLIENT_STATS[id]||{};
+  const st=(typeof clientStatut==='function')?clientStatut(s):{key:'retard'};
   const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):'?';
-  notify('✍️ Rédaction du message…','gold');
+  // Angle du message selon le segment du client
+  const angles={
+    nouveau:`C'est un NOUVEAU client (1 seul achat). Souhaite-lui la bienvenue et donne-lui envie de revenir pour une 2e commande.`,
+    regulier:`C'est un client FIDÈLE et régulier. Remercie-le et propose un réapprovisionnement au bon moment.`,
+    retard:`Ce client est EN RETARD (${jours} jours sans acheter, au-delà de son rythme habituel). Relance douce et bienveillante pour le faire revenir.`,
+    perdu:`Ce client est PERDU (${jours} jours sans achat). Message de reconquête avec une vraie raison de revenir (qualité, disponibilité, petit geste).`,
+  };
+  const angle=angles[st.key]||angles.retard;
+  notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et personnalisé pour relancer le client "${c.nom}" qui n'a pas acheté depuis ${jours} jours${s.produitHabituel?` (son aliment habituel : ${s.produitHabituel})`:''}. Objectif : le faire revenir acheter chez SADARI. Termine par la signature SADARI. Donne seulement le message, sans commentaire.`;
-    const txt=await iaGenerate('marketing', q, 'eco');
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et personnalisé pour le client "${c.nom}" de la provenderie SADARI. ${angle}${s.produitHabituel?` Son aliment habituel : ${s.produitHabituel}.`:''} Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt=await iaGenerate('marketing', q, tier);
     if(typeof ouvrirModalWA==='function'){
       ouvrirModalWA(id);
       setTimeout(()=>{ const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt; }, 60);
     } else { alert(txt); }
   }catch(e){ notify('Échec rédaction IA : '+(e.message||e),'r'); }
+}
+
+// Réécrit l'aperçu de la modale WA via l'IA selon la circonstance choisie
+// tier : 'eco' = 🚀 Pro (DeepSeek) · 'pro' = 💎 Premium (Claude)
+async function redigerMsgWAIA(tier){
+  tier = tier || 'eco';
+  const c = waClientCourant;
+  if(!c){ notify('Client introuvable','r'); return; }
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  const type = document.getElementById('wa-type')?.value || 'relance';
+  const ta = document.getElementById('wa-preview');
+  if(!ta) return;
+  const labels={
+    relance:"relance d'un client inactif", merci:"remerciement d'un excellent client",
+    promo:"annonce d'une promotion", nouveau_produit:"annonce d'un nouveau produit",
+    perso:"message personnalisé chaleureux", dette:"rappel de solde impayé, avec tact et respect",
+    prosp_intro:"introduction commerciale à un prospect", prosp_essai:"invitation à essayer nos aliments",
+    prosp_suivi:"suivi après un premier contact", prosp_parrainage:"approche d'un prospect recommandé par un client",
+    prosp_eleveur:"approche ciblée d'un éleveur"
+  };
+  const but = labels[type] || 'message commercial';
+  const before = ta.value;
+  ta.value = `⏳ Rédaction IA (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…`;
+  try{
+    const q=`Rédige UNIQUEMENT un message WhatsApp pour la provenderie SADARI (aliments volaille/élevage, Togo) : ${but}. Destinataire : "${c.nom}". Court, chaleureux, professionnel, adapté au contexte avicole ouest-africain. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt=await iaGenerate('marketing', q, tier);
+    ta.value = txt || before;
+  }catch(e){ ta.value=before; notify('Échec IA : '+(e.message||e),'r'); }
 }
 
 async function renderClients(){

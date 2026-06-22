@@ -169,27 +169,32 @@ async function renderMarketing(){
     <div style="font-size:10px;color:var(--textm);margin-top:6px">« ~est. » = coût estimé depuis les ingrédients (formule sans lot de production sur la base).</div>
   </div>`;
 
-  // Bloc diagnostic IA
+  // Bloc diagnostic IA — 2 moteurs : Pro (DeepSeek) / Premium (Claude)
   const ia = `<div class="card">
     <div class="card-title"><div class="ct-left"><span>🧠 Diagnostic du Directeur Marketing</span></div>
-      <button class="btn btn-g btn-sm" id="mkt-ia-btn" onclick="analyserMarketingIA()">Analyser avec l'IA</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g btn-sm" id="mkt-ia-pro" onclick="analyserMarketingIA('eco')" title="DeepSeek — rapide & éco">🚀 Pro</button>
+        <button class="btn btn-out btn-sm" id="mkt-ia-prem" onclick="analyserMarketingIA('pro')" title="Claude — qualité max">💎 Premium</button>
+      </div>
     </div>
     <div id="mkt-ia-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)">
-      <span style="color:var(--textm)">Clique « Analyser avec l'IA » pour un diagnostic stratégique sur où concentrer tes formules.</span>
+      <span style="color:var(--textm)">Clique <b>🚀 Pro</b> (DeepSeek) ou <b>💎 Premium</b> (Claude) pour un diagnostic : où concentrer tes formules.</span>
     </div>
   </div>`;
 
-  root.innerHTML = kpis + matrice + tbl + ia;
+  root.innerHTML = kpis + matrice + tbl + ia + '<div id="mkt-seg-zone"><div style="color:var(--textm);font-size:12px;padding:10px">⏳ Chargement des segments clients…</div></div>';
+  renderMarketingSegments();
 }
 
-async function analyserMarketingIA(){
+async function analyserMarketingIA(tier){
+  tier = tier || 'eco';
   const out = document.getElementById('mkt-ia-result');
-  const btn = document.getElementById('mkt-ia-btn');
+  const bPro = document.getElementById('mkt-ia-pro'), bPrem = document.getElementById('mkt-ia-prem');
   if(!out) return;
   if(!MKT_ROWS.length){ out.textContent = 'Aucune donnée à analyser.'; return; }
   if(typeof iaGenerate!=='function'){ out.textContent = '⚠ Assistant IA indisponible.'; return; }
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ Analyse…'; }
-  out.innerHTML = '<span style="color:var(--textm)">⏳ Le Directeur Marketing réfléchit…</span>';
+  if(bPro) bPro.disabled = true; if(bPrem) bPrem.disabled = true;
+  out.innerHTML = `<span style="color:var(--textm)">⏳ Le Directeur Marketing réfléchit (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
 
   const r = (typeof vtPeriodeRange==='function') ? vtPeriodeRange(MKT_PERIODE) : {label:'la période'};
   const lignes = MKT_ROWS.map(x=>
@@ -208,10 +213,177 @@ Donne un diagnostic stratégique CONCRET et chiffré :
 Cite les formules et les chiffres. Sois percutant et actionnable. Pas de blabla.`;
 
   try{
-    const txt = await iaGenerate('marketing', q, 'pro'); // tier "pro" (Claude) pour la stratégie
+    // Pro = 'eco' (DeepSeek) par défaut · Premium = 'pro' (Claude) pour les cas extrêmes
+    const txt = await iaGenerate('marketing', q, tier);
     out.textContent = txt || 'Réponse vide.';
   }catch(e){
     out.innerHTML = '⚠ ' + (e.message||e);
   }
-  if(btn){ btn.disabled = false; btn.textContent = 'Réanalyser'; }
+  if(bPro) bPro.disabled = false; if(bPrem) bPrem.disabled = false;
+}
+
+// ── SEGMENTS CLIENTS & RELANCES (Lot 2) ───────────
+var MKT_SEG = 'contacter';   // segment affiché
+const MKT_SEG_DEF = {
+  contacter: {label:'🎯 À contacter',  hint:'En retard + perdus, les plus rentables d\'abord'},
+  nouveau:   {label:'🆕 Nouveaux',     hint:'1 seul achat — pousser le 2e'},
+  regulier:  {label:'🟢 Fidèles',      hint:'Réguliers — remercier / réappro'},
+  retard:    {label:'🟠 En retard',    hint:'Au-delà de leur rythme habituel'},
+  perdu:     {label:'🔴 Perdus',       hint:'Plus de 60 j ou 2× leur fréquence'},
+};
+
+function mktSetSeg(seg){
+  MKT_SEG = seg;
+  document.querySelectorAll('.mkt-seg-btn').forEach(b=>b.classList.toggle('on', b.dataset.seg===seg));
+  _mktRenderListe();
+}
+
+var _MKT_SEGS = null; // cache des clients segmentés
+
+async function renderMarketingSegments(){
+  const zone = document.getElementById('mkt-seg-zone');
+  if(!zone) return;
+  if(typeof loadClients==='function' && (typeof GP_CLIENTS==='undefined' || !GP_CLIENTS.length)) await loadClients();
+  if(typeof loadClientStats==='function') await loadClientStats();
+  const clients = (typeof GP_CLIENTS!=='undefined' ? GP_CLIENTS : []) || [];
+
+  // Segmenter
+  const segs = {nouveau:[],regulier:[],retard:[],perdu:[],aucun:[]};
+  clients.forEach(c=>{
+    const s = (GP_CLIENT_STATS||{})[c.id] || {};
+    const st = (typeof clientStatut==='function') ? clientStatut(s) : {key:'aucun'};
+    (segs[st.key]||segs.aucun).push({c, s, st, jours:st.jours, ca:Number(s.totalCA||0)});
+  });
+  _MKT_SEGS = segs;
+
+  const cnt = k => (segs[k]||[]).length;
+  const nbContacter = cnt('retard') + cnt('perdu');
+
+  const chips = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <button class="mkt-seg-btn on" data-seg="contacter" onclick="mktSetSeg('contacter')">🎯 À contacter (${nbContacter})</button>
+    <button class="mkt-seg-btn" data-seg="nouveau" onclick="mktSetSeg('nouveau')">🆕 Nouveaux (${cnt('nouveau')})</button>
+    <button class="mkt-seg-btn" data-seg="regulier" onclick="mktSetSeg('regulier')">🟢 Fidèles (${cnt('regulier')})</button>
+    <button class="mkt-seg-btn" data-seg="retard" onclick="mktSetSeg('retard')">🟠 En retard (${cnt('retard')})</button>
+    <button class="mkt-seg-btn" data-seg="perdu" onclick="mktSetSeg('perdu')">🔴 Perdus (${cnt('perdu')})</button>
+  </div>`;
+
+  zone.innerHTML = `
+    <style>
+      .mkt-seg-btn{font-size:11px;padding:5px 10px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:14px;cursor:pointer;font-weight:600}
+      .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
+    </style>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
+      ${chips}
+      <div id="mkt-seg-liste"></div>
+    </div>
+    ${_mktNouveauContactCard()}`;
+  _mktRenderListe();
+}
+
+function _mktRenderListe(){
+  const box = document.getElementById('mkt-seg-liste');
+  if(!box || !_MKT_SEGS) return;
+  let liste;
+  if(MKT_SEG==='contacter'){
+    liste = [..._MKT_SEGS.retard, ..._MKT_SEGS.perdu].sort((a,b)=>b.ca-a.ca); // RFM-lite : valeur d'abord
+  }else{
+    liste = (_MKT_SEGS[MKT_SEG]||[]).slice().sort((a,b)=>b.ca-a.ca);
+  }
+  if(!liste.length){ box.innerHTML = `<div style="color:var(--textm);font-size:12px;padding:10px">Aucun client dans ce segment.</div>`; return; }
+  const top = liste.slice(0, 40);
+  box.innerHTML = `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Client</th><th>Statut</th><th class="num">CA</th><th class="num">Absence</th><th>Habituel</th><th></th>
+    </tr></thead><tbody>
+    ${top.map(x=>`<tr>
+      <td><b>${(x.c.nom||'—').replace(/</g,'&lt;')}</b>${x.c.telephone?`<div style="font-size:9px;color:var(--textm)">${x.c.telephone}</div>`:'<div style="font-size:9px;color:var(--red)">sans n°</div>'}</td>
+      <td><span style="color:${x.st.color};font-size:10px;font-weight:700">${x.st.emoji} ${x.st.label}</span></td>
+      <td class="num" style="color:var(--gold)">${fmt(x.ca)}</td>
+      <td class="num">${x.jours!=null?x.jours+' j':'—'}</td>
+      <td style="font-size:10px">${x.s.produitHabituel||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-g btn-sm" style="padding:4px 7px" title="DeepSeek" onclick="redigerRelanceIA('${x.c.id}','eco')">🚀</button>
+        <button class="btn btn-out btn-sm" style="padding:4px 7px" title="Claude" onclick="redigerRelanceIA('${x.c.id}','pro')">💎</button>
+      </td>
+    </tr>`).join('')}
+  </tbody></table></div>
+  ${liste.length>top.length?`<div style="font-size:10px;color:var(--textm);margin-top:6px">Affichage des ${top.length} plus rentables sur ${liste.length}.</div>`:''}`;
+}
+
+// Composeur "nouveau contact" : nom + numéro + type → IA rédige → WhatsApp 1 clic
+function _mktNouveauContactCard(){
+  return `<div class="card">
+    <div class="card-title"><div class="ct-left"><span>✍️ Nouveau contact (hors base)</span></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="fr" style="margin:0"><label>Nom du contact</label><input type="text" id="mkt-nc-nom" placeholder="Ex: M. Kossi"></div>
+      <div class="fr" style="margin:0"><label>Numéro WhatsApp</label><input type="text" id="mkt-nc-tel" placeholder="Ex: 90 12 34 56"></div>
+    </div>
+    <div class="fr"><label>Type de message</label>
+      <select id="mkt-nc-type">
+        <option value="prospect">🔍 Prospect — première approche</option>
+        <option value="essai">🎁 Invitation à essayer nos aliments</option>
+        <option value="nouveau">🆕 Bienvenue nouveau client</option>
+        <option value="remerciement">🙏 Remerciement</option>
+        <option value="relance">🔁 Relance / suivi</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="btn btn-g btn-sm" onclick="relanceNouveauContactIA('eco')" title="DeepSeek">🚀 Pro</button>
+      <button class="btn btn-out btn-sm" onclick="relanceNouveauContactIA('pro')" title="Claude">💎 Premium</button>
+    </div>
+    <div class="fr"><label>Message</label>
+      <textarea id="mkt-nc-msg" rows="6" style="font-size:12px;line-height:1.5;width:100%;resize:vertical" placeholder="Le message rédigé par l'IA apparaîtra ici…"></textarea>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-g" style="flex:1;justify-content:center" onclick="envoyerNouveauContactWA()">📲 Envoyer WhatsApp</button>
+      <button class="btn btn-out" onclick="enregistrerNouveauContact()" title="Ajouter à la base clients">💾 Enregistrer</button>
+    </div>
+  </div>`;
+}
+
+async function relanceNouveauContactIA(tier){
+  tier = tier || 'eco';
+  const nom = document.getElementById('mkt-nc-nom')?.value.trim();
+  const type = document.getElementById('mkt-nc-type')?.value || 'prospect';
+  const out = document.getElementById('mkt-nc-msg');
+  if(!nom){ notify('Entre le nom du contact','r'); return; }
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  const angles = {
+    prospect:'C\'est un PROSPECT qui ne nous connaît pas encore. Présente brièvement SADARI (provenderie, aliments de qualité) et donne envie d\'essayer.',
+    essai:'Invite ce contact à ESSAYER nos aliments avec une offre découverte attractive.',
+    nouveau:'Souhaite la BIENVENUE à ce nouveau client et incite-le à passer commande.',
+    remerciement:'REMERCIE chaleureusement ce contact pour sa confiance.',
+    relance:'RELANCE doucement ce contact pour reprendre le fil.',
+  };
+  out.value = '⏳ Rédaction IA ('+(tier==='eco'?'Pro · DeepSeek':'Premium · Claude')+')…';
+  try{
+    const q = `Rédige UNIQUEMENT un message WhatsApp court, chaleureux et professionnel pour la provenderie SADARI (aliments pour volaille/élevage, Togo). Destinataire : "${nom}". ${angles[type]||angles.prospect} Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt = await iaGenerate('marketing', q, tier);
+    out.value = txt || '';
+  }catch(e){ out.value=''; notify('Échec IA : '+(e.message||e),'r'); }
+}
+
+function _mktTelClean(tel){
+  return (tel||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+}
+function envoyerNouveauContactWA(){
+  const tel = _mktTelClean(document.getElementById('mkt-nc-tel')?.value);
+  const msg = document.getElementById('mkt-nc-msg')?.value || '';
+  if(!tel){ notify('Entre le numéro WhatsApp','r'); return; }
+  if(!msg.trim()){ notify('Rédige d\'abord le message (🚀 Pro / 💎 Premium)','r'); return; }
+  window.open('https://wa.me/228'+tel+'?text='+encodeURIComponent(msg), '_blank');
+}
+async function enregistrerNouveauContact(){
+  const nom = document.getElementById('mkt-nc-nom')?.value.trim();
+  const tel = document.getElementById('mkt-nc-tel')?.value.trim();
+  if(!nom){ notify('Entre le nom','r'); return; }
+  const { error } = await SB.from('gp_clients').insert({
+    admin_id: GP_ADMIN_ID, nom,
+    telephone: tel||null,
+    note: 'Prospect (ajouté depuis Marketing)',
+    point_vente: (typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) ? GP_POINT_VENTE : null
+  });
+  if(error){ notify('Erreur enregistrement : '+error.message,'r'); return; }
+  notify('Contact enregistré comme client ✓');
+  if(typeof loadClients==='function') await loadClients();
 }
