@@ -571,6 +571,33 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
 .sb-toggle{display:none}
 .mobile-fab-zone{display:none}
 @media(max-width:768px){.mobile-fab-zone{display:flex}}
+
+/* ── BARRE D'ONGLETS MOBILE ───────────────────────── */
+#mobile-tabbar{display:none}
+@media(max-width:768px){
+  body.app-ready #mobile-tabbar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:250;
+    background:var(--card2,#fff);border-top:1px solid var(--border,#e2e8f0);
+    box-shadow:0 -4px 18px rgba(0,0,0,.14);
+    padding:4px 2px;padding-bottom:calc(4px + env(safe-area-inset-bottom,0px))
+  }
+  .mtab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:none;border:none;cursor:pointer;padding:6px 2px;min-height:52px;
+    color:var(--textm,#64748b);font-size:10px;font-weight:700;font-family:inherit
+  }
+  .mtab-ic{font-size:21px;line-height:1}
+  .mtab-lb{font-size:10px;letter-spacing:.01em}
+  .mtab.active{color:var(--g5,#16A34A)}
+  .mtab.active .mtab-ic{filter:drop-shadow(0 0 6px rgba(22,163,74,.45));transform:scale(1.06)}
+  .mtab:active{transform:scale(.94)}
+  /* La barre remplace le bouton menu flottant */
+  body.app-ready .sb-toggle{display:none!important}
+  /* Laisser la place à la barre */
+  body.app-ready #main{padding-bottom:78px!important}
+  /* Remonter le bouton IA au-dessus de la barre */
+  body.app-ready #ia-fab{bottom:78px!important}
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px;vertical-align:middle}
 
