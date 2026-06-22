@@ -603,10 +603,16 @@ async function loadIngredients(){
   const{data}=await SB.from('gp_ingredients').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   GP_INGREDIENTS=data||[];
 }
+// Cloisonnement PDV pour la LECTURE des données centrales (ventes, clients) :
+// SEUL un revendeur de PDV secondaire est cloisonné à son PDV.
+// Admin, gérant, principal (vue réseau) et secrétaire du siège → accès complet.
+function estCloisonnePDV(){
+  return GP_EST_SECONDAIRE === true && !!GP_POINT_VENTE;
+}
 async function loadClients(){
   let q=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
-  // Cloisonnement PDV : un non-admin ne charge que SES clients
-  if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production');
+  // Cloisonnement PDV : seul un revendeur secondaire ne charge que SES clients (+ non assignés)
+  if(estCloisonnePDV()) q=q.or(`point_vente.is.null,point_vente.eq.${GP_POINT_VENTE}`);
   const{data}=await q;
   GP_CLIENTS=data||[];
 }

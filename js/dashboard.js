@@ -26,7 +26,7 @@ async function renderDashboard(){
     safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
     safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
     // r9 : caisses actives (pour Solde Caisse Total)
-    safe(SB.from('gp_caisses').select('id,solde_initial,type,actif').eq('admin_id',GP_ADMIN_ID).eq('actif',true)),
+    safe(SB.from('gp_caisses').select('id,solde_initial,type,actif,point_vente').eq('admin_id',GP_ADMIN_ID).eq('actif',true)),
     // r10 : mouvements caisse (pour calculer le solde réel)
     safe(SB.from('gp_mouvements_caisse').select('caisse_id,caisse_dest_id,type,montant').eq('admin_id',GP_ADMIN_ID)),
     // r11 : achats fournisseurs avec dette résiduelle (pour Dette Fournisseurs)
@@ -38,12 +38,12 @@ async function renderDashboard(){
   const toArr=r=>Array.isArray(r?.data)?r.data:(r?.data?Object.values(r.data):[]);
   const[ventesMoisD,toutesVentesD,depensesD,paiementsMP,salairesD,lotsMoisD,derniersLotsD,stockD,caissesD,mvtsCaisseD,achatsD,livMoisD]=
     [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12].map(toArr);
-  // CLOISONNEMENT : un non-admin ne voit au dashboard que le CA de SON point de vente.
-  const VMois=(GP_ROLE==='admin')?ventesMoisD:ventesMoisD.filter(v=>v.point_vente===(GP_POINT_VENTE||'Production'));
-  // CLOISONNEMENT PDV : un non-admin ne voit au dashboard que les ventes de SON point de vente.
-  // (Les cartes Production/Stock MP restent globales : le PDV doit voir l'état du point de production.)
+  // VUE COMPLÈTE = admin, gérant, principal, et secrétaire du siège (tout le monde sauf revendeur secondaire).
+  // Seul un revendeur de PDV secondaire est cloisonné à son point de vente.
+  const vueComplete = !(typeof estCloisonnePDV==='function' && estCloisonnePDV());
   const monPDVDash = GP_POINT_VENTE || 'Production';
-  const VJ=(GP_ROLE==='admin')?toutesVentesD:toutesVentesD.filter(v=>v.point_vente===monPDVDash);
+  const VMois = vueComplete ? ventesMoisD : ventesMoisD.filter(v=>v.point_vente===monPDVDash);
+  const VJ = vueComplete ? toutesVentesD : toutesVentesD.filter(v=>v.point_vente===monPDVDash);
   const D=depensesD;
   const PA=paiementsMP;
   const SAL=salairesD;
@@ -91,8 +91,8 @@ async function renderDashboard(){
   // Bénéfice = encaissé - dépenses (pas CA car impayés non reçus)
   const beneficeMois=encaisseMois-depMois;
 
-  // Ventes en gros (livraisons inter-PDV) du PDV source courant — n'entre PAS dans le CA consolidé
-  const LIVG=(GP_ROLE==='admin')?livMoisD:livMoisD.filter(l=>l.pdv_source_nom===(GP_POINT_VENTE||'Production'));
+  // Ventes en gros (livraisons inter-PDV) — vue complète = réseau ; revendeur secondaire = son PDV source
+  const LIVG=vueComplete?livMoisD:livMoisD.filter(l=>l.pdv_source_nom===monPDVDash);
   const caGros=LIVG.reduce((s,l)=>s+Number(l.montant_total||0),0);
   const encGros=LIVG.reduce((s,l)=>s+Number(l.montant_paye||0),0);
 
@@ -118,6 +118,12 @@ async function renderDashboard(){
   });
   const soldeCaisseTotal = Object.values(soldesCaisse).reduce((s,v)=>s+v,0);
   const nbCaisses = (caissesD||[]).length;
+  // Solde caisse du PDV courant (pour un revendeur secondaire) : caisses du PDV + caisses sans PDV
+  const caissesPDV = (caissesD||[]).filter(c=> !c.point_vente || c.point_vente===monPDVDash);
+  const soldeCaissePDV = caissesPDV.reduce((s,c)=>s+(soldesCaisse[c.id]||0),0);
+  const nbCaissesPDV = caissesPDV.length;
+  // Total des ventes (montant_total brut, provenderie+ferme) du périmètre visible
+  const venteTotalMois = VMois.reduce((s,v)=>s+Number(v.montant_total||0),0);
 
   // 2. Dette fournisseurs (somme des restes à payer sur achats)
   const detteFournisseurs = (achatsD||[]).reduce((s,a)=>{
@@ -144,32 +150,34 @@ async function renderDashboard(){
     </div>`;
 
   document.getElementById('dash-kpis').innerHTML=`
-    ${isAdmin?`
+    ${vueComplete?`
     ${kpi('💰','gold','CA Provenderie ce mois',fmt(caMois),null,"dashKpiDrill('ca')")}
     ${kpi('✓','green','Encaissé Provenderie',fmt(encaisseMois),
       caMois>0?{type:'up',text:`${Math.round(encaisseMois/caMois*100)} % du CA`}:null,"dashKpiDrill('encaisse')")}
+    ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois),null,"dashKpiDrill('ca')")}
     ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),
       impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
     ${kpi('💸','orange','Dépenses ce mois',fmt(depMois),
       depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'},"dashKpiDrill('depenses')")}
     ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}
-    ${caGros>0?kpi('🚚','blue','Ventes en gros (réseau)',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}`:''}
-    ${!isAdmin?`
-    ${kpi('💰','gold','Mon CA ce mois',fmt(caMois))}
-    ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null)}
-    ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
-    `:''}
-    ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,
-      nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null,"dashKpiDrill('lots')")}
-    ${isAdmin?`
+    ${caGros>0?kpi('🚚','blue','Ventes en gros (réseau)',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
+    ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null,"dashKpiDrill('lots')")}
     ${kpi('💵','gold','Solde caisse total',fmt(soldeCaisseTotal),
       nbCaisses>0?{type:'flat',text:`${nbCaisses} caisse${nbCaisses>1?'s':''}`}:null,"dashKpiDrill('caisse')")}
     ${kpi('🏢','red','Dette fournisseurs',fmt(detteFournisseurs),
       detteFournisseurs>0?{type:'down',text:`${nbAchatsAvecDette} à payer`}:{type:'up',text:'soldé'},"dashKpiDrill('dette_fourn')")}
     ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock MP',alertes.length,
       alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
-    `:kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,
-      alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}`;
+    `:`
+    ${kpi('💰','gold','Mon CA ce mois',fmt(caMois))}
+    ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null)}
+    ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois))}
+    ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'})}
+    ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
+    ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
+    ${kpi('💵','gold','Solde caisse PDV',fmt(soldeCaissePDV),nbCaissesPDV>0?{type:'flat',text:`${nbCaissesPDV} caisse${nbCaissesPDV>1?'s':''}`}:null)}
+    ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}
+    `}`;
 
   // Derniers lots
   const derniersLotsHtml=DL.map(l=>`
@@ -195,7 +203,7 @@ async function renderDashboard(){
         <div style="font-weight:600">${v.client_nom||'Client comptant'}</div>
         <div style="color:var(--textm)">${v.formule_nom||'—'}</div>
       </div>
-      ${isAdmin?`<div style="text-align:right">
+      ${vueComplete?`<div style="text-align:right">
         <div style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(v.montant_total)} F</div>
         <span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px">${v.statut_paiement}</span>
       </div>`:''}
@@ -399,7 +407,7 @@ async function _renderDashChart(){
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut);
   const{data}=await q;
   let V=data||[];
-  if(GP_ROLE!=='admin' && !GP_EST_PRINCIPAL){
+  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()){
     V=V.filter(v=>v.point_vente===(GP_POINT_VENTE||'Production'));
   }
   // 6 buckets mensuels
@@ -425,7 +433,7 @@ async function _renderDashChart(){
     </div>`;
   }).join('');
   el.innerHTML=`<div class="card">
-    <div style="font-weight:700;font-size:13px;margin-bottom:10px">📈 CA des 6 derniers mois${(GP_ROLE!=='admin'&&!GP_EST_PRINCIPAL)?' (mon PDV)':''}</div>
+    <div style="font-weight:700;font-size:13px;margin-bottom:10px">📈 CA des 6 derniers mois${(typeof estCloisonnePDV==='function'&&estCloisonnePDV())?' (mon PDV)':''}</div>
     <div style="display:flex;align-items:flex-end;gap:6px;padding:4px 2px">${barres}</div>
   </div>`;
 }
