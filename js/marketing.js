@@ -277,8 +277,113 @@ async function renderMarketingSegments(){
       ${chips}
       <div id="mkt-seg-liste"></div>
     </div>
-    ${_mktNouveauContactCard()}`;
+    ${_mktNouveauContactCard()}
+    ${_mktFicheCard()}`;
   _mktRenderListe();
+}
+
+// ── FICHE TECHNIQUE IA (calcul réel + interprétation) ──
+const _MKT_NUTRI_LBL = {
+  prot:{l:'Protéines',u:'%'}, em:{l:'Énergie',u:'kcal/kg'}, mg:{l:'Mat. grasses',u:'%'},
+  cb:{l:'Cellulose',u:'%'}, ca:{l:'Calcium',u:'%'}, lys:{l:'Lysine',u:'%'},
+  met:{l:'Méthionine',u:'%'}, mm:{l:'Mat. minérales',u:'%'}
+};
+
+function _mktFicheCard(){
+  const formules = (typeof getAllFormules==='function' ? getAllFormules() : (FORMULES_SADARI||[]));
+  const opts = (formules||[]).map(f=>`<option value="${(f.nom||'').replace(/"/g,'&quot;')}">${f.nom}</option>`).join('');
+  return `<div class="card">
+    <div class="card-title"><div class="ct-left"><span>📄 Fiche technique IA</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Valeurs calculées depuis la composition réelle ; l'IA rédige la fiche descriptive + vérifie la conformité aux normes.</div>
+    <div class="fr"><label>Formule</label>
+      <select id="mkt-ft-formule" onchange="mktFichePreview()">${opts?'<option value="">— Choisir une formule —</option>'+opts:'<option value="">Aucune formule</option>'}</select>
+    </div>
+    <div id="mkt-ft-nutri"></div>
+    <div style="display:flex;gap:6px;margin:8px 0">
+      <button class="btn btn-g btn-sm" onclick="ficheTechniqueIA('eco')" title="DeepSeek">🚀 Pro</button>
+      <button class="btn btn-out btn-sm" onclick="ficheTechniqueIA('pro')" title="Claude">💎 Premium</button>
+    </div>
+    <div id="mkt-ft-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)"></div>
+  </div>`;
+}
+
+// Profil nutritionnel + conformité aux normes pour une formule
+function _mktProfilFormule(nom){
+  const f = (typeof getFormule==='function' && getFormule(nom)) || (FORMULES_SADARI||[]).find(x=>x.nom===nom);
+  if(!f || typeof calcNutri!=='function') return null;
+  const n = calcNutri(f);
+  // Normes (besoins) pour espèce + stade
+  const besoin = (typeof GP_BESOINS!=='undefined' ? GP_BESOINS : []).find(b=>b.espece===f.espece && b.categorie===(f.stade||b.categorie));
+  const checks = [];
+  const cmp = (key, val, min, max)=>{
+    val = Number(val);
+    let verdict = 'ok';
+    if(min!=null && val < Number(min)) verdict='bas';
+    else if(max!=null && val > Number(max)) verdict='haut';
+    checks.push({key, val, min, max, verdict});
+  };
+  if(besoin){
+    cmp('prot', n.prot, besoin.pb_min, besoin.pb_max);
+    cmp('em',   n.em,   besoin.em_min, besoin.em_max);
+    cmp('ca',   n.ca,   besoin.calcium_min, besoin.calcium_max);
+    cmp('lys',  n.lys,  besoin.lysine_min, besoin.lysine_max);
+    cmp('met',  n.met,  besoin.methionine_min, besoin.methionine_max);
+  }
+  return { f, n, besoin, checks };
+}
+
+function mktFichePreview(){
+  const box = document.getElementById('mkt-ft-nutri');
+  const res = document.getElementById('mkt-ft-result');
+  if(res) res.innerHTML = '';
+  if(!box) return;
+  const nom = document.getElementById('mkt-ft-formule')?.value;
+  if(!nom){ box.innerHTML=''; return; }
+  const p = _mktProfilFormule(nom);
+  if(!p){ box.innerHTML='<div style="color:var(--textm);font-size:12px">Profil indisponible.</div>'; return; }
+  const vcol = {ok:'var(--green)', bas:'var(--red)', haut:'var(--gold)'};
+  const vico = {ok:'✅', bas:'⬇ bas', haut:'⬆ haut'};
+  const chk = k => { const c=p.checks.find(x=>x.key===k); return c?` <span style="font-size:9px;color:${vcol[c.verdict]}">${vico[c.verdict]}</span>`:''; };
+  const cells = Object.keys(_MKT_NUTRI_LBL).map(k=>{
+    const m=_MKT_NUTRI_LBL[k];
+    return `<div class="econo-box"><div class="econo-val" style="font-size:14px">${p.n[k]}${chk(k)}</div><div class="econo-lbl">${m.l} (${m.u})</div></div>`;
+  }).join('');
+  box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${cells}</div>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">${p.besoin?('Normes : '+p.f.espece+' / '+(p.f.stade||p.besoin.categorie)):'Pas de norme enregistrée pour cette formule (espèce/stade).'}</div>`;
+}
+
+async function ficheTechniqueIA(tier){
+  tier = tier || 'eco';
+  const nom = document.getElementById('mkt-ft-formule')?.value;
+  const out = document.getElementById('mkt-ft-result');
+  if(!out) return;
+  if(!nom){ notify('Choisis une formule','r'); return; }
+  if(typeof iaGenerate!=='function'){ out.textContent='⚠ IA indisponible.'; return; }
+  const p = _mktProfilFormule(nom);
+  if(!p){ out.textContent='Profil indisponible.'; return; }
+  out.innerHTML = `<span style="color:var(--textm)">⏳ Rédaction de la fiche (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
+
+  const vals = Object.keys(_MKT_NUTRI_LBL).map(k=>`${_MKT_NUTRI_LBL[k].l} : ${p.n[k]} ${_MKT_NUTRI_LBL[k].u}`).join(', ');
+  const conf = p.checks.length
+    ? 'Conformité aux normes ('+p.f.espece+'/'+(p.f.stade||'')+') : '+p.checks.map(c=>`${_MKT_NUTRI_LBL[c.key].l} ${c.verdict==='ok'?'conforme':c.verdict==='bas'?'EN DESSOUS du minimum ('+c.min+')':'AU-DESSUS du maximum ('+c.max+')'}`).join(', ')+'.'
+    : 'Pas de norme de référence enregistrée pour cette formule.';
+
+  const q = `Tu es le nutritionniste de la provenderie SADARI (Togo). Rédige une FICHE TECHNIQUE professionnelle et claire pour l'aliment "${p.f.nom}"${p.f.espece?` (${p.f.espece}${p.f.stade?' — '+p.f.stade:''})`:''}.
+Valeurs nutritionnelles RÉELLES (calculées) : ${vals}.
+${conf}
+
+Structure la fiche :
+1) Présentation courte (à quel animal/stade elle est destinée).
+2) Tableau/liste des valeurs nutritionnelles clés (reprends EXACTEMENT les chiffres ci-dessus, n'invente rien).
+3) Conseils d'utilisation (dosage, eau, conservation) — généraux et prudents.
+4) Un court argumentaire de vente (2-3 phrases).
+${p.checks.some(c=>c.verdict!=='ok')?'Mentionne avec tact les écarts aux normes.':''}
+Reste factuel, n'invente aucune valeur non fournie. Format lisible (WhatsApp/impression).`;
+
+  try{
+    const txt = await iaGenerate('marketing', q, tier);
+    out.textContent = txt || 'Réponse vide.';
+  }catch(e){ out.innerHTML = '⚠ ' + (e.message||e); }
 }
 
 function _mktRenderListe(){
