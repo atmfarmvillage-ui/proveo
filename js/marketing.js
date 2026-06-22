@@ -249,11 +249,15 @@ async function renderMarketingSegments(){
 
   // Segmenter
   const segs = {nouveau:[],regulier:[],retard:[],perdu:[],aucun:[]};
+  const tous = [];
   clients.forEach(c=>{
     const s = (GP_CLIENT_STATS||{})[c.id] || {};
     const st = (typeof clientStatut==='function') ? clientStatut(s) : {key:'aucun'};
-    (segs[st.key]||segs.aucun).push({c, s, st, jours:st.jours, ca:Number(s.totalCA||0)});
+    const item = {c, s, st, jours:st.jours, ca:Number(s.totalCA||0)};
+    (segs[st.key]||segs.aucun).push(item);
+    tous.push(item);
   });
+  mktComputeRFM(tous);   // attribue x.rfm à chaque client
   _MKT_SEGS = segs;
 
   const cnt = k => (segs[k]||[]).length;
@@ -272,6 +276,8 @@ async function renderMarketingSegments(){
       .mkt-seg-btn{font-size:11px;padding:5px 10px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:14px;cursor:pointer;font-weight:600}
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
+    <div id="mkt-cycle-zone"></div>
+    <div id="mkt-relance-stats"></div>
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
       ${chips}
@@ -280,6 +286,194 @@ async function renderMarketingSegments(){
     ${_mktNouveauContactCard()}
     ${_mktFicheCard()}`;
   _mktRenderListe();
+  mktRenderCycle();
+  mktRenderRelanceStats();
+}
+
+// ── SCORE RFM (Récence × Fréquence × Montant) ─────
+function _mktScore5(arr, val, invert){
+  if(!arr.length) return 3;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const rank = s.filter(v=>v<=val).length / s.length; // 0..1
+  let sc = Math.ceil(rank*5) || 1;
+  if(sc>5) sc=5;
+  return invert ? (6-sc) : sc;
+}
+function mktComputeRFM(items){
+  const ws = items.filter(x=>x.s && x.s.nbAchats);
+  const rec = ws.map(x=> x.jours==null?9999:x.jours);
+  const freq = ws.map(x=> x.s.nbAchats||0);
+  const mon = ws.map(x=> x.ca||0);
+  ws.forEach(x=>{
+    const r = _mktScore5(rec, x.jours==null?9999:x.jours, true);  // récent (peu de jours) = bon
+    const f = _mktScore5(freq, x.s.nbAchats||0, false);
+    const m = _mktScore5(mon, x.ca||0, false);
+    const score = r+f+m;
+    x.rfm = {r,f,m,score, label: score>=12?'🔥 VIP':score>=9?'⭐ Bon':score>=6?'👍 Moyen':'💤 Faible'};
+  });
+}
+
+// ── CALENDRIER DE CYCLE D'ÉLEVAGE ─────────────────
+const _CYCLE_DUREE = [
+  {kw:['demarr','starter','start','pre-dem','0-'], j:14},
+  {kw:['poussin','poulette','pullet','elevage','pre-ponte','preponte'], j:42},
+  {kw:['croiss','grower','growth','2-'], j:21},
+  {kw:['finition','finish','final','engrais'], j:21},
+  {kw:['ponte','pondeuse','layer','lay','production'], j:null}, // continu → fréquence
+];
+function _cycleDuree(stade){
+  const s=(stade||'').toLowerCase();
+  for(const d of _CYCLE_DUREE){ if(d.kw.some(k=>s.includes(k))) return d.j; }
+  return 30; // défaut prudent
+}
+function _cycleNextCateg(espece, stade){
+  const cats=((typeof GP_CATEGORIES!=='undefined'?GP_CATEGORIES:[])||[])
+    .filter(c=>c.espece===espece).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const i=cats.findIndex(c=>c.categorie===stade);
+  if(i<0) return null;
+  return cats[i+1]||null; // null = fin de cycle
+}
+function _formulePourStade(espece, categorie){
+  const list=((typeof getAllFormules==='function'?getAllFormules():FORMULES_SADARI)||[]);
+  return list.find(f=>f.espece===espece && f.stade===categorie) || null;
+}
+// Prévision : quand ce client aura besoin de sa prochaine formule
+function mktCycleNext(s){
+  if(!s || !s.derniereFormule || !s.dernier) return null;
+  const f=(typeof getFormule==='function'?getFormule(s.derniereFormule):null) || (FORMULES_SADARI||[]).find(x=>x.nom===s.derniereFormule);
+  if(!f) return null;
+  const duree=_cycleDuree(f.stade);
+  const last=new Date(s.dernier);
+  if(duree==null){ // ponte → réappro selon fréquence
+    const fr=s.freqMoyenne||30;
+    const next=new Date(last); next.setDate(last.getDate()+fr);
+    return {prochaine:next, jours:Math.round((next-Date.now())/86400000), formuleSuivante:f.nom, stade:f.stade||'ponte', type:'reappro'};
+  }
+  const next=new Date(last); next.setDate(last.getDate()+duree);
+  const nextCat=_cycleNextCateg(f.espece, f.stade);
+  let formuleSuivante=null, type='suite';
+  if(nextCat){ const fn=_formulePourStade(f.espece, nextCat.categorie); formuleSuivante = fn?fn.nom:(nextCat.categorie_label||nextCat.categorie); }
+  else { type='nouveau_cycle'; }
+  return {prochaine:next, jours:Math.round((next-Date.now())/86400000), formuleSuivante, stade:f.stade, type};
+}
+
+function mktRenderCycle(){
+  const zone=document.getElementById('mkt-cycle-zone');
+  if(!zone || !_MKT_SEGS) return;
+  const tous=[..._MKT_SEGS.nouveau,..._MKT_SEGS.regulier,..._MKT_SEGS.retard,..._MKT_SEGS.perdu];
+  const items=[];
+  tous.forEach(x=>{
+    const cy=mktCycleNext(x.s);
+    if(!cy) return;
+    if(cy.jours<=7 && cy.jours>=-30) items.push({...x, cy}); // bientôt dû ou en retard récent
+  });
+  items.sort((a,b)=>a.cy.jours-b.cy.jours);
+  if(!items.length){
+    zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>⏰ Cycle d'élevage — à relancer bientôt</span></div></div>
+      <div style="color:var(--textm);font-size:12px;padding:6px">Aucun client à relancer dans les 7 prochains jours. (Basé sur la dernière formule achetée + durée de phase.)</div></div>`;
+    return;
+  }
+  const top=items.slice(0,40);
+  zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>⏰ Cycle d'élevage — à relancer bientôt (${items.length})</span></div></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Anticipe le prochain besoin selon la dernière formule + la durée de phase.</div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Client</th><th>Dernière formule</th><th>Échéance</th><th>Prochaine formule</th><th></th>
+    </tr></thead><tbody>
+    ${top.map(x=>{
+      const j=x.cy.jours;
+      const ech = j<0?`<span style="color:var(--red)">en retard ${-j} j</span>` : j===0?'<span style="color:var(--gold)">aujourd\'hui</span>' : `dans ${j} j`;
+      const suiv = x.cy.type==='nouveau_cycle' ? '🔄 nouveau cycle' : (x.cy.formuleSuivante||'—');
+      return `<tr>
+        <td><b>${(x.c.nom||'—').replace(/</g,'&lt;')}</b>${x.c.telephone?'':' <span style="font-size:9px;color:var(--red)">sans n°</span>'}</td>
+        <td style="font-size:10px">${x.s.derniereFormule||'—'}</td>
+        <td>${ech}</td>
+        <td style="font-size:10px;color:var(--g6)">${suiv}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-g btn-sm" style="padding:4px 7px" title="DeepSeek" onclick="relanceCycleIA('${x.c.id}','eco')">🚀</button>
+          <button class="btn btn-out btn-sm" style="padding:4px 7px" title="Claude" onclick="relanceCycleIA('${x.c.id}','pro')">💎</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div></div>`;
+}
+
+// Relance "cycle" : message IA centré sur la prochaine formule du cycle
+async function relanceCycleIA(clientId, tier){
+  tier=tier||'eco';
+  const c=(GP_CLIENTS||[]).find(x=>x.id===clientId); if(!c) return;
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  if(typeof loadClientStats==='function') await loadClientStats();
+  const s=(GP_CLIENT_STATS||{})[clientId]||{};
+  const cy=mktCycleNext(s);
+  notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
+  try{
+    let contexte;
+    if(cy && cy.type==='reappro') contexte=`Il achète régulièrement "${s.derniereFormule}". Propose-lui de se réapprovisionner maintenant pour ne pas tomber en rupture.`;
+    else if(cy && cy.type==='nouveau_cycle') contexte=`Il a terminé un cycle d'élevage (dernière formule "${s.derniereFormule}"). Propose-lui de démarrer une nouvelle bande avec nos aliments.`;
+    else if(cy && cy.formuleSuivante) contexte=`Son élevage passe à l'étape suivante : après "${s.derniereFormule}", il a maintenant besoin de "${cy.formuleSuivante}". Propose-lui de venir le chercher au bon moment.`;
+    else contexte=`Propose-lui de se réapprovisionner en aliments.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et opportun pour le client "${c.nom}" de la provenderie SADARI. ${contexte} Sois précis sur le bon timing. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const txt=await iaGenerate('marketing', q, tier);
+    if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
+    else alert(txt);
+    if(typeof logRelance==='function') logRelance(clientId, 'cycle', c.nom);
+  }catch(e){ notify('Échec IA : '+(e.message||e),'r'); }
+}
+
+// ── BOUCLE D'APPRENTISSAGE : efficacité des relances ──
+async function mktRenderRelanceStats(){
+  const zone=document.getElementById('mkt-relance-stats');
+  if(!zone) return;
+  let rel=[];
+  try{
+    const{data,error}=await SB.from('gp_relances').select('*')
+      .eq('admin_id',GP_ADMIN_ID).order('created_at',{ascending:false}).limit(500);
+    if(error) throw error;
+    rel=data||[];
+  }catch(e){
+    zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>📈 Efficacité des relances</span></div></div>
+      <div style="color:var(--textm);font-size:12px;padding:6px">Suivi non activé. Passe le SQL <b>gp_relances</b> (fourni dans le chat) pour mesurer l'impact de tes relances.</div></div>`;
+    return;
+  }
+  if(!rel.length){
+    zone.innerHTML=`<div class="card"><div class="card-title"><div class="ct-left"><span>📈 Efficacité des relances</span></div></div>
+      <div style="color:var(--textm);font-size:12px;padding:6px">Aucune relance enregistrée. Lance des relances ⬇️ et reviens mesurer les rachats.</div></div>`;
+    return;
+  }
+  if(typeof loadClientStats==='function') await loadClientStats();
+  const stats=GP_CLIENT_STATS||{};
+  let conv=0; const delais=[]; const parSeg={};
+  rel.forEach(r=>{
+    const rd=(r.created_at||'').slice(0,10);
+    const s=stats[r.client_id];
+    let racheté=false, delai=null;
+    if(s && s.dates){
+      const after=s.dates.filter(d=>d>rd).sort();
+      if(after.length){ racheté=true; delai=Math.round((new Date(after[0])-new Date(rd))/86400000); }
+    }
+    const seg=r.segment||'autre';
+    parSeg[seg]=parSeg[seg]||{n:0,r:0};
+    parSeg[seg].n++;
+    if(racheté){ parSeg[seg].r++; conv++; if(delai!=null) delais.push(delai); }
+  });
+  const taux=rel.length?Math.round(conv/rel.length*100):0;
+  const delaiMoy=delais.length?Math.round(delais.reduce((a,b)=>a+b,0)/delais.length):null;
+  const segRows=Object.entries(parSeg).sort((a,b)=>b[1].n-a[1].n).map(([seg,v])=>
+    `<tr><td>${seg}</td><td class="num">${v.n}</td><td class="num">${v.r}</td><td class="num" style="color:${v.n&&v.r/v.n>=0.3?'var(--green)':'var(--textm)'}">${v.n?Math.round(v.r/v.n*100):0}%</td></tr>`
+  ).join('');
+  zone.innerHTML=`<div class="card">
+    <div class="card-title"><div class="ct-left"><span>📈 Efficacité des relances</span></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="econo-box"><div class="econo-val">${rel.length}</div><div class="econo-lbl">Relances</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--green)">${conv}</div><div class="econo-lbl">Rachats</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:${taux>=30?'var(--green)':'var(--gold)'}">${taux}%</div><div class="econo-lbl">Taux de conversion</div></div>
+      <div class="econo-box"><div class="econo-val">${delaiMoy!=null?delaiMoy+' j':'—'}</div><div class="econo-lbl">Délai moyen rachat</div></div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Segment</th><th class="num">Relances</th><th class="num">Rachats</th><th class="num">Taux</th>
+    </tr></thead><tbody>${segRows}</tbody></table></div>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">Un rachat = un achat enregistré après la date de la relance.</div>
+  </div>`;
 }
 
 // ── FICHE TECHNIQUE IA (calcul réel + interprétation) ──
@@ -390,18 +584,20 @@ function _mktRenderListe(){
   const box = document.getElementById('mkt-seg-liste');
   if(!box || !_MKT_SEGS) return;
   let liste;
+  const byRFM=(a,b)=>((b.rfm?.score||0)-(a.rfm?.score||0))||(b.ca-a.ca); // priorité : valeur RFM puis CA
   if(MKT_SEG==='contacter'){
-    liste = [..._MKT_SEGS.retard, ..._MKT_SEGS.perdu].sort((a,b)=>b.ca-a.ca); // RFM-lite : valeur d'abord
+    liste = [..._MKT_SEGS.retard, ..._MKT_SEGS.perdu].sort(byRFM);
   }else{
-    liste = (_MKT_SEGS[MKT_SEG]||[]).slice().sort((a,b)=>b.ca-a.ca);
+    liste = (_MKT_SEGS[MKT_SEG]||[]).slice().sort(byRFM);
   }
   if(!liste.length){ box.innerHTML = `<div style="color:var(--textm);font-size:12px;padding:10px">Aucun client dans ce segment.</div>`; return; }
   const top = liste.slice(0, 40);
   box.innerHTML = `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>
-      <th>Client</th><th>Statut</th><th class="num">CA</th><th class="num">Absence</th><th>Habituel</th><th></th>
+      <th>Client</th><th>RFM</th><th>Statut</th><th class="num">CA</th><th class="num">Absence</th><th>Habituel</th><th></th>
     </tr></thead><tbody>
     ${top.map(x=>`<tr>
       <td><b>${(x.c.nom||'—').replace(/</g,'&lt;')}</b>${x.c.telephone?`<div style="font-size:9px;color:var(--textm)">${x.c.telephone}</div>`:'<div style="font-size:9px;color:var(--red)">sans n°</div>'}</td>
+      <td><span style="font-size:10px;font-weight:700" title="R${x.rfm?.r||'-'} F${x.rfm?.f||'-'} M${x.rfm?.m||'-'}">${x.rfm?.label||'—'}</span></td>
       <td><span style="color:${x.st.color};font-size:10px;font-weight:700">${x.st.emoji} ${x.st.label}</span></td>
       <td class="num" style="color:var(--gold)">${fmt(x.ca)}</td>
       <td class="num">${x.jours!=null?x.jours+' j':'—'}</td>
@@ -412,7 +608,7 @@ function _mktRenderListe(){
       </td>
     </tr>`).join('')}
   </tbody></table></div>
-  ${liste.length>top.length?`<div style="font-size:10px;color:var(--textm);margin-top:6px">Affichage des ${top.length} plus rentables sur ${liste.length}.</div>`:''}`;
+  ${liste.length>top.length?`<div style="font-size:10px;color:var(--textm);margin-top:6px">Affichage des ${top.length} prioritaires (RFM) sur ${liste.length}.</div>`:''}`;
 }
 
 // Composeur "nouveau contact" : nom + numéro + type → IA rédige → WhatsApp 1 clic
