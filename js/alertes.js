@@ -20,17 +20,22 @@ async function renderAlertes(){
     safe(SB.from('gp_livraisons_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('statut','envoye')),
     safe(SB.from('gp_stock_veto').select('*').eq('admin_id',GP_ADMIN_ID).gt('qte',0)),
     safe(SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID)),
-    safe(SB.from('gp_ventes').select('client_nom,point_vente,montant_total,montant_paye,date').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel'])),
+    safe(SB.from('gp_ventes').select('client_id,client_nom,point_vente,montant_total,montant_paye,date').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel'])),
     estCentral ? safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)) : Promise.resolve({data:[]}),
   ]);
 
   const L=liv||[], VL=vetoLots||[], SPF=stockPF||[], VI=ventesImp||[];
 
   // ── 1. Livraisons non confirmées ──
-  const livAlertes=L.map(l=>({
-    txt:`${l.pdv_source_nom||l.pdv_source||'—'} → ${l.pdv_dest_nom||l.pdv_dest||'—'} · ${l.formule_nom||''} · ${l.qte_envoyee||0} sac(s)`,
-    detail:`Envoyée le ${l.date_livraison||l.date||'?'} — en attente de confirmation`
-  }));
+  const monPDV = GP_POINT_VENTE||'Production';
+  const livAlertes=L.map(l=>{
+    const peutConf = GP_ROLE==='admin' || l.pdv_dest_nom===monPDV || l.pdv_dest===monPDV;
+    return {
+      l:`${l.pdv_source_nom||l.pdv_source||'—'} → ${l.pdv_dest_nom||l.pdv_dest||'—'} · ${l.formule_nom||''} · ${l.qte_envoyee||0} sac(s)`,
+      r:`envoyée ${l.date_livraison||l.date||'?'}`,
+      btn: peutConf?`<button class="btn btn-g btn-sm" style="padding:3px 8px" onclick="ouvrirConfirmationReception('${l.id}')">📦 Confirmer</button>`:''
+    };
+  });
 
   // ── 2. Péremption véto ──
   const vetoPerimes=VL.filter(v=>v.date_peremption&&v.date_peremption<todayStr);
@@ -55,7 +60,7 @@ async function renderAlertes(){
 
   // ── 4. Impayés ──
   const detteParClient={};
-  VI.forEach(v=>{const k=(v.client_nom||'Client')+'|'+(v.point_vente||''); const reste=Number(v.montant_total||0)-Number(v.montant_paye||0); if(reste>0){ if(!detteParClient[k])detteParClient[k]={nom:v.client_nom||'Client',pdv:v.point_vente,total:0}; detteParClient[k].total+=reste; }});
+  VI.forEach(v=>{const reste=Number(v.montant_total||0)-Number(v.montant_paye||0); if(reste<=0)return; const k=v.client_id||('c|'+(v.client_nom||'')); if(!detteParClient[k])detteParClient[k]={id:v.client_id||null,nom:v.client_nom||'Client comptant',pdv:v.point_vente,total:0}; detteParClient[k].total+=reste;});
   const impayes=Object.values(detteParClient).sort((a,b)=>b.total-a.total);
   const totalImpaye=impayes.reduce((s,i)=>s+i.total,0);
 
@@ -66,14 +71,15 @@ async function renderAlertes(){
   const section=(titre,couleur,items,vide)=>`
     <div class="card" style="margin-bottom:12px">
       <div class="card-title"><div class="ct-left"><span>${titre} ${items.length?`<span class="badge ${couleur}" style="font-size:9px">${items.length}</span>`:''}</span></div></div>
-      ${items.length?items.map(i=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--card2);font-size:11px">
-        <span>${i.l}</span><span style="color:var(--textm);text-align:right">${i.r||''}</span>
+      ${items.length?items.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--card2);font-size:11px">
+        <span>${i.l}</span>
+        <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${i.r?`<span style="color:var(--textm);text-align:right">${i.r}</span>`:''}${i.btn||''}</span>
       </div>`).join(''):`<div style="color:var(--green);font-size:12px">${vide}</div>`}
     </div>`;
 
   c.innerHTML=`
     ${section('📦 Livraisons à confirmer','bdg-gold',
-      livAlertes.map(a=>({l:a.txt,r:a.detail})),'✓ Aucune livraison en attente.')}
+      livAlertes,'✓ Aucune livraison en attente.')}
     ${section('⛔ Véto périmé','bdg-r',
       vetoPerimes.map(v=>({l:`${v.produit_nom} · ${v.pdv_nom}`,r:`${fmt(v.qte)} ${v.unite||''} · périmé le ${v.date_peremption}`})),'✓ Aucun véto périmé.')}
     ${section('⚠ Véto proche péremption','bdg-gold',
@@ -85,7 +91,7 @@ async function renderAlertes(){
     ${estCentral?section('🌾 Stock MP bas','bdg-r',
       mpBas.map(m=>({l:m.nom,r:`${fmtKg(m.q)} kg`})),'✓ Stock MP OK.'):''}
     ${section('💰 Impayés clients','bdg-r',
-      impayes.map(i=>({l:`${i.nom}${i.pdv?' · '+i.pdv:''}`,r:`${fmt(i.total)} F dû`})),'✓ Aucun impayé.')}
+      impayes.map(i=>({l:`${i.nom}${i.pdv?' · '+i.pdv:''}`,r:`${fmt(i.total)} F dû`,btn:i.id?`<button class="btn btn-out btn-sm" style="padding:3px 8px;color:#25D366;border-color:rgba(37,211,102,.3)" onclick="envoyerRappelDette('${i.id}')">📲 Relancer</button>`:''})),'✓ Aucun impayé.')}
     ${totalImpaye>0?`<div style="font-size:11px;color:var(--textm);text-align:right">Total impayés : <b style="color:var(--red)">${fmt(totalImpaye)} F</b></div>`:''}
   `;
 
