@@ -1695,7 +1695,7 @@ async function renderVentes(){
   document.getElementById('ventes-liste').innerHTML=V.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th>Statut</th><th></th></tr></thead><tbody>
     ${V.map(v=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${v.date}</td>
-      <td><div style="font-weight:600">${v.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${v.client_tel||''}</div></td>
+      <td><div style="font-weight:600">${v.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${v.client_tel||''}</div>${GP_ROLE==='admin'&&v.point_vente?`<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(v.point_vente):('📍 '+v.point_vente)}</div>`:''}</td>
       <td style="font-size:10px">${ESPECE_ICON[v.espece]||''} ${v.formule_nom||'—'}</td>
       <td class="num">${fmtKg(v.qte_vendue)}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--gold)">${fmt(v.montant_total)} F</td>`:''}
@@ -1794,7 +1794,7 @@ async function renderDep(){
     ${D.map(d=>`<tr>
       <td style="font-size:10px">${d.date}</td>
       <td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[d.categorie]||d.categorie}</span></td>
-      <td>${d.description}</td>
+      <td>${d.description}${GP_ROLE==='admin'&&d.point_vente?`<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(d.point_vente):('📍 '+d.point_vente)}</div>`:''}</td>
       <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
       <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
