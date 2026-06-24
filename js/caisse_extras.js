@@ -31,6 +31,19 @@ async function remplirSelectCaisses(selectId, optionVide){
   if(curId && !C.some(c=>c.id===curId)) sel.value = C[0]?.id || '';
 }
 
+// Pré-sélectionne, dans un select de caisse, la caisse du PDV connecté (ou siège pour l'admin)
+async function preselectCaissePDV(selectId){
+  const sel=document.getElementById(selectId);
+  if(!sel) return;
+  try{
+    let cq=SB.from('gp_caisses').select('id,point_vente').eq('admin_id',GP_ADMIN_ID).eq('type','physique').eq('actif',true);
+    cq = GP_POINT_VENTE ? cq.eq('point_vente',GP_POINT_VENTE) : cq.is('point_vente',null);
+    const{data}=await cq.limit(1);
+    const id=data?.[0]?.id;
+    if(id && [...sel.options].some(o=>o.value===id)) sel.value=id;
+  }catch(e){}
+}
+
 // Calcule les soldes de toutes les caisses passées (même logique que renderCaisse)
 async function calcSoldesCaisses(caisses){
   const ids = caisses.map(c=>c.id);
@@ -233,6 +246,7 @@ async function saveModifSoldeInit(){
       const r = _origDep();
       if(r && typeof r.then==='function') await r;
       await remplirSelectCaisses('dep_caisse_id');
+      await preselectCaissePDV('dep_caisse_id'); // caisse du PDV connecté par défaut
     };
   }
   // Hook page paiements MP idem
