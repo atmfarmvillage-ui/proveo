@@ -71,17 +71,25 @@ async function saveReversement(){
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
-  // Mouvement caisse automatique — entrée dans caisse Production
-  const{data:caisses}=await SB.from('gp_caisses').select('id')
-    .eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
-  if(caisses?.length){
+  // Mouvement caisse : TRANSFERT de la caisse du PDV vers la caisse du siège (débite le PDV, crédite le siège)
+  const{data:cSrc}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').eq('point_vente',pdvNom).limit(1);
+  const{data:cDst}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').is('point_vente',null).limit(1);
+  const _src=cSrc?.[0]?.id, _dst=cDst?.[0]?.id;
+  if(_src && _dst){
     await SB.from('gp_mouvements_caisse').insert({
-      admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,
+      admin_id:GP_ADMIN_ID,caisse_id:_src,caisse_dest_id:_dst,
+      type:'transfert',categorie:'reversement_depot',
+      montant,date_mouvement:today(),
+      description:`Reversement ${pdvNom} — ${mois}`,
+      enregistre_par:GP_USER.id,enregistre_par_nom:GP_USER.email?.split('@')[0]
+    });
+  } else if(_dst){
+    await SB.from('gp_mouvements_caisse').insert({
+      admin_id:GP_ADMIN_ID,caisse_id:_dst,
       type:'entree',categorie:'reversement_depot',
       montant,date_mouvement:today(),
       description:`Reversement ${pdvNom} — ${mois}`,
-      enregistre_par:GP_USER.id,
-      enregistre_par_nom:GP_USER.email?.split('@')[0]
+      enregistre_par:GP_USER.id,enregistre_par_nom:GP_USER.email?.split('@')[0]
     });
   }
 

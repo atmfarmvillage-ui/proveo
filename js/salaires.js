@@ -57,9 +57,11 @@ async function saveSalaire(){
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
 
-  // Mouvement caisse automatique
-  const{data:caisses}=await SB.from('gp_caisses').select('id')
-    .eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
+  // Mouvement caisse automatique — caisse du PDV connecté (ou siège), pas une caisse au hasard
+  let _sc=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
+  _sc = GP_POINT_VENTE ? _sc.eq('point_vente',GP_POINT_VENTE) : _sc.is('point_vente',null);
+  let{data:caisses}=await _sc.limit(1);
+  if(!caisses?.length){ const _r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1); caisses=_r.data; }
   if(caisses?.length){
     await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,
