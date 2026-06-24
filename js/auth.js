@@ -459,6 +459,7 @@ var PAGE_RENDERERS = {
   distribution:  function(){ renderDistribution(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
   veto:          function(){ if(typeof renderVeto==='function') renderVeto(); },
   comparatif:    function(){ if(typeof renderComparatifPDV==='function') renderComparatifPDV(); },
+  alertes:       function(){ if(typeof renderAlertes==='function') renderAlertes(); },
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
   stock_pf:      renderStockPF,
