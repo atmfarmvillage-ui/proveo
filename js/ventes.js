@@ -1823,7 +1823,10 @@ async function renderDep(){
 
   document.getElementById('dep-liste').innerHTML=`
     ${peutVoirMP?mpBanner:''}
-    ${GP_ROLE==='admin'?`<div style="font-size:12px;color:var(--textm);margin-bottom:8px">Total dépenses${filtPdv?` · <b style="color:var(--g6)">${filtPdv}</b>`:''} (hors achats MP) : <strong style="color:var(--red)">${fmt(total)} FCFA</strong> — ${D.length} dépense(s)</div>
+    ${GP_ROLE==='admin'?`<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+      <span style="font-size:12px;color:var(--textm)">Total dépenses${filtPdv?` · <b style="color:var(--g6)">${filtPdv}</b>`:''} <span style="font-size:10px">(hors achats MP · ${D.length})</span></span>
+      <span style="font-size:22px;font-weight:800;color:var(--red)">${fmt(total)} FCFA</span>
+    </div>
     ${joursTri.length?`<details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
       <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">📅 Détail par jour (${joursTri.length} jour(s))</summary>
       <table class="tbl" style="font-size:11px;margin-top:6px"><thead><tr><th>Jour</th><th class="num">Total dépenses</th></tr></thead><tbody>
