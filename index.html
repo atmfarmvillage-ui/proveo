@@ -939,7 +939,10 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <div class="card">
         <div class="card-title">
           <div class="ct-left"><span>📋 Historique dépenses</span></div>
-          <input type="month" id="dep-filtre-mois" onchange="renderDep()" style="font-size:10px;padding:3px 6px;width:auto">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <select id="dep-filtre-pdv" class="admin-only-action" onchange="renderDep()" style="font-size:10px;padding:3px 6px;width:auto"><option value="">Tous les PDV</option></select>
+            <input type="month" id="dep-filtre-mois" onchange="renderDep()" style="font-size:10px;padding:3px 6px;width:auto">
+          </div>
         </div>
         <div id="dep-liste"></div>
       </div>
