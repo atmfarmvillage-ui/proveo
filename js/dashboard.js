@@ -5,6 +5,67 @@ function _finMois(mois){
   return mois+'-'+String(new Date(y,mo,0).getDate()).padStart(2,'0');
 }
 
+// ── COMPARATIF PDV (admin) ─────────────────────────
+async function renderComparatifPDV(){
+  const tbl=document.getElementById('comp-table');
+  if(!tbl) return;
+  if(GP_ROLE!=='admin'){ tbl.innerHTML='<div style="color:var(--textm);font-size:12px;padding:10px">Réservé à l\'administrateur.</div>'; return; }
+  const moisEl=document.getElementById('comp-mois');
+  const m=(moisEl&&moisEl.value)?moisEl.value:(typeof thisMonth==='function'?thisMonth():new Date().toISOString().slice(0,7));
+  if(moisEl&&!moisEl.value)moisEl.value=m;
+  const debut=m+'-01', fin=_finMois(m);
+
+  const safe=async(q)=>{try{return await q;}catch(e){return {data:[]};}};
+  const[{data:ventes},{data:depenses},{data:stock}]=await Promise.all([
+    safe(SB.from('gp_ventes').select('point_vente,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)),
+    safe(SB.from('gp_depenses').select('point_vente,montant').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)),
+    safe(SB.from('gp_stock_produits_pdv').select('pdv_nom,qte_disponible,seuil_critique').eq('admin_id',GP_ADMIN_ID)),
+  ]);
+
+  const byPDV={};
+  const get=(p)=>{const k=p||'Production'; if(!byPDV[k])byPDV[k]={ca:0,enc:0,dep:0,nb:0,alertes:0}; return byPDV[k];};
+  (ventes||[]).forEach(v=>{const o=get(v.point_vente); o.ca+=Number(v.montant_total||0); o.enc+=Number(v.montant_paye||0); o.nb++;});
+  (depenses||[]).forEach(d=>{const o=get(d.point_vente); o.dep+=Number(d.montant||0);});
+  (stock||[]).forEach(s=>{const o=get(s.pdv_nom); if(Number(s.qte_disponible||0)<=Number(s.seuil_critique||0)) o.alertes++;});
+
+  const lignes=Object.entries(byPDV).sort((a,b)=>b[1].ca-a[1].ca);
+  const tot=lignes.reduce((t,[,o])=>{t.ca+=o.ca;t.enc+=o.enc;t.dep+=o.dep;t.nb+=o.nb;t.alertes+=o.alertes;return t;},{ca:0,enc:0,dep:0,nb:0,alertes:0});
+
+  const kpis=document.getElementById('comp-kpis');
+  if(kpis) kpis.innerHTML=`
+    <div class="econo-box"><div class="econo-val">${lignes.length}</div><div class="econo-lbl">Points de vente actifs</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(tot.ca)}</div><div class="econo-lbl">CA total (F)</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(tot.dep)}</div><div class="econo-lbl">Dépenses total (F)</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:${(tot.enc-tot.dep)>=0?'var(--green)':'var(--red)'}">${fmt(tot.enc-tot.dep)}</div><div class="econo-lbl">Résultat caisse (F)</div></div>`;
+
+  if(!lignes.length){ tbl.innerHTML='<div style="color:var(--textm);font-size:12px;padding:10px">Aucune donnée sur la période.</div>'; return; }
+
+  const badge=(nom)=> (typeof pvBadgeHtml==='function')?pvBadgeHtml(nom):('📍 '+nom);
+  tbl.innerHTML=`<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+    <thead><tr><th>Point de vente</th><th class="num">Ventes (CA)</th><th class="num">Encaissé</th><th class="num">Dépenses</th><th class="num">Résultat*</th><th class="num">Nb ventes</th><th class="num">Alertes stock</th></tr></thead>
+    <tbody>
+    ${lignes.map(([nom,o])=>{const res=o.enc-o.dep; return `<tr>
+      <td>${badge(nom)}</td>
+      <td class="num" style="color:var(--gold)">${fmt(o.ca)}</td>
+      <td class="num" style="color:var(--green)">${fmt(o.enc)}</td>
+      <td class="num" style="color:var(--red)">${fmt(o.dep)}</td>
+      <td class="num" style="font-weight:700;color:${res>=0?'var(--green)':'var(--red)'}">${fmt(res)}</td>
+      <td class="num">${o.nb}</td>
+      <td class="num"><span class="badge ${o.alertes>0?'bdg-r':'bdg-g'}" style="font-size:9px">${o.alertes}</span></td>
+    </tr>`;}).join('')}
+    <tr style="background:rgba(22,163,74,.06);font-weight:700">
+      <td>TOTAL</td>
+      <td class="num" style="color:var(--gold)">${fmt(tot.ca)}</td>
+      <td class="num" style="color:var(--green)">${fmt(tot.enc)}</td>
+      <td class="num" style="color:var(--red)">${fmt(tot.dep)}</td>
+      <td class="num" style="color:${(tot.enc-tot.dep)>=0?'var(--green)':'var(--red)'}">${fmt(tot.enc-tot.dep)}</td>
+      <td class="num">${tot.nb}</td>
+      <td class="num">${tot.alertes}</td>
+    </tr>
+    </tbody></table></div>
+    <div style="font-size:10px;color:var(--textm);margin-top:8px">* Résultat = Encaissé − Dépenses (résultat de caisse, hors coût matière). Pour la marge nette réelle (MP consommée), voir Bilan & Rapports.</div>`;
+}
+
 // ── DASHBOARD ──────────────────────────────────────
 async function renderDashboard(){
   const m=(typeof thisMonth==='function'?thisMonth():new Date().toISOString().slice(0,7));

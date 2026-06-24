@@ -458,6 +458,7 @@ var PAGE_RENDERERS = {
   caisse:        renderCaisse,
   distribution:  function(){ renderDistribution(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
   veto:          function(){ if(typeof renderVeto==='function') renderVeto(); },
+  comparatif:    function(){ if(typeof renderComparatifPDV==='function') renderComparatifPDV(); },
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,
   stock_pf:      renderStockPF,

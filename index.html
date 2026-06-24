@@ -185,6 +185,7 @@
   <div class="nav-sect">📊 Rapports</div>
   <div class="nav-item" onclick="showGP('bilan_jour')" data-page="bilan_jour" data-roles="admin,secretaire,daf"><span class="nav-icon">📅</span>Bilan journalier</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
+  <div class="nav-item admin-only" onclick="showGP('comparatif')" data-page="comparatif"><span class="nav-icon">🏪</span>Comparatif PDV</div>
 
   <!-- DIRECTION STRATÉGIQUE -->
   <div class="nav-sect">🎯 Direction</div>
@@ -2318,6 +2319,18 @@
 </div>
 
 <!-- SALAIRES -->
+<!-- COMPARATIF PDV (admin) -->
+<div class="page" id="page-comparatif">
+  <div class="page-title">Comparatif PDV</div>
+  <div class="page-sub">Performance par point de vente · ventes, dépenses, résultat, alertes stock</div>
+  <div style="display:flex;gap:10px;align-items:end;margin-bottom:12px">
+    <div class="fr" style="max-width:200px;margin:0"><label>Mois</label><input type="month" id="comp-mois" onchange="renderComparatifPDV()"></div>
+    <button class="btn btn-out btn-sm" onclick="renderComparatifPDV()">🔄 Actualiser</button>
+  </div>
+  <div class="g4" id="comp-kpis" style="margin-bottom:14px"></div>
+  <div class="card"><div id="comp-table"></div></div>
+</div>
+
 <!-- PRODUITS VÉTO -->
 <div class="page" id="page-veto">
   <div class="page-title">Produits Véto</div>
