@@ -1673,11 +1673,21 @@ async function renderVentes(){
   // Une date fixe sélectionnée prime sur les boutons période
   const r = filtDate ? {from:filtDate,to:filtDate,label:'le '+fmtDate(filtDate)} : vtPeriodeRange(VT_PERIODE);
   document.querySelectorAll('.vt-per-btn').forEach(b=>b.classList.toggle('on', !filtDate && b.dataset.per===VT_PERIODE));
+  // Filtre par PDV (admin) — peuplé une fois
+  const vtPdvEl=document.getElementById('vt-filtre-pdv');
+  if(vtPdvEl && GP_ROLE==='admin' && vtPdvEl.options.length<=1){
+    const{data:pdvs}=await SB.from('gp_points_vente').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom');
+    const noms=['Production',...((pdvs||[]).map(p=>p.nom))];
+    vtPdvEl.innerHTML='<option value="">Tous les PDV</option>'+noms.map(n=>`<option value="${n}">${n}</option>`).join('');
+  }
+  const vtFiltPdv=(GP_ROLE==='admin')?(vtPdvEl?.value||''):'';
   let q=SB.from('gp_ventes').select('*').eq('admin_id',GP_ADMIN_ID)
     .is('deleted_at', null)  // exclure les ventes en corbeille
     .gte('date',r.from).lte('date',r.to)
     .order('date',{ascending:false}).order('created_at',{ascending:false}).limit(2000);
   if(typeof scopeQueryPDV==='function') q=scopeQueryPDV(q); // chaque PDV ne voit que ses ventes
+  if(vtFiltPdv==='Production') q=q.or('point_vente.is.null,point_vente.eq.Production');
+  else if(vtFiltPdv) q=q.eq('point_vente',vtFiltPdv);
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
   const V=data||[];
@@ -1685,13 +1695,23 @@ async function renderVentes(){
   const totCA=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
   const totKg=V.reduce((s,v)=>s+Number(v.qte_vendue||0),0);
   const totImp=V.reduce((s,v)=>s+(v.statut_paiement!=='paye'?Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)):0),0);
+  // Détail par jour (CA + nb ventes par date)
+  const parJourV={};
+  V.forEach(v=>{const k=v.date||'?'; if(!parJourV[k])parJourV[k]={ca:0,n:0,kg:0}; parJourV[k].ca+=Number(v.montant_total||0); parJourV[k].n++; parJourV[k].kg+=Number(v.qte_vendue||0);});
+  const joursV=Object.entries(parJourV).sort((a,b)=>b[0].localeCompare(a[0]));
   const sumEl=document.getElementById('ventes-sum');
   if(sumEl) sumEl.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px">
-    <div class="econo-box"><div class="econo-val">${V.length}</div><div class="econo-lbl">Ventes (${r.label})</div></div>
+    <div class="econo-box"><div class="econo-val">${V.length}</div><div class="econo-lbl">Ventes (${r.label})${vtFiltPdv?' · '+vtFiltPdv:''}</div></div>
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totCA)} F</div><div class="econo-lbl">CA total</div></div>`:''}
     <div class="econo-box"><div class="econo-val">${fmtKg(totKg)}</div><div class="econo-lbl">Kg vendus</div></div>
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:${totImp>0?'var(--red)':'var(--green)'}">${fmt(totImp)} F</div><div class="econo-lbl">Impayés</div></div>`:''}
-  </div>`;
+  </div>
+  ${GP_ROLE==='admin'&&joursV.length?`<details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+    <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">📅 Détail par jour${vtFiltPdv?' · '+vtFiltPdv:''} (${joursV.length} jour(s))</summary>
+    <table class="tbl" style="font-size:11px;margin-top:6px"><thead><tr><th>Jour</th><th class="num">Ventes</th><th class="num">Kg</th><th class="num">CA</th></tr></thead><tbody>
+      ${joursV.map(([j,o])=>`<tr><td>${j}</td><td class="num">${o.n}</td><td class="num">${fmtKg(o.kg)}</td><td class="num" style="color:var(--gold)">${fmt(o.ca)} F</td></tr>`).join('')}
+      <tr style="font-weight:700;background:rgba(22,163,74,.08)"><td>TOTAL</td><td class="num">${V.length}</td><td class="num">${fmtKg(totKg)}</td><td class="num" style="color:var(--gold)">${fmt(totCA)} F</td></tr>
+    </tbody></table></details>`:''}`;
   document.getElementById('ventes-liste').innerHTML=V.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Client</th><th>Formule</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Total</th>':''}<th>Statut</th><th></th></tr></thead><tbody>
     ${V.map(v=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${v.date}</td>
@@ -1755,12 +1775,26 @@ async function renderDep(){
   const depPvEl=document.getElementById('dep_pv');
   if(depPvEl && GP_ROLE!=='admin'){ depPvEl.value=GP_POINT_VENTE||'Production'; depPvEl.readOnly=true; depPvEl.style.opacity='.7'; }
   const filtMois=document.getElementById('dep-filtre-mois')?.value||thisMonth();
-  let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(100);
+  // Filtre par point de vente (admin) — peuplé une fois
+  const filtPdvEl=document.getElementById('dep-filtre-pdv');
+  if(filtPdvEl && GP_ROLE==='admin' && filtPdvEl.options.length<=1){
+    const{data:pdvs}=await SB.from('gp_points_vente').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom');
+    const noms=['Production',...((pdvs||[]).map(p=>p.nom))];
+    filtPdvEl.innerHTML='<option value="">Tous les PDV</option>'+noms.map(n=>`<option value="${n}">${n}</option>`).join('');
+  }
+  const filtPdv = (GP_ROLE==='admin') ? (filtPdvEl?.value||'') : '';
+  let q=SB.from('gp_depenses').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(1000);
   if(GP_ROLE!=='admin') q=q.eq('point_vente', GP_POINT_VENTE||'Production'); // ne voit que SES dépenses
+  else if(filtPdv==='Production') q=q.or('point_vente.is.null,point_vente.eq.Production'); // Production = legacy null inclus
+  else if(filtPdv) q=q.eq('point_vente',filtPdv);
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',finMois(filtMois));
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  // Détail par jour (somme des dépenses par date)
+  const parJour={};
+  D.forEach(d=>{const k=d.date||'?'; parJour[k]=(parJour[k]||0)+Number(d.montant||0);});
+  const joursTri=Object.entries(parJour).sort((a,b)=>b[0].localeCompare(a[0]));
 
   // Achats MP de la période (LECTURE SEULE) : déjà comptés via le module Achats.
   // Affichés ici pour que la secrétaire voie qu'ils sont pris en compte → évite la re-saisie en dépense (double comptage).
@@ -1789,7 +1823,13 @@ async function renderDep(){
 
   document.getElementById('dep-liste').innerHTML=`
     ${peutVoirMP?mpBanner:''}
-    ${GP_ROLE==='admin'?`<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Total dépenses (hors achats MP) : <strong style="color:var(--red)">${fmt(total)} FCFA</strong></div>`:''}
+    ${GP_ROLE==='admin'?`<div style="font-size:12px;color:var(--textm);margin-bottom:8px">Total dépenses${filtPdv?` · <b style="color:var(--g6)">${filtPdv}</b>`:''} (hors achats MP) : <strong style="color:var(--red)">${fmt(total)} FCFA</strong> — ${D.length} dépense(s)</div>
+    ${joursTri.length?`<details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+      <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">📅 Détail par jour (${joursTri.length} jour(s))</summary>
+      <table class="tbl" style="font-size:11px;margin-top:6px"><thead><tr><th>Jour</th><th class="num">Total dépenses</th></tr></thead><tbody>
+        ${joursTri.map(([j,m])=>`<tr><td>${j}</td><td class="num" style="color:var(--red)">${fmt(m)} F</td></tr>`).join('')}
+        <tr style="font-weight:700;background:rgba(239,68,68,.08)"><td>TOTAL</td><td class="num" style="color:var(--red)">${fmt(total)} F</td></tr>
+      </tbody></table></details>`:''}`:''}
     <div style="overflow-x:auto">${D.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Bénéficiaire</th>${GP_ROLE==='admin'?'<th class="num">Montant</th>':''}<th></th></tr></thead><tbody>
     ${D.map(d=>`<tr>
       <td style="font-size:10px">${d.date}</td>
