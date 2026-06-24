@@ -941,6 +941,7 @@
   <div class="page-sub">Résumé complet de la journée</div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap" class="no-print">
     <div><label class="lbl">Date</label><input type="date" id="bj_date" onchange="renderBilanJour()" style="width:auto"></div>
+    <div><label class="lbl">Caisse</label><select id="bj_caisse" onchange="renderBilanJour()" style="width:auto"></select></div>
     <button class="btn btn-print" onclick="window.print()">🖨️ Imprimer</button>
   </div>
   <div class="g4" id="bj-kpis" style="margin-bottom:14px"></div>
@@ -957,6 +958,10 @@
   <div class="card">
     <div class="card-title"><div class="ct-left"><span>📊 Bilan du jour</span></div></div>
     <div id="bj-bilan"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="ct-left"><span>🗂️ Historique des clôtures</span></div></div>
+    <div id="bj-clotures"></div>
   </div>
 </div>
 
