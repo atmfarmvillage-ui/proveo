@@ -503,10 +503,9 @@ async function onScanQRSuccess(decodedText){
     document.getElementById('sqr-err').textContent='Cette carte appartient à une autre provenderie.';
     return;
   }
-  // Vérification stricte en base
-  const{data:client, error}=await SB.from('gp_clients').select('*')
-    .eq('id', clientId).eq('admin_id', GP_ADMIN_ID).eq('qr_token', token)
-    .maybeSingle();
+  // Résolution via RPC security definer : la carte est valable dans TOUS les PDV du même compte
+  // (contourne le cloisonnement PDV en lecture, mais reste limité au compte de l'appelant).
+  const{data:client, error}=await SB.rpc('resoudre_client_qr', { p_token: token });
   if(error || !client){
     document.getElementById('sqr-err').textContent='Carte introuvable ou expirée. Régénérez la carte depuis la fiche client.';
     return;
