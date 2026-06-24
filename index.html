@@ -138,6 +138,7 @@
 
   <!-- TABLEAU DE BORD -->
   <div class="nav-item active" onclick="showGP('dashboard')" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+  <div class="nav-item" onclick="showGP('alertes')" data-page="alertes" data-roles="admin,secretaire"><span class="nav-icon">🔔</span>Alertes</div>
 
   <!-- VENTES & CLIENTS (en première position après Dashboard — usage quotidien) -->
   <div class="nav-sect">💰 Ventes & Clients</div>
@@ -185,6 +186,7 @@
   <div class="nav-sect">📊 Rapports</div>
   <div class="nav-item" onclick="showGP('bilan_jour')" data-page="bilan_jour" data-roles="admin,secretaire,daf"><span class="nav-icon">📅</span>Bilan journalier</div>
   <div class="nav-item admin-only" onclick="showGP('bilan_avance')" data-page="bilan_avance"><span class="nav-icon">📊</span>Bilan & Rapports</div>
+  <div class="nav-item admin-only" onclick="showGP('comparatif')" data-page="comparatif"><span class="nav-icon">🏪</span>Comparatif PDV</div>
 
   <!-- DIRECTION STRATÉGIQUE -->
   <div class="nav-sect">🎯 Direction</div>
@@ -2318,6 +2320,30 @@
 </div>
 
 <!-- SALAIRES -->
+<!-- CENTRE D'ALERTES -->
+<div class="page" id="page-alertes">
+  <div class="page-title">Centre d'alertes</div>
+  <div class="page-sub">Livraisons à confirmer · Péremption véto · Stock bas · Impayés</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-out btn-sm" onclick="renderAlertes()">🔄 Actualiser</button>
+    <button class="btn btn-g btn-sm" id="alertes-push-btn" style="display:none" onclick="pousserAlertes()">🔔 Notifier l'équipe</button>
+  </div>
+  <div class="g4" id="alertes-head" style="margin-bottom:14px"></div>
+  <div id="alertes-content"></div>
+</div>
+
+<!-- COMPARATIF PDV (admin) -->
+<div class="page" id="page-comparatif">
+  <div class="page-title">Comparatif PDV</div>
+  <div class="page-sub">Performance par point de vente · ventes, dépenses, résultat, alertes stock</div>
+  <div style="display:flex;gap:10px;align-items:end;margin-bottom:12px">
+    <div class="fr" style="max-width:200px;margin:0"><label>Mois</label><input type="month" id="comp-mois" onchange="renderComparatifPDV()"></div>
+    <button class="btn btn-out btn-sm" onclick="renderComparatifPDV()">🔄 Actualiser</button>
+  </div>
+  <div class="g4" id="comp-kpis" style="margin-bottom:14px"></div>
+  <div class="card"><div id="comp-table"></div></div>
+</div>
+
 <!-- PRODUITS VÉTO -->
 <div class="page" id="page-veto">
   <div class="page-title">Produits Véto</div>
@@ -3027,6 +3053,7 @@ try{
 <script src="js/paiements_mp.js?v=2.24.20"></script>
 <script src="js/stock_pf.js?v=2.24.20"></script>
 <script src="js/veto.js?v=2.24.20"></script>
+<script src="js/alertes.js?v=2.24.20"></script>
 <script src="js/bilanss.js?v=2.24.20"></script>
 <script src="js/benefices.js?v=2.24.20"></script>
 <script src="js/messages_pdv.js?v=2.24.20"></script>
