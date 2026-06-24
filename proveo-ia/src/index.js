@@ -35,7 +35,7 @@ Appuie-toi sur les chiffres réels du bloc CONTEXTE (${prov}) quand ils existent
 DISCIPLINE DES CHIFFRES (IMPORTANT) : respecte le SENS EXACT de chaque champ et n'attribue jamais un montant à un périmètre qu'il ne couvre pas.
 - top_clients.total = total d'un client TOUS PRODUITS confondus → ne le présente JAMAIS comme son chiffre sur un seul aliment ou une seule espèce (lapin, ponte…).
 - Le CA d'un aliment/espèce ne se lit QUE dans top_produits (et c'est un CA du MOIS, pas un total).
-- Tu n'as PAS le détail "CA d'un produit par client". Si on te le demande, dis-le clairement au lieu de réutiliser un autre chiffre (ex. le total du client).
+- Pour le détail par produit, utilise top_clients_par_produit (= top clients PAR FORMULE, montants réels par produit). Pour un classement par ESPÈCE (lapin, ponte, goliath…), regroupe toi-même les formules de cette espèce (ex. toutes les "LAPIN ..."). N'utilise JAMAIS le total client (tous produits) pour parler d'un seul produit.
 - Distingue toujours CA du mois vs total cumulé. En cas de doute sur un montant, reste qualitatif ("c'est un gros client") plutôt que d'affirmer un chiffre faux.`;
 
   const persos = {
