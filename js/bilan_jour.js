@@ -202,6 +202,7 @@ async function saveCloture(){
 
 // Historique des clôtures (RLS : secrétaire = les siennes ; admin = toutes → vue des écarts)
 async function renderClotures(){
+  if(typeof renderEcartsCaisse==='function') renderEcartsCaisse(); // synthèse des écarts par PDV
   const el=document.getElementById('bj-clotures');
   if(!el)return;
   const{data}=await SB.from('gp_clotures').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(40);
@@ -220,4 +221,33 @@ async function renderClotures(){
         <td style="font-size:10px;color:var(--textm)">${c.valide_par_nom||'—'}</td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
+}
+
+// Synthèse des écarts de clôture par PDV (cumul, manquants/excédents, dernier, statut)
+async function renderEcartsCaisse(){
+  const el=document.getElementById('bj-ecarts-synthese');
+  if(!el) return;
+  const{data}=await SB.from('gp_clotures').select('point_vente,date,ecart')
+    .eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(1000);
+  const C=data||[];
+  if(!C.length){ el.innerHTML='<div style="color:var(--textm);font-size:12px">Aucune clôture pour le moment — les écarts apparaîtront ici dès que des caisses seront clôturées.</div>'; return; }
+  const byPDV={};
+  C.forEach(c=>{const k=c.point_vente||'Production'; if(!byPDV[k])byPDV[k]={nb:0,total:0,manq:0,exc:0,dernier:0,dDate:null}; const o=byPDV[k]; const e=Number(c.ecart||0); o.nb++; o.total+=e; if(e<-0.5)o.manq++; else if(e>0.5)o.exc++; if(!o.dDate||c.date>o.dDate){o.dDate=c.date;o.dernier=e;}});
+  const rows=Object.entries(byPDV).sort((a,b)=>a[1].total-b[1].total); // pires (manquants) en premier
+  const badge=(n)=>(typeof pvBadgeHtml==='function')?pvBadgeHtml(n):('📍 '+n);
+  el.innerHTML=`<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+    <thead><tr><th>Point de vente</th><th class="num">Clôtures</th><th class="num">Écart cumulé</th><th class="num">Manquants</th><th class="num">Excédents</th><th class="num">Dernier écart</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(([nom,o])=>{
+      const st = (o.total<-1000 || o.manq>=3) ? '🔴 À surveiller' : ((Math.abs(o.total)<1 && o.manq===0) ? '🟢 Sain' : '🟡 Écarts');
+      return `<tr>
+        <td>${badge(nom)}</td>
+        <td class="num">${o.nb}</td>
+        <td class="num" style="font-weight:700;color:${o.total<-0.5?'var(--red)':o.total>0.5?'var(--gold)':'var(--green)'}">${o.total>0?'+'+fmt(o.total):fmt(o.total)} F</td>
+        <td class="num" style="color:var(--red)">${o.manq}</td>
+        <td class="num" style="color:var(--gold)">${o.exc}</td>
+        <td class="num" style="color:${o.dernier<-0.5?'var(--red)':o.dernier>0.5?'var(--gold)':'var(--green)'}">${o.dernier>0?'+'+fmt(o.dernier):fmt(o.dernier)} <span style="font-size:9px;color:var(--textm)">(${o.dDate||''})</span></td>
+        <td style="font-size:10px">${st}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">Écart cumulé négatif = manques récurrents (à investiguer). Liste triée des plus problématiques aux plus saines.</div>`;
 }
