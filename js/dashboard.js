@@ -16,10 +16,13 @@ async function renderComparatifPDV(){
   const debut=m+'-01', fin=_finMois(m);
 
   const safe=async(q)=>{try{return await q;}catch(e){return {data:[]};}};
-  const[{data:ventes},{data:depenses},{data:stock}]=await Promise.all([
+  const[{data:ventes},{data:depenses},{data:stock},{data:lots},{data:vlignes},{data:salaires}]=await Promise.all([
     safe(SB.from('gp_ventes').select('point_vente,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)),
     safe(SB.from('gp_depenses').select('point_vente,montant').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)),
     safe(SB.from('gp_stock_produits_pdv').select('pdv_nom,qte_disponible,seuil_critique').eq('admin_id',GP_ADMIN_ID)),
+    safe(SB.from('gp_lots').select('formule_nom,cout_total,nb_sacs,poids_sac,qte_produite').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)),
+    safe(SB.from('gp_ventes_lignes').select('formule_nom,quantite,gp_ventes!inner(point_vente,date,deleted_at)').eq('admin_id',GP_ADMIN_ID).gte('gp_ventes.date',debut).lte('gp_ventes.date',fin).is('gp_ventes.deleted_at',null)),
+    safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
   ]);
 
   const byPDV={};
@@ -42,6 +45,45 @@ async function renderComparatifPDV(){
   if(!lignes.length){ tbl.innerHTML='<div style="color:var(--textm);font-size:12px;padding:10px">Aucune donnée sur la période.</div>'; return; }
 
   const badge=(nom)=> (typeof pvBadgeHtml==='function')?pvBadgeHtml(nom):('📍 '+nom);
+
+  // ── Compte de résultat par PDV : COGS = kg vendus × coût de production/kg ──
+  const lotsByF={};
+  (lots||[]).forEach(l=>{const f=l.formule_nom||'—'; if(!lotsByF[f])lotsByF[f]={cout:0,kg:0}; lotsByF[f].cout+=Number(l.cout_total||0); lotsByF[f].kg+=(Number(l.nb_sacs||0)*Number(l.poids_sac||25))||Number(l.qte_produite||0);});
+  const coutKg={}; Object.entries(lotsByF).forEach(([f,o])=>{coutKg[f]=o.kg>0?o.cout/o.kg:0;});
+  const cogs={};
+  (vlignes||[]).forEach(l=>{const pdv=(l.gp_ventes&&l.gp_ventes.point_vente)||'Production'; cogs[pdv]=(cogs[pdv]||0)+Number(l.quantite||0)*(coutKg[l.formule_nom]||0);});
+  const totalSal=(salaires||[]).reduce((s,x)=>s+Number(x.montant||0),0);
+  let pCA=0,pCOGS=0,pDep=0,pRes=0;
+  const plLignes=lignes.map(([nom,o])=>{const cg=Math.round(cogs[nom]||0); const marge=o.ca-cg; const res=marge-o.dep; pCA+=o.ca;pCOGS+=cg;pDep+=o.dep;pRes+=res; return {nom,ca:o.ca,cogs:cg,marge,dep:o.dep,res};});
+  const netGlobal=pRes-totalSal;
+  const plHtml=`
+    <div style="font-weight:700;color:var(--g6);margin:18px 0 8px;font-size:13px">📊 Compte de résultat par PDV — ${m}</div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+      <thead><tr><th>Point de vente</th><th class="num">CA</th><th class="num">Coût produits</th><th class="num">Marge brute</th><th class="num">Dépenses</th><th class="num">Résultat net</th></tr></thead>
+      <tbody>
+      ${plLignes.map(p=>`<tr>
+        <td>${badge(p.nom)}</td>
+        <td class="num" style="color:var(--gold)">${fmt(p.ca)}</td>
+        <td class="num" style="color:var(--red)">${fmt(p.cogs)}</td>
+        <td class="num">${fmt(p.marge)}</td>
+        <td class="num" style="color:var(--red)">${fmt(p.dep)}</td>
+        <td class="num" style="font-weight:700;color:${p.res>=0?'var(--green)':'var(--red)'}">${fmt(p.res)}</td>
+      </tr>`).join('')}
+      <tr style="background:rgba(22,163,74,.06);font-weight:700">
+        <td>TOTAL PDV</td>
+        <td class="num" style="color:var(--gold)">${fmt(pCA)}</td>
+        <td class="num" style="color:var(--red)">${fmt(pCOGS)}</td>
+        <td class="num">${fmt(pCA-pCOGS)}</td>
+        <td class="num" style="color:var(--red)">${fmt(pDep)}</td>
+        <td class="num" style="color:${pRes>=0?'var(--green)':'var(--red)'}">${fmt(pRes)}</td>
+      </tr>
+      </tbody></table></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px;padding:10px 14px;background:var(--card2);border-radius:10px">
+      <span style="font-size:12px;color:var(--textm)">Charges communes (siège) · salaires : <b style="color:var(--red)">${fmt(totalSal)} F</b> <span style="font-size:10px">(non réparties sur les PDV)</span></span>
+      <span style="font-size:13px;color:var(--textm)">Résultat net global : <b style="font-size:20px;color:${netGlobal>=0?'var(--green)':'var(--red)'}">${fmt(netGlobal)} F</b></span>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">Coût produits = kg vendus × coût de production/kg (du mois). Net global = Σ résultats PDV − salaires.</div>`;
+
   tbl.innerHTML=`<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
     <thead><tr><th>Point de vente</th><th class="num">Ventes (CA)</th><th class="num">Encaissé</th><th class="num">Dépenses</th><th class="num">Résultat*</th><th class="num">Nb ventes</th><th class="num">Alertes stock</th></tr></thead>
     <tbody>
@@ -64,7 +106,8 @@ async function renderComparatifPDV(){
       <td class="num">${tot.alertes}</td>
     </tr>
     </tbody></table></div>
-    <div style="font-size:10px;color:var(--textm);margin-top:8px">* Résultat = Encaissé − Dépenses (résultat de caisse, hors coût matière). Pour la marge nette réelle (MP consommée), voir Bilan & Rapports.</div>`;
+    <div style="font-size:10px;color:var(--textm);margin-top:8px">* Résultat caisse = Encaissé − Dépenses (cash). Le compte de résultat ci-dessous intègre le coût des produits.</div>
+    ${plHtml}`;
 }
 
 // ── DASHBOARD ──────────────────────────────────────
