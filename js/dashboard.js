@@ -29,6 +29,7 @@ async function renderComparatifPDV(){
   (stock||[]).forEach(s=>{const o=get(s.pdv_nom); if(Number(s.qte_disponible||0)<=Number(s.seuil_critique||0)) o.alertes++;});
 
   const lignes=Object.entries(byPDV).sort((a,b)=>b[1].ca-a[1].ca);
+  window._compExport={lignes, mois:m}; // pour l'export PDF/Excel
   const tot=lignes.reduce((t,[,o])=>{t.ca+=o.ca;t.enc+=o.enc;t.dep+=o.dep;t.nb+=o.nb;t.alertes+=o.alertes;return t;},{ca:0,enc:0,dep:0,nb:0,alertes:0});
 
   const kpis=document.getElementById('comp-kpis');

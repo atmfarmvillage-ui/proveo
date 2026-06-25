@@ -1708,6 +1708,7 @@ async function renderVentes(){
   if(filtStatut)q=q.eq('statut_paiement',filtStatut);
   const{data}=await q;
   const V=data||[];
+  window._ventesExport={rows:V, label:r.label, pdv:vtFiltPdv}; // pour l'export PDF/Excel
   // Totaux de la période
   const totCA=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
   const totKg=V.reduce((s,v)=>s+Number(v.qte_vendue||0),0);
@@ -1808,6 +1809,7 @@ async function renderDep(){
   const{data}=await q;
   const D=data||[];
   const total=D.reduce((s,d)=>s+Number(d.montant||0),0);
+  window._depExport={rows:D, mois:filtMois, pdv:filtPdv, total}; // pour l'export PDF/Excel
   // Détail par jour (somme des dépenses par date)
   const parJour={};
   D.forEach(d=>{const k=d.date||'?'; parJour[k]=(parJour[k]||0)+Number(d.montant||0);});
