@@ -57,6 +57,16 @@ function exportComparatif(type){
   else gpExportExcel('Comparatif PDV', cols, rows, fn+'.xlsx');
 }
 
+// ── BILAN CONSOLIDÉ RÉSEAU ────────────────────────
+function exportBilanReseau(type){
+  const E=window._bilanReseau;
+  if(!E||!E.rows?.length){ notify('Ouvre le Comparatif PDV d\'abord','r'); return; }
+  const cols=[{label:'Poste',key:'poste'},{label:'Montant (F)',render:r=>fmt(r.montant)}];
+  const fn=`bilan_reseau_${E.mois}`;
+  if(type==='pdf') gpExportPDF('Bilan consolidé réseau', cols, E.rows, fn+'.pdf', 'Période '+E.mois+' · Marge nette '+E.margePct+'%');
+  else gpExportExcel('Bilan réseau', cols, E.rows, fn+'.xlsx');
+}
+
 // ── VENTES ────────────────────────────────────────
 function exportVentes(type){
   const E=window._ventesExport;
