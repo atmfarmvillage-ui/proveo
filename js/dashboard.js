@@ -84,7 +84,37 @@ async function renderComparatifPDV(){
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:6px">Coût produits = kg vendus × coût de production/kg (du mois). Net global = Σ résultats PDV − salaires.</div>`;
 
-  tbl.innerHTML=`<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+  // ── BILAN CONSOLIDÉ RÉSEAU (vue groupe) ──
+  const margeNettePct = pCA>0 ? Math.round(netGlobal/pCA*100) : 0;
+  window._bilanReseau={mois:m, margePct:margeNettePct, rows:[
+    {poste:"Chiffre d'affaires réseau", montant:pCA},
+    {poste:"Coût des produits vendus", montant:-pCOGS},
+    {poste:"= Marge brute", montant:pCA-pCOGS},
+    {poste:"Dépenses (tous PDV)", montant:-pDep},
+    {poste:"Salaires (siège)", montant:-totalSal},
+    {poste:"= Bénéfice net réseau", montant:netGlobal},
+  ]};
+  const bilanHtml=`
+    <div style="border:1px solid var(--gold);background:rgba(232,197,71,.06);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <span style="font-weight:700;color:var(--g6);font-size:13px">🌐 Bilan consolidé réseau — ${m}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn btn-out btn-sm" onclick="exportBilanReseau('pdf')" style="font-size:10px;padding:3px 8px">📄 PDF</button>
+          <button class="btn btn-out btn-sm" onclick="exportBilanReseau('excel')" style="font-size:10px;padding:3px 8px">📊 Excel</button>
+        </span>
+      </div>
+      <table class="tbl" style="font-size:12px"><tbody>
+        <tr><td>Chiffre d'affaires réseau</td><td class="num" style="color:var(--gold)">${fmt(pCA)} F</td></tr>
+        <tr><td>− Coût des produits vendus</td><td class="num" style="color:var(--red)">${fmt(pCOGS)} F</td></tr>
+        <tr style="font-weight:700"><td>= Marge brute</td><td class="num">${fmt(pCA-pCOGS)} F</td></tr>
+        <tr><td>− Dépenses (tous PDV)</td><td class="num" style="color:var(--red)">${fmt(pDep)} F</td></tr>
+        <tr><td>− Salaires (siège)</td><td class="num" style="color:var(--red)">${fmt(totalSal)} F</td></tr>
+        <tr style="font-weight:800;background:rgba(22,163,74,.08)"><td>= Bénéfice net réseau</td><td class="num" style="font-size:16px;color:${netGlobal>=0?'var(--green)':'var(--red)'}">${fmt(netGlobal)} F</td></tr>
+      </tbody></table>
+      <div style="font-size:11px;color:var(--textm);margin-top:6px">Marge nette : <b>${margeNettePct}%</b> du CA réseau</div>
+    </div>`;
+
+  tbl.innerHTML=`${bilanHtml}<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
     <thead><tr><th>Point de vente</th><th class="num">Ventes (CA)</th><th class="num">Encaissé</th><th class="num">Dépenses</th><th class="num">Résultat*</th><th class="num">Nb ventes</th><th class="num">Alertes stock</th></tr></thead>
     <tbody>
     ${lignes.map(([nom,o])=>{const res=o.enc-o.dep; return `<tr>
