@@ -954,6 +954,23 @@ async function saveVente(){
   const client=GP_CLIENTS.find(c=>c.id===clientId);
   const typeClient=client?.type_client||document.getElementById('vt_cl_type')?.value||'detail';
 
+  // ── PLAFOND DE CRÉDIT (paramétrable par l'admin) ──
+  if(GP_CONFIG?.credit_plafond_actif && clientId && (total - paye) > 0){
+    const plafond = Number(GP_CONFIG.credit_plafond_montant||0);
+    if(plafond > 0){
+      const{data:_dts}=await SB.from('gp_ventes').select('montant_total,montant_paye')
+        .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('client_id',clientId)
+        .in('statut_paiement',['impaye','partiel']);
+      const detteActuelle=(_dts||[]).reduce((s,v)=>s+Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
+      const nouvelleDette=detteActuelle+(total-paye);
+      if(nouvelleDette>plafond){
+        const msg=`🚫 Plafond de crédit dépassé pour ${client?.nom||'ce client'}.\nDette actuelle : ${fmt(detteActuelle)} F\n+ ce crédit : ${fmt(total-paye)} F\n= ${fmt(nouvelleDette)} F (plafond : ${fmt(plafond)} F).`;
+        if(GP_ROLE==='admin' || GP_EST_GERANT){ if(!confirm(msg+'\n\nForcer la vente quand même ?')) return; }
+        else { err.textContent=msg+' → encaisse davantage ou réduis la quantité.'; if(typeof notify==='function') notify('🚫 Plafond de crédit dépassé','r'); return; }
+      }
+    }
+  }
+
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,
     client_id:clientId||null,
