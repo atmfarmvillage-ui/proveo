@@ -475,7 +475,7 @@ var PAGE_RENDERERS = {
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
   licence:       renderPageLicenceClient,
-  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); },
+  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); },
   directeur:     function(){
     const el=document.getElementById('dir-mois');
     if(el&&!el.value)el.value=thisMonth();

@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.24.26">
+<link rel="stylesheet" href="css/style.css?v=2.24.27">
 <style>
 /* === Lisibilité : écritures agrandies partout, SAUF les grands titres === */
 html,body{font-size:16px}
@@ -2737,6 +2737,20 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           </div>
         </div>
       </div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>💳 Plafond de crédit clients</span></div></div>
+        <div style="font-size:12px;color:var(--textm)">
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer">
+            <input type="checkbox" id="cfg_credit_actif" style="width:18px;height:18px;accent-color:var(--gold)">
+            Activer le contrôle du plafond de crédit
+          </label>
+          <div class="fg2">
+            <div class="fr"><label>Plafond par client (FCFA)</label><input type="number" id="cfg_credit_montant" placeholder="50000" min="0"></div>
+            <button class="btn btn-g btn-sm" style="align-self:end;margin-bottom:10px" onclick="saveCreditPlafond()">✓ Enregistrer</button>
+          </div>
+          <div style="font-size:10px;color:var(--textm)">Si activé : une vente à crédit est bloquée quand la dette du client dépasserait ce plafond (l'admin peut forcer).</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -3061,48 +3075,48 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.26"></script>
-<script src="js/print.js?v=2.24.26"></script>
-<script src="js/dashboard.js?v=2.24.26"></script>
-<script src="js/stock.js?v=2.24.26"></script>
-<script src="js/matieres.js?v=2.24.26"></script>
-<script src="js/production.js?v=2.24.26"></script>
-<script src="js/ventes.js?v=2.24.26"></script>
-<script src="js/clients.js?v=2.24.26"></script>
-<script src="js/admin.js?v=2.24.26"></script>
-<script src="js/bilan_jour.js?v=2.24.26"></script>
-<script src="js/caisse_extras.js?v=2.24.26"></script>
-<script src="js/corbeille.js?v=2.24.26"></script>
-<script src="js/dashboard_drill.js?v=2.24.26"></script>
-<script src="js/fournisseurs.js?v=2.24.26"></script>
-<script src="js/achats.js?v=2.24.26"></script>
-<script src="js/caisse.js?v=2.24.26"></script>
-<script src="js/inventaire_physique.js?v=2.24.26"></script>
-<script src="js/distribution.js?v=2.24.26"></script>
-<script src="js/salaires.js?v=2.24.26"></script>
-<script src="js/rapports.js?v=2.24.26"></script>
-<script src="js/dettes.js?v=2.24.26"></script>
-<script src="js/chat.js?v=2.24.26"></script>
-<script src="js/notifications.js?v=2.24.26"></script>
-<script src="js/qr_clients.js?v=2.24.26"></script>
-<script src="js/push.js?v=2.24.26"></script>
-<script src="js/reversements.js?v=2.24.26"></script>
-<script src="js/paiements_mp.js?v=2.24.26"></script>
-<script src="js/stock_pf.js?v=2.24.26"></script>
-<script src="js/veto.js?v=2.24.26"></script>
-<script src="js/alertes.js?v=2.24.26"></script>
-<script src="js/bilanss.js?v=2.24.26"></script>
-<script src="js/benefices.js?v=2.24.26"></script>
-<script src="js/messages_pdv.js?v=2.24.26"></script>
-<script src="js/directeur.js?v=2.24.26"></script>
-<script src="js/licences.js?v=2.24.26"></script>
+<script src="js/config.js?v=2.24.27"></script>
+<script src="js/print.js?v=2.24.27"></script>
+<script src="js/dashboard.js?v=2.24.27"></script>
+<script src="js/stock.js?v=2.24.27"></script>
+<script src="js/matieres.js?v=2.24.27"></script>
+<script src="js/production.js?v=2.24.27"></script>
+<script src="js/ventes.js?v=2.24.27"></script>
+<script src="js/clients.js?v=2.24.27"></script>
+<script src="js/admin.js?v=2.24.27"></script>
+<script src="js/bilan_jour.js?v=2.24.27"></script>
+<script src="js/caisse_extras.js?v=2.24.27"></script>
+<script src="js/corbeille.js?v=2.24.27"></script>
+<script src="js/dashboard_drill.js?v=2.24.27"></script>
+<script src="js/fournisseurs.js?v=2.24.27"></script>
+<script src="js/achats.js?v=2.24.27"></script>
+<script src="js/caisse.js?v=2.24.27"></script>
+<script src="js/inventaire_physique.js?v=2.24.27"></script>
+<script src="js/distribution.js?v=2.24.27"></script>
+<script src="js/salaires.js?v=2.24.27"></script>
+<script src="js/rapports.js?v=2.24.27"></script>
+<script src="js/dettes.js?v=2.24.27"></script>
+<script src="js/chat.js?v=2.24.27"></script>
+<script src="js/notifications.js?v=2.24.27"></script>
+<script src="js/qr_clients.js?v=2.24.27"></script>
+<script src="js/push.js?v=2.24.27"></script>
+<script src="js/reversements.js?v=2.24.27"></script>
+<script src="js/paiements_mp.js?v=2.24.27"></script>
+<script src="js/stock_pf.js?v=2.24.27"></script>
+<script src="js/veto.js?v=2.24.27"></script>
+<script src="js/alertes.js?v=2.24.27"></script>
+<script src="js/bilanss.js?v=2.24.27"></script>
+<script src="js/benefices.js?v=2.24.27"></script>
+<script src="js/messages_pdv.js?v=2.24.27"></script>
+<script src="js/directeur.js?v=2.24.27"></script>
+<script src="js/licences.js?v=2.24.27"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.26"></script>
-<script src="js/reservations_admin.js?v=2.24.26"></script>
-<script src="js/strategie_mp.js?v=2.24.26"></script>
-<script src="js/reappro.js?v=2.24.26"></script>
-<script src="js/ia.js?v=2.24.26"></script>
-<script src="js/marketing.js?v=2.24.26"></script>
+<script src="js/auth.js?v=2.24.27"></script>
+<script src="js/reservations_admin.js?v=2.24.27"></script>
+<script src="js/strategie_mp.js?v=2.24.27"></script>
+<script src="js/reappro.js?v=2.24.27"></script>
+<script src="js/ia.js?v=2.24.27"></script>
+<script src="js/marketing.js?v=2.24.27"></script>
 
 <script>
 // Enregistrement Service Worker PWA

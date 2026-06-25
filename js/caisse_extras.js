@@ -31,6 +31,24 @@ async function remplirSelectCaisses(selectId, optionVide){
   if(curId && !C.some(c=>c.id===curId)) sel.value = C[0]?.id || '';
 }
 
+// ── PLAFOND DE CRÉDIT CLIENTS (config admin) ──
+function loadCreditPlafond(){
+  const a=document.getElementById('cfg_credit_actif');
+  const m=document.getElementById('cfg_credit_montant');
+  if(a) a.checked = !!(typeof GP_CONFIG!=='undefined' && GP_CONFIG && GP_CONFIG.credit_plafond_actif);
+  if(m && typeof GP_CONFIG!=='undefined' && GP_CONFIG && GP_CONFIG.credit_plafond_montant) m.value = GP_CONFIG.credit_plafond_montant;
+}
+async function saveCreditPlafond(){
+  const actif=document.getElementById('cfg_credit_actif')?.checked||false;
+  const montant=+document.getElementById('cfg_credit_montant')?.value||0;
+  const{error}=await SB.from('gp_config').upsert(
+    {user_id:GP_ADMIN_ID, credit_plafond_actif:actif, credit_plafond_montant:montant},
+    {onConflict:'user_id'});
+  if(error){ notify('Erreur: '+error.message,'r'); return; }
+  if(typeof GP_CONFIG!=='undefined' && GP_CONFIG){ GP_CONFIG.credit_plafond_actif=actif; GP_CONFIG.credit_plafond_montant=montant; }
+  notify(`Plafond de crédit ${actif?'activé ('+fmt(montant)+' F)':'désactivé'} ✓`,'gold');
+}
+
 // Pré-sélectionne, dans un select de caisse, la caisse du PDV connecté (ou siège pour l'admin)
 async function preselectCaissePDV(selectId){
   const sel=document.getElementById(selectId);
