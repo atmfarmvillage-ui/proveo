@@ -458,6 +458,10 @@
       const saved = localStorage.getItem(LS_KEY);
       if(saved && saved.length > 5){
         location.replace(location.pathname + saved);
+        // Lien court (#token) : ne changer QUE le fragment ne recharge pas la page
+        // → le token ne serait jamais décodé (cas : app installée lancée depuis l'icône).
+        // On force le rechargement (le SW resert /carte depuis le cache, marche hors-ligne).
+        if(!saved.includes('?')) location.reload();
         return;
       }
     }catch(e){}
