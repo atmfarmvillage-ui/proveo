@@ -1,5 +1,5 @@
-// Service Worker mini-app Carte SADARI v2.7.0
-const CACHE = 'sadari-carte-v19';
+// Service Worker mini-app Carte SADARI v2.8.0
+const CACHE = 'sadari-carte-v20';
 const ASSETS = [
   '/carte',
   '/manifest-carte.json',
@@ -12,8 +12,10 @@ const ASSETS = [
 
 self.addEventListener('install', e=>{
   self.skipWaiting();
+  // Mise en cache INDIVIDUELLE : si un CDN (QRious/Leaflet) échoue à l'install,
+  // les autres assets restent cachés (addAll est atomique → tout ou rien, à éviter).
   e.waitUntil(
-    caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{}))
+    caches.open(CACHE).then(c=>Promise.all(ASSETS.map(u=>c.add(u).catch(()=>{}))))
   );
 });
 
