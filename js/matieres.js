@@ -56,8 +56,9 @@ async function renderMatieresPremieresPage(){
         const seuil=i.seuil_alerte||200;
         const statut=qteStock<=0?'❌ Épuisé':qteStock<seuil*0.5?'🔴 Critique':qteStock<seuil?'🟡 Bas':'🟢 OK';
         const cls=qteStock<=0?'bad':qteStock<seuil*0.5?'bad':qteStock<seuil?'warn':'good';
-        return `<tr>
-          <td style="font-weight:600">${i.nom}</td>
+        const inactif=i.actif===false;
+        return `<tr style="${inactif?'opacity:.5':''}">
+          <td style="font-weight:600">${i.nom}${inactif?' <span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}</td>
 
           <!-- Prix inline edit -->
           <td class="num">
@@ -87,7 +88,12 @@ async function renderMatieresPremieresPage(){
           <td class="num" style="color:var(--textm)">${i.proteines||'—'}%</td>
           <td class="num" style="color:var(--textm)">${i.energie||'—'}</td>
           <td><span class="badge ${qteStock<=0?'bdg-r':qteStock<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${statut}</span></td>
-          <td><button class="btn btn-red btn-sm" onclick="deleteMPPage('${i.id}','${i.nom.replace(/'/g,'')}')">✕</button></td>
+          <td><div style="display:flex;gap:3px;justify-content:flex-end">
+            ${inactif
+              ? `<button class="btn btn-g btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',true)" title="Réactiver" style="padding:2px 6px;font-size:10px">♻️</button>`
+              : `<button class="btn btn-out btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',false)" title="Désactiver" style="padding:2px 6px;font-size:10px">🚫</button>`}
+            ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMPPage('${i.id}','${i.nom.replace(/'/g,'')}')" title="Supprimer (admin)">✕</button>`:''}
+          </div></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -202,9 +208,24 @@ async function saveMPPage(){
 }
 
 // ── SUPPRIMER ───────────────────────────────────────
+// Désactiver / réactiver une MP (secrétaire + admin). Une MP désactivée
+// disparaît des listes de saisie (achat, réception, formules) mais reste
+// visible ici, grisée, pour pouvoir la réactiver.
+async function toggleMPActif(id,nom,activer){
+  if(!confirm(`${activer?'Réactiver':'Désactiver'} "${nom}" ?${activer?'':'\n\nElle n\'apparaîtra plus dans les listes de saisie.'}`))return;
+  const{error}=await SB.from('gp_ingredients').update({actif:activer}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){notify('Erreur : '+error.message,'r');return;}
+  await loadIngredients();
+  populateSelects();
+  await renderMatieresPremieresPage();
+  notify(activer?`"${nom}" réactivée ✓`:`"${nom}" désactivée ✓`,activer?'gold':'r');
+}
+
 async function deleteMPPage(id,nom){
-  if(!confirm(`Supprimer "${nom}" ?`))return;
-  await SB.from('gp_ingredients').delete().eq('id',id);
+  if(GP_ROLE!=='admin'){notify('Suppression réservée à l\'administrateur','r');return;}
+  if(!confirm(`Supprimer DÉFINITIVEMENT "${nom}" ?\n\nSi cette MP est encore utilisée, désactivez-la plutôt.`))return;
+  const{error}=await SB.from('gp_ingredients').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){notify('Erreur : '+error.message,'r');return;}
   await loadIngredients();
   populateSelects();
   await renderMatieresPremieresPage();

@@ -9,7 +9,7 @@ function filtrerMPStock(){
   const niveaux=calcNiveaux(window._stockNiveaux||[]);
 
   // Trier : rupture d'abord, puis les plus utilisés (par nb occurrences en formule)
-  let liste=[...GP_INGREDIENTS];
+  let liste=[...GP_INGREDIENTS].filter(i=>i.actif!==false);
 
   // Score de chaque ingrédient
   liste=liste.map(ingr=>{
@@ -170,24 +170,46 @@ async function renderEntreesMPAConfirmer(){
   const{data:lignes}=await SB.from('gp_achats_lignes').select('*').in('achat_id',A.map(a=>a.id));
   const byAchat={};
   (lignes||[]).forEach(l=>{(byAchat[l.achat_id]=byAchat[l.achat_id]||[]).push(l);});
+  // Styles d'animation (injectés une seule fois)
+  if(!document.getElementById('conf-marquee-style')){
+    const st=document.createElement('style'); st.id='conf-marquee-style';
+    st.textContent='@keyframes confMarquee{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}'+
+      '@keyframes confPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}';
+    document.head.appendChild(st);
+  }
   // Peut confirmer : admin + Production (membre sans point de vente)
   const peutValider = GP_ROLE==='admin' || !GP_POINT_VENTE;
-  container.innerHTML=`<div style="border:1px solid rgba(245,158,11,.4);background:rgba(245,158,11,.06);border-radius:12px;padding:14px;margin-bottom:14px">
-    <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">🔔 ${A.length} entrée(s) MP à confirmer</div>
+  // Bandeau défilant (résumé de toutes les entrées en attente)
+  const marquee = A.map(a=>{
+    const ls=byAchat[a.id]||[];
+    const r=ls.map(l=>`${l.ingredient_nom} ${fmtKg(l.qte_recue||l.qte_commandee)}kg`).join(', ')||'(?)';
+    return `${a.point_vente||'Production'} : ${r}`;
+  }).join('   •   ');
+  container.innerHTML=`<div style="border:2px solid var(--red);background:rgba(239,68,68,.07);border-radius:12px;margin-bottom:14px;overflow:hidden;animation:confPulse 1.8s ease-in-out infinite">
+    <div style="background:var(--red);color:#fff;overflow:hidden;white-space:nowrap;padding:9px 0">
+      <span style="display:inline-block;padding-left:100%;animation:confMarquee 16s linear infinite;font-weight:800;font-size:15px">
+        🔴 ${A.length} ENTRÉE(S) MP À CONFIRMER  —  ${marquee}  •  À CONFIRMER DANS 📦 STOCK MP
+      </span>
+    </div>
+    <div style="padding:12px 14px">
     ${A.map(a=>{
       const ls=byAchat[a.id]||[];
       const resume=ls.map(l=>`${l.ingredient_nom} · ${fmtKg(l.qte_recue||l.qte_commandee)} kg`).join(' · ')||'(aucune ligne)';
+      // Séparation des tâches : celui qui a créé l'entrée ne la confirme pas lui-même
+      const estCreateur = a.cree_par && GP_USER && a.cree_par===GP_USER.id;
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--card2)">
         <div style="min-width:0">
           <div style="font-size:12px;font-weight:600">${resume}</div>
           <div style="font-size:10px;color:var(--textm)">${a.fournisseur_nom||'—'} · ${a.date_commande||''} · ${typeof statutAchatBadge==='function'?statutAchatBadge(a.statut):a.statut} · par ${a.cree_par_nom||'—'}</div>
+          <div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(a.point_vente||'Production'):''}</div>
         </div>
-        ${peutValider?`<div style="display:flex;gap:4px;flex-shrink:0">
+        ${(peutValider && !estCreateur)?`<div style="display:flex;gap:4px;flex-shrink:0">
           <button class="btn btn-g btn-sm" onclick="confirmerEntreeMP('${a.id}')">✓ Confirmer</button>
           <button class="btn btn-out btn-sm" onclick="ajusterEntreeMP('${a.id}')">✏ Ajuster</button>
-        </div>`:`<span style="font-size:9px;color:var(--textm);flex-shrink:0">⏳ attente Production</span>`}
+        </div>`:`<span style="font-size:9px;color:var(--textm);flex-shrink:0">${estCreateur?'⏳ à confirmer par un autre':'⏳ attente Production'}</span>`}
       </div>`;
     }).join('')}
+    </div>
   </div>`;
 }
 

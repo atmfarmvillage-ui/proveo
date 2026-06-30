@@ -17,6 +17,12 @@ async function renderPaiementsMP(){
     .order('date_commande',{ascending:false});
   const{data:paiements}=await SB.from('gp_achats_paiements').select('*')
     .eq('admin_id',GP_ADMIN_ID).order('date_paiement',{ascending:false});
+  // Lignes (détail des MP achetées) — groupées par achat pour l'affichage
+  const{data:lignes}=await SB.from('gp_achats_lignes')
+    .select('achat_id,ingredient_nom,qte_commandee,prix_unitaire,montant_ligne')
+    .eq('admin_id',GP_ADMIN_ID);
+  const lignesParAchat={};
+  (lignes||[]).forEach(l=>{(lignesParAchat[l.achat_id]=lignesParAchat[l.achat_id]||[]).push(l);});
   const A=achats||[];const P=paiements||[];
 
   const totalDu=A.reduce((s,a)=>s+Math.max(0,Number(a.montant_total||0)-Number(a.montant_paye||0)),0);
@@ -35,13 +41,22 @@ async function renderPaiementsMP(){
     const reste=total-paye;
     const pct=total>0?Math.round(paye/total*100):0;
     const solde=reste<=0;
+    const ligA=lignesParAchat[a.id]||[];
+    const detailMP=ligA.length?`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:8px">
+            ${ligA.map(l=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0">
+              <span style="font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.ingredient_nom||'—'}</span>
+              <span style="color:var(--textm);white-space:nowrap">${fmtKg(l.qte_commandee)} kg × ${fmt(l.prix_unitaire)} F = <strong style="color:var(--gold)">${fmt(l.montant_ligne)} F</strong></span>
+            </div>`).join('')}
+          </div>`:'';
     return `<div style="background:var(--card2);border:1px solid ${solde?'rgba(22,163,74,.3)':'var(--card2)'};border-radius:10px;padding:14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:14px;margin-bottom:4px">${a.fournisseur_nom||'—'}
             <span class="badge ${solde?'bdg-g':'bdg-gold'}" style="font-size:9px;margin-left:4px">${solde?'✅ Soldé':'⏳ En cours'}</span>
+            ${typeof pvBadgeHtml==='function'?' '+pvBadgeHtml(a.point_vente||'Production'):''}
           </div>
           <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${a.date_commande} · ${a.ref||''} · ${a.condition_paiement}</div>
+          ${detailMP}
           <div style="background:var(--card2);border-radius:20px;height:6px;margin-bottom:6px">
             <div style="width:${pct}%;height:100%;background:${pct>=100?'var(--green)':pct>50?'var(--gold)':'var(--red)'};border-radius:20px"></div>
           </div>

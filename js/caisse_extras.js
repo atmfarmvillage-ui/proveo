@@ -75,7 +75,7 @@ async function calcSoldesCaisses(caisses){
     if(m.type==='entree' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] += Number(m.montant||0);
     if(m.type==='sortie' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] -= Number(m.montant||0);
     if(m.type==='ajustement' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] += Number(m.montant||0);
-    if(m.type==='transfert'){
+    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
       if(soldes[m.caisse_id]!==undefined) soldes[m.caisse_id] -= Number(m.montant||0);
       if(m.caisse_dest_id && soldes[m.caisse_dest_id]!==undefined) soldes[m.caisse_dest_id] += Number(m.montant||0);
     }
@@ -180,15 +180,16 @@ async function ouvrirModifSoldeInit(caisseId){
   if(GP_ROLE !== 'admin' && !GP_EST_GERANT){ notify('Action réservée à l\'admin','r'); return; }
   const{data:c}=await SB.from('gp_caisses').select('*').eq('id',caisseId).maybeSingle();
   if(!c){ notify('Caisse introuvable','r'); return; }
-  // Calculer solde actuel
+  // Calculer solde actuel (entrées + sorties + ajustements + transferts entrants/sortants)
   const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('caisse_id', caisseId);
+    .eq('admin_id',GP_ADMIN_ID)
+    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`);
   let soldeAct = Number(c.solde_initial||0);
   (mvts||[]).forEach(m=>{
-    if(m.type==='entree') soldeAct += Number(m.montant||0);
-    if(m.type==='sortie') soldeAct -= Number(m.montant||0);
-    if(m.type==='ajustement') soldeAct += Number(m.montant||0);
-    if(m.type==='transfert'){
+    if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
+    if(m.type==='sortie' && m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
+    if(m.type==='ajustement' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
+    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
       if(m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
       if(m.caisse_dest_id===caisseId) soldeAct += Number(m.montant||0);
     }
@@ -220,37 +221,54 @@ function onMsiMotifChange(){
   btn.style.cursor = peutValider ? 'pointer' : 'not-allowed';
 }
 
+// Met à jour le SOLDE COURANT d'une caisse pour qu'il corresponde au comptage
+// physique (inventaire). On crée UN SEUL mouvement d'ajustement = écart entre
+// le réel compté et le solde calculé actuel. Le solde initial n'est PAS modifié
+// (sinon on compterait l'écart deux fois).
 async function saveModifSoldeInit(){
   const caisseId = document.getElementById('msi-caisse-id').value;
   const nouveau = +document.getElementById('msi-nouveau').value;
   const motif = document.getElementById('msi-motif').value.trim();
   const err = document.getElementById('msi-err');
   if(!motif || motif.length < 5){ err.textContent = 'Motif obligatoire (5 caractères min)'; notify('⚠ Motif obligatoire','r'); return; }
-  if(isNaN(nouveau)){ err.textContent = 'Entre un nouveau solde valide'; return; }
+  if(isNaN(nouveau)){ err.textContent = 'Entre le solde réel compté'; return; }
 
-  // Récupérer l'ancien solde initial pour calculer la différence
   const{data:c}=await SB.from('gp_caisses').select('solde_initial,nom').eq('id',caisseId).maybeSingle();
   if(!c){ err.textContent = 'Caisse introuvable'; return; }
-  const ancien = Number(c.solde_initial||0);
-  const diff = nouveau - ancien;
 
-  // 1. Update solde_initial
-  const{error:e1}=await SB.from('gp_caisses').update({solde_initial: nouveau}).eq('id',caisseId);
-  if(e1){ err.textContent = 'Erreur: '+e1.message; return; }
+  // Recalculer le solde réellement affiché (initial + tous les mouvements)
+  const{data:mvts}=await SB.from('gp_mouvements_caisse')
+    .select('type,montant,caisse_id,caisse_dest_id,statut_transfert')
+    .eq('admin_id',GP_ADMIN_ID)
+    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`);
+  let soldeAct = Number(c.solde_initial||0);
+  (mvts||[]).forEach(m=>{
+    if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
+    if(m.type==='sortie' && m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
+    if(m.type==='ajustement' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
+    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
+      if(m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
+      if(m.caisse_dest_id===caisseId) soldeAct += Number(m.montant||0);
+    }
+  });
 
-  // 2. Créer un mouvement d'ajustement pour la traçabilité
-  await SB.from('gp_mouvements_caisse').insert({
+  const diff = nouveau - soldeAct;
+  if(diff===0){ fermerModalModifSoldeInit(); notify('Solde déjà à jour ✓','gold'); return; }
+
+  // Un seul ajustement amène le solde affiché à la valeur comptée
+  const{error}=await SB.from('gp_mouvements_caisse').insert({
     admin_id: GP_ADMIN_ID, caisse_id: caisseId,
-    type: 'ajustement', categorie: 'correction_solde_initial',
+    type: 'ajustement', categorie: 'inventaire',
     montant: diff,
     date_mouvement: today(),
-    description: `Modif solde initial : ${fmt(ancien)} → ${fmt(nouveau)} F. Motif : ${motif}`,
+    description: `Mise à jour par inventaire : ${fmt(soldeAct)} → ${fmt(nouveau)} F (écart ${diff>0?'+':''}${fmt(diff)}). Motif : ${motif}`,
     enregistre_par: GP_USER?.id,
     enregistre_par_nom: GP_USER?.email?.split('@')[0]
   });
+  if(error){ err.textContent = 'Erreur: '+error.message; return; }
 
   fermerModalModifSoldeInit();
-  notify(`✓ Solde initial de ${c.nom} modifié`,'gold');
+  notify(`✓ ${c.nom} mise à jour à ${fmt(nouveau)} F`,'gold');
   if(typeof renderCaisse === 'function') await renderCaisse();
 }
 

@@ -240,7 +240,7 @@ async function filtrerIngrFormule(){
     if(data) GP_INGREDIENTS = data;
   }
   const dejaPris = new Set(MF_INGREDIENTS.map(i => i.nom));
-  let liste = (GP_INGREDIENTS||[]).filter(i => !dejaPris.has(i.nom));
+  let liste = (GP_INGREDIENTS||[]).filter(i => i.actif!==false && !dejaPris.has(i.nom));
   if(q) liste = liste.filter(i => normalizeSearch(i.nom).includes(q));
   liste.sort((a,b) => a.nom.localeCompare(b.nom));
   liste = liste.slice(0, 12);
@@ -636,7 +636,7 @@ function fermerOptimiseur(){
 function renderOptMPListe(){
   const q = normalizeSearch(document.getElementById('opt-search')?.value || '');
   const liste = (GP_INGREDIENTS||[])
-    .filter(i => !q || normalizeSearch(i.nom).includes(q))
+    .filter(i => i.actif!==false && (!q || normalizeSearch(i.nom).includes(q)))
     .sort((a,b) => a.nom.localeCompare(b.nom));
 
   const el = document.getElementById('opt-mp-liste');
@@ -668,7 +668,7 @@ function optToggleMP(id, checked){
 
 function optToggleAll(state){
   const q = normalizeSearch(document.getElementById('opt-search')?.value || '');
-  const liste = (GP_INGREDIENTS||[]).filter(i => !q || normalizeSearch(i.nom).includes(q));
+  const liste = (GP_INGREDIENTS||[]).filter(i => i.actif!==false && (!q || normalizeSearch(i.nom).includes(q)));
   for(const i of liste){
     if(state) OPT_MP_SELECTION.add(i.id);
     else OPT_MP_SELECTION.delete(i.id);

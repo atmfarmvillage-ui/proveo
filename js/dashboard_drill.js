@@ -49,7 +49,7 @@ async function drillSoldeCaisse(){
     if(m.type==='entree' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
     if(m.type==='sortie' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
     if(m.type==='ajustement' && soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
-    if(m.type==='transfert'){
+    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
       if(soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
       if(m.caisse_dest_id && soldes[m.caisse_dest_id]!==undefined) soldes[m.caisse_dest_id]+=Number(m.montant||0);
     }
@@ -259,7 +259,7 @@ async function drillImpayes(){
   const cols = [
     {key:'date', label:'Date'},
     {key:'client_nom', label:'Client', render:r=>
-      `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${r._tel||'(sans tél)'}</div>`},
+      `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${r._tel||'(sans tél)'}</div>${typeof pvBadgeHtml==='function'?'<div style="margin-top:3px">'+pvBadgeHtml(r.point_vente||'Production')+'</div>':''}`},
     {key:'montant_total', label:'Total', align:'num', render:r=>fmt(r.montant_total||0)+' F'},
     {key:'montant_paye', label:'Payé', align:'num', style:'color:var(--green)', render:r=>fmt(r.montant_paye||0)+' F'},
     {key:'_reste', label:'Reste dû', align:'num', style:'color:var(--red);font-weight:700', render:r=>fmt(r._reste||0)+' F'},
@@ -321,6 +321,7 @@ async function drillDepenses(){
     {key:'categorie', label:'Catégorie', render:r=>`<span class="badge bdg-gold" style="font-size:9px">${r.categorie||'—'}</span>`},
     {key:'description', label:'Description'},
     {key:'beneficiaire', label:'Bénéficiaire'},
+    {key:'point_vente', label:'PDV', render:r=>typeof pvBadgeHtml==='function'?pvBadgeHtml(r.point_vente||'Production'):(r.point_vente||'Production')},
     {key:'montant', label:'Montant', align:'num', style:'color:var(--red);font-weight:700', render:r=>fmt(r.montant||0)+' F'}
   ];
   _renderKpiTable(cols, dep, `TOTAL DÉPENSES`, fmt(total)+' F');

@@ -315,7 +315,7 @@ async function renderClients(){
           `:''}
           <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')" title="Modifier le client">✏️</button>
           <button class="btn btn-out btn-sm" onclick="ouvrirCarteClient('${c.id}')" title="Carte de fidélité" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🪪</button>
-          ${Number(c.points_fidelite)>0?`<button class="btn btn-out btn-sm" onclick="ouvrirEchangePoints('${c.id}')" title="Échanger les points (${c.points_fidelite} pts)" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🎁</button>`:''}
+          ${(GP_ROLE==='admin' && Number(c.points_fidelite)>0)?`<button class="btn btn-out btn-sm" onclick="ouvrirEchangePoints('${c.id}')" title="Donner le cadeau (${c.points_fidelite} pts) — admin" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🎁</button>`:''}
           ${c.qr_token?`<button class="btn btn-out btn-sm" onclick="regenererQRClient('${c.id}')" title="Régénérer la carte (perte)" style="color:var(--textm);font-size:10px">↺</button>`:''}
           <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>
         </td>
@@ -396,7 +396,38 @@ function fermerEchangePoints(){
   if(m)m.style.display='none';
 }
 
+// ── 20 MESSAGES DYNAMIQUES DE FÉLICITATIONS FIDÉLITÉ ──────────────
+// Variables : {nom} client · {prov} provenderie · {recompense} nom du palier
+//             {detail} ce qu'il reçoit · {reste} points restants
+const MSG_CADEAU_FIDELITE = [
+  v=>`🎉 Félicitations ${v.nom} ! Votre fidélité est récompensée : vous venez de débloquer *${v.recompense}*. 🎁 Vous recevez ${v.detail}.\nMerci pour votre confiance, on continue ensemble !\n\n_${v.prov}_`,
+  v=>`👏 Bravo ${v.nom} ! Grâce à vos achats réguliers chez ${v.prov}, voici votre cadeau : ${v.detail}. 🎁\nVous êtes un client en or — à très bientôt !`,
+  v=>`🌟 ${v.nom}, vous faites partie de nos meilleurs clients ! Récompense débloquée : ${v.detail}. 🎁\nContinuez ainsi, d'autres surprises vous attendent.\n\n_${v.prov}_`,
+  v=>`🎁 Bonne nouvelle ${v.nom} ! Vos points fidélité vous offrent *${v.recompense}* : ${v.detail}.\nMerci de faire confiance à ${v.prov} 🙏`,
+  v=>`💚 Merci ${v.nom} pour votre fidélité ! Vous avez bien mérité votre cadeau : ${v.detail}. 🎁\nVotre prochaine récompense se rapproche déjà, continuez !\n\n_${v.prov}_`,
+  v=>`🏆 ${v.nom}, votre constance paie ! Cadeau fidélité débloqué : ${v.detail}. 🎁\nNous sommes fiers de vous compter parmi nos clients. — ${v.prov}`,
+  v=>`✨ Quelle belle fidélité ${v.nom} ! Voici votre récompense : ${v.detail}. 🎁\nChaque achat vous rapproche du prochain cadeau. Merci !\n\n_${v.prov}_`,
+  v=>`🎊 ${v.nom}, c'est le moment de vous gâter ! Vous recevez ${v.detail} grâce à vos points. 🎁\nMerci de votre confiance renouvelée. — ${v.prov}`,
+  v=>`🙌 Un grand merci ${v.nom} ! Votre fidélité chez ${v.prov} vous offre ${v.detail}. 🎁\nVous méritez le meilleur, à très vite !`,
+  v=>`💛 Félicitations ${v.nom} ! Palier *${v.recompense}* atteint : ${v.detail}. 🎁\nContinuez vos achats, vos points continuent de grimper !\n\n_${v.prov}_`,
+  v=>`🎁 ${v.nom}, vos efforts sont récompensés ! Cadeau du jour : ${v.detail}.\nMerci d'être un client si fidèle. ${v.prov} vous remercie 🙏`,
+  v=>`🥳 Bravo ${v.nom} ! Vous venez de transformer vos points en cadeau : ${v.detail}. 🎁\nProchain objectif en vue — on vous attend !\n\n_${v.prov}_`,
+  v=>`🌻 ${v.nom}, votre fidélité illumine notre journée ! Voici ${v.detail} rien que pour vous. 🎁\nMerci infiniment. — ${v.prov}`,
+  v=>`🎉 Cadeau mérité ${v.nom} ! Vos points vous offrent ${v.detail}. 🎁\nVotre confiance est notre plus belle récompense. Continuez !\n\n_${v.prov}_`,
+  v=>`💪 ${v.nom}, client fidèle = client récompensé ! Vous recevez ${v.detail}. 🎁\nEncore merci, et à bientôt chez ${v.prov} !`,
+  v=>`🎈 Surprise ${v.nom} ! Votre fidélité vous vaut *${v.recompense}* : ${v.detail}. 🎁\nVos prochains achats préparent déjà le cadeau suivant 😉\n\n_${v.prov}_`,
+  v=>`🌟 ${v.nom}, vous brillez par votre fidélité ! Récompense : ${v.detail}. 🎁\nMerci de grandir avec ${v.prov}. À très vite !`,
+  v=>`🙏 Merci ${v.nom} ! En reconnaissance de votre fidélité, voici ${v.detail}. 🎁\nNous avons hâte de vous récompenser à nouveau.\n\n_${v.prov}_`,
+  v=>`🎁 Félicitations ${v.nom} ! Vous débloquez ${v.detail} grâce à vos points fidélité.\nContinuez vos achats chez ${v.prov}, ça paie vraiment ! 💚`,
+  v=>`👑 ${v.nom}, vous êtes un client VIP ! Votre cadeau : ${v.detail}. 🎁\nMerci pour votre fidélité sans faille. — ${v.prov}`
+];
+function _msgCadeauFidelite(v){
+  const f = MSG_CADEAU_FIDELITE[Math.floor(Math.random()*MSG_CADEAU_FIDELITE.length)];
+  return f(v);
+}
+
 async function echangerRecompense(recompenseId, mode){
+  if(GP_ROLE!=='admin'){ notify('Attribution du cadeau réservée à l\'administrateur','r'); return; }
   const clientId=document.getElementById('ep-client-id').value;
   const client=GP_CLIENTS.find(c=>c.id===clientId);
   const rec=GP_RECOMPENSES.find(r=>r.id===recompenseId);
@@ -406,23 +437,42 @@ async function echangerRecompense(recompenseId, mode){
 
   const valeur=Number(rec.valeur_reduction)||0;
   const enReduction = (mode==='reduction' && valeur>0);
-  const objet=rec.objet_fixe?(' + '+rec.objet_fixe):'';
-  // Libellé clair selon le mode choisi
-  const detail = enReduction
-    ? `💵 Bon de ${fmt(valeur)} F${objet} (crédité sur sa prochaine vente)`
-    : `🎁 ${rec.nom} (remis physiquement)`;
-  if(!confirm(`Confirmer l'échange ?\n\n${client.nom} échange ${rec.points_requis} points contre :\n${detail}\n\nSolde points après : ${pts-rec.points_requis}`))return;
 
+  // Mode réduction : aucun stock, on confirme et on finalise directement.
+  if(enReduction){
+    const objet=rec.objet_fixe?(' + '+rec.objet_fixe):'';
+    if(!confirm(`Confirmer l'échange ?\n\n${client.nom} échange ${rec.points_requis} points contre :\n💵 Bon de ${fmt(valeur)} F${objet} (crédité sur sa prochaine vente)\n\nSolde points après : ${pts-rec.points_requis}`))return;
+    return _finaliserEchange(clientId, recompenseId, 'reduction', null);
+  }
+  // Mode objet (sac/produit remis) : proposer la déduction de stock (Option A).
+  return ouvrirCadeauStock(clientId, recompenseId);
+}
+
+// Finalise l'échange : déduit points + journalise, crédite (réduction) OU déduit
+// le stock produit fini (objet), puis envoie le WhatsApp de félicitations.
+//   pfDeduct = { formule, kg } | null
+async function _finaliserEchange(clientId, recompenseId, mode, pfDeduct){
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const rec=GP_RECOMPENSES.find(r=>r.id===recompenseId);
+  if(!client||!rec)return;
+  const pts=Number(client.points_fidelite)||0;
+  if(pts<rec.points_requis){notify('Points insuffisants','r');return;}
+  const valeur=Number(rec.valeur_reduction)||0;
+  const enReduction=(mode==='reduction' && valeur>0);
+  const objet=rec.objet_fixe?(' + '+rec.objet_fixe):'';
   const nouveauSoldePts=pts-rec.points_requis;
   try{
-    // Journal points (déduction)
+    // Cadeau objet : déduire le stock produit fini choisi (FIFO)
+    if(pfDeduct && pfDeduct.formule && Number(pfDeduct.kg)>0){
+      await _deduirePFStockCadeau(pfDeduct.formule, Number(pfDeduct.kg));
+    }
     await SB.from('gp_fidelite_mouvements').insert({
       admin_id:GP_ADMIN_ID, client_id:clientId,
       points:-rec.points_requis, type:'cadeau',
-      description: enReduction ? `Bon ${fmt(valeur)} F${objet}` : rec.nom
+      description: enReduction ? `Bon ${fmt(valeur)} F${objet}`
+        : (rec.nom + (pfDeduct?.formule?` (−${fmtKg(pfDeduct.kg)} kg ${pfDeduct.formule})`:''))
     });
     const maj={ points_fidelite:nouveauSoldePts };
-    // Si réduction : créditer le compte (cumulable)
     if(enReduction){
       const creditAvant=Number(client.credit_fidelite)||0;
       maj.credit_fidelite=creditAvant+valeur;
@@ -437,8 +487,87 @@ async function echangerRecompense(recompenseId, mode){
   notify(enReduction
     ? `💵 Bon de ${fmt(valeur)} F crédité (−${rec.points_requis} pts)`
     : `🎁 Cadeau remis : ${rec.nom} (−${rec.points_requis} pts)`, 'gold');
+
+  // 📲 WhatsApp de félicitations (message dynamique)
+  const tel = client.whatsapp || client.telephone || '';
+  if(tel && typeof detecterPays==='function'){
+    const p = detecterPays(tel);
+    if(p.numero_whatsapp){
+      const v = {
+        nom: client.nom || 'cher client',
+        prov: (typeof GP_CONFIG!=='undefined' && GP_CONFIG?.nom_provenderie) || 'PROVENDA',
+        recompense: rec.nom,
+        detail: enReduction ? `un bon de réduction de ${fmt(valeur)} F${objet}` : rec.nom,
+        reste: nouveauSoldePts
+      };
+      try{ window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(_msgCadeauFidelite(v)),'_blank'); }catch(e){}
+    } else {
+      notify('Cadeau remis ✓ — pas de n° WhatsApp valide pour ce client','gold');
+    }
+  } else if(!tel){
+    notify('Cadeau remis ✓ — ajoute un n° de téléphone pour envoyer le message','gold');
+  }
+
   fermerEchangePoints();
   renderClients();
+  if(typeof renderStockNiveaux==='function'){ try{ renderStockNiveaux(); }catch(e){} }
+}
+
+// Déduit le stock produit fini (FIFO sur toutes les lignes de la formule).
+async function _deduirePFStockCadeau(formuleNom, kg){
+  const{data:stocks}=await SB.from('gp_stock_produits_pdv').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',formuleNom)
+    .order('qte_disponible',{ascending:false});
+  const rows=stocks||[]; let reste=Number(kg)||0;
+  for(const st of rows){
+    if(reste<=0) break;
+    const dispo=Number(st.qte_disponible||0);
+    const pris=Math.min(dispo,reste);
+    reste-=pris;
+    await SB.from('gp_stock_produits_pdv')
+      .update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()})
+      .eq('id',st.id);
+  }
+}
+
+// Modal Option A : choisir le produit + quantité (kg) à déduire du stock pour un cadeau objet.
+async function ouvrirCadeauStock(clientId, recompenseId){
+  const client=GP_CLIENTS.find(c=>c.id===clientId);
+  const rec=GP_RECOMPENSES.find(r=>r.id===recompenseId);
+  if(!client||!rec)return;
+  const{data:stk}=await SB.from('gp_stock_produits_pdv')
+    .select('formule_nom,qte_disponible').eq('admin_id',GP_ADMIN_ID).gt('qte_disponible',0);
+  const agg={}; (stk||[]).forEach(s=>{ agg[s.formule_nom]=(agg[s.formule_nom]||0)+Number(s.qte_disponible||0); });
+  const formules=Object.entries(agg).sort((a,b)=>a[0].localeCompare(b[0]));
+  let host=document.getElementById('modal-cadeau-stock');
+  if(!host){ host=document.createElement('div'); host.id='modal-cadeau-stock'; document.body.appendChild(host); }
+  host.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
+  host.innerHTML=`<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="font-weight:700;font-size:15px;margin-bottom:2px">🎁 Cadeau pour ${client.nom||''}</div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">${rec.nom} · ${rec.points_requis} pts · solde après : ${(Number(client.points_fidelite)||0)-rec.points_requis}</div>
+    <div class="fr"><label>Produit à déduire du stock</label>
+      <select id="cs-formule">
+        <option value="">— Ne rien déduire (T-shirt, gadget…) —</option>
+        ${formules.map(([n,q])=>`<option value="${n.replace(/"/g,'&quot;')}">${n} (${fmtKg(q)} kg dispo)</option>`).join('')}
+      </select></div>
+    <div class="fr"><label>Quantité offerte (kg)</label>
+      <input type="number" id="cs-kg" placeholder="ex : 30" step="0.1"></div>
+    <div class="a-err" id="cs-err" style="font-size:11px"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-g" style="flex:1;justify-content:center" onclick="confirmerCadeauStock('${clientId}','${recompenseId}')">✓ Donner le cadeau</button>
+      <button class="btn btn-out" onclick="document.getElementById('modal-cadeau-stock').remove()">Annuler</button>
+    </div>
+  </div>`;
+}
+
+async function confirmerCadeauStock(clientId, recompenseId){
+  const formule=document.getElementById('cs-formule')?.value||'';
+  const kg=+document.getElementById('cs-kg')?.value||0;
+  const err=document.getElementById('cs-err');
+  if(formule && kg<=0){ if(err)err.textContent='Indique la quantité (kg), ou choisis « Ne rien déduire ».'; return; }
+  const pf = formule ? { formule, kg } : null;
+  document.getElementById('modal-cadeau-stock')?.remove();
+  await _finaliserEchange(clientId, recompenseId, 'objet', pf);
 }
 
 async function deleteClient(id){

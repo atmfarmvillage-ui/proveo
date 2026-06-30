@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.24.31">
+<link rel="stylesheet" href="css/style.css?v=2.24.32">
 <style>
 /* === Lisibilité : écritures agrandies partout, SAUF les grands titres === */
 html,body{font-size:16px}
@@ -1766,12 +1766,13 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <div id="modal-modif-solde-init" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModalModifSoldeInit()">
   <div style="background:var(--card2,#0E1A0C);border:2px solid var(--gold);border-radius:14px;padding:22px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <div style="font-weight:700;font-size:16px;color:var(--gold)">✏ Modifier le solde initial</div>
+      <div style="font-weight:700;font-size:16px;color:var(--gold)">📋 Mettre à jour le solde (inventaire)</div>
       <button onclick="fermerModalModifSoldeInit()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
     </div>
     <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin:8px 0 14px;font-size:11px;line-height:1.5;color:var(--text)">
-      ⚠ <b>Action administrative sensible.</b> Le changement crée un mouvement d'ajustement
-      visible dans l'historique pour traçabilité comptable.
+      💡 Saisis le <b>montant réel compté</b> dans la caisse. L'app crée un ajustement
+      (= écart avec le solde calculé) et la caisse affichera exactement ce montant.
+      Le mouvement reste visible dans l'historique pour traçabilité.
     </div>
     <input type="hidden" id="msi-caisse-id">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px" id="msi-caisse-nom">—</div>
@@ -1781,21 +1782,21 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <div style="font-weight:700;color:var(--g6)" id="msi-solde-initial-actuel">—</div>
       </div>
       <div style="background:rgba(0,0,0,.15);border-radius:8px;padding:8px">
-        <div style="color:var(--textm)">Solde réel calculé</div>
+        <div style="color:var(--textm)">Solde calculé par l'app</div>
         <div style="font-weight:700;color:var(--gold)" id="msi-solde-actuel">—</div>
       </div>
     </div>
     <div class="fr">
-      <label>Nouveau solde initial (F) *</label>
-      <input type="number" id="msi-nouveau" placeholder="100000" oninput="onMsiMotifChange()" style="font-size:15px;font-weight:700;color:var(--gold)">
+      <label>Solde réel compté (F) *</label>
+      <input type="number" id="msi-nouveau" placeholder="800000" oninput="onMsiMotifChange()" style="font-size:15px;font-weight:700;color:var(--gold)">
     </div>
     <div class="fr">
-      <label>Motif de la modification * <span style="font-size:9px;color:var(--textm)">(5 caractères min, obligatoire pour traçabilité)</span></label>
-      <textarea id="msi-motif" rows="3" placeholder="Ex : Correction erreur de saisie initiale, dépôt complémentaire, audit comptable…" oninput="onMsiMotifChange()" style="resize:vertical;font-size:12px"></textarea>
+      <label>Motif * <span style="font-size:9px;color:var(--textm)">(5 caractères min, obligatoire pour traçabilité)</span></label>
+      <textarea id="msi-motif" rows="3" placeholder="Ex : Inventaire physique du 30/06, recomptage caisse…" oninput="onMsiMotifChange()" style="resize:vertical;font-size:12px"></textarea>
     </div>
     <div class="a-err" id="msi-err"></div>
     <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn btn-g" id="msi-valider" disabled onclick="saveModifSoldeInit()" style="flex:1;justify-content:center;font-size:14px;min-height:44px;opacity:.4;cursor:not-allowed">✓ Valider la modification</button>
+      <button class="btn btn-g" id="msi-valider" disabled onclick="saveModifSoldeInit()" style="flex:1;justify-content:center;font-size:14px;min-height:44px;opacity:.4;cursor:not-allowed">✓ Mettre à jour le solde</button>
       <button class="btn btn-out" onclick="fermerModalModifSoldeInit()" style="padding:0 16px">Annuler</button>
     </div>
   </div>
@@ -3085,49 +3086,50 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.31"></script>
-<script src="js/print.js?v=2.24.31"></script>
-<script src="js/dashboard.js?v=2.24.31"></script>
-<script src="js/stock.js?v=2.24.31"></script>
-<script src="js/matieres.js?v=2.24.31"></script>
-<script src="js/production.js?v=2.24.31"></script>
-<script src="js/ventes.js?v=2.24.31"></script>
-<script src="js/clients.js?v=2.24.31"></script>
-<script src="js/admin.js?v=2.24.31"></script>
-<script src="js/bilan_jour.js?v=2.24.31"></script>
-<script src="js/caisse_extras.js?v=2.24.31"></script>
-<script src="js/corbeille.js?v=2.24.31"></script>
-<script src="js/dashboard_drill.js?v=2.24.31"></script>
-<script src="js/fournisseurs.js?v=2.24.31"></script>
-<script src="js/achats.js?v=2.24.31"></script>
-<script src="js/caisse.js?v=2.24.31"></script>
-<script src="js/inventaire_physique.js?v=2.24.31"></script>
-<script src="js/distribution.js?v=2.24.31"></script>
-<script src="js/salaires.js?v=2.24.31"></script>
-<script src="js/rapports.js?v=2.24.31"></script>
-<script src="js/dettes.js?v=2.24.31"></script>
-<script src="js/chat.js?v=2.24.31"></script>
-<script src="js/notifications.js?v=2.24.31"></script>
-<script src="js/qr_clients.js?v=2.24.31"></script>
-<script src="js/push.js?v=2.24.31"></script>
-<script src="js/reversements.js?v=2.24.31"></script>
-<script src="js/paiements_mp.js?v=2.24.31"></script>
-<script src="js/stock_pf.js?v=2.24.31"></script>
-<script src="js/veto.js?v=2.24.31"></script>
-<script src="js/alertes.js?v=2.24.31"></script>
-<script src="js/exports.js?v=2.24.31"></script>
-<script src="js/bilanss.js?v=2.24.31"></script>
-<script src="js/benefices.js?v=2.24.31"></script>
-<script src="js/messages_pdv.js?v=2.24.31"></script>
-<script src="js/directeur.js?v=2.24.31"></script>
-<script src="js/licences.js?v=2.24.31"></script>
+<script src="js/config.js?v=2.24.32"></script>
+<script src="js/print.js?v=2.24.32"></script>
+<script src="js/dashboard.js?v=2.24.32"></script>
+<script src="js/stock.js?v=2.24.32"></script>
+<script src="js/matieres.js?v=2.24.32"></script>
+<script src="js/production.js?v=2.24.32"></script>
+<script src="js/ventes.js?v=2.24.32"></script>
+<script src="js/clients.js?v=2.24.32"></script>
+<script src="js/admin.js?v=2.24.32"></script>
+<script src="js/bilan_jour.js?v=2.24.32"></script>
+<script src="js/caisse_extras.js?v=2.24.32"></script>
+<script src="js/corbeille.js?v=2.24.32"></script>
+<script src="js/dashboard_drill.js?v=2.24.32"></script>
+<script src="js/fournisseurs.js?v=2.24.32"></script>
+<script src="js/achats.js?v=2.24.32"></script>
+<script src="js/confirmations.js?v=2.24.32"></script>
+<script src="js/caisse.js?v=2.24.32"></script>
+<script src="js/inventaire_physique.js?v=2.24.32"></script>
+<script src="js/distribution.js?v=2.24.32"></script>
+<script src="js/salaires.js?v=2.24.32"></script>
+<script src="js/rapports.js?v=2.24.32"></script>
+<script src="js/dettes.js?v=2.24.32"></script>
+<script src="js/chat.js?v=2.24.32"></script>
+<script src="js/notifications.js?v=2.24.32"></script>
+<script src="js/qr_clients.js?v=2.24.32"></script>
+<script src="js/push.js?v=2.24.32"></script>
+<script src="js/reversements.js?v=2.24.32"></script>
+<script src="js/paiements_mp.js?v=2.24.32"></script>
+<script src="js/stock_pf.js?v=2.24.32"></script>
+<script src="js/veto.js?v=2.24.32"></script>
+<script src="js/alertes.js?v=2.24.32"></script>
+<script src="js/exports.js?v=2.24.32"></script>
+<script src="js/bilanss.js?v=2.24.32"></script>
+<script src="js/benefices.js?v=2.24.32"></script>
+<script src="js/messages_pdv.js?v=2.24.32"></script>
+<script src="js/directeur.js?v=2.24.32"></script>
+<script src="js/licences.js?v=2.24.32"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.31"></script>
-<script src="js/reservations_admin.js?v=2.24.31"></script>
-<script src="js/strategie_mp.js?v=2.24.31"></script>
-<script src="js/reappro.js?v=2.24.31"></script>
-<script src="js/ia.js?v=2.24.31"></script>
-<script src="js/marketing.js?v=2.24.31"></script>
+<script src="js/auth.js?v=2.24.32"></script>
+<script src="js/reservations_admin.js?v=2.24.32"></script>
+<script src="js/strategie_mp.js?v=2.24.32"></script>
+<script src="js/reappro.js?v=2.24.32"></script>
+<script src="js/ia.js?v=2.24.32"></script>
+<script src="js/marketing.js?v=2.24.32"></script>
 
 <script>
 // Enregistrement Service Worker PWA

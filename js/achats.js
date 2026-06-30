@@ -244,7 +244,8 @@ async function saveAchat(){
     condition_paiement:condition,note_logistique:note,
     montant_total:total,montant_paye:0,
     statut:'brouillon',cree_par:GP_USER.id,
-    cree_par_nom:GP_USER.email
+    cree_par_nom:GP_USER.email,
+    point_vente:GP_POINT_VENTE||'Production'
   }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
@@ -265,6 +266,19 @@ async function saveAchat(){
         {url:'#stock',tag:'achat-mp'});
     }
   }catch(e){}
+
+  // 📲 WhatsApp pré-rempli vers le confirmeur (Production / PDV principal).
+  // Seulement si le créateur ne peut pas confirmer lui-même (secrétaire d'un PDV).
+  const estConfirmeur = GP_ROLE==='admin' || !GP_POINT_VENTE;
+  if(!estConfirmeur && typeof notifierConfirmeurWA==='function'){
+    const lignesTxt = ACHAT_LIGNES.map(l=>`• ${l.ingredient_nom} : ${fmtKg(l.qte_commandee)} kg × ${fmt(l.prix_unitaire)} F = ${fmt(l.montant_ligne)} F`).join('\n');
+    const msg = `🛒 *Achat MP à confirmer*\n`+
+      `PDV : ${GP_POINT_VENTE||'Production'}\n`+
+      `Fournisseur : ${fournNom||'—'}\nRéf : ${ref}\n\n`+
+      `${lignesTxt}\n─────────────\nTotal : *${fmt(total)} F*\n\n`+
+      `Merci de confirmer la réception et les quantités dans 📦 Stock MP.\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`;
+    notifierConfirmeurWA({ titre:'Achat MP à confirmer', message:msg, cibleNom:'principal' });
+  }
 
   ACHAT_LIGNES=[];
   renderLignesAchat();
@@ -373,7 +387,7 @@ function filtrerIngrModif(){
   if(!results)return;
   if(!search){results.style.display='none';return;}
   const filtered=[...GP_INGREDIENTS]
-    .filter(i=>normalizeSearch(i.nom).includes(search))
+    .filter(i=>i.actif!==false && normalizeSearch(i.nom).includes(search))
     .sort((a,b)=>a.nom.localeCompare(b.nom)).slice(0,10);
   if(!filtered.length){results.style.display='none';return;}
   results.style.display='block';
@@ -609,7 +623,9 @@ async function confirmerReception(){
   );
 
   notify(aDesEcarts?'Réception (avec écarts) — stock crédité ✓':'Réception confirmée — stock crédité ✓','gold');
-  renderAchats();
+  // Rafraîchir seulement les vues présentes (le bouton Ajuster vient de la page Stock,
+  // où renderAchats() planterait car ses éléments DOM n'existent pas).
+  try{ if(document.getElementById('achats-liste') && typeof renderAchats==='function') await renderAchats(); }catch(e){}
   try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(e){}
 }
 
@@ -843,7 +859,7 @@ function filtrerIngrAchat(){
   if(!search){results.style.display='none';return;}
 
   const filtered=[...GP_INGREDIENTS]
-    .filter(i=>normalizeSearch(i.nom).includes(search))
+    .filter(i=>i.actif!==false && normalizeSearch(i.nom).includes(search))
     .sort((a,b)=>a.nom.localeCompare(b.nom))
     .slice(0,10);
 
