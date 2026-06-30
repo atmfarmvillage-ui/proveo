@@ -37,7 +37,8 @@ async function renderCaisse(){
   M.forEach(m=>{
     if(m.type==='entree'&&soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
     if(m.type==='sortie'&&soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
-    if(m.type==='transfert'){
+    if(m.type==='ajustement'&&soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]+=Number(m.montant||0);
+    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
       if(soldes[m.caisse_id]!==undefined) soldes[m.caisse_id]-=Number(m.montant||0);
       if(m.caisse_dest_id&&soldes[m.caisse_dest_id]!==undefined) soldes[m.caisse_dest_id]+=Number(m.montant||0);
     }
@@ -88,7 +89,7 @@ async function renderCaisse(){
         <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
-        ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:rgba(232,197,71,.5);color:var(--gold)" onclick="ouvrirModifSoldeInit('${c.id}')" title="Modifier le solde initial">✏ Solde init</button>`:''}
+        ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:rgba(232,197,71,.5);color:var(--gold)" onclick="ouvrirModifSoldeInit('${c.id}')" title="Mettre le solde à jour avec le comptage physique">📋 Mettre à jour</button>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>`:''}
       </div>
     </div>`;
@@ -191,9 +192,10 @@ async function saveTransfertAvecValidation(){
   if(source===dest){err.textContent='Source et destination doivent être différentes.';return;}
   if(!montant){err.textContent='Montant requis.';return;}
 
-  // Admin/DAF → transfert direct
-  // Secrétaire → transfert en attente de validation
-  const statut=GP_ROLE==='admin'||GP_ROLE==='daf'?'valide':'en_attente';
+  // Siège (admin/gérant/DAF ou membre Production sans PDV) → transfert validé d'office.
+  // Secrétaire d'un PDV → transfert en attente de validation.
+  const peutValiderDirect = GP_ROLE==='admin' || GP_ROLE==='daf' || GP_EST_GERANT || !GP_POINT_VENTE;
+  const statut = peutValiderDirect ? 'valide' : 'en_attente';
 
   await SB.from('gp_mouvements_caisse').insert({
     admin_id:GP_ADMIN_ID,caisse_id:source,caisse_dest_id:dest,
@@ -211,6 +213,15 @@ async function saveTransfertAvecValidation(){
 
   if(statut==='en_attente'){
     notify('Transfert soumis — en attente de validation admin ✓','gold');
+    // 📲 Prévenir le validateur (admin / contact principal) par WhatsApp
+    if(typeof notifierConfirmeurWA==='function'){
+      const msg = `🔄 *Transfert de caisse à valider*\n`+
+        `PDV : ${GP_POINT_VENTE||'Production'}\n`+
+        `Montant : *${fmt(montant)} F*\n${desc?'Motif : '+desc+'\n':''}`+
+        `Par : ${GP_USER?.email?.split('@')[0]||'secrétaire'}\n\n`+
+        `Merci de valider dans 💵 Caisse & Banques.\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`;
+      notifierConfirmeurWA({ titre:'Transfert à valider', message:msg, preferProv:true });
+    }
   } else {
     notify('Transfert effectué ✓','gold');
   }
@@ -315,12 +326,13 @@ async function voirHistoriqueCaisse(caisseId,nom){
   document.getElementById('historique-caisse-content').innerHTML=M.length?`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Montant</th></tr></thead>
       <tbody>${M.map(m=>{
+        const refuse=m.type==='transfert'&&m.statut_transfert==='refuse';
         const entrant=(m.caisse_id===caisseId&&m.type==='entree')||(m.caisse_dest_id===caisseId&&m.type==='transfert');
-        return `<tr>
+        return `<tr style="${refuse?'opacity:.5':''}">
           <td style="font-size:10px">${m.date_mouvement}</td>
-          <td><span class="badge ${entrant?'bdg-g':'bdg-r'}" style="font-size:9px">${m.type}</span></td>
+          <td><span class="badge ${refuse?'bdg-gold':entrant?'bdg-g':'bdg-r'}" style="font-size:9px">${m.type}${refuse?' (refusé)':''}</span></td>
           <td style="font-size:10px">${m.description||m.categorie||'—'}</td>
-          <td class="num" style="color:${entrant?'var(--green)':'var(--red)'}">${entrant?'+':'−'}${fmt(m.montant)}</td>
+          <td class="num" style="color:${refuse?'var(--textm)':entrant?'var(--green)':'var(--red)'};${refuse?'text-decoration:line-through':''}">${entrant?'+':'−'}${fmt(m.montant)}</td>
         </tr>`;}).join('')}
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';

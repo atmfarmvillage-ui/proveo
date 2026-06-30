@@ -76,7 +76,8 @@ function selectionnerClientVente(clientId){
   prefillDefaultsDernierAchatClient(c);
 
   // ── BON DE FIDÉLITÉ : afficher si le client a un crédit disponible ──
-  window._bonFidelite = 0; // remis à zéro à chaque changement de client
+  window._bonFidelite = 0;          // remis à zéro à chaque changement de client
+  window._bonFideliteAuto = true;   // auto-appliqué par défaut (la remise suit le total)
   renderBonFidelite(c);
 
   // Charger le prix selon type client et formule + coût de prod
@@ -178,41 +179,40 @@ function effacerClientVente(){
 }
 
 // ── BON DE FIDÉLITÉ (crédit client appliqué en remise) ──
+// Grosse alerte ROUGE dès qu'un client avec crédit est sélectionné/scanné.
+// La remise est appliquée AUTOMATIQUEMENT et suit le total (cf. calcVente).
 function renderBonFidelite(client){
   const el=document.getElementById('vt-bon-fidelite');
   if(!el)return;
   const credit=Number(client?.credit_fidelite)||0;
-  if(credit<=0){ el.style.display='none'; return; }
-  el.style.display='flex';
-  if(window._bonFidelite>0){
-    el.innerHTML=`<span style="font-size:12px;color:var(--gold);font-weight:700">✅ Bon fidélité appliqué : −${fmt(window._bonFidelite)} F</span>
-      <button onclick="retirerBonFidelite()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">Retirer</button>`;
-  } else {
-    el.innerHTML=`<span style="font-size:12px;color:var(--gold);font-weight:700">💳 Bon fidélité disponible : ${fmt(credit)} F</span>
-      <button onclick="appliquerBonFidelite()" class="btn btn-g btn-sm" style="font-size:11px">Appliquer</button>`;
+  if(credit<=0){ el.style.display='none'; window._bonFideliteAuto=false; return; }
+  // Animation (injectée une fois)
+  if(!document.getElementById('fid-pulse-style')){
+    const st=document.createElement('style'); st.id='fid-pulse-style';
+    st.textContent='@keyframes fidPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0)}}';
+    document.head.appendChild(st);
   }
+  el.style.display='block';
+  const actif = window._bonFideliteAuto!==false;
+  const applique = Number(window._bonFidelite)||0;
+  el.innerHTML=`<div style="background:var(--red);color:#fff;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;animation:fidPulse 1.6s ease-in-out infinite">
+    <div style="min-width:0">
+      <div style="font-weight:800;font-size:16px;letter-spacing:.3px">🎁 RÉDUCTION FIDÉLITÉ</div>
+      <div style="font-size:14px;font-weight:700;margin-top:1px">Ce client a droit à ${fmt(credit)} F de réduction !</div>
+      <div style="font-size:12px;opacity:.95;margin-top:2px">${actif?`✅ Appliquée automatiquement${applique>0?' (−'+fmt(applique)+' F)':' dès l\'ajout d\'un produit'}`:'❌ Retirée — cliquez pour réappliquer'}</div>
+    </div>
+    <button onclick="${actif?'retirerBonFidelite()':'appliquerBonFidelite()'}" style="background:#fff;color:var(--red);border:none;padding:9px 14px;border-radius:9px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">${actif?'Retirer':'Appliquer'}</button>
+  </div>`;
 }
 
 function appliquerBonFidelite(){
-  const clientId=document.getElementById('vt_client')?.value;
-  const client=GP_CLIENTS.find(c=>c.id===clientId);
-  const credit=Number(client?.credit_fidelite)||0;
-  if(credit<=0)return;
-  // Total courant (lignes ajoutées ou ligne en cours)
-  const totalActuel=VT_LIGNES.length
-    ? VT_LIGNES.reduce((s,l)=>s+Number(l.montant_ligne||0),0)
-    : Math.round((+document.getElementById('vt_qte')?.value||0)*(+document.getElementById('vt_prix')?.value||0));
-  // Le bon ne dépasse pas le total
-  window._bonFidelite=Math.min(credit, totalActuel||credit);
-  renderBonFidelite(client);
+  window._bonFideliteAuto=true; // calcVente recalcule le montant (min crédit / total)
   calcVente();
 }
 
 function retirerBonFidelite(){
+  window._bonFideliteAuto=false;
   window._bonFidelite=0;
-  const clientId=document.getElementById('vt_client')?.value;
-  const client=GP_CLIENTS.find(c=>c.id===clientId);
-  renderBonFidelite(client);
   calcVente();
 }
 
@@ -724,13 +724,19 @@ function calcVente(){
   const remiseTotauxBloc=document.getElementById('vt-remise-totaux-bloc');
   if(remiseTotauxBloc) remiseTotauxBloc.style.display = remise>0 ? 'block' : 'none';
 
-  // ── BON DE FIDÉLITÉ : appliqué comme réduction globale sur le total ──
+  // ── BON DE FIDÉLITÉ : auto-appliqué et suit le total (sauf si retiré) ──
+  const _fidCl=GP_CLIENTS.find(c=>c.id===(document.getElementById('vt_client')?.value));
+  const _fidCredit=Number(_fidCl?.credit_fidelite)||0;
+  if(window._bonFideliteAuto!==false && _fidCredit>0){
+    window._bonFidelite=Math.min(_fidCredit, total);
+  }
   let bonApplique=Number(window._bonFidelite)||0;
   if(bonApplique>0){
     bonApplique=Math.min(bonApplique, total); // jamais plus que le total
     window._bonFidelite=bonApplique;
     total=Math.max(0, total-bonApplique);
   }
+  if(_fidCredit>0 && typeof renderBonFidelite==='function') renderBonFidelite(_fidCl);
 
   // Système monnaie : si remis > total → monnaie à rendre, payé conservé = total
   // Si remis < total → reste à payer
@@ -1152,6 +1158,20 @@ async function saveVente(){
           .eq('id',clientId).eq('admin_id',GP_ADMIN_ID);
         if(ci>=0) GP_CLIENTS[ci].points_fidelite = nouveauSolde;
         window._lastVentePoints = { gagnes:ptsGagnes, total:nouveauSolde };
+        // 🎁 Le client vient-il d'atteindre un palier de récompense ? → prévenir l'admin
+        try{
+          const{data:recs}=await SB.from('gp_fidelite_recompenses')
+            .select('nom,points_requis').eq('admin_id',GP_ADMIN_ID).eq('actif',true);
+          const palier=(recs||[])
+            .filter(r=> soldeAvant < Number(r.points_requis) && nouveauSolde >= Number(r.points_requis))
+            .sort((a,b)=>Number(b.points_requis)-Number(a.points_requis))[0];
+          if(palier && typeof pushSendToUsers==='function' && GP_ADMIN_ID){
+            const nomCli=(ci>=0?GP_CLIENTS[ci].nom:'')||'Un client';
+            pushSendToUsers([GP_ADMIN_ID], '🎁 Client éligible à un cadeau',
+              `${nomCli} a atteint ${nouveauSolde} pts → « ${palier.nom} ». À valider dans Clients.`,
+              {url:'#clients', tag:'cadeau-fidelite'});
+          }
+        }catch(e){}
       }catch(e){ /* silencieux — fidélité pas critique pour la vente */ }
     }
   }
@@ -1856,7 +1876,7 @@ async function renderDep(){
     ${D.map(d=>`<tr>
       <td style="font-size:10px">${d.date}</td>
       <td><span class="badge bdg-gold" style="font-size:9px">${CAT_LABELS[d.categorie]||d.categorie}</span></td>
-      <td>${d.description}${GP_ROLE==='admin'?`<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(d.point_vente||'Production'):('📍 '+(d.point_vente||'Production'))}</div>`:''}</td>
+      <td>${d.description}<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(d.point_vente||'Production'):('📍 '+(d.point_vente||'Production'))}</div></td>
       <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
       <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
@@ -1878,6 +1898,16 @@ async function saveDep(){
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   err.textContent='';
+  // 📲 Si un secrétaire de PDV saisit une dépense → prévenir l'admin par WhatsApp
+  if(GP_ROLE!=='admin' && GP_POINT_VENTE && typeof notifierConfirmeurWA==='function'){
+    const cat=document.getElementById('dep_cat')?.value||'';
+    const msg = `💸 *Dépense à vérifier*\n`+
+      `PDV : ${GP_POINT_VENTE}\n`+
+      `Catégorie : ${cat}\nDescription : ${desc}\nMontant : *${fmt(montant)} F*\n`+
+      `${document.getElementById('dep_benef')?.value.trim()?'Bénéficiaire : '+document.getElementById('dep_benef').value.trim()+'\n':''}`+
+      `Par : ${GP_USER?.email?.split('@')[0]||'secrétaire'} · ${date}\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`;
+    notifierConfirmeurWA({ titre:'Dépense à vérifier', message:msg, preferProv:true });
+  }
   ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>document.getElementById(id).value='');
   notify('Dépense enregistrée ✓','gold');
   await renderDep();

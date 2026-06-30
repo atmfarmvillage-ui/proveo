@@ -12,7 +12,7 @@ function soldeCaisseCumul(caisse, mvts, dateMax){
     if(m.type==='entree' && m.caisse_id===caisse.id) s+=Number(m.montant||0);
     else if(m.type==='sortie' && m.caisse_id===caisse.id) s-=Number(m.montant||0);
     else if(m.type==='ajustement' && m.caisse_id===caisse.id) s+=Number(m.montant||0);
-    else if(m.type==='transfert'){
+    else if(m.type==='transfert' && m.statut_transfert!=='refuse'){
       if(m.caisse_id===caisse.id) s-=Number(m.montant||0);
       if(m.caisse_dest_id===caisse.id) s+=Number(m.montant||0);
     }
@@ -63,8 +63,8 @@ async function renderBilanJour(){
   const cashEncaisse=V.reduce((s,v)=>s+Number(v.montant_paye||0),0);
   const creditAccorde=Math.max(0,caTotal-cashEncaisse);
   const totDepenses=D.reduce((s,d)=>s+Number(d.montant||0),0);
-  const entreesCaisse=Mday.filter(m=>(m.type==='entree')||(m.type==='transfert'&&m.caisse_dest_id===selectedId)).reduce((s,m)=>s+Number(m.montant||0),0);
-  const sortiesCaisse=Mday.filter(m=>(m.type==='sortie')||(m.type==='transfert'&&m.caisse_id===selectedId)).reduce((s,m)=>s+Number(m.montant||0),0);
+  const entreesCaisse=Mday.filter(m=>(m.type==='entree')||(m.type==='transfert'&&m.statut_transfert!=='refuse'&&m.caisse_dest_id===selectedId)).reduce((s,m)=>s+Number(m.montant||0),0);
+  const sortiesCaisse=Mday.filter(m=>(m.type==='sortie')||(m.type==='transfert'&&m.statut_transfert!=='refuse'&&m.caisse_id===selectedId)).reduce((s,m)=>s+Number(m.montant||0),0);
   const balanceJour=entreesCaisse-sortiesCaisse;
   const margeBrute=caTotal-totDepenses;
 
