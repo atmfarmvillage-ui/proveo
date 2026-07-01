@@ -1107,7 +1107,8 @@ async function saveVente(){
           const pris=Math.min(dispo,reste);
           const newQte=Math.max(0,dispo-pris);
           reste-=pris;
-          await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()}).eq('id',st.id);
+          const {error:eUpd}=await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()}).eq('id',st.id);
+          if(eUpd && typeof notify==='function') notify(`⚠ Stock NON décrémenté (${l.formule_nom}) : ${eUpd.message}`,'r');
         }
         // Seuil critique sur le stock total restant
         const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-Number(l.quantite||0);
