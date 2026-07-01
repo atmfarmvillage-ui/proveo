@@ -115,6 +115,49 @@ async function renderCaisse(){
         <td style="font-size:10px;color:var(--textm)">${m.enregistre_par_nom||'—'}</td>
       </tr>`).join('')}</tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
+
+  // Historique dédié des transferts entre caisses / PDV
+  if(typeof renderTransfertsHistorique==='function') renderTransfertsHistorique(caisses, filtreActif);
+}
+
+// ── HISTORIQUE DES TRANSFERTS ENTRE CAISSES / PDV ──────────────────
+// Vue consolidée : date · PDV source → PDV destination · montant · statut · par qui.
+async function renderTransfertsHistorique(caisses, filtreId){
+  const el=document.getElementById('transferts-historique');
+  if(!el) return;
+  // Noms + PDV de TOUTES les caisses (pour libeller source ET destination)
+  const{data:allC}=await SB.from('gp_caisses').select('id,nom,point_vente').eq('admin_id',GP_ADMIN_ID);
+  const nom={}, pdv={};
+  (allC||[]).forEach(c=>{ nom[c.id]=c.nom; pdv[c.id]=c.point_vente||'Siège'; });
+  const{data}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('type','transfert')
+    .order('date_mouvement',{ascending:false}).order('created_at',{ascending:false}).limit(200);
+  let T=data||[];
+  // Filtre par caisse sélectionnée (source ou destination)
+  if(filtreId) T=T.filter(t=>t.caisse_id===filtreId || t.caisse_dest_id===filtreId);
+  // Cloisonnement PDV : une secrétaire scopée ne voit que les transferts touchant ses caisses
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE){
+    const mesIds=new Set(caisses.map(c=>c.id));
+    T=T.filter(t=>mesIds.has(t.caisse_id) || mesIds.has(t.caisse_dest_id));
+  }
+  const badge=s=> s==='refuse'
+      ? '<span class="badge bdg-r" style="font-size:9px">Refusé</span>'
+      : s==='en_attente'
+        ? '<span class="badge bdg-gold" style="font-size:9px">En attente</span>'
+        : '<span class="badge bdg-g" style="font-size:9px">Validé</span>';
+  const totalValide=T.filter(t=>t.statut_transfert!=='refuse'&&t.statut_transfert!=='en_attente').reduce((s,t)=>s+Number(t.montant||0),0);
+  el.innerHTML = T.length ? `
+    <div style="font-size:11px;color:var(--textm);margin-bottom:6px">${T.length} transfert(s) · total validé : <b style="color:var(--gold)">${fmt(totalValide)} F</b></div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+      <thead><tr><th>Date</th><th>De → Vers</th><th class="num">Montant</th><th>Statut</th><th>Par</th></tr></thead>
+      <tbody>${T.map(t=>`<tr style="${t.statut_transfert==='refuse'?'opacity:.5':''}">
+        <td style="font-size:10px">${t.date_mouvement||''}</td>
+        <td>${nom[t.caisse_id]||'—'} <span style="color:var(--textm)">(${pdv[t.caisse_id]||'—'})</span> → ${nom[t.caisse_dest_id]||'—'} <span style="color:var(--textm)">(${pdv[t.caisse_dest_id]||'—'})</span></td>
+        <td class="num" style="color:var(--gold)">${fmt(t.montant)} F</td>
+        <td>${badge(t.statut_transfert)}</td>
+        <td style="font-size:10px;color:var(--textm)">${t.enregistre_par_nom||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div style="color:var(--textm);font-size:12px">Aucun transfert entre caisses.</div>';
 }
 
 function populateCaisseSelects(caisses,soldes){
