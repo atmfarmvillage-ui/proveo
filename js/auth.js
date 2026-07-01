@@ -297,10 +297,8 @@ async function bootApp(user){
     if(document.visibilityState!=='visible') return;
     const active=document.querySelector('.page.active')?.id?.replace('page-','');
     const pagesJamaisRefresh2=['achats','production'];
-    const pagesExclues2=['ventes','fournisseurs','clients','equipe'];
-    const formulaireActif2=document.activeElement&&
-      ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
-    if(active&&!pagesJamaisRefresh2.includes(active)&&!(formulaireActif2&&pagesExclues2.includes(active)))showGP(active);
+    // Ne pas rafraîchir si travail en cours (saisie / modal / vente-achat)
+    if(active&&!pagesJamaisRefresh2.includes(active)&&!_travailEnCoursGP())showGP(active);
     checkPendingRemises();
   },180000); // 3 minutes
 
@@ -849,6 +847,21 @@ function closeSidebar(){
 // ── REALTIME SYNC GLOBAL ─────────────────────
 let _realtimeChannel=null;
 let _realtimeRerenderTimer=null;
+
+// Vrai si l'utilisateur a un travail en cours qu'un auto-refresh effacerait :
+// un champ en saisie, un modal ouvert, ou une vente/achat en construction.
+function _travailEnCoursGP(){
+  const ae=document.activeElement;
+  if(ae && ['INPUT','SELECT','TEXTAREA'].includes(ae.tagName)) return true;
+  const modalOuvert=[...document.querySelectorAll('[id^="modal-"]')].some(m=>{
+    const d=getComputedStyle(m).display; return d==='flex'||d==='block';
+  });
+  if(modalOuvert) return true;
+  try{ if(typeof VT_LIGNES!=='undefined' && VT_LIGNES.length) return true; }catch(e){}
+  try{ if(typeof ACHAT_LIGNES!=='undefined' && ACHAT_LIGNES.length) return true; }catch(e){}
+  return false;
+}
+
 function initRealtimeSync(){
   if(!GP_ADMIN_ID)return;
   // Supprimer l'ancien canal si existe
@@ -872,10 +885,8 @@ function initRealtimeSync(){
     _realtimeRerenderTimer=setTimeout(()=>{
       _realtimeRerenderTimer=null;
       const active=document.querySelector('.page.active')?.id?.replace('page-','');
-      const pagesExclues=['achats','ventes','fournisseurs','clients','production','equipe'];
-      const formulaireActif=document.activeElement&&
-        ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
-      if(active&&PAGE_RENDERERS[active]&&!(formulaireActif&&pagesExclues.includes(active))){
+      // Ne jamais re-render si l'utilisateur a un travail en cours (saisie / modal / vente-achat)
+      if(active&&PAGE_RENDERERS[active]&&!_travailEnCoursGP()){
         try{PAGE_RENDERERS[active]();}catch(e){}
       }
     },3000);
