@@ -207,6 +207,19 @@ async function renderDashboard(){
     if(resteProv > 0) impayeMois += resteProv;
   }
 
+  // Impayés TOTAUX (tous mois confondus) = total dû par les clients, toutes périodes
+  let impayesTotal = 0;
+  try{
+    const{data:_imp}=await SB.from('gp_ventes')
+      .select('montant_total,montant_paye,point_vente')
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
+      .in('statut_paiement',['partiel','impaye']);
+    (_imp||[]).forEach(v=>{
+      if(!vueComplete && typeof appartientAuPDV==='function' && !appartientAuPDV(v.point_vente)) return;
+      impayesTotal += Math.max(0, Number(v.montant_total||0)-Number(v.montant_paye||0));
+    });
+  }catch(e){}
+
   // Dépenses courantes (fonctionnement)
   const depCourantes=D.reduce((s,d)=>s+Number(d.montant||0),0);
   // Paiements achats MP du mois
@@ -301,6 +314,8 @@ async function renderDashboard(){
     ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois),null,"dashKpiDrill('ca')")}
     ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),
       impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
+    ${kpi('🧾','red','Impayés total (tous mois)',fmt(impayesTotal),
+      impayesTotal>0?{type:'down',text:'total dû clients'}:{type:'up',text:'aucun impayé'},"dashKpiDrill('impayes_total')")}
     ${kpi('💸','orange','Dépenses ce mois',fmt(depMois),
       depMois>encaisseMois?{type:'down',text:'> encaissé'}:{type:'flat',text:'sous contrôle'},"dashKpiDrill('depenses')")}
     ${caFermeMois>0?kpi('🚜','blue','CA Ferme ce mois',fmt(caFermeMois),null,"dashKpiDrill('ca_ferme')"):''}
@@ -317,6 +332,7 @@ async function renderDashboard(){
     ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null,"dashKpiDrill('encaisse')")}
     ${kpi('🧾','blue','Ventes totales ce mois',fmt(venteTotalMois),null,"dashKpiDrill('ca')")}
     ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
+    ${kpi('🧾','red','Impayés total (tous mois)',fmt(impayesTotal),impayesTotal>0?{type:'down',text:'total dû clients'}:{type:'up',text:'aucun impayé'},"dashKpiDrill('impayes_total')")}
     ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
     ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
     ${kpi('💵','gold','Solde caisse PDV',fmt(soldeCaissePDV),nbCaissesPDV>0?{type:'flat',text:`${nbCaissesPDV} caisse${nbCaissesPDV>1?'s':''}`}:null,"dashKpiDrill('caisse')")}
