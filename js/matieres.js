@@ -77,8 +77,8 @@ async function renderMatieresPremieresPage(){
               <input type="number" id="mpp-prix-inp-${i.id}" value="${i.prix_actuel||0}"
                 style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
                 onkeydown="if(event.key==='Enter')mppSauverPrix('${i.id}');if(event.key==='Escape')mppAnnulerPrix('${i.id}')">
-              ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Admin uniquement">✏️</button>
-              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
+              <button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Modifier le prix d'achat">✏️</button>
+              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>
             </div>
           </td>
 
