@@ -58,7 +58,17 @@ async function renderMatieresPremieresPage(){
         const cls=qteStock<=0?'bad':qteStock<seuil*0.5?'bad':qteStock<seuil?'warn':'good';
         const inactif=i.actif===false;
         return `<tr style="${inactif?'opacity:.5':''}">
-          <td style="font-weight:600">${i.nom}${inactif?' <span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}</td>
+          <td style="font-weight:600">
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+              <span id="mpp-nom-val-${i.id}">${i.nom}</span>
+              <input type="text" id="mpp-nom-inp-${i.id}" value="${(i.nom||'').replace(/"/g,'&quot;')}"
+                style="display:none;width:150px;padding:2px 5px;font-size:11px"
+                onkeydown="if(event.key==='Enter')mppSauverNom('${i.id}');if(event.key==='Escape')mppAnnulerNom('${i.id}')">
+              ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerNom('${i.id}')" id="mpp-nom-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Renommer">✏️</button>
+              <button class="btn btn-g btn-sm" onclick="mppSauverNom('${i.id}')" id="mpp-nom-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
+              ${inactif?'<span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}
+            </div>
+          </td>
 
           <!-- Prix inline edit -->
           <td class="num">
@@ -101,6 +111,40 @@ async function renderMatieresPremieresPage(){
 
   // Remplir aussi le select du seuil rapide
   populateMPSelect();
+}
+
+// ── RENOMMER UNE MP (admin) ─────────────────────────
+// Renomme dans gp_ingredients ET propage le nouveau nom (par ingredient_id)
+// dans le stock et les lignes d'achat, sinon les niveaux/détails se cassent.
+function mppEditerNom(id){
+  document.getElementById('mpp-nom-val-'+id).style.display='none';
+  document.getElementById('mpp-nom-inp-'+id).style.display='inline-block';
+  document.getElementById('mpp-nom-edit-'+id).style.display='none';
+  document.getElementById('mpp-nom-save-'+id).style.display='inline-flex';
+  const inp=document.getElementById('mpp-nom-inp-'+id); inp.focus(); inp.select();
+}
+function mppAnnulerNom(id){
+  document.getElementById('mpp-nom-val-'+id).style.display='inline';
+  document.getElementById('mpp-nom-inp-'+id).style.display='none';
+  document.getElementById('mpp-nom-edit-'+id).style.display='inline-flex';
+  document.getElementById('mpp-nom-save-'+id).style.display='none';
+}
+async function mppSauverNom(id){
+  if(GP_ROLE!=='admin'){notify('Renommage réservé à l\'administrateur','r');return;}
+  const nouveau=(document.getElementById('mpp-nom-inp-'+id)?.value||'').trim();
+  if(!nouveau){notify('Nom requis','r');return;}
+  const ancien=(GP_INGREDIENTS.find(i=>i.id===id)?.nom)||'';
+  if(nouveau===ancien){mppAnnulerNom(id);return;}
+  if(GP_INGREDIENTS.some(i=>i.id!==id && (i.nom||'').toLowerCase()===nouveau.toLowerCase())){
+    notify('Une autre MP porte déjà ce nom','r');return;
+  }
+  const{error}=await SB.from('gp_ingredients').update({nom:nouveau}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){notify('Erreur: '+error.message,'r');return;}
+  // Propager le nouveau nom dans l'historique (par ingredient_id)
+  try{ await SB.from('gp_stock_mp').update({ingredient_nom:nouveau}).eq('ingredient_id',id).eq('admin_id',GP_ADMIN_ID); }catch(e){}
+  try{ await SB.from('gp_achats_lignes').update({ingredient_nom:nouveau}).eq('ingredient_id',id).eq('admin_id',GP_ADMIN_ID); }catch(e){}
+  await loadIngredients(); populateSelects(); await renderMatieresPremieresPage();
+  notify(`Renommée : ${ancien} → ${nouveau} ✓`,'gold');
 }
 
 // ── ÉDITION PRIX ────────────────────────────────────
