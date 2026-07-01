@@ -110,6 +110,71 @@ function _livInterne(l){
   return p?.type_pdv==='principal';
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TRAÇABILITÉ STOCK (déterministe) — reconstruit la chaîne d'un stock PF
+// depuis les vraies tables : reçu (livraisons confirmées) + produit (lots) −
+// vendu (ventes) − redistribué (livraisons sortantes) ± écart (inventaire).
+// Utilisé par le modal 🔎 (A) ET injecté dans le contexte IA (B).
+// ══════════════════════════════════════════════════════════════════
+async function calcTracabiliteStockAll(){
+  const [liv, vts, stk, lots] = await Promise.all([
+    SB.from('gp_livraisons_pdv').select('pdv_source_nom,pdv_dest_nom,formule_nom,qte_envoyee,qte_confirmee,poids_sac,statut').eq('admin_id',GP_ADMIN_ID),
+    SB.from('gp_ventes').select('point_vente,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null),
+    SB.from('gp_stock_produits_pdv').select('pdv_nom,formule_nom,qte_disponible').eq('admin_id',GP_ADMIN_ID),
+    SB.from('gp_lots').select('formule_nom,qte_produite').eq('admin_id',GP_ADMIN_ID)
+  ]);
+  const map={};
+  const get=(p,f)=>{ const k=(p||'Production')+'||'+f; if(!map[k]) map[k]={pdv:p||'Production',produit:f,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0}; return map[k]; };
+  // Reçu (dest) / redistribué (source) — livraisons confirmées, converties en kg
+  (liv.data||[]).forEach(l=>{
+    if(!l.formule_nom) return;
+    const kg=Number(l.qte_confirmee||l.qte_envoyee||0)*Number(l.poids_sac||1);
+    if(l.pdv_dest_nom)   get(l.pdv_dest_nom,l.formule_nom).recu += kg;
+    if(l.pdv_source_nom) get(l.pdv_source_nom,l.formule_nom).redistribue += kg;
+  });
+  // Vendu (ventes) — déjà en kg
+  (vts.data||[]).forEach(v=>{ if(v.formule_nom) get(v.point_vente||'Production',v.formule_nom).vendu += Number(v.qte_vendue||0); });
+  // Produit (lots) → entrées de la Production
+  (lots.data||[]).forEach(l=>{ if(l.formule_nom) get('Production',l.formule_nom).produit_kg += Number(l.qte_produite||0); });
+  // Stock actuel
+  (stk.data||[]).forEach(s=>{ if(s.formule_nom) get(s.pdv_nom,s.formule_nom).stock = Number(s.qte_disponible||0); });
+  return Object.values(map).map(o=>{
+    const entrees=o.recu+o.produit_kg;
+    const theorique=entrees - o.vendu - o.redistribue;
+    return {...o, entrees, theorique, ecart: Math.round((o.stock - theorique)*10)/10};
+  });
+}
+
+// Modal 🔎 : traçabilité d'un (PDV, produit)
+async function ouvrirTracabilite(pdvNom, formuleNom){
+  let host=document.getElementById('modal-tracabilite');
+  if(!host){ host=document.createElement('div'); host.id='modal-tracabilite'; document.body.appendChild(host); }
+  host.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
+  host.innerHTML=`<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:460px;width:100%"><div style="color:var(--textm)">⏳ Calcul de la traçabilité…</div></div>`;
+  let row;
+  try{
+    const all=await calcTracabiliteStockAll();
+    row=all.find(r=>r.pdv===pdvNom && r.produit===formuleNom) || {pdv:pdvNom,produit:formuleNom,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0,entrees:0,theorique:0,ecart:0};
+  }catch(e){ row={pdv:pdvNom,produit:formuleNom,_err:e.message}; }
+  const L=(lbl,val,color)=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${lbl}</span><span style="font-weight:700;${color?'color:'+color:''}">${val}</span></div>`;
+  host.innerHTML=`<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-weight:700;font-size:15px">🔎 Traçabilité stock</div>
+      <button onclick="document.getElementById('modal-tracabilite').remove()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">${formuleNom} · ${pdvNom}</div>
+    ${row._err?`<div style="color:var(--red);font-size:12px">Erreur : ${row._err}</div>`:`
+      ${row.produit_kg>0?L('🏭 Produit (lots)','+'+fmtKg(row.produit_kg)+' kg','var(--green)'):''}
+      ${L('📥 Reçu (livraisons)','+'+fmtKg(row.recu)+' kg','var(--green)')}
+      ${L('🛒 Vendu (ventes)','−'+fmtKg(row.vendu)+' kg','var(--red)')}
+      ${row.redistribue>0?L('🚚 Redistribué (vers d\'autres PDV)','−'+fmtKg(row.redistribue)+' kg','var(--red)'):''}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:2px solid var(--border);font-size:13px"><span>= Théorique</span><span style="font-weight:700">${fmtKg(row.theorique)} kg</span></div>
+      ${L('📦 Stock réel affiché',fmtKg(row.stock)+' kg','var(--gold)')}
+      ${Math.abs(row.ecart)>0.1?`<div style="margin-top:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:8px 10px;font-size:11px">⚠ Écart de <b>${fmtKg(row.ecart)} kg</b> entre le théorique et le stock affiché — probablement un <b>ajustement d'inventaire / saisie manuelle</b>.</div>`:`<div style="margin-top:10px;color:var(--g6);font-size:11px">✅ Le stock affiché correspond exactement au calcul (reçu/produit − vendu − redistribué).</div>`}
+    `}
+  </div>`;
+}
+
 function statutLivBadge(statut,statutPaiement){
   const labels={envoye:'📤 Envoyé',confirme:'✅ Confirmé',litige:'⚠ Litige',solde:'✅ Soldé',annule:'❌ Annulé'};
   const colors={envoye:'bdg-gold',confirme:'bdg-g',litige:'bdg-r',solde:'bdg-g',annule:'bdg-r'};
@@ -632,6 +697,9 @@ async function renderStockPDV(){
             ${s.qte_disponible<=0?'❌ Épuisé':s.qte_disponible<=s.seuil_critique?'⚠ Critique':'✅ OK'}
           </span></td>
           <td>
+            <button onclick="ouvrirTracabilite('${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}')"
+              title="Traçabilité : d'où vient ce stock ?"
+              style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.7">🔎</button>
             ${GP_ROLE==='admin'?
               `<button onclick="supprimerStockPDV('${s.id}','${(s.formule_nom||'').replace(/'/g,'')}','${(s.pdv_nom||'').replace(/'/g,'')}')"
                 title="Supprimer cette ligne"
