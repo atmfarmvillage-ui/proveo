@@ -302,6 +302,25 @@ async function saveLivraison(){
   err.textContent='';
   ['dist_qte','dist_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   notify(`Livraison ${produitNom} → ${dest?.nom} enregistrée ✓`,'gold');
+
+  // 📲 Prévenir le PDV destinataire par WhatsApp (bon de livraison pré-rempli)
+  try{
+    const telDest = dest?.whatsapp || dest?.telephone || '';
+    const interne = dest?.type_pdv==='principal';
+    const prov = (typeof GP_CONFIG!=='undefined' && GP_CONFIG?.nom_provenderie) || 'PROVENDA';
+    const kg = qte*poidsSac;
+    const msg = interne
+      ? `📦 *Transfert interne* — ${refLiv}\nDe : ${sourceNomFinal}\n${produitNom} : ${qte} sac(s) (~${fmtKg(kg)} kg)\n\nMerci de confirmer la réception dans l'app.\n\n_${prov}_`
+      : `📦 *Bon de livraison* — ${refLiv}\nDe : ${sourceNomFinal}\n${produitNom} : ${qte} sac(s) (~${fmtKg(kg)} kg)\n💰 Montant à régler : *${fmt(qte*prixGros)} F*\n\nMerci de confirmer la réception et de régler.\n\n_${prov}_`;
+    if(telDest && typeof detecterPays==='function'){
+      const p = detecterPays(telDest);
+      if(p.numero_whatsapp){ window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank'); }
+      else notify(`Livraison OK ✓ — n° WhatsApp de ${dest?.nom} invalide`,'gold');
+    } else {
+      notify(`Livraison OK ✓ — ajoute un n° WhatsApp à ${dest?.nom} (Équipe & PDV) pour l'alerte auto`,'gold');
+    }
+  }catch(e){}
+
   await renderDistribution();
 }
 
