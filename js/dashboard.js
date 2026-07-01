@@ -167,7 +167,7 @@ async function renderDashboard(){
     // r11 : achats fournisseurs avec dette résiduelle (pour Dette Fournisseurs)
     safe(SB.from('gp_achats').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0)),
     // r12 : livraisons inter-PDV du mois (ventes en gros) — pour le CA "ventes en gros" par PDV source
-    safe(SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_source_nom,date_livraison').eq('admin_id',GP_ADMIN_ID).gte('date_livraison',mDebut).lte('date_livraison',mFin)),
+    safe(SB.from('gp_livraisons_pdv').select('montant_total,montant_paye,pdv_source_nom,pdv_dest_nom,date_livraison').eq('admin_id',GP_ADMIN_ID).gte('date_livraison',mDebut).lte('date_livraison',mFin)),
   ]);
   // Extraire les tableaux — garantir que c'est toujours un Array
   const toArr=r=>Array.isArray(r?.data)?r.data:(r?.data?Object.values(r.data):[]);
@@ -228,7 +228,15 @@ async function renderDashboard(){
   const beneficeMois=encaisseMois-depMois;
 
   // Ventes en gros (livraisons inter-PDV) — vue complète = réseau ; sinon, gros du PDV source du membre
-  const LIVG=vueComplete?livMoisD:livMoisD.filter(l=>(typeof appartientAuPDV==='function')?appartientAuPDV(l.pdv_source_nom):l.pdv_source_nom===monPDVDash);
+  // On EXCLUT les transferts internes (destination = PDV principal / prolongement de Production),
+  // sinon on double-compte le CA (le transfert + la vente réelle du PDV au client).
+  let _principalNoms=new Set();
+  try{
+    const{data:_pdvs}=await SB.from('gp_points_vente').select('nom,type_pdv').eq('admin_id',GP_ADMIN_ID).eq('type_pdv','principal');
+    (_pdvs||[]).forEach(p=>_principalNoms.add(p.nom));
+  }catch(e){}
+  const LIVG=(vueComplete?livMoisD:livMoisD.filter(l=>(typeof appartientAuPDV==='function')?appartientAuPDV(l.pdv_source_nom):l.pdv_source_nom===monPDVDash))
+    .filter(l=>!_principalNoms.has(l.pdv_dest_nom));
   const caGros=LIVG.reduce((s,l)=>s+Number(l.montant_total||0),0);
   const encGros=LIVG.reduce((s,l)=>s+Number(l.montant_paye||0),0);
 
