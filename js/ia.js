@@ -92,16 +92,33 @@ function setIAPersona(p){
   document.getElementById('ia-p-marketing')?.classList.toggle('on', p==='marketing');
 }
 
+// Charge le contexte IA : résumé (RPC) + traçabilité stock déterministe (pour
+// que l'IA explique les niveaux avec les VRAIS chiffres, sans rien inventer).
+async function _iaChargerContexte(){
+  let ctx={};
+  try{ const{data}=await SB.rpc('get_ia_contexte'); ctx=data||{}; }catch(e){ ctx={}; }
+  try{
+    if(typeof calcTracabiliteStockAll==='function'){
+      const all=await calcTracabiliteStockAll();
+      ctx.tracabilite_stock = all
+        .filter(r=> r.stock>0 || r.recu>0 || r.vendu>0 || r.redistribue>0 || r.produit_kg>0)
+        .map(r=>({ pdv:r.pdv, produit:r.produit,
+          produit_kg:Math.round(r.produit_kg), recu_kg:Math.round(r.recu),
+          vendu_kg:Math.round(r.vendu), redistribue_kg:Math.round(r.redistribue),
+          stock_kg:Math.round(r.stock), ecart_kg:Math.round(r.ecart) }))
+        .slice(0,120);
+    }
+  }catch(e){}
+  return ctx;
+}
+
 async function openIA(){
   document.getElementById('ia-panel').style.display='flex';
   setIAPersona(_iaPersona);
   if(!_iaHistory.length) _iaAddMsg('ai', 'Bonjour 👋 Je suis ton assistant SADARI. Pose-moi une question sur tes chiffres, tes clients, tes relances…');
   // Recharger le contexte à chaque ouverture (données fraîches)
   _iaCtx = null;
-  try{
-    const { data } = await SB.rpc('get_ia_contexte');
-    _iaCtx = data || {};
-  }catch(e){ _iaCtx = {}; }
+  _iaCtx = await _iaChargerContexte();
 }
 function closeIA(){ document.getElementById('ia-panel').style.display='none'; }
 
@@ -133,7 +150,7 @@ async function sendIA(){
     const { data:{ session } } = await SB.auth.getSession();
     const token = session?.access_token;
     if(!token){ loading.innerHTML='⚠ Session expirée, reconnecte-toi.'; _iaBusy=false; document.getElementById('ia-send').disabled=false; return; }
-    if(_iaCtx===null){ try{ const{data}=await SB.rpc('get_ia_contexte'); _iaCtx=data||{}; }catch(e){ _iaCtx={}; } }
+    if(_iaCtx===null){ _iaCtx = await _iaChargerContexte(); }
 
     const res = await fetch(IA_WORKER, {
       method:'POST',
@@ -158,8 +175,7 @@ async function iaGenerate(persona, question, tier='eco'){
   const { data:{ session } } = await SB.auth.getSession();
   const token = session?.access_token;
   if(!token) throw new Error('Session expirée');
-  let ctx = {};
-  try{ const { data } = await SB.rpc('get_ia_contexte'); ctx = data || {}; }catch(e){}
+  let ctx = await _iaChargerContexte();
   const res = await fetch(IA_WORKER, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token },
