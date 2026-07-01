@@ -56,7 +56,9 @@ async function renderDistribution(){
 
   // KPIs
   const totalEnvoye=L.reduce((s,l)=>s+Number(l.montant_total||0),0);
-  const totalDu=L.reduce((s,l)=>s+(Number(l.montant_total||0)-Number(l.montant_paye||0)),0);
+  // Un PDV PRINCIPAL est un prolongement de la Production : la livraison est un
+  // transfert interne (pas de dette). Seuls les PDV secondaires (revendeurs) doivent.
+  const totalDu=L.reduce((s,l)=> s + (_livInterne(l)?0:(Number(l.montant_total||0)-Number(l.montant_paye||0))),0);
   const enAttente=L.filter(l=>l.statut==='envoye').length;
 
   document.getElementById('dist-kpis').innerHTML=`
@@ -76,6 +78,7 @@ async function renderDistribution(){
       </tr></thead>
       <tbody>
       ${L.map(l=>{
+        const interne=_livInterne(l);
         const reste=Number(l.montant_total||0)-Number(l.montant_paye||0);
         return `<tr>
           <td style="font-size:10px">${l.date_livraison}</td>
@@ -84,8 +87,8 @@ async function renderDistribution(){
           <td class="num">${l.qte_envoyee}</td>
           <td class="num" style="color:${l.qte_confirmee<l.qte_envoyee?'var(--red)':'var(--green)'}">${l.qte_confirmee||'—'}</td>
           <td class="num">${fmt(l.montant_total)} F</td>
-          <td class="num" style="color:${reste>0?'var(--red)':'var(--green)'}">${reste>0?fmt(l.montant_paye)+' F':'✓'}</td>
-          <td>${statutLivBadge(l.statut,l.statut_paiement)}</td>
+          <td class="num" style="color:${interne?'var(--textm)':(reste>0?'var(--red)':'var(--green)')}">${interne?'📦 interne':(reste>0?fmt(l.montant_paye)+' F':'✓')}</td>
+          <td>${statutLivBadge(l.statut, interne?'na':l.statut_paiement)}</td>
           <td><div style="display:flex;gap:3px">${actionsLivraison(l)}</div></td>
         </tr>`;
       }).join('')}
@@ -99,12 +102,25 @@ async function renderDistribution(){
   await renderStockPDV();
 }
 
+// Livraison "interne" = destination est un PDV PRINCIPAL (prolongement de Production) → pas de dette.
+function _livInterne(l){
+  if(!l) return false;
+  const list = (typeof GP_PDV_LIST!=='undefined') ? GP_PDV_LIST : [];
+  const p = list.find(x=> x.id===l.pdv_dest_id || x.nom===l.pdv_dest_nom);
+  return p?.type_pdv==='principal';
+}
+
 function statutLivBadge(statut,statutPaiement){
   const labels={envoye:'📤 Envoyé',confirme:'✅ Confirmé',litige:'⚠ Litige',solde:'✅ Soldé',annule:'❌ Annulé'};
   const colors={envoye:'bdg-gold',confirme:'bdg-g',litige:'bdg-r',solde:'bdg-g',annule:'bdg-r'};
+  const pmt = statutPaiement==='na'
+    ? `<span class="badge bdg-b" style="font-size:9px;display:block;margin-top:2px">📦 transfert interne</span>`
+    : (statutPaiement!=='paye'
+        ? `<span class="badge ${statutPaiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px;display:block;margin-top:2px">${statutPaiement}</span>`
+        : '');
   return `<div>
     <span class="badge ${colors[statut]}" style="font-size:9px">${labels[statut]||statut}</span>
-    ${statutPaiement!=='paye'?`<span class="badge ${statutPaiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:9px;display:block;margin-top:2px">${statutPaiement}</span>`:''}
+    ${pmt}
   </div>`;
 }
 
@@ -116,7 +132,7 @@ function actionsLivraison(l){
   if(l.statut==='envoye' && peutConfirmer){
     btns+=`<button class="btn btn-g btn-sm" onclick="ouvrirConfirmationReception('${l.id}')">📦 Confirmer</button>`;
   }
-  if(l.statut==='confirme'&&l.statut_paiement!=='paye'&&l.type_relation==='vente_gros'){
+  if(l.statut==='confirme'&&l.statut_paiement!=='paye'&&l.type_relation==='vente_gros'&&!_livInterne(l)){
     btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirPaiementLivraison('${l.id}','${l.pdv_dest_nom}',${Number(l.montant_total)-Number(l.montant_paye)})">💳 Payer</button>`;
   }
   btns+=`<button class="btn btn-out btn-sm" onclick="voirDetailLivraison('${l.id}')">👁</button>`;
