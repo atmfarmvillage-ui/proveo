@@ -23,6 +23,7 @@ async function dashKpiDrill(type){
     case 'ca':         await drillCA(); break;
     case 'encaisse':   await drillEncaisse(); break;
     case 'impayes':    await drillImpayes(); break;
+    case 'impayes_total': await drillImpayes(true); break;
     case 'depenses':   await drillDepenses(); break;
     case 'lots':       await drillLots(); break;
     case 'ca_ferme':   await drillCAFerme(); break;
@@ -212,11 +213,13 @@ async function drillEncaisse(){
 }
 
 // ── 3. IMPAYÉS (dettes clients) ────────────────────
-async function drillImpayes(){
+async function drillImpayes(toutePeriode){
   const {debut, fin} = _moisRangeCe();
-  const{data:V}=await _drillScopePV(SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin)
-    .in('statut_paiement',['partiel','impaye']).order('date',{ascending:false}));
+  let q = SB.from('gp_ventes').select('*')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
+    .in('statut_paiement',['partiel','impaye']).order('date',{ascending:false});
+  if(!toutePeriode) q = q.gte('date',debut).lte('date',fin);
+  const{data:V}=await _drillScopePV(q);
   const ventes = (V||[]).map(v=>{
     v._reste = Math.max(0, Number(v.montant_total||0) - Number(v.montant_paye||0));
     return v;
@@ -249,9 +252,9 @@ async function drillImpayes(){
   window._kpiDrillDebiteurs = byCli;
   const nbAvecTel = Object.values(byCli).filter(d=>d.tel).length;
 
-  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés — ${ventes.length} factures · ${Object.keys(byCli).length} clients`;
+  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés${toutePeriode?' (tous mois)':''} — ${ventes.length} factures · ${Object.keys(byCli).length} clients`;
   document.getElementById('kpi-drill-summary').innerHTML =
-    `<b style="color:var(--red);font-size:18px">${fmt(total)} F</b> à recouvrer sur le mois`;
+    `<b style="color:var(--red);font-size:18px">${fmt(total)} F</b> à recouvrer${toutePeriode?' au total (toutes périodes)':' sur le mois'}`;
   document.getElementById('kpi-drill-actions').innerHTML = nbAvecTel
     ? `<button class="btn btn-g" onclick="relancerTousImpayes()" style="background:#25D366;color:#FFF;border:none">📞 Relancer ${nbAvecTel} client(s) par WhatsApp</button>`
     : '';
