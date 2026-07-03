@@ -579,10 +579,21 @@ async function exporterLotsExcel(){
 }
 
 async function deleteLot(id){
-  if(!confirm('Supprimer ce lot ? Les sorties de stock associées seront supprimées.'))return;
+  const{data:lot}=await SB.from('gp_lots').select('*').eq('id',id).maybeSingle();
+  if(!lot){ notify('Lot introuvable','r'); return; }
+  if(!confirm(`Supprimer ce lot (${lot.formule_nom||''}) ?\n\n• Les MP consommées reviennent en stock.\n• Le stock produit fini créé par ce lot est retiré.\n\nAction irréversible.`))return;
+  const pdvProd=lot.pdv_production||'Production';
+  // 1) Retirer le stock produit fini crédité par ce lot (si les sacs avaient été saisis)
+  if(lot.stock_mis_a_jour){
+    const reelKg=(Number(lot.nb_sacs)>0?Number(lot.nb_sacs)*Number(lot.poids_sac||25):0)+(Number(lot.kg_vrac)||0);
+    if(reelKg>0 && typeof ajusterStockPDV==='function') await ajusterStockPDV(pdvProd, lot.formule_nom, -reelKg);
+    if(Number(lot.nb_sacs)>0 && typeof upsertStockPF==='function') await upsertStockPF(pdvProd, lot.formule_nom, Number(lot.poids_sac||25), -Number(lot.nb_sacs));
+  }
+  // 2) Remettre les MP consommées (supprime les sorties de stock MP liées au lot)
   await SB.from('gp_stock_mp').delete().eq('lot_id',id);
+  // 3) Supprimer le lot
   await SB.from('gp_lots').delete().eq('id',id);
-  renderLots();notify('Lot supprimé','r');
+  renderLots();notify('Lot supprimé — MP rendues, stock produit fini retiré ✓','r');
 }
 
 // ── INVENTAIRE MENSUEL ─────────────────────────────
