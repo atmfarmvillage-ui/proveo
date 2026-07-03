@@ -1915,9 +1915,19 @@ async function saveDep(){
 }
 
 async function deleteDep(id){
-  if(!confirm('Supprimer cette dépense ?'))return;
+  const{data:d}=await SB.from('gp_depenses').select('*').eq('id',id).maybeSingle();
+  if(!d){ notify('Dépense introuvable','r'); return; }
+  if(!confirm(`Supprimer la dépense « ${d.description||''} » (${fmt(d.montant)} F) ?\n\n💰 Si elle avait sorti du cash, l'argent sera rendu à la caisse.`))return;
+  // Rendre l'argent : retrouver et supprimer le mouvement caisse lié (sortie 'depense')
+  try{
+    const{data:mvts}=await SB.from('gp_mouvements_caisse').select('id')
+      .eq('admin_id',GP_ADMIN_ID).eq('type','sortie').eq('categorie','depense')
+      .eq('montant',d.montant).eq('date_mouvement',d.date)
+      .eq('description',`Dépense : ${d.description}`).limit(1);
+    if(mvts&&mvts.length){ await SB.from('gp_mouvements_caisse').delete().eq('id',mvts[0].id); }
+  }catch(e){}
   await SB.from('gp_depenses').delete().eq('id',id);
-  renderDep();notify('Dépense supprimée','r');
+  renderDep();notify('Dépense supprimée — caisse ajustée ✓','r');
 }
 
 function mettreAJourLigneVente(){} // stub — mise à jour manuelle uniquement

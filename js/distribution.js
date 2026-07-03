@@ -200,8 +200,58 @@ function actionsLivraison(l){
   if(l.statut==='confirme'&&l.statut_paiement!=='paye'&&l.type_relation==='vente_gros'&&!_livInterne(l)){
     btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirPaiementLivraison('${l.id}','${l.pdv_dest_nom}',${Number(l.montant_total)-Number(l.montant_paye)})">💳 Payer</button>`;
   }
+  if(GP_ROLE==='admin'){
+    btns+=`<button class="btn btn-red btn-sm" onclick="supprimerLivraison('${l.id}')" title="Supprimer — rend le stock source, retire le stock reçu, annule les paiements" style="padding:2px 6px">🗑</button>`;
+  }
   btns+=`<button class="btn btn-out btn-sm" onclick="voirDetailLivraison('${l.id}')">👁</button>`;
   return btns;
+}
+
+// Supprime une livraison (admin) en ANNULANT tous ses effets :
+//  1) recrédite le stock de la SOURCE (formule) ou supprime la sortie MP
+//  2) retire du stock de la DEST ce qui avait été confirmé
+//  3) supprime les paiements liés + leurs entrées de caisse
+async function supprimerLivraison(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
+  const{data:l}=await SB.from('gp_livraisons_pdv').select('*').eq('id',id).maybeSingle();
+  if(!l){ notify('Livraison introuvable','r'); return; }
+  const{data:pmts}=await SB.from('gp_paiements_livraison_pdv').select('*').eq('livraison_id',id);
+  const P=pmts||[];
+  const poids=Number(l.poids_sac||25);
+  let msg=`Supprimer la livraison ${l.ref||''} (${l.formule_nom} → ${l.pdv_dest_nom}) ?\n\n`;
+  msg+=`• Stock rendu à ${l.pdv_source_nom}.\n`;
+  if(Number(l.qte_confirmee||0)>0) msg+=`• Stock reçu chez ${l.pdv_dest_nom} retiré.\n`;
+  if(P.length) msg+=`• ${P.length} paiement(s) = ${fmt(P.reduce((s,p)=>s+Number(p.montant||0),0))} F supprimés + retirés de la caisse.\n`;
+  msg+=`\nAction irréversible.`;
+  if(!confirm(msg)) return;
+
+  // 1) Stock SOURCE
+  if(l.type_produit==='formule'){
+    await ajusterStockPDV(l.pdv_source_nom, l.formule_nom, +Number(l.qte_envoyee||0)*poids);
+    // 2) Stock DEST (ce qui avait été confirmé)
+    if(Number(l.qte_confirmee||0)>0){
+      await ajusterStockPDV(l.pdv_dest_nom, l.formule_nom, -Number(l.qte_confirmee||0)*poids);
+    }
+  } else if(l.type_produit==='mp'){
+    try{ await SB.from('gp_stock_mp').delete()
+      .eq('admin_id',GP_ADMIN_ID).eq('ref','Livraison '+String(l.id).slice(0,8)+' → '+l.pdv_dest_nom); }catch(e){}
+  }
+
+  // 3) Paiements + entrées caisse
+  for(const p of P){
+    try{
+      const{data:mv}=await SB.from('gp_mouvements_caisse').select('id')
+        .eq('admin_id',GP_ADMIN_ID).eq('type','entree').eq('categorie','vente_gros')
+        .eq('montant',p.montant).eq('description',`Règlement livraison → ${l.pdv_dest_nom||''} · ${p.mode}`).limit(1);
+      if(mv&&mv.length) await SB.from('gp_mouvements_caisse').delete().eq('id',mv[0].id);
+    }catch(e){}
+  }
+  if(P.length){ try{ await SB.from('gp_paiements_livraison_pdv').delete().eq('livraison_id',id); }catch(e){} }
+
+  // 4) La livraison elle-même
+  await SB.from('gp_livraisons_pdv').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  notify('Livraison supprimée — stock et caisse ajustés ✓','r');
+  await renderDistribution();
 }
 
 // ── BASCULE TYPE PRODUIT POUR DISTRIBUTION ───────
