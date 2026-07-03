@@ -113,7 +113,7 @@ async function renderCaisse(){
         <td style="font-size:10px;color:var(--textm)">${m.categorie||'—'}</td>
         <td class="num" style="color:${m.type==='entree'?'var(--green)':'var(--red)'}">${m.type==='entree'?'+':'−'}${fmt(m.montant)}</td>
         <td style="font-size:10px;color:var(--textm)">${m.enregistre_par_nom||'—'}</td>
-        <td>${(GP_ROLE==='admin'&&m.type==='transfert')?`<button class="btn btn-red btn-sm" onclick="supprimerMouvementCaisse('${m.id}')" title="Supprimer ce transfert — l'argent revient à la caisse source" style="padding:2px 6px">🗑</button>`:''}</td>
+        <td>${_mvtSupprimable(m)?`<button class="btn btn-red btn-sm" onclick="supprimerMouvementCaisse('${m.id}')" title="${m.categorie==='vente'?'Annuler cet encaissement (remet la dette client)':m.type==='transfert'?'Supprimer ce transfert (argent rendu)':'Supprimer ce mouvement manuel'}" style="padding:2px 6px">🗑</button>`:''}</td>
       </tr>`).join('')}</tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
 
@@ -125,15 +125,42 @@ async function renderCaisse(){
 // la suppression rend automatiquement l'argent à la caisse source (et le retire de
 // la destination). Réservé aux transferts : les autres mouvements (vente, paiement
 // fournisseur…) sont liés à d'autres tables et ne se suppriment pas d'ici.
+// Mouvements liés à un autre écran : leur suppression doit se faire LÀ-BAS (annulation propre).
+const _MVT_LIES = ['depense','paiement_fournisseur','vente_gros'];
+// Un mouvement est supprimable ici (admin) sauf s'il est lié à un autre écran.
+function _mvtSupprimable(m){
+  if(GP_ROLE!=='admin' || !m) return false;
+  if(m.type==='transfert') return true;              // transfert → rend l'argent
+  if(m.categorie==='vente') return true;             // encaissement client → restaure l'impayé
+  return !_MVT_LIES.includes(m.categorie);           // mouvement manuel (entrée/sortie/ajustement)
+}
 async function supprimerMouvementCaisse(id){
   if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   const{data:m}=await SB.from('gp_mouvements_caisse').select('*').eq('id',id).maybeSingle();
   if(!m){ notify('Mouvement introuvable','r'); return; }
-  if(m.type!=='transfert'){ notify('Seuls les transferts se suppriment ici (les ventes/paiements sont liés à d\'autres écrans)','r'); return; }
-  if(!confirm(`Supprimer ce transfert de ${fmt(m.montant)} F ?\n\n💰 L'argent sera rendu à la caisse source.\nCette action est irréversible.`)) return;
+  if(_MVT_LIES.includes(m.categorie)){
+    notify('Mouvement lié à un autre écran (Dépenses / Paiements MP / Distribution) — supprime-le là-bas pour tout annuler proprement.','r');
+    return;
+  }
+  let extra='';
+  if(m.categorie==='vente' && m.vente_id) extra='\n\n⚠ La vente redeviendra « impayée » de ce montant.';
+  else if(m.type==='transfert') extra='\n\n💰 L\'argent revient à la caisse source.';
+  if(!confirm(`Supprimer ce mouvement de ${fmt(m.montant)} F ?${extra}\n\nAction irréversible.`)) return;
+
+  // Encaissement client → restaurer l'impayé sur la vente
+  if(m.categorie==='vente' && m.vente_id){
+    try{
+      const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye').eq('id',m.vente_id).maybeSingle();
+      if(v){
+        const np=Math.max(0, Number(v.montant_paye||0)-Number(m.montant||0));
+        const st = np<=0 ? 'impaye' : (np>=Number(v.montant_total||0) ? 'paye' : 'partiel');
+        await SB.from('gp_ventes').update({montant_paye:np, statut_paiement:st}).eq('id',m.vente_id);
+      }
+    }catch(e){}
+  }
   const{error}=await SB.from('gp_mouvements_caisse').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){ notify('Erreur: '+error.message,'r'); return; }
-  notify(`Transfert supprimé — ${fmt(m.montant)} F rendus à la caisse source ✓`,'gold');
+  notify('Mouvement supprimé — soldes ajustés ✓','gold');
   await renderCaisse();
 }
 
