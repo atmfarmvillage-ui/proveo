@@ -336,6 +336,7 @@ async function saveCaisse(){
 }
 
 async function supprimerCaisse(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   if(!confirm('Archiver cette caisse ?'))return;
   await SB.from('gp_caisses').update({actif:false}).eq('id',id);
   await renderCaisse();

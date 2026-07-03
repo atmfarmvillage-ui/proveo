@@ -27,7 +27,7 @@ async function renderFournisseurs(){
             ${f.whatsapp?`<a href="https://wa.me/228${f.whatsapp.replace(/[\s\-\+]/g,'').replace(/^228/,'')}" target="_blank" class="btn btn-g btn-sm">📲</a>`:''}
             <button class="btn btn-out btn-sm" onclick="ouvrirBilanFourn('${f.id}','${f.nom}')" title="Bilan">📊</button>
             <button class="btn btn-out btn-sm" onclick="ouvrirModificationFourn('${f.id}')" title="Modifier">✏️</button>
-            <button class="btn btn-red btn-sm" onclick="deleteFourn('${f.id}')" title="Archiver">✕</button>
+            ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteFourn('${f.id}')" title="Archiver">✕</button>`:''}
           </div>
         </td>
       </tr>`).join('')}
@@ -97,6 +97,7 @@ async function saveFournisseur(){
 }
 
 async function deleteFourn(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   if(!confirm('Archiver ce fournisseur ?'))return;
   await SB.from('gp_fournisseurs').update({actif:false}).eq('id',id);
   await renderFournisseurs();
