@@ -105,7 +105,7 @@ async function renderCaisse(){
   caisses.forEach(c=>caisseMap[c.id]=c.nom);
   document.getElementById('mouvements-caisse-liste').innerHTML=recents.length?`
     <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
-      <thead><tr><th>Date</th><th>Caisse</th><th>Type</th><th>Catégorie</th><th class="num">Montant</th><th>Par</th></tr></thead>
+      <thead><tr><th>Date</th><th>Caisse</th><th>Type</th><th>Catégorie</th><th class="num">Montant</th><th>Par</th><th></th></tr></thead>
       <tbody>${recents.map(m=>`<tr>
         <td style="font-size:10px">${m.date_mouvement}</td>
         <td>${caisseMap[m.caisse_id]||'—'}${m.caisse_dest_id?` → ${caisseMap[m.caisse_dest_id]||'—'}`:''}</td>
@@ -113,11 +113,28 @@ async function renderCaisse(){
         <td style="font-size:10px;color:var(--textm)">${m.categorie||'—'}</td>
         <td class="num" style="color:${m.type==='entree'?'var(--green)':'var(--red)'}">${m.type==='entree'?'+':'−'}${fmt(m.montant)}</td>
         <td style="font-size:10px;color:var(--textm)">${m.enregistre_par_nom||'—'}</td>
+        <td>${(GP_ROLE==='admin'&&m.type==='transfert')?`<button class="btn btn-red btn-sm" onclick="supprimerMouvementCaisse('${m.id}')" title="Supprimer ce transfert — l'argent revient à la caisse source" style="padding:2px 6px">🗑</button>`:''}</td>
       </tr>`).join('')}</tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
 
   // Historique dédié des transferts entre caisses / PDV
   if(typeof renderTransfertsHistorique==='function') renderTransfertsHistorique(caisses, filtreActif);
+}
+
+// Supprimer un TRANSFERT (admin). Le solde étant calculé à partir des mouvements,
+// la suppression rend automatiquement l'argent à la caisse source (et le retire de
+// la destination). Réservé aux transferts : les autres mouvements (vente, paiement
+// fournisseur…) sont liés à d'autres tables et ne se suppriment pas d'ici.
+async function supprimerMouvementCaisse(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
+  const{data:m}=await SB.from('gp_mouvements_caisse').select('*').eq('id',id).maybeSingle();
+  if(!m){ notify('Mouvement introuvable','r'); return; }
+  if(m.type!=='transfert'){ notify('Seuls les transferts se suppriment ici (les ventes/paiements sont liés à d\'autres écrans)','r'); return; }
+  if(!confirm(`Supprimer ce transfert de ${fmt(m.montant)} F ?\n\n💰 L'argent sera rendu à la caisse source.\nCette action est irréversible.`)) return;
+  const{error}=await SB.from('gp_mouvements_caisse').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){ notify('Erreur: '+error.message,'r'); return; }
+  notify(`Transfert supprimé — ${fmt(m.montant)} F rendus à la caisse source ✓`,'gold');
+  await renderCaisse();
 }
 
 // ── HISTORIQUE DES TRANSFERTS ENTRE CAISSES / PDV ──────────────────
@@ -149,13 +166,14 @@ async function renderTransfertsHistorique(caisses, filtreId){
   el.innerHTML = T.length ? `
     <div style="font-size:11px;color:var(--textm);margin-bottom:6px">${T.length} transfert(s) · total validé : <b style="color:var(--gold)">${fmt(totalValide)} F</b></div>
     <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
-      <thead><tr><th>Date</th><th>De → Vers</th><th class="num">Montant</th><th>Statut</th><th>Par</th></tr></thead>
+      <thead><tr><th>Date</th><th>De → Vers</th><th class="num">Montant</th><th>Statut</th><th>Par</th><th></th></tr></thead>
       <tbody>${T.map(t=>`<tr style="${t.statut_transfert==='refuse'?'opacity:.5':''}">
         <td style="font-size:10px">${t.date_mouvement||''}</td>
         <td>${nom[t.caisse_id]||'—'} <span style="color:var(--textm)">(${pdv[t.caisse_id]||'—'})</span> → ${nom[t.caisse_dest_id]||'—'} <span style="color:var(--textm)">(${pdv[t.caisse_dest_id]||'—'})</span></td>
         <td class="num" style="color:var(--gold)">${fmt(t.montant)} F</td>
         <td>${badge(t.statut_transfert)}</td>
         <td style="font-size:10px;color:var(--textm)">${t.enregistre_par_nom||'—'}</td>
+        <td>${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerMouvementCaisse('${t.id}')" title="Supprimer ce transfert — l'argent revient à la caisse source" style="padding:2px 6px">🗑</button>`:''}</td>
       </tr>`).join('')}</tbody>
     </table></div>` : '<div style="color:var(--textm);font-size:12px">Aucun transfert entre caisses.</div>';
 }
