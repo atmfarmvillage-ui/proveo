@@ -30,7 +30,7 @@ async function renderSalaires(){
           <button class="btn btn-print btn-sm" onclick="imprimerFichePaie('${s.id}')" title="Fiche de paie PDF">🖨️</button>
           <button class="btn btn-out btn-sm" onclick="envoyerFichePayeWA('${s.id}')" title="Envoyer WhatsApp" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.3);color:#25D366">📲</button>
           <button class="btn btn-out btn-sm" onclick="afficherBilanEmploye('${s.nom_prenom}')" title="Bilan cumulé">📊</button>
-          <button class="btn btn-red btn-sm" onclick="deleteSalaire('${s.id}')">✕</button>
+          ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteSalaire('${s.id}')">✕</button>`:''}
         </td>
       </tr>`).join('')}
       <tr style="font-weight:700;background:rgba(22,163,74,.05)">
@@ -82,6 +82,7 @@ async function saveSalaire(){
 }
 
 async function deleteSalaire(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   if(!confirm('Supprimer ce salaire ?'))return;
   await SB.from('gp_salaires').delete().eq('id',id);
   await renderSalaires();

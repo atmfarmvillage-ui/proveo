@@ -497,7 +497,7 @@ async function renderServicesAdmin(){
       </div>
       <input type="number" value="${s.prix_unitaire||0}" onchange="updateServicePrix('${s.id}',this.value)" style="width:90px;text-align:right;font-size:11px;padding:3px 6px"><span style="font-size:10px;color:var(--textm)">F/${s.unite}</span>
       <button class="btn btn-out btn-sm" onclick="toggleServiceActif('${s.id}',${s.actif})" style="font-size:10px;padding:3px 8px">${s.actif?'🟢 Actif':'⚪ Inactif'}</button>
-      <button class="btn btn-red btn-sm" onclick="deleteService('${s.id}')" style="padding:3px 7px">✕</button>
+      ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteService('${s.id}')" style="padding:3px 7px">✕</button>`:''}
     </div>`).join('');
 }
 async function saveService(){
@@ -524,6 +524,7 @@ async function toggleServiceActif(id,actif){
   renderServicesAdmin();
 }
 async function deleteService(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   if(!confirm('Supprimer cette prestation définitivement ?')) return;
   await SB.from('gp_services').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
   notify('Prestation supprimée','r');
@@ -1880,7 +1881,7 @@ async function renderDep(){
       <td>${d.description}<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(d.point_vente||'Production'):('📍 '+(d.point_vente||'Production'))}</div></td>
       <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
-      <td><button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button></td>
+      <td>${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button>`:''}</td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
 }
 
@@ -1915,6 +1916,7 @@ async function saveDep(){
 }
 
 async function deleteDep(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   const{data:d}=await SB.from('gp_depenses').select('*').eq('id',id).maybeSingle();
   if(!d){ notify('Dépense introuvable','r'); return; }
   if(!confirm(`Supprimer la dépense « ${d.description||''} » (${fmt(d.montant)} F) ?\n\n💰 Si elle avait sorti du cash, l'argent sera rendu à la caisse.`))return;

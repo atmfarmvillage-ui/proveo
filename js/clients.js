@@ -317,7 +317,7 @@ async function renderClients(){
           <button class="btn btn-out btn-sm" onclick="ouvrirCarteClient('${c.id}')" title="Carte de fidélité" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🪪</button>
           ${(GP_ROLE==='admin' && Number(c.points_fidelite)>0)?`<button class="btn btn-out btn-sm" onclick="ouvrirEchangePoints('${c.id}')" title="Donner le cadeau (${c.points_fidelite} pts) — admin" style="color:var(--gold);border-color:rgba(232,197,71,.4)">🎁</button>`:''}
           ${c.qr_token?`<button class="btn btn-out btn-sm" onclick="regenererQRClient('${c.id}')" title="Régénérer la carte (perte)" style="color:var(--textm);font-size:10px">↺</button>`:''}
-          <button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>
+          ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteClient('${c.id}')">✕</button>`:''}
         </td>
       </tr>`;
     }).join('')}
@@ -571,6 +571,7 @@ async function confirmerCadeauStock(clientId, recompenseId){
 }
 
 async function deleteClient(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   if(!confirm('Supprimer ce client ?'))return;
   await SB.from('gp_clients').delete().eq('id',id);
   await loadClients();populateSelects();renderClients();notify('Client supprimé','r');

@@ -435,7 +435,7 @@ async function renderLots(){
           ? `<span class="badge bdg-g" style="font-size:9px" title="Cliquer pour corriger">📦 ${l.nb_sacs} sacs${Number(l.kg_pertes)>0?' · perte '+fmt(l.kg_pertes)+' kg':''}</span>
              <button class="btn btn-out btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:3px 6px" title="Corriger">✏️</button>`
           : `<button class="btn btn-g btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:4px 8px">📦 Sacs obtenus</button>`}
-        <button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button>
+        ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button>`:''}
       </td>
     </tr>`).join('')}</tbody></table>`:`<div style="color:var(--textm);font-size:12px">${filtMois?'Aucun lot ce mois.':'Aucun lot enregistré.'}</div>`}</div>`;
 }
@@ -579,6 +579,7 @@ async function exporterLotsExcel(){
 }
 
 async function deleteLot(id){
+  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   const{data:lot}=await SB.from('gp_lots').select('*').eq('id',id).maybeSingle();
   if(!lot){ notify('Lot introuvable','r'); return; }
   if(!confirm(`Supprimer ce lot (${lot.formule_nom||''}) ?\n\n• Les MP consommées reviennent en stock.\n• Le stock produit fini créé par ce lot est retiré.\n\nAction irréversible.`))return;
