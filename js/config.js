@@ -57,3 +57,30 @@ function fmt(n){
 function fmtKg(n){
   return Number(n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
 }
+
+// ══════════════════════════════════════════════════
+// ANTI-DOUBLON GLOBAL — empêche le double-clic (ou re-clic réseau lent)
+// d'enregistrer 2× la même action (vente, dépense, paiement, transfert…).
+// Sur le 1er clic d'un bouton d'action : on le verrouille ~2,5 s (grisé) ;
+// les clics suivants sur CE bouton sont ignorés. Si la liste se rafraîchit,
+// le nouveau bouton est immédiatement réutilisable.
+// ══════════════════════════════════════════════════
+(function(){
+  const MUT = /(save|enregistr|payer|paiement|encaisse|confirm|valid|supprim|delete|donner|échang|echang|transfert|soumettre|recept|rembours|ajouter|creer|créer|generer|générer)/i;
+  const WIN = 2500; // ms
+  document.addEventListener('click', function(e){
+    const b = e.target.closest('button, .btn');
+    if(!b) return;
+    const sig = (b.getAttribute('onclick')||'') + ' ' + (b.textContent||'');
+    if(!MUT.test(sig)) return;
+    if(b.dataset._locked){                 // clic répété trop rapide → on bloque
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+    b.dataset._locked = '1';               // 1er clic : on laisse passer + on verrouille
+    const opq = b.style.opacity;
+    b.style.opacity = '.55';
+    setTimeout(function(){
+      try{ if(b){ delete b.dataset._locked; b.style.opacity = opq; } }catch(_){}
+    }, WIN);
+  }, true); // phase capture : bloque avant l'onclick inline
+})();
