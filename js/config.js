@@ -89,4 +89,5 @@ function fmtKg(n){
 // Dès que le réseau revient, on déduit le stock des ventes restées non déduites.
 window.addEventListener('online', function(){
   if(typeof synchroniserStockVentes==='function'){ try{ synchroniserStockVentes(); }catch(e){} }
+  if(typeof synchroniserCaisseDepenses==='function'){ try{ synchroniserCaisseDepenses(); }catch(e){} }
 });

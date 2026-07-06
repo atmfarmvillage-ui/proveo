@@ -266,8 +266,9 @@ async function bootApp(user){
   // Load base data — loadFormules d'abord car loadPrix() s'appuie dessus
   await loadFormules();
   await Promise.all([loadConfig(),loadIngredients(),loadClients(),loadPrix(),loadCategoriesAliment(),loadBesoinsNutritionnels(),loadContraintesMP()]);
-  // 🔄 Rattrapage auto : déduire le stock des ventes non déduites (connexion coupée avant)
+  // 🔄 Rattrapage auto : stock des ventes + caisse des dépenses non débitées (connexion coupée avant)
   if(typeof synchroniserStockVentes==='function'){ try{ synchroniserStockVentes(); }catch(e){} }
+  if(typeof synchroniserCaisseDepenses==='function'){ try{ synchroniserCaisseDepenses(); }catch(e){} }
   // Set defaults
   const todayStr=new Date().toISOString().slice(0,10);
   const monthStr=new Date().toISOString().slice(0,7);
