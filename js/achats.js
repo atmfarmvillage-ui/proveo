@@ -945,8 +945,8 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
   const reste=Number(montantTotal)-nouveauPaye;
   const statutPaiement=reste<=0?'solde':'partiel';
 
-  // Enregistrer le paiement
-  const{error}=await SB.from('gp_achats_paiements').insert({
+  // Enregistrer le paiement (id capturé pour le rattrapage caisse)
+  const{data:paie,error}=await SB.from('gp_achats_paiements').insert({
     achat_id:achatId,
     admin_id:GP_ADMIN_ID,
     montant,mode_paiement:mode,
@@ -954,7 +954,7 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
     reference:ref,
     enregistre_par:GP_USER?.id,
     enregistre_par_nom:GP_USER?.email?.split('@')[0]
-  });
+  }).select().maybeSingle();
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
@@ -964,7 +964,7 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
     statut_paiement:statutPaiement
   }).eq('id',achatId);
 
-  // Mouvement caisse automatique — caisse du PDV (ou siège), pas une caisse au hasard
+  // Sortie caisse — caisse du PDV (ou siège). Débit OBLIGATOIRE : si échec → rattrapé au refresh.
   let _cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
   _cq = GP_POINT_VENTE ? _cq.eq('point_vente',GP_POINT_VENTE) : _cq.is('point_vente',null);
   let{data:caisses}=await _cq.limit(1);
@@ -972,16 +972,20 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
     const _r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
     caisses=_r.data;
   }
-  if(caisses?.length){
-    await SB.from('gp_mouvements_caisse').insert({
-      admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,
+  const _caisseId=caisses?.[0]?.id||null;
+  let _caisseOk=false;
+  if(_caisseId && paie?.id){
+    const{error:eSortie}=await SB.from('gp_mouvements_caisse').insert({
+      admin_id:GP_ADMIN_ID,caisse_id:_caisseId,
       type:'sortie',categorie:'paiement_fournisseur',
       montant,date_mouvement:date,
       description:`Paiement fournisseur · ${ref||mode}`,
       enregistre_par:GP_USER?.id,
       enregistre_par_nom:GP_USER?.email?.split('@')[0]
     });
+    _caisseOk=!eSortie;
   }
+  if(paie?.id){ try{ await SB.from('gp_achats_paiements').update({caisse_id:_caisseId, caisse_debitee:_caisseOk}).eq('id',paie.id); }catch(_){} }
 
   // Notification WhatsApp au fournisseur si configuré
   const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref')

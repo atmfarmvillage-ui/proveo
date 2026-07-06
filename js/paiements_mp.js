@@ -190,35 +190,39 @@ async function saveModalPaiement(){
   const nouveauPaye=montantPaye+montant;
   const reste=montantTotal-nouveauPaye;
 
-  // Enregistrer paiement
-  const{error}=await SB.from('gp_achats_paiements').insert({
+  // Enregistrer paiement (on capture son id pour le rattrapage caisse)
+  const{data:paie,error}=await SB.from('gp_achats_paiements').insert({
     achat_id:achatId,admin_id:GP_ADMIN_ID,
     montant,mode_paiement:mode,date_paiement:date,reference:ref,
     enregistre_par:GP_USER?.id,enregistre_par_nom:GP_USER?.email?.split('@')[0]
-  });
+  }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
 
   await SB.from('gp_achats').update({
     montant_paye:nouveauPaye,statut_paiement:reste<=0?'solde':'partiel'
   }).eq('id',achatId);
 
-  // Mouvement caisse — utilise la caisse choisie par l'utilisateur (filtrée par PDV)
+  // Sortie caisse — caisse choisie (filtrée PDV) sinon repli. Débit OBLIGATOIRE :
+  // si ça échoue, le paiement reste et sera RATTRAPÉ au refresh (synchroniserCaissePaiementsMP).
   const caisseSel = document.getElementById('pmt-caisse')?.value || null;
   let caisseId = caisseSel;
   if(!caisseId){
-    // Fallback : 1ère caisse physique accessible
     const{data:caisseFb}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
     caisseId = caisseFb?.[0]?.id || null;
   }
-  if(caisseId){
-    await SB.from('gp_mouvements_caisse').insert({
+  let _caisseOk=false;
+  if(caisseId && paie?.id){
+    const{error:eSortie}=await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID,caisse_id:caisseId,
       type:'sortie',categorie:'paiement_fournisseur',
       montant,date_mouvement:date,
       description:`Paiement fournisseur · ${ref||mode}`,
       enregistre_par:GP_USER?.id,enregistre_par_nom:GP_USER?.email?.split('@')[0]
     });
+    _caisseOk = !eSortie;
   }
+  // Mémoriser la caisse visée + l'état du débit (pour le rattrapage). Inoffensif si colonnes absentes.
+  if(paie?.id){ try{ await SB.from('gp_achats_paiements').update({caisse_id:caisseId, caisse_debitee:_caisseOk}).eq('id',paie.id); }catch(_){} }
 
   // Construire message WhatsApp
   const{data:achat}=await SB.from('gp_achats').select('fournisseur_id,fournisseur_nom,ref').eq('id',achatId).maybeSingle();
@@ -323,4 +327,54 @@ async function voirHistoPaiements(achatId, fournisseurNom){
     <button onclick="fermerModalPaiement()" class="btn btn-out" style="width:100%;justify-content:center;margin-top:10px">Fermer</button>`;
   succes.style.display='block';
   document.getElementById('modal-paiement-mp').style.display='flex';
+}
+
+// ── RATTRAPAGE CAISSE des paiements MP (comme les ventes/dépenses) ──
+// Débite la caisse des paiements restés caisse_debitee=false. Idempotent (claim).
+async function _debiterCaissePaiementMP(p){
+  let caisseId = p.caisse_id || null;
+  if(!caisseId){
+    // Repli : résoudre la caisse via le PDV de l'achat
+    let pv=null;
+    try{ const{data:a}=await SB.from('gp_achats').select('point_vente').eq('id',p.achat_id).maybeSingle(); pv=a?.point_vente||null; }catch(_){}
+    let cq=SB.from('gp_caisses').select('id').eq('admin_id',p.admin_id).eq('type','physique');
+    cq = pv ? cq.eq('point_vente',pv) : cq.is('point_vente',null);
+    let{data:cc}=await cq.limit(1);
+    if(!cc||!cc.length){ const r=await SB.from('gp_caisses').select('id').eq('admin_id',p.admin_id).eq('type','physique').limit(1); cc=r.data; }
+    caisseId=cc?.[0]?.id||null;
+  }
+  if(!caisseId) throw new Error('Aucune caisse pour débiter le paiement');
+  const{error}=await SB.from('gp_mouvements_caisse').insert({
+    admin_id:p.admin_id, caisse_id:caisseId,
+    type:'sortie', categorie:'paiement_fournisseur',
+    montant:p.montant, date_mouvement:p.date_paiement,
+    description:`Paiement fournisseur · ${p.reference||p.mode_paiement||''}`,
+    enregistre_par:p.enregistre_par, enregistre_par_nom:p.enregistre_par_nom
+  });
+  if(error) throw error;
+}
+
+let _syncPaieMPEnCours=false;
+async function synchroniserCaissePaiementsMP(){
+  if(_syncPaieMPEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncPaieMPEnCours=true;
+  try{
+    const{data:ps}=await SB.from('gp_achats_paiements').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false)
+      .order('date_paiement',{ascending:true}).limit(100);
+    if(!ps || !ps.length) return;
+    let n=0;
+    for(const p of ps){
+      const{data:claim}=await SB.from('gp_achats_paiements').update({caisse_debitee:true})
+        .eq('id',p.id).eq('caisse_debitee',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{ await _debiterCaissePaiementMP(p); n++; }
+      catch(e){ try{ await SB.from('gp_achats_paiements').update({caisse_debitee:false}).eq('id',p.id); }catch(_){} }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} paiement(s) MP synchronisé(s) — caisse à jour`,'gold');
+    if(n>0 && typeof renderCaisse==='function'){ try{ renderCaisse(); }catch(_){} }
+  }catch(e){ /* silencieux */ }
+  finally{ _syncPaieMPEnCours=false; }
 }
