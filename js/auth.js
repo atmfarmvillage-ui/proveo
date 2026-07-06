@@ -270,6 +270,7 @@ async function bootApp(user){
   if(typeof synchroniserStockVentes==='function'){ try{ synchroniserStockVentes(); }catch(e){} }
   if(typeof synchroniserCaisseDepenses==='function'){ try{ synchroniserCaisseDepenses(); }catch(e){} }
   if(typeof synchroniserCaissePaiementsMP==='function'){ try{ synchroniserCaissePaiementsMP(); }catch(e){} }
+  if(typeof synchroniserCaisseVentes==='function'){ try{ synchroniserCaisseVentes(); }catch(e){} }
   // Set defaults
   const todayStr=new Date().toISOString().slice(0,10);
   const monthStr=new Date().toISOString().slice(0,7);
