@@ -978,6 +978,30 @@ async function saveVente(){
     }
   }
 
+  // ── BLOCAGE STOCK (AVANT enregistrement) : pas de stock suffisant au PDV → PAS de vente ──
+  {
+    const _norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const _pdv = (typeof pdvSourceVente==='function' ? pdvSourceVente() : (GP_POINT_VENTE||'Production')) || 'Production';
+    for(const l of VT_LIGNES){
+      if(l.type_produit==='mp'||l.type_produit==='ferme'||l.type_produit==='prestation'||l.type_produit==='veto') continue;
+      const besoin=Number(l.quantite||0);
+      if(besoin<=0) continue;
+      const{data:_st}=await SB.from('gp_stock_produits_pdv').select('formule_nom,qte_disponible')
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',_pdv);
+      const dispo=(_st||[]).filter(s=>_norm(s.formule_nom)===_norm(l.formule_nom))
+        .reduce((s,r)=>s+Number(r.qte_disponible||0),0);
+      if(dispo < besoin - 0.01){
+        const msg = dispo<=0
+          ? `🚫 Vous n'avez PAS de stock de « ${l.formule_nom} » à ${_pdv}.\n\nVente ANNULÉE. Faites une production ou une livraison d'abord.`
+          : `🚫 Stock insuffisant pour « ${l.formule_nom} » à ${_pdv} :\nil ne reste que ${fmtKg(dispo)} kg, vous voulez en vendre ${fmtKg(besoin)} kg.\n\nVente ANNULÉE.`;
+        alert(msg);
+        if(typeof notify==='function') notify('🚫 Stock insuffisant — vente annulée','r');
+        _showErr(dispo<=0 ? `Aucun stock de « ${l.formule_nom} » à ${_pdv}` : `Stock insuffisant : ${fmtKg(dispo)} kg de « ${l.formule_nom} » à ${_pdv}`);
+        return; // BLOQUE : aucune vente enregistrée
+      }
+    }
+  }
+
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,
     client_id:clientId||null,
@@ -1097,24 +1121,12 @@ async function saveVente(){
       const besoin = Number(l.quantite||0);
       if(besoin<=0) continue;
 
-      // 1) Chercher au PDV de vente (match nom tolérant : espaces/majuscules ignorés)
-      let{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
-      let rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom));
-      let pdvUtilise=pdvStock;
-      // 2) Repli sur Production si rien trouvé au PDV (le stock produit fini vit à Production)
-      if(!rows.length && pdvStock!=='Production'){
-        const r2=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom','Production');
-        rows=(r2.data||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom));
-        if(rows.length) pdvUtilise='Production';
-      }
-      rows.sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
-
-      if(!rows.length){
-        // Introuvable → BLOCAGE visible (la secrétaire ne peut pas rater)
-        alert(`⚠️ STOCK NON DÉDUIT\n\n« ${l.formule_nom} » est introuvable en stock (ni à ${pdvStock}, ni à Production).\n\nLa vente EST enregistrée, mais le stock n'a PAS baissé.\nVérifie le nom exact de la formule et son stock.`);
-        continue;
-      }
-      // Déduire (FIFO sur la ligne la plus garnie)
+      // Déduire au PDV de vente uniquement (le blocage pré-enregistrement a déjà
+      // garanti qu'il y a assez de stock — PAS de repli, PAS de vente à découvert).
+      const{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+      const rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom))
+        .sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
+      if(!rows.length) continue; // ne devrait plus arriver (bloqué avant)
       let reste=besoin;
       for(const st of rows){
         if(reste<=0) break;
@@ -1122,13 +1134,10 @@ async function saveVente(){
         const pris=Math.min(dispo,reste); reste-=pris;
         await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
       }
-      if(reste>0.01){
-        alert(`⚠️ Stock insuffisant pour « ${l.formule_nom} » à ${pdvUtilise} : il manquait ${fmtKg(reste)} kg.\nVendu à découvert — stock mis à 0. Régularise par un inventaire.`);
-      }
       // Alerte seuil
       const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
       const seuil=Number(rows[0].seuil_critique||0);
-      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvUtilise,l.formule_nom,Math.max(0,totalRestant),seuil); }
+      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
     }
   }catch(e){
     try{ alert('⚠️ Erreur lors de la déduction du stock : '+(e?.message||e)+'\n\nLa vente est enregistrée — VÉRIFIE le stock manuellement.'); }catch(_){}
