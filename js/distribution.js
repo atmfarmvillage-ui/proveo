@@ -394,25 +394,19 @@ async function saveLivraison(){
 
   if(error){err.textContent='Erreur: '+error.message;return;}
 
-  // Déduire le stock de la SOURCE à l'envoi (formules), en KG. La dest sera créditée à la confirmation.
+  // Déduire le stock de la SOURCE à l'envoi. Si échec → drapeau false → RATTRAPÉ au refresh.
+  let _stockOk=true;
   if(typeProduit==='formule'){
-    await ajusterStockPDV(sourceNomFinal, produitNom, -kgDistribue);
-  }
-
-  // Si MP : décrémenter le stock central immédiatement (envoi vers PDV)
-  if(typeProduit === 'mp' && ingredientId){
-    await SB.from('gp_stock_mp').insert({
-      admin_id:GP_ADMIN_ID,
-      saisi_par:GP_USER?.id,
-      type:'sortie_distribution',
-      date:today(),
-      ingredient_id:ingredientId,
-      ingredient_nom:produitNom,
-      quantite:qte,
-      prix_unit:prixGros,
+    _stockOk = await ajusterStockPDV(sourceNomFinal, produitNom, -kgDistribue);
+  } else if(typeProduit === 'mp' && ingredientId){
+    const{error:eMp}=await SB.from('gp_stock_mp').insert({
+      admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, type:'sortie_distribution', date:today(),
+      ingredient_id:ingredientId, ingredient_nom:produitNom, quantite:qte, prix_unit:prixGros,
       ref:'Livraison '+(liv?.id||'').slice(0,8)+' → '+dest?.nom
     });
+    _stockOk = !eMp;
   }
+  if(liv?.id){ try{ await SB.from('gp_livraisons_pdv').update({stock_applique:_stockOk}).eq('id',liv.id); }catch(_){} }
 
   err.textContent='';
   ['dist_qte','dist_prix'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -562,24 +556,29 @@ async function savePaiementLivraison(){
 // ── STOCK PRODUITS FINIS PAR PDV ─────────────────
 // Ajuste le stock d'un PDV (ou de "Production") pour une formule. delta en KG (+ entrée / - sortie).
 // Table unique gp_stock_produits_pdv = vérité opérationnelle (Production = pseudo-PDV). Tout en KG.
+// Renvoie true si l'ajustement a réussi, false en cas d'erreur DB (pour le rattrapage).
+// Les appelants existants ignorent la valeur — non-cassant.
 async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
-  if(!pdvNom || !formuleNom) return;
-  // TOUTES les lignes (gère les doublons) : on met à jour la 1re, on n'en crée pas une nouvelle s'il en existe déjà
-  const{data:rows}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
+  if(!pdvNom || !formuleNom) return false;
+  const{data:rows,error:eSel}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
     .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom)
     .order('qte_disponible',{ascending:false});
+  if(eSel) return false;
   const st=(rows&&rows.length)?rows[0]:null;
   if(st){
-    await SB.from('gp_stock_produits_pdv').update({
+    const{error}=await SB.from('gp_stock_produits_pdv').update({
       qte_disponible:Math.max(0,Number(st.qte_disponible||0)+deltaKg),
       updated_at:new Date().toISOString()
     }).eq('id',st.id);
+    return !error;
   } else if(deltaKg>0){
-    await SB.from('gp_stock_produits_pdv').insert({
+    const{error}=await SB.from('gp_stock_produits_pdv').insert({
       admin_id:GP_ADMIN_ID, pdv_nom:pdvNom, formule_nom:formuleNom,
-      qte_disponible:Math.max(0,deltaKg), seuil_critique:100 // 100 kg ≈ 4 sacs 25kg
+      qte_disponible:Math.max(0,deltaKg), seuil_critique:100
     });
+    return !error;
   }
+  return true; // deltaKg<=0 sans ligne : rien à faire, considéré OK
 }
 
 // Définit la valeur ABSOLUE du stock d'un PDV/formule (init départ ou inventaire). kg.
@@ -819,3 +818,43 @@ async function voirDetailLivraison(id){
 }
 
 function actualiserStockPDV(){renderDistribution();notify('Stock actualisé ✓','gold');}
+
+// ── RATTRAPAGE STOCK des livraisons (déduction source non appliquée) ──
+async function _appliquerStockLivraison(l){
+  if(l.type_produit==='formule' || !l.type_produit){
+    const kg=Number(l.qte_envoyee||0)*Number(l.poids_sac||1);
+    const ok=await ajusterStockPDV(l.pdv_source_nom, l.formule_nom, -kg);
+    if(!ok) throw new Error('Ajustement stock source échoué');
+  } else if(l.type_produit==='mp' && l.ingredient_id){
+    const ref='Livraison '+String(l.id).slice(0,8)+' → '+(l.pdv_dest_nom||'');
+    const{data:deja}=await SB.from('gp_stock_mp').select('id').eq('admin_id',l.admin_id).eq('ref',ref).limit(1);
+    if(deja && deja.length) return; // déjà décrémenté (idempotent)
+    const{error}=await SB.from('gp_stock_mp').insert({
+      admin_id:l.admin_id, saisi_par:l.envoye_par, type:'sortie_distribution', date:l.date_livraison,
+      ingredient_id:l.ingredient_id, ingredient_nom:l.formule_nom, quantite:l.qte_envoyee, prix_unit:l.prix_gros_unitaire, ref
+    });
+    if(error) throw error;
+  }
+}
+let _syncStockLivEnCours=false;
+async function synchroniserStockLivraisons(){
+  if(_syncStockLivEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncStockLivEnCours=true;
+  try{
+    const{data:ls}=await SB.from('gp_livraisons_pdv').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('stock_applique',false).order('date_livraison',{ascending:true}).limit(100);
+    if(!ls || !ls.length) return;
+    let n=0;
+    for(const l of ls){
+      const{data:claim}=await SB.from('gp_livraisons_pdv').update({stock_applique:true}).eq('id',l.id).eq('stock_applique',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{ await _appliquerStockLivraison(l); n++; }
+      catch(e){ try{ await SB.from('gp_livraisons_pdv').update({stock_applique:false}).eq('id',l.id); }catch(_){} }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} livraison(s) synchronisée(s) — stock à jour`,'gold');
+    if(n>0 && typeof renderDistribution==='function'){ try{ renderDistribution(); }catch(_){} }
+  }catch(e){}
+  finally{ _syncStockLivEnCours=false; }
+}

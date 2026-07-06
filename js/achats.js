@@ -789,28 +789,34 @@ async function supprimerAchat(id){
 // met à jour le prix des ingrédients et passe l'achat en "validé".
 // Réutilisé par la validation DAF ET par la file "Entrées MP à confirmer" de la page Stock MP.
 async function crediterStockDepuisAchat(achatId){
-  const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
   const{data:achat}=await SB.from('gp_achats').select('*').eq('id',achatId).maybeSingle();
   if(!achat) return;
-  const L=lignes||[];
-  const stockEntrees=L.map(l=>({
-    admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
-    type:'entree',date:achat.date_commande,
-    ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
-    quantite:l.qte_recue||l.qte_commandee,
-    prix_unit:l.prix_unitaire,
-    ref:'Achat '+achat.ref,note:'Entrée stock validée'
-  }));
-  if(stockEntrees.length) await SB.from('gp_stock_mp').insert(stockEntrees);
-  for(const l of L){
-    if(l.ingredient_id){
-      await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+  // IDEMPOTENCE : déjà crédité ? (entrées stock portant cet achat_id) → ne pas re-créditer
+  const{data:deja}=await SB.from('gp_stock_mp').select('id').eq('achat_id',achatId).limit(1);
+  if(!(deja && deja.length)){
+    const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
+    const L=lignes||[];
+    const stockEntrees=L.map(l=>({
+      admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
+      type:'entree',date:achat.date_commande,
+      ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
+      quantite:l.qte_recue||l.qte_commandee,
+      prix_unit:l.prix_unitaire,
+      ref:'Achat '+achat.ref,note:'Entrée stock validée'
+    }));
+    if(stockEntrees.length){ const{error}=await SB.from('gp_stock_mp').insert(stockEntrees); if(error) throw error; }
+    for(const l of L){
+      if(l.ingredient_id){
+        await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+      }
     }
   }
   await SB.from('gp_achats').update({
     statut:'valide_daf',
     valide_par:GP_USER.id,valide_par_nom:GP_USER.email
   }).eq('id',achatId);
+  // Drapeau (séparé : inoffensif si colonne absente) — stock bien crédité
+  try{ await SB.from('gp_achats').update({stock_credite:true}).eq('id',achatId); }catch(_){}
 }
 
 // ── DÉTAIL ACHAT ──────────────────────────────────
@@ -1016,4 +1022,28 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
   notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
   document.getElementById('modal-detail-achat').style.display='none';
   await renderAchats();
+}
+
+// ── RATTRAPAGE crédit stock des achats validés (crediterStockDepuisAchat est idempotent) ──
+let _syncStockAchatEnCours=false;
+async function synchroniserStockAchats(){
+  if(_syncStockAchatEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncStockAchatEnCours=true;
+  try{
+    const{data:as}=await SB.from('gp_achats').select('id')
+      .eq('admin_id',GP_ADMIN_ID).eq('statut','valide_daf').eq('stock_credite',false).limit(100);
+    if(!as || !as.length) return;
+    let n=0;
+    for(const a of as){
+      const{data:claim}=await SB.from('gp_achats').update({stock_credite:true}).eq('id',a.id).eq('stock_credite',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{ await crediterStockDepuisAchat(a.id); n++; }
+      catch(e){ try{ await SB.from('gp_achats').update({stock_credite:false}).eq('id',a.id); }catch(_){} }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} achat(s) crédité(s) au stock`,'gold');
+    if(n>0 && typeof renderStockNiveaux==='function'){ try{ renderStockNiveaux(); }catch(_){} }
+  }catch(e){}
+  finally{ _syncStockAchatEnCours=false; }
 }
