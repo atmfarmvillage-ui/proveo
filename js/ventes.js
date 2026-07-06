@@ -845,6 +845,89 @@ function calcPointsVente(lignes){
   return pts;
 }
 
+// ── HELPER PARTAGÉ : applique la déduction de stock d'un jeu de lignes ──
+// (formules → gp_stock_produits_pdv · MP → gp_stock_mp · véto → deduireStockVeto).
+// Utilisé par la vente ET par le rattrapage auto. LÈVE en cas d'erreur réseau,
+// pour que l'appelant sache que ce n'est pas fait (et laisse stock_deduit=false).
+async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
+  const alerter = opts && opts.alerter;
+  const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  pdvStock = pdvStock || 'Production';
+  for(const l of (lignes||[])){
+    const tp = l.type_produit || 'formule';
+    if(tp==='ferme' || tp==='prestation') continue;
+    if(tp==='veto'){
+      if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
+      continue;
+    }
+    if(tp==='mp'){
+      if(l.ingredient_id){
+        const{error:eMp}=await SB.from('gp_stock_mp').insert({
+          admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, type:'sortie_vente', date:today(),
+          ingredient_id:l.ingredient_id, ingredient_nom:l.formule_nom, quantite:l.quantite,
+          prix_unit:l.prix_unitaire, ref:'Vente '+String(refVente||'').slice(0,8)
+        });
+        if(eMp) throw eMp;
+        if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(l.ingredient_id);
+      }
+      continue;
+    }
+    // formule (produit fini)
+    const besoin = Number(l.quantite||0);
+    if(besoin<=0) continue;
+    const{data:sA,error:eSel}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+    if(eSel) throw eSel;
+    const rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom)).sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
+    if(!rows.length){ if(alerter){ try{ alert(`⚠️ « ${l.formule_nom} » introuvable en stock à ${pdvStock} — non déduit.`); }catch(_){}} continue; }
+    let reste=besoin;
+    for(const st of rows){
+      if(reste<=0) break;
+      const dispo=Number(st.qte_disponible||0);
+      const pris=Math.min(dispo,reste); reste-=pris;
+      const{error:eUpd}=await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
+      if(eUpd) throw eUpd;
+    }
+    const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
+    const seuil=Number(rows[0].seuil_critique||0);
+    if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
+  }
+}
+
+// ── RATTRAPAGE AUTO : déduit le stock des ventes dont stock_deduit=false ──
+// Appelé à l'ouverture de l'app + au retour de connexion. Idempotent (claim
+// atomique par vente) → jamais de double déduction, même sur 2 téléphones.
+let _syncStockEnCours = false;
+async function synchroniserStockVentes(){
+  if(_syncStockEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncStockEnCours = true;
+  try{
+    const{data:ventes}=await SB.from('gp_ventes').select('id,point_vente')
+      .eq('admin_id',GP_ADMIN_ID).eq('stock_deduit',false).is('deleted_at',null)
+      .order('created_at',{ascending:true}).limit(100);
+    if(!ventes || !ventes.length) return;
+    let n=0;
+    for(const v of ventes){
+      // CLAIM atomique : on « prend » la vente (false→true). Si 0 ligne mise à jour, un autre l'a prise.
+      const{data:claim}=await SB.from('gp_ventes').update({stock_deduit:true})
+        .eq('id',v.id).eq('stock_deduit',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{
+        const{data:lignes}=await SB.from('gp_ventes_lignes').select('*').eq('vente_id',v.id);
+        await _appliquerDeductionStock(lignes||[], v.point_vente||'Production', v.id, {alerter:false});
+        n++;
+      }catch(e){
+        // Échec (connexion ?) → on REND la vente pour réessayer au prochain refresh
+        try{ await SB.from('gp_ventes').update({stock_deduit:false}).eq('id',v.id); }catch(_){}
+      }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} vente(s) synchronisée(s) — stock à jour`,'gold');
+    if(n>0 && typeof renderStockNiveaux==='function'){ try{ renderStockNiveaux(); }catch(_){} }
+  }catch(e){ /* silencieux : réessai au prochain refresh */ }
+  finally{ _syncStockEnCours=false; }
+}
+
 async function saveVente(){
   // Popup WhatsApp pré-ouvert pour contourner le bloqueur de pop-up
   // (les navigateurs interdisent window.open APRÈS un await)
@@ -1043,56 +1126,16 @@ async function saveVente(){
     }))
   );
 
-  // ── DÉDUCTION STOCK (formules) — EN PREMIER après la vente, pour qu'aucune
-  // erreur en aval (caisse, points, WhatsApp) ne puisse la sauter. Blindée +
-  // jamais silencieuse. Le blocage pré-enregistrement a déjà vérifié le stock. ──
+  // ── DÉDUCTION STOCK — JUSTE après la vente (formules + MP + véto), via helper
+  // partagé. Si ça réussit → stock_deduit=true. Si la connexion coupe → reste
+  // false → RATTRAPÉ automatiquement au prochain refresh (synchroniserStockVentes). ──
   try{
-    const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
     const pdvStock = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production')) || 'Production';
-    for(const l of VT_LIGNES){
-      if(l.type_produit==='mp' || l.type_produit==='ferme' || l.type_produit==='prestation') continue;
-      if(l.type_produit==='veto'){
-        if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
-        continue;
-      }
-      const besoin = Number(l.quantite||0);
-      if(besoin<=0) continue;
-      const{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
-      const rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom))
-        .sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
-      if(!rows.length){ try{ alert(`⚠️ STOCK NON DÉDUIT : « ${l.formule_nom} » introuvable à ${pdvStock}. Vérifie le stock.`); }catch(_){}; continue; }
-      let reste=besoin;
-      for(const st of rows){
-        if(reste<=0) break;
-        const dispo=Number(st.qte_disponible||0);
-        const pris=Math.min(dispo,reste); reste-=pris;
-        await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
-      }
-      const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
-      const seuil=Number(rows[0].seuil_critique||0);
-      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
-    }
+    await _appliquerDeductionStock(VT_LIGNES, pdvStock, vente.id, {alerter:true});
+    // Déduction OK → marquer la vente (dans son propre try : inoffensif si la colonne n'existe pas encore)
+    try{ await SB.from('gp_ventes').update({stock_deduit:true}).eq('id',vente.id); }catch(_){}
   }catch(e){
-    try{ alert('⚠️ Erreur déduction stock : '+(e?.message||e)+'\nLa vente est enregistrée — VÉRIFIE le stock.'); }catch(_){}
-  }
-
-  // Décrément stock MP pour les lignes type 'mp'
-  for(const l of VT_LIGNES){
-    if(l.type_produit==='mp' && l.ingredient_id){
-      await SB.from('gp_stock_mp').insert({
-        admin_id:GP_ADMIN_ID,
-        saisi_par:GP_USER?.id,
-        type:'sortie_vente',
-        date:today(),
-        ingredient_id:l.ingredient_id,
-        ingredient_nom:l.formule_nom,
-        quantite:l.quantite,
-        prix_unit:l.prix_unitaire,
-        ref:'Vente '+vente.id.slice(0,8)
-      });
-      // Trigger B : vérifier seuil critique après sortie MP
-      if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(l.ingredient_id);
-    }
+    try{ alert('⚠️ Stock pas encore déduit (connexion ?).\nLa vente est bien enregistrée — le stock sera rattrapé AUTOMATIQUEMENT au prochain rafraîchissement de l\'app.'); }catch(_){}
   }
 
   // Mouvement caisse automatique — fallback intelligent en cascade
