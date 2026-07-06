@@ -92,4 +92,7 @@ window.addEventListener('online', function(){
   if(typeof synchroniserCaisseDepenses==='function'){ try{ synchroniserCaisseDepenses(); }catch(e){} }
   if(typeof synchroniserCaissePaiementsMP==='function'){ try{ synchroniserCaissePaiementsMP(); }catch(e){} }
   if(typeof synchroniserCaisseVentes==='function'){ try{ synchroniserCaisseVentes(); }catch(e){} }
+  if(typeof synchroniserStockLivraisons==='function'){ try{ synchroniserStockLivraisons(); }catch(e){} }
+  if(typeof synchroniserStockProduction==='function'){ try{ synchroniserStockProduction(); }catch(e){} }
+  if(typeof synchroniserStockAchats==='function'){ try{ synchroniserStockAchats(); }catch(e){} }
 });

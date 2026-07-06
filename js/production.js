@@ -353,18 +353,22 @@ async function saveLot(){
     pdv_production:document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||null
   }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
-  // Auto-create stock sorties
+  // Auto-create stock sorties (consommation MP). Si un insert échoue → drapeau false → rattrapé au refresh.
+  let _mpOk=true; const _mpDetails=[];
   for(const s of mpSorties){
     if(s.ingrData){
-      await SB.from('gp_stock_mp').insert({
+      const{error:eS}=await SB.from('gp_stock_mp').insert({
         admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,type:'sortie_production',date,
         ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,
         prix_unit:s.ingrData.prix_actuel,lot_id:lot?.id,ref:'Production '+ref
       });
-      // Trigger B : vérifier seuil critique après sortie production
+      if(eS) _mpOk=false;
+      _mpDetails.push({ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,prix_unit:s.ingrData.prix_actuel});
       if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(s.ingrData.id);
     }
   }
+  // Détail consommation + drapeau (séparé : inoffensif si colonnes absentes)
+  if(lot?.id){ try{ await SB.from('gp_lots').update({mp_consommee:_mpOk, mp_details:_mpDetails}).eq('id',lot.id); }catch(_){} }
   err.textContent='';
 
   // Réf PDV de production (pour la feuille de fab) — le stock sera crédité à la saisie des sacs
@@ -943,4 +947,38 @@ async function marquerToutesVues(){
     .eq('statut','incomplet');
   notify('Toutes les alertes masquées ✓','gold');
   verifierFeuillesIncompletes();
+}
+
+// ── RATTRAPAGE STOCK production (consommation MP non appliquée) — idempotent (lot_id) ──
+let _syncStockProdEnCours=false;
+async function synchroniserStockProduction(){
+  if(_syncStockProdEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncStockProdEnCours=true;
+  try{
+    const{data:lots}=await SB.from('gp_lots').select('id,date,ref,mp_details')
+      .eq('admin_id',GP_ADMIN_ID).eq('mp_consommee',false).limit(100);
+    if(!lots || !lots.length) return;
+    let n=0;
+    for(const lot of lots){
+      const{data:claim}=await SB.from('gp_lots').update({mp_consommee:true}).eq('id',lot.id).eq('mp_consommee',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{
+        const{data:deja}=await SB.from('gp_stock_mp').select('id').eq('lot_id',lot.id).limit(1);
+        if(!(deja && deja.length) && Array.isArray(lot.mp_details) && lot.mp_details.length){
+          const rows=lot.mp_details.filter(d=>d.ingredient_id).map(d=>({
+            admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, type:'sortie_production', date:lot.date,
+            ingredient_id:d.ingredient_id, ingredient_nom:d.ingredient_nom, quantite:d.quantite,
+            prix_unit:d.prix_unit, lot_id:lot.id, ref:'Production '+(lot.ref||'')
+          }));
+          if(rows.length){ const{error}=await SB.from('gp_stock_mp').insert(rows); if(error) throw error; }
+        }
+        n++;
+      }catch(e){ try{ await SB.from('gp_lots').update({mp_consommee:false}).eq('id',lot.id); }catch(_){} }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} production(s) synchronisée(s) — MP déduite`,'gold');
+    if(n>0 && typeof renderStockNiveaux==='function'){ try{ renderStockNiveaux(); }catch(_){} }
+  }catch(e){}
+  finally{ _syncStockProdEnCours=false; }
 }
