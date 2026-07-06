@@ -84,3 +84,9 @@ function fmtKg(n){
     }, WIN);
   }, true); // phase capture : bloque avant l'onclick inline
 })();
+
+// ── RATTRAPAGE STOCK au RETOUR de connexion ──
+// Dès que le réseau revient, on déduit le stock des ventes restées non déduites.
+window.addEventListener('online', function(){
+  if(typeof synchroniserStockVentes==='function'){ try{ synchroniserStockVentes(); }catch(e){} }
+});
