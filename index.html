@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.24.52">
+<link rel="stylesheet" href="css/style.css?v=2.24.53">
 <style>
 /* === Lisibilité : écritures agrandies partout, SAUF les grands titres === */
 html,body{font-size:16px}
@@ -923,17 +923,15 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         </div>
       </div>
       <div class="fr"><label>Point de vente</label><input type="text" id="dep_pv" placeholder="Dépôt principal"></div>
-      <!-- Sortie caisse auto -->
+      <!-- Sortie caisse OBLIGATOIRE : toute dépense débite forcément la caisse -->
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px;margin-bottom:10px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:6px">
-          <input type="checkbox" id="dep_sortir_caisse" checked onchange="onDepCaisseToggle()" style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold)">
-          <span style="font-weight:700;color:var(--gold)">💵 Sortir le cash de la caisse automatiquement</span>
-        </label>
-        <div id="dep-caisse-select-wrap" class="fr" style="margin-top:6px;margin-bottom:0">
+        <input type="checkbox" id="dep_sortir_caisse" checked style="display:none">
+        <div style="font-weight:700;color:var(--gold);font-size:12px;margin-bottom:6px">💵 La dépense sort automatiquement de la caisse</div>
+        <div id="dep-caisse-select-wrap" class="fr" style="margin:0">
           <label style="font-size:10px">Caisse à débiter</label>
           <select id="dep_caisse_id" style="font-size:12px"></select>
         </div>
-        <div style="font-size:10px;color:var(--textm);margin-top:4px">Décocher si tu as déjà sorti le cash physiquement avant (l'app affichera un rappel).</div>
+        <div style="font-size:10px;color:var(--textm);margin-top:4px">Chaque dépense débite obligatoirement la caisse choisie.</div>
       </div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveDep()">✓ Enregistrer</button>
       <div class="a-err" id="dep_err"></div>
@@ -3091,50 +3089,50 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.52"></script>
-<script src="js/print.js?v=2.24.52"></script>
-<script src="js/dashboard.js?v=2.24.52"></script>
-<script src="js/stock.js?v=2.24.52"></script>
-<script src="js/matieres.js?v=2.24.52"></script>
-<script src="js/production.js?v=2.24.52"></script>
-<script src="js/ventes.js?v=2.24.52"></script>
-<script src="js/clients.js?v=2.24.52"></script>
-<script src="js/admin.js?v=2.24.52"></script>
-<script src="js/bilan_jour.js?v=2.24.52"></script>
-<script src="js/caisse_extras.js?v=2.24.52"></script>
-<script src="js/corbeille.js?v=2.24.52"></script>
-<script src="js/dashboard_drill.js?v=2.24.52"></script>
-<script src="js/fournisseurs.js?v=2.24.52"></script>
-<script src="js/achats.js?v=2.24.52"></script>
-<script src="js/confirmations.js?v=2.24.52"></script>
-<script src="js/caisse.js?v=2.24.52"></script>
-<script src="js/inventaire_physique.js?v=2.24.52"></script>
-<script src="js/distribution.js?v=2.24.52"></script>
-<script src="js/salaires.js?v=2.24.52"></script>
-<script src="js/rapports.js?v=2.24.52"></script>
-<script src="js/dettes.js?v=2.24.52"></script>
-<script src="js/chat.js?v=2.24.52"></script>
-<script src="js/notifications.js?v=2.24.52"></script>
-<script src="js/qr_clients.js?v=2.24.52"></script>
-<script src="js/push.js?v=2.24.52"></script>
-<script src="js/reversements.js?v=2.24.52"></script>
-<script src="js/paiements_mp.js?v=2.24.52"></script>
-<script src="js/stock_pf.js?v=2.24.52"></script>
-<script src="js/veto.js?v=2.24.52"></script>
-<script src="js/alertes.js?v=2.24.52"></script>
-<script src="js/exports.js?v=2.24.52"></script>
-<script src="js/bilanss.js?v=2.24.52"></script>
-<script src="js/benefices.js?v=2.24.52"></script>
-<script src="js/messages_pdv.js?v=2.24.52"></script>
-<script src="js/directeur.js?v=2.24.52"></script>
-<script src="js/licences.js?v=2.24.52"></script>
+<script src="js/config.js?v=2.24.53"></script>
+<script src="js/print.js?v=2.24.53"></script>
+<script src="js/dashboard.js?v=2.24.53"></script>
+<script src="js/stock.js?v=2.24.53"></script>
+<script src="js/matieres.js?v=2.24.53"></script>
+<script src="js/production.js?v=2.24.53"></script>
+<script src="js/ventes.js?v=2.24.53"></script>
+<script src="js/clients.js?v=2.24.53"></script>
+<script src="js/admin.js?v=2.24.53"></script>
+<script src="js/bilan_jour.js?v=2.24.53"></script>
+<script src="js/caisse_extras.js?v=2.24.53"></script>
+<script src="js/corbeille.js?v=2.24.53"></script>
+<script src="js/dashboard_drill.js?v=2.24.53"></script>
+<script src="js/fournisseurs.js?v=2.24.53"></script>
+<script src="js/achats.js?v=2.24.53"></script>
+<script src="js/confirmations.js?v=2.24.53"></script>
+<script src="js/caisse.js?v=2.24.53"></script>
+<script src="js/inventaire_physique.js?v=2.24.53"></script>
+<script src="js/distribution.js?v=2.24.53"></script>
+<script src="js/salaires.js?v=2.24.53"></script>
+<script src="js/rapports.js?v=2.24.53"></script>
+<script src="js/dettes.js?v=2.24.53"></script>
+<script src="js/chat.js?v=2.24.53"></script>
+<script src="js/notifications.js?v=2.24.53"></script>
+<script src="js/qr_clients.js?v=2.24.53"></script>
+<script src="js/push.js?v=2.24.53"></script>
+<script src="js/reversements.js?v=2.24.53"></script>
+<script src="js/paiements_mp.js?v=2.24.53"></script>
+<script src="js/stock_pf.js?v=2.24.53"></script>
+<script src="js/veto.js?v=2.24.53"></script>
+<script src="js/alertes.js?v=2.24.53"></script>
+<script src="js/exports.js?v=2.24.53"></script>
+<script src="js/bilanss.js?v=2.24.53"></script>
+<script src="js/benefices.js?v=2.24.53"></script>
+<script src="js/messages_pdv.js?v=2.24.53"></script>
+<script src="js/directeur.js?v=2.24.53"></script>
+<script src="js/licences.js?v=2.24.53"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.52"></script>
-<script src="js/reservations_admin.js?v=2.24.52"></script>
-<script src="js/strategie_mp.js?v=2.24.52"></script>
-<script src="js/reappro.js?v=2.24.52"></script>
-<script src="js/ia.js?v=2.24.52"></script>
-<script src="js/marketing.js?v=2.24.52"></script>
+<script src="js/auth.js?v=2.24.53"></script>
+<script src="js/reservations_admin.js?v=2.24.53"></script>
+<script src="js/strategie_mp.js?v=2.24.53"></script>
+<script src="js/reappro.js?v=2.24.53"></script>
+<script src="js/ia.js?v=2.24.53"></script>
+<script src="js/marketing.js?v=2.24.53"></script>
 
 <script>
 // Enregistrement Service Worker PWA

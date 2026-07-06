@@ -104,9 +104,18 @@ async function saveDep(){
   const date = document.getElementById('dep_date')?.value;
   const err = document.getElementById('dep_err');
   if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
-  const sortirCaisse = document.getElementById('dep_sortir_caisse')?.checked;
-  const caisseId = document.getElementById('dep_caisse_id')?.value || null;
-  if(sortirCaisse && !caisseId){ err.textContent = 'Choisis la caisse à débiter.'; notify('⚠ Choisis la caisse à débiter','r'); return; }
+  // ── Caisse à débiter : OBLIGATOIRE. Toute dépense sort forcément de la caisse. ──
+  let caisseId = document.getElementById('dep_caisse_id')?.value || null;
+  if(!caisseId){
+    // Auto : caisse physique du PDV (ou siège), sinon 1ʳᵉ physique
+    const pv = (document.getElementById('dep_pv')?.value.trim()) || GP_POINT_VENTE || null;
+    let cq = SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
+    cq = pv ? cq.eq('point_vente',pv) : cq.is('point_vente',null);
+    let{data:cc}=await cq.limit(1);
+    if(!cc || !cc.length){ const r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1); cc=r.data; }
+    caisseId = cc?.[0]?.id || null;
+  }
+  if(!caisseId){ err.textContent = 'Aucune caisse pour débiter la dépense — crée une caisse d\'abord.'; notify('⚠ Aucune caisse disponible','r'); return; }
 
   // 1. Insert dépense
   const{data:dep, error}=await SB.from('gp_depenses').insert({
@@ -118,29 +127,26 @@ async function saveDep(){
   }).select().maybeSingle();
   if(error){ err.textContent = 'Erreur: '+error.message; return; }
 
-  // 2. Si coché → mouvement caisse auto
-  if(sortirCaisse && caisseId){
-    try{
-      await SB.from('gp_mouvements_caisse').insert({
-        admin_id: GP_ADMIN_ID, caisse_id: caisseId,
-        type: 'sortie', categorie: 'depense',
-        montant, date_mouvement: date,
-        description: `Dépense : ${desc}`,
-        enregistre_par: GP_USER?.id,
-        enregistre_par_nom: GP_USER?.email?.split('@')[0]
-      });
-    }catch(e){ console.warn('Mvt caisse échoué', e); }
+  // 2. Débit caisse OBLIGATOIRE — ATOMIQUE : si ça échoue, on ANNULE la dépense
+  //    (sinon elle gonflerait la caisse : cash sorti côté logiciel mais jamais débité).
+  const{error:eMv}=await SB.from('gp_mouvements_caisse').insert({
+    admin_id: GP_ADMIN_ID, caisse_id: caisseId,
+    type: 'sortie', categorie: 'depense',
+    montant, date_mouvement: date,
+    description: `Dépense : ${desc}`,
+    enregistre_par: GP_USER?.id,
+    enregistre_par_nom: GP_USER?.email?.split('@')[0]
+  });
+  if(eMv){
+    try{ await SB.from('gp_depenses').delete().eq('id', dep.id); }catch(_){}
+    err.textContent = 'Caisse non débitée (connexion ?) — dépense annulée, réessaie.';
+    try{ alert('⚠️ La caisse n\'a pas pu être débitée (connexion ?).\nLa dépense a été ANNULÉE pour ne pas fausser la caisse — réessaie.'); }catch(_){}
+    return;
   }
 
   err.textContent = '';
   ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-
-  // 3. Si décoché → rappel plein écran
-  if(!sortirCaisse){
-    afficherRappelSortieCash(montant, desc);
-  } else {
-    notify(`✓ Dépense + ${fmt(montant)} F sortis de la caisse`,'gold');
-  }
+  notify(`✓ Dépense enregistrée · ${fmt(montant)} F sortis de la caisse`,'gold');
   if(typeof renderDep === 'function') await renderDep();
 }
 
