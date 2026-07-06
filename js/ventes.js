@@ -1144,6 +1144,7 @@ async function saveVente(){
   // 3. fallback : N'IMPORTE quelle caisse physique active
   // 4. AUCUNE caisse → notification rouge claire à l'admin
   window._lastVenteCaisseNom = null;
+  let _caisseVenteOk = !(paye>0); // rien à créditer si paye=0 → OK
   if(paye>0){
     let caisseTarget = null;
     if(pv){
@@ -1165,7 +1166,7 @@ async function saveVente(){
       if(cAny) caisseTarget = cAny;
     }
     if(caisseTarget){
-      await SB.from('gp_mouvements_caisse').insert({
+      const{error:eCa}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
         type:'entree', categorie:'vente',
         montant:paye, date_mouvement:today(),
@@ -1174,14 +1175,14 @@ async function saveVente(){
         enregistre_par:GP_USER?.id,
         enregistre_par_nom:GP_USER?.email?.split('@')[0]
       });
-      window._lastVenteCaisseNom = caisseTarget.nom;
-    } else {
-      // Aucune caisse trouvée → alerte gros et clair
-      if(typeof notify==='function'){
-        notify(`⚠ ${fmt(paye)} F NON crédité — aucune caisse. Crée-en une via Page Caisse.`,'r');
-      }
+      _caisseVenteOk = !eCa;
+      if(!eCa) window._lastVenteCaisseNom = caisseTarget.nom;
+    } else if(typeof notify==='function'){
+      notify(`⚠ ${fmt(paye)} F — aucune caisse trouvée. L'encaissement sera rattrapé au refresh.`,'r');
     }
   }
+  // Drapeau : caisse créditée ? (sinon rattrapée au refresh — top-up jusqu'à montant_paye)
+  try{ await SB.from('gp_ventes').update({caisse_creditee:_caisseVenteOk}).eq('id',vente.id); }catch(_){}
 
   // (Déduction stock formules déplacée juste après l'insertion des lignes,
   //  pour qu'aucune erreur en aval — caisse, points — ne puisse la sauter.)
@@ -2854,12 +2855,13 @@ async function savePaiementVente(){
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Mouvement de caisse (entrée) — le solde encaissé entre en caisse du PDV
+  let _encOk=false;
   try{
     const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
     const{data:caisse}=await SB.from('gp_caisses').select('id')
       .eq('admin_id',GP_ADMIN_ID).eq('point_vente',v.point_vente||'').maybeSingle();
     if(caisse){
-      await SB.from('gp_mouvements_caisse').insert({
+      const{error:eE}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID,caisse_id:caisse.id,
         type:'entree',categorie:'vente',
         montant:montantApplique,date_mouvement:today(),
@@ -2868,8 +2870,11 @@ async function savePaiementVente(){
         enregistre_par:GP_USER?.id,
         enregistre_par_nom:GP_USER?.email?.split('@')[0]
       });
+      _encOk=!eE;
     }
   }catch(e){}
+  // Si le crédit caisse n'a pas abouti → marquer la vente pour rattrapage (top-up au refresh)
+  if(!_encOk){ try{ await SB.from('gp_ventes').update({caisse_creditee:false}).eq('id',id); }catch(_){} }
   fermerPaiementVente();
   renderVentes();
   const monnaie=montant-montantApplique;
@@ -3014,4 +3019,55 @@ async function envoyerWAVenteAuto(venteId,client,lignes,total,paye){
     client.localite||'',nbAchats,totalHisto,especeIcon,nbAchats>=5,totalHisto>=500000,nbAchats<=1);
   const p=detecterPays(tel);
   if(p.numero_whatsapp)window.open('https://wa.me/'+p.numero_whatsapp+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// ── RATTRAPAGE CAISSE des ventes (entrées d'encaissement) — approche DÉFICIT ──
+// Pour chaque vente non créditée : crée une entrée = montant_paye − (déjà en caisse).
+// Idempotent : si déjà couvert (déficit ≤ 0), rien créé → jamais de double crédit.
+async function _crediterCaisseVenteDeficit(v){
+  const paye = Number(v.montant_paye||0);
+  if(paye<=0) return false;
+  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('montant')
+    .eq('admin_id',v.admin_id).eq('vente_id',v.id).eq('type','entree').eq('categorie','vente');
+  const dejaCredit=(mvts||[]).reduce((s,m)=>s+Number(m.montant||0),0);
+  const deficit = paye - dejaCredit;
+  if(deficit<=0.01) return false; // déjà équilibré
+  const pv=v.point_vente||null;
+  let caisseId=null;
+  if(pv){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('point_vente',pv).maybeSingle(); caisseId=c?.id||null; }
+  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle(); caisseId=c?.id||null; }
+  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').limit(1).maybeSingle(); caisseId=c?.id||null; }
+  if(!caisseId) throw new Error('Aucune caisse pour créditer la vente');
+  const{error}=await SB.from('gp_mouvements_caisse').insert({
+    admin_id:v.admin_id, caisse_id:caisseId, type:'entree', categorie:'vente',
+    montant:deficit, date_mouvement:v.date||today(),
+    description:'Vente '+String(v.id).slice(0,8)+' (rattrapage)', vente_id:v.id,
+    enregistre_par:v.saisi_par, enregistre_par_nom:GP_USER?.email?.split('@')[0]
+  });
+  if(error) throw error;
+  return true;
+}
+
+let _syncCaisseVEnCours=false;
+async function synchroniserCaisseVentes(){
+  if(_syncCaisseVEnCours) return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
+  _syncCaisseVEnCours=true;
+  try{
+    const{data:vs}=await SB.from('gp_ventes').select('id,admin_id,point_vente,montant_paye,date,saisi_par')
+      .eq('admin_id',GP_ADMIN_ID).eq('caisse_creditee',false).is('deleted_at',null)
+      .gt('montant_paye',0).order('date',{ascending:true}).limit(100);
+    if(!vs || !vs.length) return;
+    let n=0;
+    for(const v of vs){
+      const{data:claim}=await SB.from('gp_ventes').update({caisse_creditee:true}).eq('id',v.id).eq('caisse_creditee',false).select('id');
+      if(!claim || !claim.length) continue;
+      try{ if(await _crediterCaisseVenteDeficit(v)) n++; }
+      catch(e){ try{ await SB.from('gp_ventes').update({caisse_creditee:false}).eq('id',v.id); }catch(_){} }
+    }
+    if(n>0 && typeof notify==='function') notify(`🔄 ${n} encaissement(s) synchronisé(s) — caisse à jour`,'gold');
+    if(n>0 && typeof renderCaisse==='function'){ try{ renderCaisse(); }catch(_){} }
+  }catch(e){}
+  finally{ _syncCaisseVEnCours=false; }
 }
