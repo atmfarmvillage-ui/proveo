@@ -1083,43 +1083,55 @@ async function saveVente(){
     }
   }
 
-  // Déduire du stock (formules) — en KG. Utilise le PDV source sélectionné (pdvSourceVente).
-  {
-    const pdvStock = typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production');
+  // ── DÉDUCTION STOCK (formules) — blindée : tolérante aux noms, repli sur
+  // Production (PDV = prolongements), et JAMAIS silencieuse (blocage visible). ──
+  try{
+    const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const pdvStock = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production')) || 'Production';
     for(const l of VT_LIGNES){
-      if(l.type_produit==='mp') continue; // les MP sont déjà décrémentées dans gp_stock_mp
-      if(l.type_produit==='ferme') continue; // les produits ferme ne sont pas du stock provenderie
-      if(l.type_produit==='prestation') continue; // les prestations ne touchent aucun stock
-      if(l.type_produit==='veto'){ // déduit le stock véto du PDV (FIFO par péremption)
+      if(l.type_produit==='mp' || l.type_produit==='ferme' || l.type_produit==='prestation') continue;
+      if(l.type_produit==='veto'){
         if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
         continue;
       }
-      // Récupérer TOUTES les lignes (gère les doublons éventuels) — surtout au point Production
-      const{data:stocks}=await SB.from('gp_stock_produits_pdv').select('*')
-        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock)
-        .eq('formule_nom',l.formule_nom).order('qte_disponible',{ascending:false});
-      const rows=stocks||[];
-      if(rows.length){
-        // Déduire la quantité (KG) à travers les lignes, en commençant par la plus garnie
-        let reste=Number(l.quantite||0);
-        for(const st of rows){
-          if(reste<=0) break;
-          const dispo=Number(st.qte_disponible||0);
-          const pris=Math.min(dispo,reste);
-          const newQte=Math.max(0,dispo-pris);
-          reste-=pris;
-          const {error:eUpd}=await SB.from('gp_stock_produits_pdv').update({qte_disponible:newQte,updated_at:new Date().toISOString()}).eq('id',st.id);
-          if(eUpd && typeof notify==='function') notify(`⚠ Stock NON décrémenté (${l.formule_nom}) : ${eUpd.message}`,'r');
-        }
-        // Seuil critique sur le stock total restant
-        const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-Number(l.quantite||0);
-        const seuil=Number(rows[0].seuil_critique||0);
-        if(totalRestant<=seuil){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
-      } else {
-        // Aucune ligne de stock → ne pas échouer en silence : alerter
-        if(typeof notify==='function') notify(`⚠ Stock introuvable : "${l.formule_nom}" à ${pdvStock} — non décrémenté`,'r');
+      const besoin = Number(l.quantite||0);
+      if(besoin<=0) continue;
+
+      // 1) Chercher au PDV de vente (match nom tolérant : espaces/majuscules ignorés)
+      let{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+      let rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom));
+      let pdvUtilise=pdvStock;
+      // 2) Repli sur Production si rien trouvé au PDV (le stock produit fini vit à Production)
+      if(!rows.length && pdvStock!=='Production'){
+        const r2=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom','Production');
+        rows=(r2.data||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom));
+        if(rows.length) pdvUtilise='Production';
       }
+      rows.sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
+
+      if(!rows.length){
+        // Introuvable → BLOCAGE visible (la secrétaire ne peut pas rater)
+        alert(`⚠️ STOCK NON DÉDUIT\n\n« ${l.formule_nom} » est introuvable en stock (ni à ${pdvStock}, ni à Production).\n\nLa vente EST enregistrée, mais le stock n'a PAS baissé.\nVérifie le nom exact de la formule et son stock.`);
+        continue;
+      }
+      // Déduire (FIFO sur la ligne la plus garnie)
+      let reste=besoin;
+      for(const st of rows){
+        if(reste<=0) break;
+        const dispo=Number(st.qte_disponible||0);
+        const pris=Math.min(dispo,reste); reste-=pris;
+        await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
+      }
+      if(reste>0.01){
+        alert(`⚠️ Stock insuffisant pour « ${l.formule_nom} » à ${pdvUtilise} : il manquait ${fmtKg(reste)} kg.\nVendu à découvert — stock mis à 0. Régularise par un inventaire.`);
+      }
+      // Alerte seuil
+      const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
+      const seuil=Number(rows[0].seuil_critique||0);
+      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvUtilise,l.formule_nom,Math.max(0,totalRestant),seuil); }
     }
+  }catch(e){
+    try{ alert('⚠️ Erreur lors de la déduction du stock : '+(e?.message||e)+'\n\nLa vente est enregistrée — VÉRIFIE le stock manuellement.'); }catch(_){}
   }
 
   // ── DEFAULTS INTELLIGENTS : mémoriser le 1er produit (le + courant) sur le client ──
