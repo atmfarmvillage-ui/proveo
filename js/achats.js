@@ -567,9 +567,17 @@ async function confirmerAchat(id){
 
 // ── RÉCEPTION ────────────────────────────────────
 async function ouvrirReception(achatId){
-  const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
+  const{data:lignes,error:eL}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
+  if(eL) throw eL;
   const L=lignes||[];
   const modal=document.getElementById('modal-reception');
+  if(!modal || !document.getElementById('reception-achat-id') || !document.getElementById('reception-lignes')){
+    alert('⚠️ Fenêtre de réception introuvable. Recharge la page (Ctrl+Maj+R).'); return;
+  }
+  if(!L.length){
+    alert('⚠️ Ce bon n\'a aucune ligne de produit à ajuster.\nUtilise plutôt ✏️ Modifier sur la page 🛒 Achats MP.');
+    return;
+  }
   document.getElementById('reception-achat-id').value=achatId;
   document.getElementById('reception-lignes').innerHTML=`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Ingrédient</th><th class="num">Commandé</th><th class="num">Quantité reçue</th></tr></thead>
