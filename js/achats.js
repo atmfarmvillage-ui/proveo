@@ -578,6 +578,8 @@ async function ouvrirReception(achatId){
     alert('⚠️ Ce bon n\'a aucune ligne de produit à ajuster.\nUtilise plutôt ✏️ Modifier sur la page 🛒 Achats MP.');
     return;
   }
+  // Sortir le modal de tout conteneur ayant un transform/filter (qui casse position:fixed → modal invisible)
+  if(modal.parentElement !== document.body){ try{ document.body.appendChild(modal); }catch(_){} }
   document.getElementById('reception-achat-id').value=achatId;
   document.getElementById('reception-lignes').innerHTML=`<table class="tbl" style="font-size:11px">
       <thead><tr><th>Ingrédient</th><th class="num">Commandé</th><th class="num">Quantité reçue</th></tr></thead>
