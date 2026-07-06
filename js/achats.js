@@ -63,6 +63,15 @@ async function renderAchats(){
     .order('created_at',{ascending:false}).limit(50);
   const A=data||[];
 
+  // Lignes (MP + quantités achetées) — groupées par achat pour l'affichage
+  const lignesParAchat={};
+  if(A.length){
+    const{data:lignes}=await SB.from('gp_achats_lignes')
+      .select('achat_id,ingredient_nom,qte_commandee,qte_recue,prix_unitaire')
+      .in('achat_id',A.map(a=>a.id));
+    (lignes||[]).forEach(l=>{(lignesParAchat[l.achat_id]=lignesParAchat[l.achat_id]||[]).push(l);});
+  }
+
   // KPIs
   const enCours=A.filter(a=>!['valide_daf','annule'].includes(a.statut)).length;
   const aValider=A.filter(a=>a.statut==='recu_complet'||a.statut==='recu_partiel').length;
@@ -84,7 +93,9 @@ async function renderAchats(){
         return `<tr>
           <td style="font-size:10px;font-family:'DM Mono',monospace">${a.date_commande}</td>
           <td style="font-size:10px;font-weight:600">${a.ref||'—'}</td>
-          <td style="font-weight:600">${a.fournisseur_nom||'—'}</td>
+          <td style="font-weight:600">${a.fournisseur_nom||'—'}
+            <div style="font-size:9px;color:var(--textm);font-weight:500;line-height:1.5;margin-top:2px">${(lignesParAchat[a.id]||[]).map(l=>`🌾 ${l.ingredient_nom} · <b>${fmtKg(l.qte_recue||l.qte_commandee)} kg</b>`).join('<br>')||'—'}</div>
+          </td>
           <td class="num">${fmt(a.montant_total)}</td>
           <td class="num" style="color:${reste>0?'var(--red)':'var(--green)'}">${reste>0?fmt(Number(a.montant_paye||0))+' F':'✓ Payé'}</td>
           <td>${statutAchatBadge(a.statut)}</td>
