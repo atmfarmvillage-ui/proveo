@@ -50,7 +50,8 @@ async function creerNouvelInventaire(mois){
         <td class="num">
           <input type="number" class="invp-physique" data-nom="${l.nom}"
             data-theorique="${l.qte_theorique}" data-prix="${l.prix}"
-            value="${l.qte_theorique.toFixed(1)}" step="0.1"
+            value="" placeholder="${l.qte_theorique.toFixed(1)}" step="0.1"
+            title="Laisse vide = garder le stock actuel · Saisis le vrai comptage pour corriger"
             style="width:100px;text-align:right;font-size:11px;padding:3px 6px"
             oninput="calcEcartLigne(this)">
         </td>
@@ -83,7 +84,8 @@ function calcEcartLigne(input){
   const nom=input.dataset.nom;
   const theorique=parseFloat(input.dataset.theorique)||0;
   const prix=parseFloat(input.dataset.prix)||0;
-  const physique=parseFloat(input.value)||0;
+  // Champ vide = pas de comptage → on garde le théorique (écart 0, pas de mise à 0 accidentelle)
+  const physique=(String(input.value).trim()==='')?theorique:(parseFloat(input.value)||0);
   const ecart=physique-theorique;
   const coutEcart=Math.abs(ecart)*prix;
   const key=nom.replace(/\s/g,'-');
@@ -104,7 +106,7 @@ function calcEcartLigne(input){
   document.querySelectorAll('.invp-physique').forEach(inp=>{
     const t=parseFloat(inp.dataset.theorique)||0;
     const p2=parseFloat(inp.dataset.prix)||0;
-    const ph=parseFloat(inp.value)||0;
+    const ph=(String(inp.value).trim()==='')?t:(parseFloat(inp.value)||0);
     total+=Math.abs(ph-t)*p2;
   });
   const totalEl=document.getElementById('invp-total-cout');
@@ -122,7 +124,8 @@ async function sauvegarderInventairePhysique(mois){
     const nom=inp.dataset.nom;
     const theorique=parseFloat(inp.dataset.theorique)||0;
     const prix=parseFloat(inp.dataset.prix)||0;
-    const physique=parseFloat(inp.value)||0;
+    // Champ vide = pas recompté → on conserve le stock actuel (physique = théorique, écart 0)
+    const physique=(String(inp.value).trim()==='')?theorique:(parseFloat(inp.value)||0);
     const ecart=physique-theorique;
     const coutEcart=Math.abs(ecart)*prix;
     coutTotal+=coutEcart;
