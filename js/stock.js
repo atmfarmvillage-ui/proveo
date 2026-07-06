@@ -224,10 +224,14 @@ async function confirmerEntreeMP(achatId){
 }
 
 // Ajuster les quantités reçues avant de créditer → réutilise le modal de réception
-function ajusterEntreeMP(achatId){
+async function ajusterEntreeMP(achatId){
   window._mpAjustCredit=true; // dit à confirmerReception de créditer le stock après l'ajustement
-  if(typeof ouvrirReception==='function') ouvrirReception(achatId);
-  else notify('Module réception indisponible','r');
+  try{
+    if(typeof ouvrirReception!=='function'){ alert('Module réception indisponible.'); return; }
+    await ouvrirReception(achatId);
+  }catch(e){
+    try{ alert('⚠️ Impossible d\'ouvrir l\'ajustement : '+(e?.message||e)); }catch(_){}
+  }
 }
 
 function editerPrixStock(id){
