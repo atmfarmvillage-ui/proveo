@@ -1043,6 +1043,39 @@ async function saveVente(){
     }))
   );
 
+  // ── DÉDUCTION STOCK (formules) — EN PREMIER après la vente, pour qu'aucune
+  // erreur en aval (caisse, points, WhatsApp) ne puisse la sauter. Blindée +
+  // jamais silencieuse. Le blocage pré-enregistrement a déjà vérifié le stock. ──
+  try{
+    const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const pdvStock = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production')) || 'Production';
+    for(const l of VT_LIGNES){
+      if(l.type_produit==='mp' || l.type_produit==='ferme' || l.type_produit==='prestation') continue;
+      if(l.type_produit==='veto'){
+        if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
+        continue;
+      }
+      const besoin = Number(l.quantite||0);
+      if(besoin<=0) continue;
+      const{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+      const rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom))
+        .sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
+      if(!rows.length){ try{ alert(`⚠️ STOCK NON DÉDUIT : « ${l.formule_nom} » introuvable à ${pdvStock}. Vérifie le stock.`); }catch(_){}; continue; }
+      let reste=besoin;
+      for(const st of rows){
+        if(reste<=0) break;
+        const dispo=Number(st.qte_disponible||0);
+        const pris=Math.min(dispo,reste); reste-=pris;
+        await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
+      }
+      const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
+      const seuil=Number(rows[0].seuil_critique||0);
+      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
+    }
+  }catch(e){
+    try{ alert('⚠️ Erreur déduction stock : '+(e?.message||e)+'\nLa vente est enregistrée — VÉRIFIE le stock.'); }catch(_){}
+  }
+
   // Décrément stock MP pour les lignes type 'mp'
   for(const l of VT_LIGNES){
     if(l.type_produit==='mp' && l.ingredient_id){
@@ -1107,41 +1140,8 @@ async function saveVente(){
     }
   }
 
-  // ── DÉDUCTION STOCK (formules) — blindée : tolérante aux noms, repli sur
-  // Production (PDV = prolongements), et JAMAIS silencieuse (blocage visible). ──
-  try{
-    const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-    const pdvStock = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production')) || 'Production';
-    for(const l of VT_LIGNES){
-      if(l.type_produit==='mp' || l.type_produit==='ferme' || l.type_produit==='prestation') continue;
-      if(l.type_produit==='veto'){
-        if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
-        continue;
-      }
-      const besoin = Number(l.quantite||0);
-      if(besoin<=0) continue;
-
-      // Déduire au PDV de vente uniquement (le blocage pré-enregistrement a déjà
-      // garanti qu'il y a assez de stock — PAS de repli, PAS de vente à découvert).
-      const{data:sA}=await SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
-      const rows=(sA||[]).filter(s=>norm(s.formule_nom)===norm(l.formule_nom))
-        .sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
-      if(!rows.length) continue; // ne devrait plus arriver (bloqué avant)
-      let reste=besoin;
-      for(const st of rows){
-        if(reste<=0) break;
-        const dispo=Number(st.qte_disponible||0);
-        const pris=Math.min(dispo,reste); reste-=pris;
-        await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
-      }
-      // Alerte seuil
-      const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
-      const seuil=Number(rows[0].seuil_critique||0);
-      if(totalRestant<=seuil && typeof envoyerAlerteSeuil==='function'){ envoyerAlerteSeuil(pdvStock,l.formule_nom,Math.max(0,totalRestant),seuil); }
-    }
-  }catch(e){
-    try{ alert('⚠️ Erreur lors de la déduction du stock : '+(e?.message||e)+'\n\nLa vente est enregistrée — VÉRIFIE le stock manuellement.'); }catch(_){}
-  }
+  // (Déduction stock formules déplacée juste après l'insertion des lignes,
+  //  pour qu'aucune erreur en aval — caisse, points — ne puisse la sauter.)
 
   // ── DEFAULTS INTELLIGENTS : mémoriser le 1er produit (le + courant) sur le client ──
   // On prend la 1re ligne de la vente comme "dernière habitude" du client.
