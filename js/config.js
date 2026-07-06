@@ -90,4 +90,5 @@ function fmtKg(n){
 window.addEventListener('online', function(){
   if(typeof synchroniserStockVentes==='function'){ try{ synchroniserStockVentes(); }catch(e){} }
   if(typeof synchroniserCaisseDepenses==='function'){ try{ synchroniserCaisseDepenses(); }catch(e){} }
+  if(typeof synchroniserCaissePaiementsMP==='function'){ try{ synchroniserCaissePaiementsMP(); }catch(e){} }
 });
