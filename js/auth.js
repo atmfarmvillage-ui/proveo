@@ -474,14 +474,17 @@ var PAGE_RENDERERS = {
   salaires:      function(){
     const sm=document.getElementById('sal-mois');
     const ss=document.getElementById('sal_mois_saisie');
+    const pd=document.getElementById('point-date');
     if(sm&&!sm.value)sm.value=thisMonth();
     if(ss&&!ss.value)ss.value=thisMonth();
-    renderSalaires();
+    if(pd&&!pd.value)pd.value=today();
+    if(typeof remplirSelectOuvriers==='function')remplirSelectOuvriers();
+    if(typeof showSalTab==='function')showSalTab('bulletins'); else renderSalaires();
   },
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();},
   licence:       renderPageLicenceClient,
-  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); },
+  config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); if(typeof loadReglesPaie==='function') loadReglesPaie(); if(typeof loadEtatEntete==='function') loadEtatEntete(); },
   directeur:     function(){
     const el=document.getElementById('dir-mois');
     if(el&&!el.value)el.value=thisMonth();

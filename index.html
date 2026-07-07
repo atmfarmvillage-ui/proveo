@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.24.58">
+<link rel="stylesheet" href="css/style.css?v=2.24.59">
 <style>
 /* === Lisibilité : écritures agrandies partout, SAUF les grands titres === */
 html,body{font-size:16px}
@@ -2459,36 +2459,115 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 </div>
 
 <div class="page" id="page-salaires">
-  <div class="page-title">Salaires</div>
-  <div class="page-sub">Enregistrer et suivre les salaires</div>
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-    <div><label class="lbl">Mois</label><input type="month" id="sal-mois" onchange="renderSalaires()" style="width:auto"></div>
+  <div class="page-title">Salaires & Personnel</div>
+  <div class="page-sub">Ouvriers · Pointage · Bulletins auto · Ordre de virement</div>
+
+  <!-- Onglets -->
+  <div class="saltabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:2px">
+    <button id="saltabbtn-bulletins" class="btn btn-out btn-sm active" onclick="showSalTab('bulletins')">💰 Salaires & bulletins</button>
+    <button id="saltabbtn-ouvriers" class="btn btn-out btn-sm" onclick="showSalTab('ouvriers')">👷 Ouvriers</button>
+    <button id="saltabbtn-pointage" class="btn btn-out btn-sm" onclick="showSalTab('pointage')">🕐 Pointage</button>
+    <button id="saltabbtn-virement" class="btn btn-out btn-sm" onclick="showSalTab('virement')">🏦 Ordre de virement</button>
   </div>
-  <div class="g4" id="sal-kpis" style="margin-bottom:14px"></div>
-  <div class="g2" style="align-items:start">
-    <div class="card">
-      <div class="card-title"><div class="ct-left"><span>➕ Enregistrer un salaire</span></div></div>
+
+  <!-- Onglet BULLETINS / SALAIRES DU MOIS -->
+  <div id="saltab-bulletins">
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px">
+      <div><label class="lbl">Mois</label><input type="month" id="sal-mois" onchange="renderSalaires();renderApercuVirement&&renderApercuVirement()" style="width:auto"></div>
+      <button class="btn btn-g btn-sm" onclick="genererTousBulletins()" title="Calcule bonus/retranchements depuis production + pointage">🧮 Générer tous les bulletins</button>
+      <button class="btn btn-print btn-sm" onclick="imprimerOrdreVirement()" title="État à présenter à la banque">🖨️ Ordre de virement</button>
+    </div>
+    <div class="g4" id="sal-kpis" style="margin-bottom:14px"></div>
+    <div class="g2" style="align-items:start">
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>➕ Enregistrer un salaire</span></div></div>
+        <div class="fr"><label>Ouvrier enregistré</label>
+          <select id="sal_ouvrier" onchange="onSalOuvrierChange()"><option value="">— Saisie libre —</option></select>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Nom & Prénom *</label><input type="text" id="sal_nom" placeholder="Jean Adekou"></div>
+          <div class="fr"><label>Matricule</label><input type="text" id="sal_matricule" placeholder="EMP-001"></div>
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>Mois *</label><input type="month" id="sal_mois_saisie"></div>
+          <div class="fr"><label>Montant net (F) *</label><input type="number" id="sal_montant" placeholder="75000"></div>
+        </div>
+        <div class="fr"><label>Mode de paiement</label>
+          <select id="sal_mode">
+            <option value="especes">Espèces</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="virement">Virement</option>
+            <option value="cheque">Chèque</option>
+          </select>
+        </div>
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveSalaire()">✓ Enregistrer & payer</button>
+        <div style="font-size:10px;color:var(--textm);margin-top:6px">L'enregistrement crée une dépense « Salaire » et déduit la caisse.</div>
+        <div class="a-err" id="sal_err"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📋 Salaires du mois</span></div></div>
+        <div id="sal-liste"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onglet OUVRIERS -->
+  <div id="saltab-ouvriers" style="display:none">
+    <div class="g4" id="ouvriers-kpis" style="margin-bottom:14px"></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><div class="ct-left"><span>➕ Enregistrer un ouvrier</span></div></div>
+      <input type="hidden" id="ouv_edit_id">
       <div class="fg2">
-        <div class="fr"><label>Nom & Prénom *</label><input type="text" id="sal_nom" placeholder="Jean Adekou"></div>
-        <div class="fr"><label>Matricule</label><input type="text" id="sal_matricule" placeholder="EMP-001"></div>
+        <div class="fr"><label>Nom & Prénom *</label><input type="text" id="ouv_nom" placeholder="DEMA M. Véronique"></div>
+        <div class="fr"><label>Matricule</label><input type="text" id="ouv_matricule" placeholder="EMP-001"></div>
       </div>
       <div class="fg2">
-        <div class="fr"><label>Mois *</label><input type="month" id="sal_mois_saisie"></div>
-        <div class="fr"><label>Montant (F) *</label><input type="number" id="sal_montant" placeholder="75000"></div>
+        <div class="fr"><label>Fonction / Poste</label><input type="text" id="ouv_fonction" placeholder="Meunier, Ensacheur, Chauffeur…"></div>
+        <div class="fr"><label>N° de compte / RIB</label><input type="text" id="ouv_rib" placeholder="5233/6436"></div>
       </div>
-      <div class="fr"><label>Mode de paiement</label>
-        <select id="sal_mode">
-          <option value="especes">Espèces</option>
-          <option value="mobile_money">Mobile Money</option>
-          <option value="virement">Virement</option>
-        </select>
+      <div class="fg2">
+        <div class="fr"><label>Téléphone / WhatsApp</label><input type="tel" id="ouv_tel" placeholder="+228 90 00 00 00"></div>
+        <div class="fr"><label>Date d'embauche</label><input type="date" id="ouv_embauche"></div>
       </div>
-      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveSalaire()">✓ Enregistrer</button>
-      <div class="a-err" id="sal_err"></div>
+      <div class="fg2">
+        <div class="fr"><label>Salaire de base (F)</label><input type="number" id="ouv_salaire" placeholder="70000" min="0"></div>
+        <div class="fr"><label>Point de vente / site</label><input type="text" id="ouv_pdv" placeholder="Laisser vide = siège"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin:6px 0">
+        <input type="checkbox" id="ouv_prod" style="width:16px;height:16px"> 🏭 Fait partie de l'équipe de production (compte dans le quota tonnage du site)
+      </label>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" id="ouv_save_btn" style="flex:1;justify-content:center" onclick="saveOuvrier()">➕ Ajouter l'ouvrier</button>
+        <button class="btn btn-out" id="ouv_cancel_btn" style="display:none" onclick="resetOuvrierForm()">Annuler</button>
+      </div>
+      <div class="a-err" id="ouv_err"></div>
     </div>
     <div class="card">
-      <div class="card-title"><div class="ct-left"><span>📋 Salaires du mois</span></div></div>
-      <div id="sal-liste"></div>
+      <div class="card-title"><div class="ct-left"><span>👥 Registre des ouvriers</span></div></div>
+      <div id="ouvriers-liste"></div>
+    </div>
+  </div>
+
+  <!-- Onglet POINTAGE -->
+  <div id="saltab-pointage" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <div><label class="lbl">Jour</label><input type="date" id="point-date" onchange="renderPointage()" style="width:auto"></div>
+        <div style="font-size:11px;color:var(--textm);flex:1;min-width:200px">Pointez chaque ouvrier qui vient : les retards et absences alimentent automatiquement les retranchements du bulletin.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🕐 Pointage du jour</span></div></div>
+      <div id="pointage-liste"></div>
+    </div>
+  </div>
+
+  <!-- Onglet ORDRE DE VIREMENT -->
+  <div id="saltab-virement" style="display:none">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🏦 État d'ordre de virement</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Basé sur le mois sélectionné dans l'onglet « Salaires & bulletins ». Modifiez l'en-tête (RCCM, compte, signataires) dans Paramètres.</div>
+      <div id="virement-apercu"></div>
     </div>
   </div>
 </div>
@@ -2765,6 +2844,60 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <div style="font-size:10px;color:var(--textm)">Si activé : une vente à crédit est bloquée quand la dette du client dépasserait ce plafond (l'admin peut forcer).</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- PAIE & PERSONNEL -->
+  <div class="g2" style="align-items:start;margin-top:14px">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🏦 En-tête de l'ordre de virement</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Apparaît sur l'état imprimé pour la banque. Valeurs SADARI par défaut.</div>
+      <div class="fr"><label>Siège</label><input type="text" id="cfg_etat_siege" placeholder="Amoussoukopé"></div>
+      <div class="fg2">
+        <div class="fr"><label>N° RCCM</label><input type="text" id="cfg_etat_rccm" placeholder="TG-LFW-01-2023-A10-06807"></div>
+        <div class="fr"><label>Numéro de compte</label><input type="text" id="cfg_etat_compte" placeholder="6363/5162"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Établi par — Nom</label><input type="text" id="cfg_etat_etabli_nom" placeholder="GALLEY Kossi Biaglo"></div>
+        <div class="fr"><label>Établi par — Fonction</label><input type="text" id="cfg_etat_etabli_fonction" placeholder="Directeur Administratif et Financier"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Responsable hiérarchique</label><input type="text" id="cfg_etat_responsable" placeholder="ATCHOU A. Messan"></div>
+        <div class="fr"><label>Libellé comptable / visa</label><input type="text" id="cfg_etat_comptable" placeholder="Comptable / Directeur de la CECAV SOLIDARITÉ"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEtatEntete()">✓ Enregistrer l'en-tête</button>
+      <div class="a-ok" id="cfg_etat_ok"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>🧮 Règles de paie (bonus · quota · pointage)</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Utilisées par « Générer les bulletins ». Mettez 0 pour désactiver une règle.</div>
+      <div style="font-weight:700;font-size:11px;color:var(--g6);margin:6px 0">🎯 Quota de production (équipe production)</div>
+      <div class="fg2">
+        <div class="fr"><label>Quota mensuel du site (kg)</label><input type="number" id="rp_quota_kg" placeholder="10000" min="0"></div>
+        <div class="fr"><label>Prime si quota atteint (F)</label><input type="number" id="rp_bonus_quota_montant" placeholder="15000" min="0"></div>
+      </div>
+      <div class="fr"><label>Prime par tonne au-dessus du quota (F)</label><input type="number" id="rp_bonus_depassement_tonne" placeholder="2000" min="0"></div>
+      <div style="font-weight:700;font-size:11px;color:var(--g6);margin:10px 0 6px">🎁 Assiduité & qualité</div>
+      <div class="fg2">
+        <div class="fr"><label>Prime assiduité — 0 absence (F)</label><input type="number" id="rp_bonus_assiduite" placeholder="5000" min="0"></div>
+        <div class="fr"><label>Seuil taux de perte fab (%)</label><input type="number" id="rp_perte_seuil_pct" placeholder="3" min="0" step="0.1"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Prime si perte &lt; seuil (F)</label><input type="number" id="rp_bonus_perte_montant" placeholder="3000" min="0"></div>
+        <div class="fr"><label>Malus si perte &gt; seuil (F)</label><input type="number" id="rp_malus_perte_montant" placeholder="3000" min="0"></div>
+      </div>
+      <div style="font-weight:700;font-size:11px;color:var(--red);margin:10px 0 6px">⛔ Retranchements pointage</div>
+      <div class="fg2">
+        <div class="fr"><label>Malus par retard (F)</label><input type="number" id="rp_malus_retard" placeholder="500" min="0"></div>
+        <div class="fr"><label>Malus par absence (F)</label><input type="number" id="rp_malus_absence" placeholder="2000" min="0"></div>
+      </div>
+      <div style="font-weight:700;font-size:11px;color:var(--gold);margin:10px 0 6px">🛡 Garde-fous</div>
+      <div class="fg2">
+        <div class="fr"><label>Salaire plancher (F)</label><input type="number" id="rp_plancher_salaire" placeholder="30000" min="0"></div>
+        <div class="fr"><label>Plafond retranchement (% du salaire)</label><input type="number" id="rp_plafond_retranchement" placeholder="30" min="0" max="50"></div>
+      </div>
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveReglesPaie()">✓ Enregistrer les règles</button>
     </div>
   </div>
 </div>
@@ -3089,50 +3222,51 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.24.58"></script>
-<script src="js/print.js?v=2.24.58"></script>
-<script src="js/dashboard.js?v=2.24.58"></script>
-<script src="js/stock.js?v=2.24.58"></script>
-<script src="js/matieres.js?v=2.24.58"></script>
-<script src="js/production.js?v=2.24.58"></script>
-<script src="js/ventes.js?v=2.24.58"></script>
-<script src="js/clients.js?v=2.24.58"></script>
-<script src="js/admin.js?v=2.24.58"></script>
-<script src="js/bilan_jour.js?v=2.24.58"></script>
-<script src="js/caisse_extras.js?v=2.24.58"></script>
-<script src="js/corbeille.js?v=2.24.58"></script>
-<script src="js/dashboard_drill.js?v=2.24.58"></script>
-<script src="js/fournisseurs.js?v=2.24.58"></script>
-<script src="js/achats.js?v=2.24.58"></script>
-<script src="js/confirmations.js?v=2.24.58"></script>
-<script src="js/caisse.js?v=2.24.58"></script>
-<script src="js/inventaire_physique.js?v=2.24.58"></script>
-<script src="js/distribution.js?v=2.24.58"></script>
-<script src="js/salaires.js?v=2.24.58"></script>
-<script src="js/rapports.js?v=2.24.58"></script>
-<script src="js/dettes.js?v=2.24.58"></script>
-<script src="js/chat.js?v=2.24.58"></script>
-<script src="js/notifications.js?v=2.24.58"></script>
-<script src="js/qr_clients.js?v=2.24.58"></script>
-<script src="js/push.js?v=2.24.58"></script>
-<script src="js/reversements.js?v=2.24.58"></script>
-<script src="js/paiements_mp.js?v=2.24.58"></script>
-<script src="js/stock_pf.js?v=2.24.58"></script>
-<script src="js/veto.js?v=2.24.58"></script>
-<script src="js/alertes.js?v=2.24.58"></script>
-<script src="js/exports.js?v=2.24.58"></script>
-<script src="js/bilanss.js?v=2.24.58"></script>
-<script src="js/benefices.js?v=2.24.58"></script>
-<script src="js/messages_pdv.js?v=2.24.58"></script>
-<script src="js/directeur.js?v=2.24.58"></script>
-<script src="js/licences.js?v=2.24.58"></script>
+<script src="js/config.js?v=2.24.59"></script>
+<script src="js/print.js?v=2.24.59"></script>
+<script src="js/dashboard.js?v=2.24.59"></script>
+<script src="js/stock.js?v=2.24.59"></script>
+<script src="js/matieres.js?v=2.24.59"></script>
+<script src="js/production.js?v=2.24.59"></script>
+<script src="js/ventes.js?v=2.24.59"></script>
+<script src="js/clients.js?v=2.24.59"></script>
+<script src="js/admin.js?v=2.24.59"></script>
+<script src="js/bilan_jour.js?v=2.24.59"></script>
+<script src="js/caisse_extras.js?v=2.24.59"></script>
+<script src="js/corbeille.js?v=2.24.59"></script>
+<script src="js/dashboard_drill.js?v=2.24.59"></script>
+<script src="js/fournisseurs.js?v=2.24.59"></script>
+<script src="js/achats.js?v=2.24.59"></script>
+<script src="js/confirmations.js?v=2.24.59"></script>
+<script src="js/caisse.js?v=2.24.59"></script>
+<script src="js/inventaire_physique.js?v=2.24.59"></script>
+<script src="js/distribution.js?v=2.24.59"></script>
+<script src="js/salaires.js?v=2.24.59"></script>
+<script src="js/rapports.js?v=2.24.59"></script>
+<script src="js/dettes.js?v=2.24.59"></script>
+<script src="js/chat.js?v=2.24.59"></script>
+<script src="js/notifications.js?v=2.24.59"></script>
+<script src="js/qr_clients.js?v=2.24.59"></script>
+<script src="js/push.js?v=2.24.59"></script>
+<script src="js/reversements.js?v=2.24.59"></script>
+<script src="js/paiements_mp.js?v=2.24.59"></script>
+<script src="js/stock_pf.js?v=2.24.59"></script>
+<script src="js/veto.js?v=2.24.59"></script>
+<script src="js/alertes.js?v=2.24.59"></script>
+<script src="js/exports.js?v=2.24.59"></script>
+<script src="js/bilanss.js?v=2.24.59"></script>
+<script src="js/benefices.js?v=2.24.59"></script>
+<script src="js/messages_pdv.js?v=2.24.59"></script>
+<script src="js/directeur.js?v=2.24.59"></script>
+<script src="js/licences.js?v=2.24.59"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.24.58"></script>
-<script src="js/reservations_admin.js?v=2.24.58"></script>
-<script src="js/strategie_mp.js?v=2.24.58"></script>
-<script src="js/reappro.js?v=2.24.58"></script>
-<script src="js/ia.js?v=2.24.58"></script>
-<script src="js/marketing.js?v=2.24.58"></script>
+<script src="js/auth.js?v=2.24.59"></script>
+<script src="js/reservations_admin.js?v=2.24.59"></script>
+<script src="js/strategie_mp.js?v=2.24.59"></script>
+<script src="js/reappro.js?v=2.24.59"></script>
+<script src="js/ia.js?v=2.24.59"></script>
+<script src="js/marketing.js?v=2.24.59"></script>
+<script src="js/rh.js?v=2.24.59"></script>
 
 <script>
 // Enregistrement Service Worker PWA
