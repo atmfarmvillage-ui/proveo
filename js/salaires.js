@@ -25,8 +25,9 @@ async function renderSalaires(){
         <td style="font-size:10px;color:var(--textm)">${s.matricule||'—'}</td>
         <td style="font-size:10px">${s.mois}</td>
         <td class="num" style="color:var(--gold)">${fmt(s.montant)} F</td>
-        <td style="font-size:10px">${s.mode||'especes'}</td>
+        <td style="font-size:10px">${s.mode||'especes'} ${(s.paye||s.depense_id)?'<span class="badge bdg-g" style="font-size:8px">✓ payé</span>':''}</td>
         <td style="white-space:nowrap">
+          ${(!s.paye && !s.depense_id)?`<button class="btn btn-g btn-sm" onclick="marquerSalairePaye('${s.id}')" title="Payer : dépense + caisse">💵 Payer</button>`:''}
           <button class="btn btn-print btn-sm" onclick="imprimerFichePaie('${s.id}')" title="Fiche de paie PDF">🖨️</button>
           <button class="btn btn-out btn-sm" onclick="envoyerFichePayeWA('${s.id}')" title="Envoyer WhatsApp" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.3);color:#25D366">📲</button>
           <button class="btn btn-out btn-sm" onclick="afficherBilanEmploye('${s.nom_prenom}')" title="Bilan cumulé">📊</button>
@@ -51,33 +52,48 @@ async function saveSalaire(){
   const err=document.getElementById('sal_err');
   if(!nom||!montant){err.textContent='Nom et montant requis.';return;}
 
-  const{error}=await SB.from('gp_salaires').insert({
+  // Si un ouvrier enregistré est sélectionné : on récupère son id / RIB / PDV.
+  const ouvId=document.getElementById('sal_ouvrier')?.value||null;
+  const ouv=(typeof GP_OUVRIERS!=='undefined')?GP_OUVRIERS.find(o=>o.id===ouvId):null;
+
+  const row={
     admin_id:GP_ADMIN_ID,nom_prenom:nom,matricule:mat,
-    mois,montant,mode,date_paiement:today()
-  });
-  if(error){err.textContent='Erreur: '+error.message;return;}
-
-  // Mouvement caisse automatique — caisse du PDV connecté (ou siège), pas une caisse au hasard
-  let _sc=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
-  _sc = GP_POINT_VENTE ? _sc.eq('point_vente',GP_POINT_VENTE) : _sc.is('point_vente',null);
-  let{data:caisses}=await _sc.limit(1);
-  if(!caisses?.length){ const _r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1); caisses=_r.data; }
-  if(caisses?.length){
-    await SB.from('gp_mouvements_caisse').insert({
-      admin_id:GP_ADMIN_ID,caisse_id:caisses[0].id,
-      type:'sortie',categorie:'salaire',montant,
-      date_mouvement:today(),
-      description:`Salaire ${nom} — ${mois}`,
-      enregistre_par:GP_USER.id,
-      enregistre_par_nom:GP_USER.email?.split('@')[0]
-    });
+    mois,montant,mode,date_paiement:today(),
+    net_a_payer:montant,salaire_base:montant,
+    ouvrier_id:ouvId||null,
+    numero_compte:ouv?.numero_compte||null,
+    poste:ouv?.fonction||null,
+    point_vente:ouv?.point_vente||GP_POINT_VENTE||null,
+    paye:false
+  };
+  const{data:sal,error}=await SB.from('gp_salaires').insert(row).select().maybeSingle();
+  if(error){
+    // Fallback si colonnes récentes absentes : insertion minimale
+    if(String(error.message||'').includes('Could not find')){
+      const{data:sal2,error:e2}=await SB.from('gp_salaires').insert({
+        admin_id:GP_ADMIN_ID,nom_prenom:nom,matricule:mat,mois,montant,mode,date_paiement:today()
+      }).select().maybeSingle();
+      if(e2){err.textContent='Erreur: '+e2.message;return;}
+      err.textContent='';
+      await _finaliserSaveSalaire(sal2||{id:null,nom_prenom:nom,mois,montant,net_a_payer:montant,point_vente:row.point_vente},nom);
+      return;
+    }
+    err.textContent='Erreur: '+error.message;return;
   }
-
   err.textContent='';
-  ['sal_nom','sal_matricule','sal_montant'].forEach(id=>{
-    const el=document.getElementById(id);if(el)el.value='';
-  });
-  notify(`Salaire ${nom} enregistré ✓`,'gold');
+  await _finaliserSaveSalaire(sal,nom);
+}
+
+// Paiement (dépense + caisse) + reset formulaire, commun aux deux chemins d'insert.
+async function _finaliserSaveSalaire(sal,nom){
+  // Enregistrer & payer : crée une dépense « Salaire » et déduit la caisse (idempotent + rattrapage hors-ligne).
+  if(sal && sal.id && typeof payerSalaireVersDepense==='function'){
+    const r=await payerSalaireVersDepense(sal);
+    if(r && r.error){ notify('Salaire enregistré, mais caisse non débitée : '+r.error,'r'); }
+  }
+  ['sal_nom','sal_matricule','sal_montant'].forEach(id=>{ const el=document.getElementById(id);if(el)el.value=''; });
+  const selO=document.getElementById('sal_ouvrier'); if(selO)selO.value='';
+  notify(`Salaire ${nom} enregistré & payé ✓ (dépense + caisse)`,'gold');
   await renderSalaires();
 }
 
