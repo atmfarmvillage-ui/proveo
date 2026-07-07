@@ -63,7 +63,7 @@ async function saveSalaire(){
     ouvrier_id:ouvId||null,
     numero_compte:ouv?.numero_compte||null,
     poste:ouv?.fonction||null,
-    point_vente:ouv?.point_vente||GP_POINT_VENTE||null,
+    point_vente:null, // salaires = site de production uniquement
     paye:false
   };
   const{data:sal,error}=await SB.from('gp_salaires').insert(row).select().maybeSingle();

@@ -118,7 +118,7 @@ async function saveOuvrier(){
     whatsapp:document.getElementById('ouv_tel')?.value.trim()||null,
     date_embauche:document.getElementById('ouv_embauche')?.value||null,
     salaire_base:+document.getElementById('ouv_salaire')?.value||0,
-    point_vente:document.getElementById('ouv_pdv')?.value.trim()||GP_POINT_VENTE||null,
+    point_vente:null, // salaires = site de production uniquement
     equipe_production:document.getElementById('ouv_prod')?.checked||false,
     statut:'actif'
   };
@@ -437,7 +437,8 @@ async function payerSalaireVersDepense(sal, preferredCaisseId){
   if(sal.depense_id){ return {already:true}; }
   const net=Number(sal.net_a_payer!=null?sal.net_a_payer:sal.montant)||0;
   const desc=`Salaire ${sal.nom_prenom} — ${sal.mois}`;
-  const pdv=sal.point_vente||GP_POINT_VENTE||null;
+  // Salaires = site de production uniquement → dépense/débit sur la caisse Production (point_vente null).
+  const pdv=null;
   const {data:dep,error}=await SB.from('gp_depenses').insert({
     admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, date:today(),
     categorie:'salaire', description:desc, montant:net,
