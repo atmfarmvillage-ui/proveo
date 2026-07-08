@@ -98,37 +98,57 @@ if(typeof window._saveDepOriginal === 'undefined' && typeof saveDep === 'functio
   window._saveDepOriginal = saveDep;
 }
 
+let _savingDep = false;   // verrou anti double-clic / double-soumission
 async function saveDep(){
-  const desc = document.getElementById('dep_desc')?.value.trim();
-  const montant = +document.getElementById('dep_montant')?.value || 0;
-  const date = document.getElementById('dep_date')?.value;
-  const err = document.getElementById('dep_err');
-  if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
-  const caisseSel = document.getElementById('dep_caisse_id')?.value || null;
-
-  // 1. Insert dépense
-  const{data:dep, error}=await SB.from('gp_depenses').insert({
-    admin_id: GP_ADMIN_ID, saisi_par: GP_USER?.id, date,
-    categorie: document.getElementById('dep_cat').value,
-    description: desc, montant,
-    beneficiaire: document.getElementById('dep_benef').value.trim() || null,
-    point_vente: document.getElementById('dep_pv').value.trim() || null
-  }).select().maybeSingle();
-  if(error){ err.textContent = 'Erreur: '+error.message; return; }
-
-  err.textContent = '';
-  ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-
-  // 2. Débit caisse OBLIGATOIRE. Comme les ventes : si ça réussit → caisse_debitee=true.
-  //    Si la connexion coupe → reste false → RATTRAPÉ auto au refresh (synchroniserCaisseDepenses).
+  if(_savingDep) return;   // une sauvegarde est déjà en cours → on ignore le second clic
+  _savingDep = true;
+  const btn = document.querySelector('button[onclick*="saveDep"]');
+  if(btn){ btn.disabled = true; btn.dataset._lbl = btn.textContent; btn.style.opacity='.6'; btn.textContent='⏳ Enregistrement…'; }
+  const _unlock = ()=>{ _savingDep=false; if(btn){ btn.disabled=false; btn.style.opacity=''; if(btn.dataset._lbl){ btn.textContent=btn.dataset._lbl; } } };
   try{
-    await _debiterCaisseDepense(dep, caisseSel);
-    try{ await SB.from('gp_depenses').update({caisse_debitee:true}).eq('id',dep.id); }catch(_){}
-    notify(`✓ Dépense · ${fmt(montant)} F sortis de la caisse`,'gold');
-  }catch(e){
-    try{ alert('⚠️ La caisse n\'a pas pu être débitée (connexion ?).\nLa dépense est enregistrée — elle sera débitée AUTOMATIQUEMENT au prochain rafraîchissement de l\'app.'); }catch(_){}
+    const desc = document.getElementById('dep_desc')?.value.trim();
+    const montant = +document.getElementById('dep_montant')?.value || 0;
+    const date = document.getElementById('dep_date')?.value;
+    const err = document.getElementById('dep_err');
+    if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
+    const caisseSel = document.getElementById('dep_caisse_id')?.value || null;
+    const categorie = document.getElementById('dep_cat').value;
+
+    // Anti-doublon : une dépense identique (même jour, même libellé, même montant, même catégorie) existe déjà ?
+    try{
+      const{data:dup}=await SB.from('gp_depenses').select('id')
+        .eq('admin_id',GP_ADMIN_ID).eq('date',date).eq('description',desc)
+        .eq('montant',montant).eq('categorie',categorie).limit(1);
+      if(dup && dup.length){
+        if(!confirm(`⚠️ Une dépense IDENTIQUE existe déjà le ${date} :\n« ${desc} » — ${fmt(montant)} F.\n\nC'est probablement un doublon. Enregistrer quand même ?`)) return;
+      }
+    }catch(_){}
+
+    // 1. Insert dépense
+    const{data:dep, error}=await SB.from('gp_depenses').insert({
+      admin_id: GP_ADMIN_ID, saisi_par: GP_USER?.id, date,
+      categorie, description: desc, montant,
+      beneficiaire: document.getElementById('dep_benef').value.trim() || null,
+      point_vente: document.getElementById('dep_pv').value.trim() || null
+    }).select().maybeSingle();
+    if(error){ err.textContent = 'Erreur: '+error.message; return; }
+
+    err.textContent = '';
+    ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+
+    // 2. Débit caisse OBLIGATOIRE. Comme les ventes : si ça réussit → caisse_debitee=true.
+    //    Si la connexion coupe → reste false → RATTRAPÉ auto au refresh (synchroniserCaisseDepenses).
+    try{
+      await _debiterCaisseDepense(dep, caisseSel);
+      try{ await SB.from('gp_depenses').update({caisse_debitee:true}).eq('id',dep.id); }catch(_){}
+      notify(`✓ Dépense · ${fmt(montant)} F sortis de la caisse`,'gold');
+    }catch(e){
+      try{ alert('⚠️ La caisse n\'a pas pu être débitée (connexion ?).\nLa dépense est enregistrée — elle sera débitée AUTOMATIQUEMENT au prochain rafraîchissement de l\'app.'); }catch(_){}
+    }
+    if(typeof renderDep === 'function') await renderDep();
+  } finally {
+    _unlock();
   }
-  if(typeof renderDep === 'function') await renderDep();
 }
 
 // Crée le mouvement de SORTIE caisse d'une dépense (résout la caisse via son PDV).

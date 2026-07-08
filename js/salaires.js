@@ -43,7 +43,9 @@ async function renderSalaires(){
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun salaire pour ce mois.</div>';
 }
 
+let _savingSal=false;   // verrou anti double-clic
 async function saveSalaire(){
+  if(_savingSal) return;
   const nom=document.getElementById('sal_nom')?.value.trim();
   const mat=document.getElementById('sal_matricule')?.value.trim()||null;
   const mois=document.getElementById('sal_mois_saisie')?.value||thisMonth();
@@ -51,6 +53,19 @@ async function saveSalaire(){
   const mode=document.getElementById('sal_mode')?.value||'especes';
   const err=document.getElementById('sal_err');
   if(!nom||!montant){err.textContent='Nom et montant requis.';return;}
+
+  // Anti-doublon : salaire déjà saisi pour ce nom + ce mois ?
+  try{
+    const{data:dupS}=await SB.from('gp_salaires').select('id')
+      .eq('admin_id',GP_ADMIN_ID).eq('nom_prenom',nom).eq('mois',mois).eq('montant',montant).limit(1);
+    if(dupS&&dupS.length){
+      if(!confirm(`⚠️ Un salaire IDENTIQUE existe déjà pour ${nom} — ${mois} (${fmt(montant)} F).\n\nC'est probablement un doublon. Enregistrer quand même ?`)) return;
+    }
+  }catch(_){}
+  _savingSal=true;
+  const _btnS=document.querySelector('button[onclick*="saveSalaire"]');
+  if(_btnS){ _btnS.disabled=true; _btnS.style.opacity='.6'; }
+  try{
 
   // Si un ouvrier enregistré est sélectionné : on récupère son id / RIB / PDV.
   const ouvId=document.getElementById('sal_ouvrier')?.value||null;
@@ -82,6 +97,10 @@ async function saveSalaire(){
   }
   err.textContent='';
   await _finaliserSaveSalaire(sal,nom);
+  } finally {
+    _savingSal=false;
+    if(_btnS){ _btnS.disabled=false; _btnS.style.opacity=''; }
+  }
 }
 
 // Paiement (dépense + caisse) + reset formulaire, commun aux deux chemins d'insert.
