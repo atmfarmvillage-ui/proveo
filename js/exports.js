@@ -18,6 +18,29 @@ function gpExportExcel(titre, columns, rows, filename){
   notify('Excel téléchargé ✓','gold');
 }
 
+// Word : document HTML téléchargé en .doc (Word ouvre parfaitement le HTML). Aucune librairie requise.
+function _gpHtmlEsc(s){ return _gpStrip(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function gpExportWord(titre, columns, rows, filename, sousTitre){
+  if(!rows||!rows.length){ notify('Rien à exporter','r'); return; }
+  const prov=(typeof GP_CONFIG!=='undefined' && GP_CONFIG && GP_CONFIG.nom_provenderie) || 'SADARI';
+  const th=columns.map(c=>`<th style="background:#16A34A;color:#fff;border:1px solid #999;padding:5px;font-size:11px;text-align:left">${_gpHtmlEsc(c.label)}</th>`).join('');
+  const trs=rows.map(r=>'<tr>'+columns.map(c=>`<td style="border:1px solid #ccc;padding:4px;font-size:10px">${_gpHtmlEsc(c.render?c.render(r):r[c.key])}</td>`).join('')+'</tr>').join('');
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"><title>${_gpHtmlEsc(titre)}</title></head>
+    <body style="font-family:Calibri,Arial,sans-serif">
+      <h2 style="margin:0">${_gpHtmlEsc(prov)}</h2>
+      <h3 style="color:#16A34A;margin:4px 0">${_gpHtmlEsc(titre)}</h3>
+      ${sousTitre?`<p style="color:#555;font-size:11px;margin:0 0 8px">${_gpHtmlEsc(sousTitre)}</p>`:''}
+      <table style="border-collapse:collapse;width:100%"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>
+    </body></html>`;
+  const blob=new Blob(['﻿'+html], {type:'application/msword'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  notify('Word téléchargé ✓','gold');
+}
+
 function gpExportPDF(titre, columns, rows, filename, sousTitre){
   if(typeof window.jspdf==='undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2s','r'); return; }
   if(!rows||!rows.length){ notify('Rien à exporter','r'); return; }

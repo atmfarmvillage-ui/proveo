@@ -76,6 +76,7 @@ async function drillSoldeCaisse(){
 
 // ── DRILL : DETTE FOURNISSEURS ─────────────────────
 async function drillDetteFournisseurs(){
+  if(_drillReserveSiege()) return;
   document.getElementById('kpi-drill-titre').textContent = '🏢 Dette fournisseurs';
   const {data:A} = await SB.from('gp_achats').select('id,fournisseur_nom,date_commande,ref,montant_total,montant_paye,condition_paiement').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0).order('date_commande',{ascending:false});
   const dettes = (A||[]).filter(a=>Number(a.montant_total||0) > Number(a.montant_paye||0));
@@ -96,6 +97,7 @@ async function drillDetteFournisseurs(){
 
 // ── DRILL : ALERTES STOCK MP ───────────────────────
 async function drillAlertesMP(){
+  if(_drillReserveSiege()) return;
   document.getElementById('kpi-drill-titre').textContent = '⚠ Alertes stock MP';
   const {data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
   const stock = S||[];
@@ -124,6 +126,19 @@ async function drillAlertesMP(){
 // Cloisonnement PDV : un membre scopé ne voit le détail que de SON périmètre
 function _drillScopePV(q){
   return (typeof scopeQueryPDV==='function') ? scopeQueryPDV(q) : q;
+}
+// Défense en profondeur : les drills « production / réseau » (lots, dette fournisseurs,
+// stock MP) sont réservés au siège / principal / admin. Un PDV réel scopé est refusé,
+// même en appel direct (console) — les KPI correspondants lui sont déjà masqués.
+function _drillReserveSiege(){
+  const scoped = (typeof estCloisonnePDV==='function' && estCloisonnePDV()
+    && typeof GP_POINT_VENTE!=='undefined' && !!GP_POINT_VENTE);
+  if(!scoped) return false;
+  const t=document.getElementById('kpi-drill-titre'); if(t) t.textContent='🔒 Accès restreint';
+  const s=document.getElementById('kpi-drill-summary'); if(s) s.innerHTML='<div style="color:var(--textm);padding:10px">Donnée réservée au siège.</div>';
+  const tb=document.getElementById('kpi-drill-tbody'); if(tb) tb.innerHTML='';
+  const a=document.getElementById('kpi-drill-actions'); if(a) a.innerHTML='';
+  return true;
 }
 
 // Helper : filtrer les périodes (mois courant)
@@ -309,8 +324,8 @@ function relancerTousImpayes(){
 // ── 4. DÉPENSES ────────────────────────────────────
 async function drillDepenses(){
   const {debut, fin} = _moisRangeCe();
-  const{data:D}=await SB.from('gp_depenses').select('*')
-    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)
+  const{data:D}=await _drillScopePV(SB.from('gp_depenses').select('*')
+    .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin))
     .order('date',{ascending:false});
   const dep = D||[];
   const total = dep.reduce((s,d)=>s+Number(d.montant||0),0);
@@ -335,6 +350,7 @@ async function drillDepenses(){
 
 // ── 5. LOTS PRODUITS ───────────────────────────────
 async function drillLots(){
+  if(_drillReserveSiege()) return;
   const {debut, fin} = _moisRangeCe();
   const{data:L}=await SB.from('gp_lots').select('*')
     .eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)
@@ -364,8 +380,8 @@ async function drillLots(){
 // ── 6. CA FERME (bonus) ────────────────────────────
 async function drillCAFerme(){
   const {debut, fin} = _moisRangeCe();
-  const{data:V}=await SB.from('gp_ventes').select('*')
-    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin);
+  const{data:V}=await _drillScopePV(SB.from('gp_ventes').select('*')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin));
   // Filtrer ventes ferme uniquement (espèce non-provenderie)
   const ESPECES_FERME = ['lapin','oeuf','poulet','autre'];
   const ventes = (V||[]).filter(v => {
