@@ -25,7 +25,7 @@ async function loadClientStats(force){
   let _qStats=SB.from('gp_ventes')
     .select('client_id,date,formule_nom,montant_total,point_vente')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).not('client_id','is',null);
-  if(typeof scopeQueryPDV==='function') _qStats=scopeQueryPDV(_qStats); // stats client scopées au PDV
+  if(typeof scopeQueryClientsPole==='function') _qStats=scopeQueryClientsPole(_qStats); // relation/fidélité partagée dans le pôle
   const{data}=await _qStats;
   const map={};
   (data||[]).forEach(v=>{
@@ -142,7 +142,7 @@ async function openClientDetail(id){
   let _qDet=SB.from('gp_ventes')
     .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement,point_vente')
     .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
-  if(typeof scopeQueryPDV==='function') _qDet=scopeQueryPDV(_qDet); // historique client limité au périmètre du membre
+  if(typeof scopeQueryClientsPole==='function') _qDet=scopeQueryClientsPole(_qDet); // historique partagé dans le pôle central
   const{data:V}=await _qDet.order('date',{ascending:false}).limit(50);
   const hist=(V||[]).length?`<table class="tbl" style="font-size:11px"><thead><tr>
       <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th></th>
@@ -253,9 +253,9 @@ async function redigerMsgWAIA(tier){
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
-  // Cloisonnement : un membre scopé ne voit QUE ses clients (siège = null/Production).
-  if(typeof appartientAuPDV==='function' && typeof estCloisonnePDV==='function' && estCloisonnePDV()){
-    filtered=filtered.filter(c=> appartientAuPDV(c.point_vente));
+  // Cloisonnement : pôle central (Production+Principal) partage ses clients ; secondaire isolé.
+  if(typeof appartientAuPoleClients==='function'){
+    filtered=filtered.filter(c=> appartientAuPoleClients(c.point_vente));
   }
 
   // Charger les ventes impayées/partielles pour calculer les dettes (scopées au PDV)
@@ -672,7 +672,7 @@ async function verifierProspect(){
 
   // Chercher dans les clients existants
   let query=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID);
-  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()) query=query.eq('point_vente', (typeof pdvCourant==='function')?pdvCourant():(GP_POINT_VENTE||'Production'));
+  if(typeof scopeQueryClientsPole==='function') query=scopeQueryClientsPole(query); // pôle central (Production+Principal)
   if(tel) query=query.eq('telephone',tel);
   else if(nom) query=query.ilike('nom','%'+nom+'%');
   const{data:clients}=await query.limit(1);

@@ -196,6 +196,13 @@ async function bootApp(user){
         GP_EST_PRINCIPAL=(pv?.type_pdv==='principal');
       }catch(e){}
     }
+    // Noms des PDV "principaux" → pôle central (Production + Principal partagent les clients)
+    GP_PDV_PRINCIPAUX=[];
+    try{
+      const{data:_pp}=await SB.from('gp_points_vente').select('nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('type_pdv','principal');
+      GP_PDV_PRINCIPAUX=(_pp||[]).map(p=>p.nom).filter(Boolean);
+    }catch(e){}
   } else {
     GP_ROLE='admin';
     GP_ADMIN_ID=user.id;
@@ -203,6 +210,7 @@ async function bootApp(user){
     GP_EST_GERANT=false;
     GP_EST_SECONDAIRE=false;
     GP_EST_PRINCIPAL=false;
+    GP_PDV_PRINCIPAUX=[];
   }
   // Show UI
   document.getElementById('authScreen').classList.add('hidden');
@@ -637,11 +645,35 @@ function scopeQueryPDV(q){
   if(GP_POINT_VENTE) return q.eq('point_vente', GP_POINT_VENTE);
   return q.or('point_vente.is.null,point_vente.eq.Production'); // siège
 }
+
+// ── PÔLE CENTRAL (partage clients Production + Principal) ──
+// Pour la VISIBILITÉ DES CLIENTS (liste, sélection en vente, historique, fidélité) :
+// - admin / gérant : tout ; - PDV SECONDAIRE : uniquement le sien (isolé) ;
+// - Siège (Production) OU Principal : pôle central = null + "Production" + PDV principaux.
+// Un client d'un PDV du pôle peut donc acheter dans un autre PDV du pôle et cumuler ses points.
+// NB : les CHIFFRES (classement, dettes, top3) restent strictement par PDV vendeur (scopeQueryPDV).
+function _estPoleCentral(){
+  if(GP_ROLE==='admin' || GP_EST_GERANT) return false; // couvert par "voit tout"
+  return (!GP_POINT_VENTE) || (typeof GP_EST_PRINCIPAL!=='undefined' && GP_EST_PRINCIPAL);
+}
+function _polePointsVenteOr(){
+  const noms=(typeof GP_PDV_PRINCIPAUX!=='undefined'?GP_PDV_PRINCIPAUX:[])||[];
+  return ['point_vente.is.null','point_vente.eq.Production', ...noms.map(n=>`point_vente.eq.${n}`)].join(',');
+}
+function scopeQueryClientsPole(q){
+  if(GP_ROLE==='admin' || GP_EST_GERANT) return q;              // tout
+  if(_estPoleCentral()) return q.or(_polePointsVenteOr());       // pôle central
+  return q.eq('point_vente', GP_POINT_VENTE);                    // secondaire / PDV réel : strict
+}
+function appartientAuPoleClients(pv){
+  if(GP_ROLE==='admin' || GP_EST_GERANT) return true;
+  if(_estPoleCentral()) return !pv || pv==='Production' || ((typeof GP_PDV_PRINCIPAUX!=='undefined'?GP_PDV_PRINCIPAUX:[])||[]).includes(pv);
+  return pv===GP_POINT_VENTE;
+}
 async function loadClients(){
   let q=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
-  // Cloisonnement PDV strict : un PDV réel ne charge QUE ses clients ; le siège (sans PDV)
-  // garde les clients non-assignés (null) + "Production" — géré par scopeQueryPDV.
-  q=scopeQueryPDV(q);
+  // Pôle central : Production + Principal partagent leurs clients ; un secondaire reste isolé.
+  q=scopeQueryClientsPole(q);
   const{data}=await q;
   GP_CLIENTS=data||[];
 }
