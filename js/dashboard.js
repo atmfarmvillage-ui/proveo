@@ -294,6 +294,11 @@ async function renderDashboard(){
     `${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — Données temps réel`;
 
   const isAdmin=GP_ROLE==='admin';
+  // Un PDV RÉEL non-principal (ex. secondaire) ne doit voir AUCUNE donnée production/usine
+  // (kg produits, derniers lots, alertes stock MP). Siège / principal / admin : conservent.
+  const masqueProd = (GP_ROLE!=='admin'
+    && !(typeof GP_EST_PRINCIPAL!=='undefined' && GP_EST_PRINCIPAL)
+    && typeof GP_POINT_VENTE!=='undefined' && !!GP_POINT_VENTE);
 
   // Helper KPI : icône pastel + libellé + valeur + delta optionnel + onClick optionnel
   const kpi=(icon,iconColor,label,value,delta,onClick)=>`
@@ -334,9 +339,9 @@ async function renderDashboard(){
     ${kpi('⚠','red','Impayés du mois',fmt(impayeMois),impayeMois>0?{type:'down',text:'à relancer'}:{type:'up',text:'rien à relancer'},"dashKpiDrill('impayes')")}
     ${kpi('🧾','red','Impayés total (tous mois)',fmt(impayesTotal),impayesTotal>0?{type:'down',text:'total dû clients'}:{type:'up',text:'aucun impayé'},"dashKpiDrill('impayes_total')")}
     ${caGros>0?kpi('🚚','blue','Ventes en gros',fmt(caGros),{type:'flat',text:'encaissé '+fmt(encGros)}):''}
-    ${kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
+    ${masqueProd?'':kpi('📦','blue','Produits ce mois',`${fmt(prodMois)} kg`,nbSacsMois>0?{type:'flat',text:`${nbSacsMois} sacs`}:null)}
     ${kpi('💵','gold','Solde caisse PDV',fmt(soldeCaissePDV),nbCaissesPDV>0?{type:'flat',text:`${nbCaissesPDV} caisse${nbCaissesPDV>1?'s':''}`}:null,"dashKpiDrill('caisse')")}
-    ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}
+    ${masqueProd?'':kpi('⚠',alertes.length>0?'red':'green','Alertes stock',alertes.length,alertes.length>0?{type:'down',text:'à vérifier'}:{type:'up',text:'tout est OK'})}
     `}`;
 
   // Derniers lots
@@ -410,7 +415,7 @@ async function renderDashboard(){
 
   document.getElementById('dash-body').innerHTML=`
     <div>
-      <div class="card">
+      ${masqueProd?'':`<div class="card">
         <div class="card-title"><div class="ct-left"><span>🏭 Dernière production</span></div></div>
         ${derniersLotsHtml||'<div style="color:var(--textm);font-size:12px">Aucune production. <span style="color:var(--g6);cursor:pointer" onclick="showGP(\'production\')">→ Enregistrer</span></div>'}
         <button class="btn btn-g btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('production')">+ Nouveau lot</button>
@@ -419,7 +424,7 @@ async function renderDashboard(){
         <div class="card-title"><div class="ct-left"><span>⚠ Alertes stock MP</span></div></div>
         ${alerteHtml||'<div style="color:var(--green);font-size:12px">✓ Tous les stocks sont suffisants.</div>'}
         <button class="btn btn-out btn-sm no-print" style="width:100%;justify-content:center;margin-top:8px" onclick="showGP('stock')">Gérer le stock →</button>
-      </div>
+      </div>`}
     </div>
     <div>
       <div class="card">

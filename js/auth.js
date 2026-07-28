@@ -639,8 +639,9 @@ function scopeQueryPDV(q){
 }
 async function loadClients(){
   let q=SB.from('gp_clients').select('*').eq('admin_id',GP_ADMIN_ID).order('total_achats',{ascending:false});
-  // Cloisonnement PDV : un membre scopé ne charge que SES clients (+ clients sans PDV)
-  if(estCloisonnePDV()) q=q.or(`point_vente.is.null,point_vente.eq.${pdvCourant()}`);
+  // Cloisonnement PDV strict : un PDV réel ne charge QUE ses clients ; le siège (sans PDV)
+  // garde les clients non-assignés (null) + "Production" — géré par scopeQueryPDV.
+  q=scopeQueryPDV(q);
   const{data}=await q;
   GP_CLIENTS=data||[];
 }

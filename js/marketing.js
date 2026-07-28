@@ -286,6 +286,7 @@ async function renderMarketingSegments(){
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
+    <div id="mkt-fidelite-zone"></div>
     <div id="mkt-campagne-zone"></div>
     <div id="mkt-relance-stats"></div>
     <div class="card">
@@ -298,6 +299,7 @@ async function renderMarketingSegments(){
   mktRenderCycle();
   mktRenderDowntrade();
   mktRenderCrossSell();
+  mktRenderFidelite();
   mktRenderCampagne();
   mktRenderRelanceStats();
 }
@@ -382,6 +384,161 @@ function envoyerCampagne(){
     n++;
   });
   notify(`📢 Campagne lancée vers ${n} client(s)`,'gold');
+}
+
+// ── MESSAGE DE FIDÉLITÉ DU MOIS ───────────────────
+// Banque de 12 messages de remerciement prêts à l'emploi ({nom} = prénom).
+// Rotation automatique : 1 message différent suggéré chaque mois → jamais 2 fois le même.
+const MKT_FIDELITE_TEMPLATES = [
+  {label:'🙏 Remerciement classique',
+   texte:`🐇 Bonjour {nom}, La Provenderie Sadari vous remercie sincèrement pour votre fidélité et la confiance que vous nous accordez. Votre satisfaction est notre plus grande motivation. Nous restons engagés à vous fournir une alimentation de qualité pour la réussite de votre élevage. Bon mois rempli de succès et de prospérité. 🙏\n— La Provenderie Sadari`},
+  {label:'🌅 Nouveau mois, nouvel élan',
+   texte:`Bonjour {nom} 👋 Un nouveau mois commence, et toute l'équipe Sadari vous souhaite un élevage prospère et sans souci. Merci de nous faire confiance pour nourrir vos animaux — nous mettons tout en œuvre pour être à la hauteur. À très vite au comptoir ! 🐓\n— La Provenderie Sadari`},
+  {label:'🌱 Fierté partagée',
+   texte:`{nom}, votre réussite est aussi la nôtre 🌱 Merci de faire partie de la famille Sadari. Ce mois-ci encore, comptez sur nous pour une alimentation régulière et de qualité. Nous vous souhaitons de belles récoltes et un cheptel en pleine forme.\n— La Provenderie Sadari`},
+  {label:'💚 Court & chaleureux',
+   texte:`Bonjour {nom} 🙏 Juste un mot pour vous dire merci de votre fidélité. Excellent mois à vous et à votre élevage, de la part de toute l'équipe Sadari ! 🐇🐓`},
+  {label:'🤝 Engagement qualité',
+   texte:`{nom}, merci pour votre confiance renouvelée 🤝 Notre engagement pour ce nouveau mois : la même qualité, la même régularité, le même sérieux dans vos aliments. Votre élevage mérite le meilleur, et nous y veillons.\n— La Provenderie Sadari`},
+  {label:'🐣 Orienté résultats',
+   texte:`Bonjour {nom} 🐣 Un bon aliment, c'est une bonne croissance et de bons résultats. Merci de nous accorder votre confiance mois après mois. Toute l'équipe Sadari vous souhaite un mois productif et rentable. À bientôt !\n— La Provenderie Sadari`},
+  {label:'📍 Proximité / conseil',
+   texte:`{nom}, merci d'être un client fidèle de Sadari 💚 Ce mois-ci, n'hésitez pas à passer nous voir : nous sommes là pour vous conseiller et vous accompagner dans votre élevage. Excellent mois à vous !\n— La Provenderie Sadari`},
+  {label:'🌾 Saison / bénédiction',
+   texte:`Bonjour {nom} 🙏 Que ce nouveau mois vous apporte santé, prospérité et un élevage florissant. Merci de faire confiance à la Provenderie Sadari pour l'alimentation de vos animaux. Nous sommes honorés de vous compter parmi nous. 🌾`},
+  {label:'🤗 Famille Sadari',
+   texte:`{nom}, faire partie de la famille Sadari, c'est ce qui nous rend fiers chaque jour 🤗 Merci pour votre fidélité. Nous vous souhaitons un mois rempli de succès et de belles réussites dans votre élevage.\n— La Provenderie Sadari`},
+  {label:'🐇 Clin d’œil lapins',
+   texte:`Bonjour {nom} 🐇 Vos lapins comptent sur vous… et vous pouvez compter sur nous ! Merci de votre fidélité. Toute l'équipe Sadari vous souhaite une portée en bonne santé et un excellent mois.\n— La Provenderie Sadari`},
+  {label:'📦 Remerciement + réappro',
+   texte:`{nom}, merci de votre confiance 🙏 Pensez à anticiper votre réapprovisionnement pour éviter toute rupture ce mois-ci — nous gardons votre aliment habituel prêt. Bon mois à vous et à votre élevage !\n— La Provenderie Sadari`},
+  {label:'🎩 Ton sobre et pro',
+   texte:`Bonjour {nom}. Au nom de toute l'équipe de la Provenderie Sadari, merci pour votre fidélité et la confiance que vous nous témoignez. Nous restons pleinement engagés à vos côtés pour la réussite de votre élevage. Nous vous souhaitons un excellent mois.\n— La Provenderie Sadari`},
+];
+
+var MKT_FID_IDX = 0;      // template sélectionné
+var MKT_FID_AUD = 'regulier';   // audience : 'regulier' (Fidèles) | 'tous'
+
+// Template suggéré du mois (rotation mensuelle)
+function mktFideliteSuggestion(){
+  return (new Date().getMonth()) % MKT_FIDELITE_TEMPLATES.length;
+}
+
+// Destinataires selon l'audience choisie (uniquement ceux avec un numéro)
+function mktFideliteDestinataires(){
+  if(!_MKT_SEGS) return [];
+  let liste = (MKT_FID_AUD==='tous')
+    ? [..._MKT_SEGS.nouveau,..._MKT_SEGS.regulier,..._MKT_SEGS.retard,..._MKT_SEGS.perdu]
+    : (_MKT_SEGS.regulier||[]);
+  return liste.filter(x=> (x.c.telephone||'').replace(/\D/g,'').length>=6);
+}
+
+async function mktRenderFidelite(){
+  const zone=document.getElementById('mkt-fidelite-zone');
+  if(!zone) return;
+
+  // A-t-on déjà envoyé le message de fidélité ce mois-ci ? (anti-doublon + rappel)
+  let sentThisMonth=false;
+  try{
+    const now=new Date();
+    const debutMois=new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+    const{data}=await SB.from('gp_relances').select('id')
+      .eq('admin_id',GP_ADMIN_ID).like('segment','fidelite%').gte('created_at',debutMois).limit(1);
+    sentThisMonth=!!(data&&data.length);
+  }catch(e){ /* table gp_relances absente → pas de rappel, pas grave */ }
+
+  const jour=new Date().getDate();
+  const debutDeMois = jour<=7;
+  MKT_FID_IDX = mktFideliteSuggestion();   // suggérer le template du mois par défaut
+
+  const opts=MKT_FIDELITE_TEMPLATES.map((t,i)=>
+    `<option value="${i}"${i===MKT_FID_IDX?' selected':''}>${t.label}${i===mktFideliteSuggestion()?' — ✨ suggéré ce mois':''}</option>`).join('');
+  const audOpt=(v,l)=>`<option value="${v}"${MKT_FID_AUD===v?' selected':''}>${l}</option>`;
+
+  let banniere='';
+  if(sentThisMonth){
+    banniere=`<div style="background:rgba(22,163,74,.10);border:1px solid var(--green);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--green);font-weight:600;margin-bottom:10px">✅ Message de fidélité déjà envoyé ce mois-ci.</div>`;
+  }else if(debutDeMois){
+    banniere=`<div style="background:rgba(232,197,71,.12);border:1px solid var(--gold);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--gold);font-weight:700;margin-bottom:10px">🎁 Nouveau mois : pensez à envoyer le message de fidélité à vos clients fidèles.</div>`;
+  }
+
+  zone.innerHTML=`<div class="card">
+    <div class="card-title"><div class="ct-left"><span>🎁 Message de fidélité du mois</span></div></div>
+    ${banniere}
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Un message de remerciement chaleureux, chaque début de mois. <b>{nom}</b> est remplacé par le prénom de chaque client. Un template différent est suggéré automatiquement chaque mois.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fr" style="margin:0"><label>Message (12 modèles)</label>
+        <select id="mkt-fid-tpl" onchange="mktFideliteChoisir(this.value)">${opts}</select>
+      </div>
+      <div class="fr" style="margin:0"><label>Destinataires</label>
+        <select id="mkt-fid-aud" onchange="MKT_FID_AUD=this.value;mktFideliteMaj()">
+          ${audOpt('regulier','🟢 Clients fidèles')}
+          ${audOpt('tous','👥 Tous les clients avec numéro')}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin:8px 0">
+      <button class="btn btn-out btn-sm" onclick="mktFideliteVarierIA('eco')" title="DeepSeek — reformuler">🚀 Varier (Pro)</button>
+      <button class="btn btn-out btn-sm" onclick="mktFideliteVarierIA('pro')" title="Claude — reformuler">💎 Varier (Premium)</button>
+    </div>
+    <div class="fr"><label>Aperçu (modifiable)</label>
+      <textarea id="mkt-fid-msg" rows="7" style="font-size:12px;line-height:1.5;width:100%;resize:vertical"></textarea>
+    </div>
+    <div id="mkt-fid-count" style="font-size:12px;color:var(--g6);font-weight:700;margin-bottom:8px"></div>
+    <button class="btn btn-g" style="width:100%;justify-content:center" onclick="envoyerFidelite()">📲 Envoyer le message de fidélité</button>
+    <div style="font-size:10px;color:var(--textm);margin-top:6px">⚠ Un onglet WhatsApp s'ouvre par client : autorise les pop-ups. L'envoi reste manuel (tu valides chaque message).</div>
+  </div>`;
+
+  mktFideliteChoisir(MKT_FID_IDX);
+  mktFideliteMaj();
+}
+
+function mktFideliteChoisir(i){
+  MKT_FID_IDX=Number(i)||0;
+  const ta=document.getElementById('mkt-fid-msg');
+  if(ta) ta.value=(MKT_FIDELITE_TEMPLATES[MKT_FID_IDX]||{}).texte||'';
+}
+
+function mktFideliteMaj(){
+  const el=document.getElementById('mkt-fid-count');
+  if(el){ const n=mktFideliteDestinataires().length; el.textContent=`${n} destinataire(s) avec numéro`; }
+}
+
+async function mktFideliteVarierIA(tier){
+  tier=tier||'eco';
+  const out=document.getElementById('mkt-fid-msg');
+  if(!out) return;
+  if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
+  const base=(MKT_FIDELITE_TEMPLATES[MKT_FID_IDX]||{}).texte||out.value||'';
+  const saved=out.value;
+  out.value=`⏳ Reformulation (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…`;
+  try{
+    const q=`Reformule ce message WhatsApp de remerciement mensuel pour la provenderie SADARI (Togo), en gardant le même sens chaleureux et le marqueur {nom} EXACTEMENT (il sera remplacé par le prénom). Garde-le court et termine par la signature Sadari. Donne UNIQUEMENT le message, sans guillemets ni commentaire.\n\nMessage de départ :\n${base}`;
+    const txt=await iaGenerate('marketing', q, tier);
+    out.value = txt || saved;
+    if(out.value && !/\{nom\}/.test(out.value)) out.value='Bonjour {nom},\n\n'+out.value;
+  }catch(e){ out.value=saved; notify('Échec IA : '+(e.message||e),'r'); }
+}
+
+function envoyerFidelite(){
+  const tpl=(document.getElementById('mkt-fid-msg')?.value||'').trim();
+  if(!tpl){ notify('Choisis ou rédige d\'abord le message','r'); return; }
+  const dests=mktFideliteDestinataires();
+  if(!dests.length){ notify('Aucun destinataire avec numéro dans cette audience','r'); return; }
+  if(!confirm(`Envoyer le message de fidélité à ${dests.length} client(s) ? ${dests.length} onglets WhatsApp vont s'ouvrir.`)) return;
+  let n=0;
+  dests.forEach(x=>{
+    const prenom=(x.c.nom||'').split(' ')[0]||'';
+    const msg=tpl.replace(/\{nom\}/g,prenom);
+    const tel=_mktTelClean(x.c.telephone);
+    if(!tel) return;
+    window.open('https://wa.me/228'+tel+'?text='+encodeURIComponent(msg),'_blank');
+    if(typeof logRelance==='function') logRelance(x.c.id, 'fidelite:mensuel', x.c.nom);
+    n++;
+  });
+  notify(`🎁 Message de fidélité envoyé vers ${n} client(s)`,'gold');
+  // Rafraîchir la bannière (marquera "déjà envoyé ce mois-ci")
+  setTimeout(mktRenderFidelite, 1200);
 }
 
 // ── BULLETIN MARKETING HEBDO ──────────────────────

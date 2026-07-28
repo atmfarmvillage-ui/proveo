@@ -8,10 +8,16 @@ async function renderCaisse(){
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
-  // Filtre PDV : secrétaire/autres rôles avec PDV → seulement leurs caisses + siège
-  if(GP_ROLE !== 'admin' && !GP_EST_GERANT && GP_POINT_VENTE){
-    caisses = caisses.filter(c => !c.point_vente || c.point_vente === GP_POINT_VENTE);
+  // VISIBILITÉ :
+  // - PDV SECONDAIRE (revendeur indépendant, ex. Kegue) : cloisonné → ne voit QUE sa
+  //   propre caisse. Rien sur la production ni le PDV principal.
+  // - Admin / gérant / PDV PRINCIPAL / Siège : VUE RÉSEAU → voient toutes les caisses.
+  // Dans tous les cas, on n'AGIT que sur SA caisse (voir estMaCaisse()).
+  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
+    caisses = caisses.filter(c => c.point_vente === GP_POINT_VENTE);
   }
+  // Mémoriser les caisses VISIBLES pour les garde-fous d'action.
+  window.GP_CAISSES_MAP={}; caisses.forEach(c=>{ GP_CAISSES_MAP[c.id]=c; });
 
   // Auto-création de la caisse du Siège/Production si aucune caisse "siège" n'existe.
   // Une caisse de PDV a un point_vente ; la caisse siège/production n'en a pas.
@@ -72,6 +78,7 @@ async function renderCaisse(){
   document.getElementById('caisses-cartes').innerHTML=caissesAff.map(c=>{
     const solde=soldes[c.id]||0;
     const couleur=c.couleur||'#16A34A';
+    const mine=estMaCaisse(c);
     return `<div style="background:var(--card2);border:1px solid var(--card2);border-left:4px solid ${couleur};border-radius:12px;padding:18px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
@@ -84,13 +91,14 @@ async function renderCaisse(){
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--green)" onclick="ouvrirMouvement('${c.id}','${c.nom}','entree')">➕ Entrée</button>
+        ${mine?`<button class="btn btn-sm" style="background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:var(--green)" onclick="ouvrirMouvement('${c.id}','${c.nom}','entree')">➕ Entrée</button>
         <button class="btn btn-sm" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)" onclick="ouvrirMouvement('${c.id}','${c.nom}','sortie')">➖ Sortie</button>
-        <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>
+        <button class="btn btn-g btn-sm" onclick="ouvrirTransfert('${c.id}','${c.nom}')">⇄ Transfert</button>`:''}
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:rgba(232,197,71,.5);color:var(--gold)" onclick="ouvrirModifSoldeInit('${c.id}')" title="Mettre le solde à jour avec le comptage physique">📋 Mettre à jour</button>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>`:''}
+        ${!mine?`<span style="font-size:10px;color:var(--textm);align-self:center">👁 Lecture seule — caisse d'un autre point de vente</span>`:''}
       </div>
     </div>`;
   }).join('');
@@ -99,8 +107,10 @@ async function renderCaisse(){
   populateCaisseSelects(caisses,soldes);
 
   // Remplir les selects de transfert (après rendu)
-  // Mouvements récents
-  const recents=M.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,20);
+  // Mouvements récents — LIMITÉS aux caisses visibles par le membre (cloisonnement).
+  const _visIds=new Set(caisses.map(c=>c.id));
+  const recents=M.filter(m=> _visIds.has(m.caisse_id) || _visIds.has(m.caisse_dest_id))
+    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,20);
   const caisseMap={};
   caisses.forEach(c=>caisseMap[c.id]=c.nom);
   document.getElementById('mouvements-caisse-liste').innerHTML=recents.length?`
@@ -119,6 +129,19 @@ async function renderCaisse(){
 
   // Historique dédié des transferts entre caisses / PDV
   if(typeof renderTransfertsHistorique==='function') renderTransfertsHistorique(caisses, filtreActif);
+}
+
+// ── APPARTENANCE D'UNE CAISSE (qui a le droit d'AGIR dessus) ──
+// Admin / gérant : toutes. Membre d'un PDV : uniquement les caisses de SON PDV.
+// Membre du siège/production (sans PDV) : uniquement les caisses sans point_vente.
+function estMaCaisse(c){
+  if(!c) return false;
+  if(GP_ROLE==='admin' || GP_EST_GERANT) return true;
+  if(GP_POINT_VENTE) return c.point_vente===GP_POINT_VENTE;
+  return !c.point_vente;
+}
+function estMaCaisseId(id){
+  return estMaCaisse((typeof GP_CAISSES_MAP!=='undefined'?GP_CAISSES_MAP:{})[id]);
 }
 
 // Supprimer un TRANSFERT (admin). Le solde étant calculé à partir des mouvements,
@@ -246,6 +269,7 @@ async function reactiverCaisse(id){
 
 // ── CORRECTION D'ÉCART ───────────────────────────
 function ouvrirCorrectionEcart(caisseId,nom){
+  if(!estMaCaisseId(caisseId)){ notify('Correction interdite : caisse d\'un autre point de vente','r'); return; }
   const montant=prompt(`Correction d'écart — ${nom}
 
 Entrez le montant (positif = excédent, négatif = manque) :`);
@@ -278,6 +302,7 @@ async function saveTransfertAvecValidation(){
   const err=document.getElementById('transfert-err');
   if(!source||!dest){err.textContent='Sélectionnez les deux caisses.';return;}
   if(source===dest){err.textContent='Source et destination doivent être différentes.';return;}
+  if(!estMaCaisseId(source)){ err.textContent='Vous ne pouvez transférer que depuis votre propre caisse.'; return; }
   if(!montant){err.textContent='Montant requis.';return;}
 
   // Siège (admin/gérant/DAF ou membre Production sans PDV) → transfert validé d'office.
@@ -345,6 +370,7 @@ async function supprimerCaisse(id){
 // ── MOUVEMENTS ────────────────────────────────────
 let mvtCaisseId='',mvtCaisseType='';
 function ouvrirMouvement(caisseId,nom,type){
+  if(!estMaCaisseId(caisseId)){ notify('Action interdite : cette caisse n\'appartient pas à votre point de vente','r'); return; }
   mvtCaisseId=caisseId;mvtCaisseType=type;
   document.getElementById('modal-mvt-caisse').style.display='flex';
   document.getElementById('mvt-caisse-titre').textContent=(type==='entree'?'+ Entrée':'- Sortie')+' — '+nom;
@@ -358,6 +384,7 @@ async function saveMouvement(){
   const categorie=document.getElementById('mvt-categorie')?.value||'';
   const desc=document.getElementById('mvt-desc')?.value.trim()||null;
   const err=document.getElementById('mvt-err');
+  if(!estMaCaisseId(mvtCaisseId)){ err.textContent='Caisse non autorisée pour votre point de vente.'; return; }
   if(!montant){err.textContent='Montant requis.';return;}
   await SB.from('gp_mouvements_caisse').insert({
     admin_id:GP_ADMIN_ID,caisse_id:mvtCaisseId,type:mvtCaisseType,
@@ -398,6 +425,7 @@ async function saveTransfertAvecValidation_OLD(){
 }
 
 function ouvrirTransfert(caisseId,nom){
+  if(!estMaCaisseId(caisseId)){ notify('Vous ne pouvez transférer que depuis votre propre caisse','r'); return; }
   document.getElementById('modal-transfert').style.display='flex';
   document.getElementById('transfert-source').value=caisseId;
   document.getElementById('transfert-montant').value='';
@@ -406,7 +434,10 @@ function ouvrirTransfert(caisseId,nom){
 }
 
 async function voirHistoriqueCaisse(caisseId,nom){
+  // Sécurité : ne montrer que les caisses visibles par le membre (map des caisses rendues).
+  if(typeof GP_CAISSES_MAP!=='undefined' && !GP_CAISSES_MAP[caisseId]){ if(typeof notify==='function') notify('Caisse hors de votre périmètre','r'); return; }
   const{data}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID)
     .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`)
     .order('date_mouvement',{ascending:false});
   const M=data||[];
@@ -426,6 +457,57 @@ async function voirHistoriqueCaisse(caisseId,nom){
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
   modal.style.display='flex';
+}
+
+// ── EXPORT HISTORIQUE (TOUTES LES CAISSES) → Excel / Word ──
+async function exporterHistoriqueCaisses(type){
+  type = type || 'excel';
+  notify('⏳ Préparation de l\'export…','gold');
+  // Caisses (pour les noms). Un PDV secondaire ne voit/exporte que la sienne.
+  let{data:C}=await SB.from('gp_caisses').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
+  let caisses=C||[];
+  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
+    caisses = caisses.filter(c => c.point_vente === GP_POINT_VENTE);
+  }
+  const caisseMap={}; caisses.forEach(c=>caisseMap[c.id]=c.nom);
+  const idsVisibles=new Set(caisses.map(c=>c.id));
+
+  // Filtre caisse en cours (sélecteur du haut) : une seule caisse ou toutes
+  const filtreActif=document.getElementById('caisse-filtre')?.value||'';
+
+  // Historique limité aux caisses visibles
+  const{data:mvts,error}=await SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID).order('date_mouvement',{ascending:false});
+  if(error){ notify('Erreur chargement : '+error.message,'r'); return; }
+  let M=(mvts||[]).filter(m=> idsVisibles.has(m.caisse_id) || idsVisibles.has(m.caisse_dest_id));
+  if(filtreActif) M=M.filter(m=> m.caisse_id===filtreActif || m.caisse_dest_id===filtreActif);
+  if(!M.length){ notify('Aucun mouvement à exporter','r'); return; }
+
+  const nomCaisseFiltre = filtreActif ? (caisseMap[filtreActif]||'caisse') : 'toutes';
+  const signe=m=>{
+    if(m.type==='transfert') return m.statut_transfert==='refuse'?'0' : fmt(m.montant);
+    return (m.type==='sortie'?'−':'+')+fmt(m.montant);
+  };
+  const cols=[
+    {label:'Date', key:'date_mouvement'},
+    {label:'Caisse', render:m=> (caisseMap[m.caisse_id]||'—') + (m.caisse_dest_id?(' → '+(caisseMap[m.caisse_dest_id]||'—')):'')},
+    {label:'Type', render:m=> m.type + (m.statut_transfert==='refuse'?' (refusé)':'')},
+    {label:'Catégorie', key:'categorie'},
+    {label:'Description', render:m=> m.description||m.categorie||'—'},
+    {label:'Montant (F)', render:signe},
+    {label:'Enregistré par', key:'enregistre_par_nom'},
+  ];
+  const titre='Historique des caisses';
+  const st=`${filtreActif?('Caisse : '+nomCaisseFiltre):'Toutes les caisses'} · ${M.length} mouvement(s) · export du ${today()}`;
+  const base=`historique_caisses_${filtreActif?_gpStrip(nomCaisseFiltre).replace(/\s+/g,'_'):'toutes'}_${today()}`;
+
+  if(type==='word'){
+    if(typeof gpExportWord!=='function'){ notify('Export Word indisponible','r'); return; }
+    gpExportWord(titre, cols, M, base+'.doc', st);
+  }else{
+    if(typeof gpExportExcel!=='function'){ notify('Export Excel indisponible','r'); return; }
+    gpExportExcel(titre, cols, M, base+'.xlsx');
+  }
 }
 
 // ── TRANSFERTS EN ATTENTE ────────────────────────

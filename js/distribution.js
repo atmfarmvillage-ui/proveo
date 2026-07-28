@@ -147,6 +147,8 @@ async function calcTracabiliteStockAll(){
 
 // Modal 🔎 : traçabilité d'un (PDV, produit)
 async function ouvrirTracabilite(pdvNom, formuleNom){
+  // Traçabilité = vue réseau (croise tous les PDV) → réservée au siège / principal / admin.
+  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()){ if(typeof notify==='function') notify('Traçabilité réseau réservée au siège','r'); return; }
   let host=document.getElementById('modal-tracabilite');
   if(!host){ host=document.createElement('div'); host.id='modal-tracabilite'; document.body.appendChild(host); }
   host.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
@@ -746,9 +748,10 @@ async function renderStockPDV(){
             ${s.qte_disponible<=0?'❌ Épuisé':s.qte_disponible<=s.seuil_critique?'⚠ Critique':'✅ OK'}
           </span></td>
           <td>
-            <button onclick="ouvrirTracabilite('${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}')"
+            ${(typeof estCloisonnePDV!=='function' || !estCloisonnePDV())?
+              `<button onclick="ouvrirTracabilite('${(s.pdv_nom||'').replace(/'/g,'')}','${(s.formule_nom||'').replace(/'/g,'')}')"
               title="Traçabilité : d'où vient ce stock ?"
-              style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.7">🔎</button>
+              style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.7">🔎</button>`:''}
             ${GP_ROLE==='admin'?
               `<button onclick="supprimerStockPDV('${s.id}','${(s.formule_nom||'').replace(/'/g,'')}','${(s.pdv_nom||'').replace(/'/g,'')}')"
                 title="Supprimer cette ligne"

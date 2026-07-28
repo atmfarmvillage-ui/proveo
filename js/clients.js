@@ -22,9 +22,11 @@ async function saveClient(){
 let GP_CLIENT_STATS = null;
 async function loadClientStats(force){
   if(GP_CLIENT_STATS && !force) return GP_CLIENT_STATS;
-  const{data}=await SB.from('gp_ventes')
-    .select('client_id,date,formule_nom,montant_total')
+  let _qStats=SB.from('gp_ventes')
+    .select('client_id,date,formule_nom,montant_total,point_vente')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).not('client_id','is',null);
+  if(typeof scopeQueryPDV==='function') _qStats=scopeQueryPDV(_qStats); // stats client scopées au PDV
+  const{data}=await _qStats;
   const map={};
   (data||[]).forEach(v=>{
     if(!v.client_id)return;
@@ -137,10 +139,11 @@ async function openClientDetail(id){
   const st=clientStatut(s);
   const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):null;
 
-  const{data:V}=await SB.from('gp_ventes')
-    .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement')
-    .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null)
-    .order('date',{ascending:false}).limit(50);
+  let _qDet=SB.from('gp_ventes')
+    .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement,point_vente')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
+  if(typeof scopeQueryPDV==='function') _qDet=scopeQueryPDV(_qDet); // historique client limité au périmètre du membre
+  const{data:V}=await _qDet.order('date',{ascending:false}).limit(50);
   const hist=(V||[]).length?`<table class="tbl" style="font-size:11px"><thead><tr>
       <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th></th>
     </tr></thead><tbody>${(V||[]).map(v=>`<tr>
@@ -250,16 +253,17 @@ async function redigerMsgWAIA(tier){
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
-  // Cloisonnement : un membre scopé ne voit que SES clients (+ clients sans PDV)
-  if(typeof estCloisonnePDV==='function' && estCloisonnePDV()){
-    const mine=(typeof pdvCourant==='function')?pdvCourant():(GP_POINT_VENTE||'Production');
-    filtered=filtered.filter(c=> !c.point_vente || c.point_vente===mine);
+  // Cloisonnement : un membre scopé ne voit QUE ses clients (siège = null/Production).
+  if(typeof appartientAuPDV==='function' && typeof estCloisonnePDV==='function' && estCloisonnePDV()){
+    filtered=filtered.filter(c=> appartientAuPDV(c.point_vente));
   }
 
-  // Charger les ventes impayées/partielles pour calculer les dettes
+  // Charger les ventes impayées/partielles pour calculer les dettes (scopées au PDV)
   const mois=new Date().toISOString().slice(0,7);
-  const{data:vImpayees}=await SB.from('gp_ventes').select('client_id,montant_total,montant_paye,statut_paiement,date,formule_nom')
+  let _qDette=SB.from('gp_ventes').select('client_id,montant_total,montant_paye,statut_paiement,date,formule_nom,point_vente')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
+  if(typeof scopeQueryPDV==='function') _qDette=scopeQueryPDV(_qDette);
+  const{data:vImpayees}=await _qDette;
 
   // Calculer dette par client
   const dettes={};
@@ -738,7 +742,8 @@ async function saveAppel(){
 // ── CLASSEMENT ─────────────────────────────────────
 async function renderClassement(){
   const periode=document.getElementById('class-filtre-periode')?.value||'all';
-  let q=SB.from('gp_ventes').select('client_id,client_nom,client_tel,qte_vendue,montant_total,date').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null);
+  let q=SB.from('gp_ventes').select('client_id,client_nom,client_tel,qte_vendue,montant_total,date,point_vente').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null);
+  if(typeof scopeQueryPDV==='function') q=scopeQueryPDV(q); // cloisonnement : chaque PDV ne classe QUE ses clients
   const now=new Date();
   if(periode==='month'){const m=thisMonth();q=q.gte('date',m+'-01').lte('date',m+'-31');}
   else if(periode==='3months'){const d=new Date(now);d.setMonth(d.getMonth()-3);q=q.gte('date',d.toISOString().slice(0,10));}
@@ -1004,8 +1009,10 @@ const TEMPLATES_TOP3=[
 
 async function envoyerMessagesTop3(){
   const mois=new Date().toISOString().slice(0,7);
-  const{data:V}=await SB.from('gp_ventes').select('client_id,client_nom,montant_total,date')
+  let _qTop=SB.from('gp_ventes').select('client_id,client_nom,montant_total,date,point_vente')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',mois+'-01').lte('date',_finMois(mois));
+  if(typeof scopeQueryPDV==='function') _qTop=scopeQueryPDV(_qTop); // top 3 du PDV, pas du réseau
+  const{data:V}=await _qTop;
 
   const stats={};
   (V||[]).forEach(v=>{
