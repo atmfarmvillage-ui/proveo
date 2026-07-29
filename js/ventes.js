@@ -1243,6 +1243,15 @@ async function saveVente(){
     }
   }
 
+  // ── COMMISSION PDV (hors caisse) : registre séparé, aucun mouvement de caisse ──
+  try{
+    if(typeof enregistrerCommissionsVente==='function'){
+      const _estGros = clientId ? ((GP_CLIENTS.find(c=>c.id===clientId)?.type_client)==='gros') : false;
+      const _pvVente = (vente && vente.point_vente) || (typeof GP_POINT_VENTE!=='undefined'?GP_POINT_VENTE:null);
+      enregistrerCommissionsVente(vente.id, VT_LIGNES, _pvVente, _estGros);
+    }
+  }catch(_){}
+
   // ── BON DE FIDÉLITÉ utilisé : déduire du crédit du client ──
   if(clientId && bonFidelite>0){
     try{
@@ -1439,12 +1448,12 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
     }catch(e){ console.warn('carte url:', e); }
 
     msg = `🌾 Bienvenue *${client.nom}* chez *${prov}* !\n\n` +
-          `✅ Ta 1ʳᵉ vente est enregistrée :\n${produitsLines}\n` +
+          `✅ Votre 1ʳᵉ vente est enregistrée :\n${produitsLines}\n` +
           `*Total : ${fmt(total)} F*\n` +
           `${payeLine}\n\n` +
           (carteUrl
-            ? `🎁 *Ta carte de fidélité numérique* (toujours dans ton téléphone) :\n${carteUrl}\n\n` +
-              `Présente ce QR à chaque achat pour cumuler des points et gagner des cadeaux 🎁\n\n`
+            ? `🎁 *Votre carte de fidélité numérique* (toujours dans votre téléphone) :\n${carteUrl}\n\n` +
+              `Présentez ce QR à chaque achat pour cumuler des points et gagner des cadeaux 🎁\n\n`
             : '') +
           `Bienvenue dans la famille ${prov} 🤝`;
   } else {
@@ -1453,10 +1462,10 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
       ? `\n🎁 +${pts.gagnes} pts fidélité (total : ${pts.total} pts)`
       : '';
     msg = `🌾 Bonjour *${client.nom}*,\n\n` +
-          `✅ Ton achat chez *${prov}* :\n${produitsLines}\n` +
+          `✅ Votre achat chez *${prov}* :\n${produitsLines}\n` +
           `*Total : ${fmt(total)} F*\n` +
           `${payeLine}${ptsLine}\n\n` +
-          `Merci de ta confiance 🤝`;
+          `Merci de votre confiance 🤝`;
   }
 
   // Construire l'URL WhatsApp

@@ -201,7 +201,7 @@ async function redigerRelanceIA(id, tier){
   const angle=angles[st.key]||angles.retard;
   notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et personnalisé pour le client "${c.nom}" de la provenderie SADARI. ${angle}${s.produitHabituel?` Son aliment habituel : ${s.produitHabituel}.`:''} Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et personnalisé pour le client "${c.nom}" de la provenderie SADARI. ${angle}${s.produitHabituel?` Son aliment habituel : ${s.produitHabituel}.`:''} Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt=await iaGenerate('marketing', q, tier);
     if(typeof ouvrirModalWA==='function'){
       ouvrirModalWA(id);
@@ -244,7 +244,7 @@ async function redigerMsgWAIA(tier){
   const before = ta.value;
   ta.value = `⏳ Rédaction IA (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…`;
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp pour la provenderie SADARI (aliments volaille/élevage, Togo) : ${but}. Destinataire : "${c.nom}". Court, chaleureux, professionnel, adapté au contexte avicole ouest-africain. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp pour la provenderie SADARI (aliments volaille/élevage, Togo) : ${but}. Destinataire : "${c.nom}". Court, chaleureux, professionnel, adapté au contexte avicole ouest-africain. Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt=await iaGenerate('marketing', q, tier);
     ta.value = txt || before;
   }catch(e){ ta.value=before; notify('Échec IA : '+(e.message||e),'r'); }

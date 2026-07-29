@@ -46,6 +46,14 @@ async function renderMarketing(){
   if(!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--textm)">⏳ Analyse en cours…</div>';
 
+  // Secrétaire : accès UNIQUEMENT aux outils de contact clients (fidélité, relances,
+  // campagne), scopés à SON PDV. Pas d'analyse réseau (marges, matrice, diagnostic).
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){
+    root.innerHTML = '<div style="font-size:12px;color:var(--textm);margin-bottom:10px">📣 Vos outils de relance et de fidélité clients.</div><div id="mkt-seg-zone"><div style="color:var(--textm);font-size:12px;padding:10px">⏳ Chargement…</div></div>';
+    if(typeof renderMarketingSegments==='function') renderMarketingSegments();
+    return;
+  }
+
   // Période
   const r = (typeof vtPeriodeRange==='function')
     ? vtPeriodeRange(MKT_PERIODE)
@@ -276,19 +284,22 @@ async function renderMarketingSegments(){
     <button class="mkt-seg-btn" data-seg="perdu" onclick="mktSetSeg('perdu')">🔴 Perdus (${cnt('perdu')})</button>
   </div>`;
 
+  // Admin/gérant : tout. Secrétaire : outils de contact clients uniquement (scopés à SON PDV),
+  // sans les données réseau (bulletin marketing, stats de relances tous-PDV).
+  const _mktAdm = (GP_ROLE==='admin' || GP_EST_GERANT);
   zone.innerHTML = `
     <style>
       .mkt-seg-btn{font-size:11px;padding:5px 10px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:14px;cursor:pointer;font-weight:600}
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
-    ${_mktBulletinCard()}
+    ${_mktAdm?_mktBulletinCard():''}
     ${_mktFicheCard()}
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
     <div id="mkt-fidelite-zone"></div>
     <div id="mkt-campagne-zone"></div>
-    <div id="mkt-relance-stats"></div>
+    ${_mktAdm?'<div id="mkt-relance-stats"></div>':''}
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
       ${chips}
@@ -301,7 +312,7 @@ async function renderMarketingSegments(){
   mktRenderCrossSell();
   mktRenderFidelite();
   mktRenderCampagne();
-  mktRenderRelanceStats();
+  if(_mktAdm) mktRenderRelanceStats();
 }
 
 // ── CAMPAGNE GROUPÉE (segment → 1 message → envoi en série) ──
@@ -361,7 +372,7 @@ async function genCampagneIA(tier){
   };
   out.value=`⏳ Rédaction (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…`;
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp de campagne pour la provenderie SADARI (aliments volaille/élevage, Togo) ${angles[MKT_CAMP_SEG]||'commercial'}. IMPORTANT : commence par "Bonjour {nom}," en gardant EXACTEMENT le marqueur {nom} (il sera remplacé par le prénom de chaque client). Court, chaleureux, une seule version générique. Termine par la signature SADARI. Donne seulement le message.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp de campagne pour la provenderie SADARI (aliments volaille/élevage, Togo) ${angles[MKT_CAMP_SEG]||'commercial'}. IMPORTANT : commence par "Bonjour {nom}," en gardant EXACTEMENT le marqueur {nom} (il sera remplacé par le prénom de chaque client). Court, chaleureux, une seule version générique. Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message.`;
     const txt=await iaGenerate('marketing', q, tier);
     out.value = txt || '';
     if(out.value && !/\{nom\}/.test(out.value)) out.value='Bonjour {nom},\n\n'+out.value; // garantir le marqueur
@@ -665,7 +676,7 @@ async function relanceDowntradeIA(clientId, tier){
   if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
   notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp court, attentionné et non culpabilisant pour le client "${c.nom}" de la provenderie SADARI. On a remarqué que ses commandes ont BAISSÉ ces derniers temps. Prends de ses nouvelles avec tact, demande si tout va bien dans son élevage, et propose discrètement de l'aider à reprendre (dispo, qualité, petit geste commercial si pertinent). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, attentionné et non culpabilisant pour le client "${c.nom}" de la provenderie SADARI. On a remarqué que ses commandes ont BAISSÉ ces derniers temps. Prends de ses nouvelles avec tact, demande si tout va bien dans son élevage, et propose discrètement de l'aider à reprendre (dispo, qualité, petit geste commercial si pertinent). Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt=await iaGenerate('marketing', q, tier);
     if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
     else alert(txt);
@@ -741,7 +752,7 @@ async function relanceCrossSellIA(clientId, produit, tier){
   if(typeof iaGenerate!=='function'){ notify('IA indisponible','r'); return; }
   notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
   try{
-    const q=`Rédige UNIQUEMENT un message WhatsApp court et malin pour le client "${c.nom}" de la provenderie SADARI. Ce client achète déjà chez nous mais ne prend pas "${produit}" (il l'achète sûrement ailleurs). Propose-lui naturellement de prendre aussi "${produit}" chez nous — avantage : tout au même endroit, qualité homogène sur tout le cycle. Reste subtil, pas agressif. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp court et malin pour le client "${c.nom}" de la provenderie SADARI. Ce client achète déjà chez nous mais ne prend pas "${produit}" (il l'achète sûrement ailleurs). Propose-lui naturellement de prendre aussi "${produit}" chez nous — avantage : tout au même endroit, qualité homogène sur tout le cycle. Reste subtil, pas agressif. Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt=await iaGenerate('marketing', q, tier);
     if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
     else alert(txt);
@@ -871,7 +882,7 @@ async function relanceCycleIA(clientId, tier){
     else if(cy && cy.type==='nouveau_cycle') contexte=`Il a terminé un cycle d'élevage (dernière formule "${s.derniereFormule}"). Propose-lui de démarrer une nouvelle bande avec nos aliments.`;
     else if(cy && cy.formuleSuivante) contexte=`Son élevage passe à l'étape suivante : après "${s.derniereFormule}", il a maintenant besoin de "${cy.formuleSuivante}". Propose-lui de venir le chercher au bon moment.`;
     else contexte=`Propose-lui de se réapprovisionner en aliments.`;
-    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et opportun pour le client "${c.nom}" de la provenderie SADARI. ${contexte} Sois précis sur le bon timing. Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q=`Rédige UNIQUEMENT un message WhatsApp court, chaleureux et opportun pour le client "${c.nom}" de la provenderie SADARI. ${contexte} Sois précis sur le bon timing. Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt=await iaGenerate('marketing', q, tier);
     if(typeof ouvrirModalWA==='function'){ ouvrirModalWA(clientId); setTimeout(()=>{const ta=document.getElementById('wa-preview'); if(ta) ta.value=txt;},60); }
     else alert(txt);
@@ -1121,7 +1132,7 @@ async function relanceNouveauContactIA(tier){
   };
   out.value = '⏳ Rédaction IA ('+(tier==='eco'?'Pro · DeepSeek':'Premium · Claude')+')…';
   try{
-    const q = `Rédige UNIQUEMENT un message WhatsApp court, chaleureux et professionnel pour la provenderie SADARI (aliments pour volaille/élevage, Togo). Destinataire : "${nom}". ${angles[type]||angles.prospect} Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
+    const q = `Rédige UNIQUEMENT un message WhatsApp court, chaleureux et professionnel pour la provenderie SADARI (aliments pour volaille/élevage, Togo). Destinataire : "${nom}". ${angles[type]||angles.prospect} Vouvoie le client (emploie « vous », jamais « tu »). Termine par la signature SADARI. Donne seulement le message, sans commentaire ni guillemets.`;
     const txt = await iaGenerate('marketing', q, tier);
     out.value = txt || '';
   }catch(e){ out.value=''; notify('Échec IA : '+(e.message||e),'r'); }
