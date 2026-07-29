@@ -11,10 +11,8 @@ async function caissesAccessibles(){
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   const C = data||[];
   if(GP_ROLE === 'admin' || GP_EST_GERANT) return C;
-  // Chacun ne voit QUE sa caisse : PDV → la sienne ; siège (sans PDV) → caisses Production.
-  return GP_POINT_VENTE
-    ? C.filter(c => c.point_vente === GP_POINT_VENTE)
-    : C.filter(c => !c.point_vente);
+  if(!GP_POINT_VENTE) return C; // siège : voit les caisses (le paiement est bloqué si ce n'est pas la sienne)
+  return C.filter(c => !c.point_vente || c.point_vente === GP_POINT_VENTE);
 }
 
 // Remplir un <select> avec les caisses accessibles

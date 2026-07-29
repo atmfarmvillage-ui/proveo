@@ -187,6 +187,20 @@ async function saveModalPaiement(){
   if(!montant||montant<=0){err.textContent='Entrez un montant valide.';return;}
   if(montant>montantTotal-montantPaye){err.textContent='Montant supérieur au reste dû.';return;}
 
+  // Garde-fou : on ne peut payer que depuis SA propre caisse. On VOIT les autres caisses,
+  // mais si on en sélectionne une qui n'est pas la sienne → refus + notification.
+  const _cSel = document.getElementById('pmt-caisse')?.value || null;
+  if(_cSel && GP_ROLE!=='admin' && !GP_EST_GERANT){
+    const{data:_cc}=await SB.from('gp_caisses').select('point_vente').eq('id',_cSel).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+    const _pv=_cc?.point_vente||null;
+    const _mienne = GP_POINT_VENTE ? (_pv===GP_POINT_VENTE) : (!_pv);
+    if(!_mienne){
+      err.textContent='🚫 Cette caisse n\'est pas la vôtre — choisissez votre propre caisse.';
+      if(typeof notify==='function') notify('Paiement refusé : vous ne pouvez payer que depuis votre propre caisse','r');
+      return;
+    }
+  }
+
   const nouveauPaye=montantPaye+montant;
   const reste=montantTotal-nouveauPaye;
 
