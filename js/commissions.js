@@ -43,32 +43,34 @@ function _commSacs(l){
 // Trouve la règle applicable pour (PDV, espèce, formule).
 // Règle sans PDV = tous PDV ; sans formule = toutes formules ; sans espèce = toutes espèces.
 // Priorité à la plus spécifique : formule > espèce > PDV.
-function _commRegle(pointVente, espece, formuleNom){
+function _commRegle(pointVente, espece, formuleNom, typeVente){
   const regles=GP_COMM_REGLES||[];
   const cands=regles.filter(r=>
     (!r.point_vente || r.point_vente===(pointVente||null)) &&
     (!r.formule_nom || r.formule_nom===formuleNom) &&
-    (!r.espece || r.espece===espece));
-  const sc=r=>(r.formule_nom?4:0)+(r.espece?2:0)+(r.point_vente?1:0);
+    (!r.espece || r.espece===espece) &&
+    (!r.type_vente || r.type_vente===typeVente));
+  const sc=r=>(r.formule_nom?4:0)+(r.espece?2:0)+(r.point_vente?1:0)+(r.type_vente?1:0);
   cands.sort((a,b)=> sc(b)-sc(a));
   return cands[0]||null;
 }
 
-// Calcule les commissions d'une vente. Pas de commission si client GROS.
+// Calcule les commissions d'une vente. estGros → type de vente ('gros' sinon 'detail').
+// La règle applicable dépend du type de vente (détail et gros = 2 barèmes distincts).
 function calcCommissionVente(lignes, pointVente, estGros){
-  if(estGros) return [];
+  const typeVente = estGros ? 'gros' : 'detail';
   const out=[];
   (lignes||[]).forEach(l=>{
     if(l.type_produit!=='formule') return;
     const esp=_commEspece(l.formule_nom);
     if(!esp) return;
-    const r=_commRegle(pointVente, esp, l.formule_nom);
+    const r=_commRegle(pointVente, esp, l.formule_nom, typeVente);
     if(!r || !Number(r.montant_par_sac)) return;
     const sacs=_commSacs(l);
     if(sacs<=0) return;
     const montant=Math.round(sacs*Number(r.montant_par_sac));
     if(montant>0) out.push({
-      espece:esp, formule_nom:l.formule_nom,
+      espece:esp, formule_nom:l.formule_nom, type_vente:typeVente,
       nb_sacs:Math.round(sacs*100)/100,
       montant_unitaire:Number(r.montant_par_sac), montant
     });
@@ -86,7 +88,7 @@ async function enregistrerCommissionsVente(venteId, lignes, pointVente, estGros)
     if(!comms.length) return;
     const rows=comms.map(c=>({
       admin_id:GP_ADMIN_ID, vente_id:venteId, point_vente:pointVente||null,
-      espece:c.espece, formule_nom:c.formule_nom, nb_sacs:c.nb_sacs,
+      espece:c.espece, formule_nom:c.formule_nom, type_vente:c.type_vente, nb_sacs:c.nb_sacs,
       montant_unitaire:c.montant_unitaire, montant:c.montant,
       date:today(), statut:'due',
       enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
@@ -160,12 +162,13 @@ async function renderCommissions(){
       </div>
       <div style="font-size:11px;color:var(--textm);cursor:pointer" onclick="var e=document.getElementById('${detId}');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Détail des ventes (${p.lignes.length})</div>
       <div id="${detId}" style="display:none;overflow-x:auto;margin-top:6px"><table class="tbl" style="font-size:11px"><thead><tr>
-        <th>Date</th><th>Espèce</th><th>Formule</th><th class="num">Sacs</th><th class="num">/sac</th><th class="num">Commission</th><th>Statut</th>
+        <th>Date</th><th>Espèce</th><th>Formule</th><th>Type</th><th class="num">Sacs</th><th class="num">/sac</th><th class="num">Commission</th><th>Statut</th>
       </tr></thead><tbody>
         ${p.lignes.slice(0,300).map(c=>`<tr>
           <td style="font-size:10px">${c.date||''}</td>
           <td style="text-transform:capitalize">${c.espece||'—'}</td>
           <td style="font-size:10px">${c.formule_nom||'—'}</td>
+          <td style="font-size:10px">${c.type_vente==='gros'?'💼 Gros':'🛒 Détail'}</td>
           <td class="num">${c.nb_sacs||0}</td>
           <td class="num">${fmt(c.montant_unitaire||0)}</td>
           <td class="num" style="font-weight:700">${fmt(c.montant||0)}</td>
@@ -207,20 +210,24 @@ function _commConfigCard(){
     + pdvs.map(p=>`<option value="${(p.nom||'').replace(/"/g,'&quot;')}">${p.nom}${p.type_pdv==='principal'?' (principal)':''}</option>`).join('');
   const regles=GP_COMM_REGLES||[];
   const liste = regles.length ? `<div style="overflow-x:auto;margin-top:8px"><table class="tbl" style="font-size:11px"><thead><tr>
-      <th>PDV</th><th>Aliment</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
+      <th>PDV</th><th>Aliment</th><th>Type</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
       ${regles.map(r=>`<tr>
         <td>${r.point_vente||'<i>Tous</i>'}</td>
         <td style="text-transform:capitalize">${r.formule_nom?('🎯 '+r.formule_nom):(r.espece?r.espece:'<i>Toutes</i>')}</td>
+        <td style="font-size:10px">${r.type_vente==='gros'?'💼 Gros':r.type_vente==='detail'?'🛒 Détail':'Les deux'}</td>
         <td class="num" style="font-weight:700">${fmt(r.montant_par_sac||0)} F</td>
         <td><button class="btn btn-red btn-sm" style="padding:2px 7px" onclick="supprimerRegleCommission('${r.id}')">🗑</button></td>
       </tr>`).join('')}
     </tbody></table></div>` : '<div style="font-size:11px;color:var(--textm);margin-top:6px">Aucune règle. Ajoute-en une ci-dessous (ex. Principal · lapin · 500 F/sac).</div>';
   return `<div class="card">
     <div class="card-title"><div class="ct-left"><span>⚙️ Règles de commission (admin)</span></div></div>
-    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Montant versé au PDV vendeur, par sac d'aliment vendu au <b>détail</b> (les ventes en gros sont exclues).</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Montant versé au PDV vendeur, par sac d'aliment vendu. Barème distinct possible pour le <b>détail</b> et le <b>gros</b> (ex. détail 500 F, gros 200 F).</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 0.9fr 0.9fr auto;gap:8px;align-items:end">
       <div class="fr" style="margin:0"><label>PDV</label><select id="comm-r-pdv">${optPdv}</select></div>
       <div class="fr" style="margin:0"><label>Aliment (formule ou espèce)</label><select id="comm-r-esp">${optEsp}</select></div>
+      <div class="fr" style="margin:0"><label>Type de vente</label>
+        <select id="comm-r-type"><option value="detail">🛒 Détail</option><option value="gros">💼 Gros</option><option value="">Les deux</option></select>
+      </div>
       <div class="fr" style="margin:0"><label>Montant / sac (F)</label><input type="number" id="comm-r-montant" placeholder="500"></div>
       <button class="btn btn-g" onclick="ajouterRegleCommission()">+ Ajouter</button>
     </div>
@@ -232,6 +239,7 @@ async function ajouterRegleCommission(){
   if(!(GP_ROLE==='admin'||GP_EST_GERANT)){ notify('Réservé à l\'admin','r'); return; }
   let pv=document.getElementById('comm-r-pdv')?.value||'';
   const sel=document.getElementById('comm-r-esp')?.value||''; // '', 'esp:lapin', 'form:LAPIN Repro A'
+  const type_vente=document.getElementById('comm-r-type')?.value||null; // 'detail' | 'gros' | '' (les deux)
   const montant=+document.getElementById('comm-r-montant')?.value||0;
   if(!montant){ notify('Entre le montant par sac','r'); return; }
   const point_vente = pv||null; // vide = tous les PDV ; sinon nom du PDV
@@ -239,7 +247,7 @@ async function ajouterRegleCommission(){
   if(sel.startsWith('form:')){ formule_nom=sel.slice(5); espece=_commEspece(formule_nom)||null; }
   else if(sel.startsWith('esp:')){ espece=sel.slice(4); }
   const{error}=await SB.from('gp_commissions_regles').insert({
-    admin_id:GP_ADMIN_ID, point_vente, espece, formule_nom,
+    admin_id:GP_ADMIN_ID, point_vente, espece, formule_nom, type_vente:type_vente||null,
     montant_par_sac:montant, actif:true
   });
   if(error){ notify('Erreur : '+error.message,'r'); return; }
