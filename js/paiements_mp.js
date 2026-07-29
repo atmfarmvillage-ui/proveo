@@ -191,9 +191,10 @@ async function saveModalPaiement(){
   // mais si on en sélectionne une qui n'est pas la sienne → refus + notification.
   const _cSel = document.getElementById('pmt-caisse')?.value || null;
   if(_cSel && GP_ROLE!=='admin' && !GP_EST_GERANT){
-    const{data:_cc}=await SB.from('gp_caisses').select('point_vente').eq('id',_cSel).eq('admin_id',GP_ADMIN_ID).maybeSingle();
-    const _pv=_cc?.point_vente||null;
-    const _mienne = GP_POINT_VENTE ? (_pv===GP_POINT_VENTE) : (!_pv);
+    const{data:_cc}=await SB.from('gp_caisses').select('point_vente,type').eq('id',_cSel).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+    const _mienne = (typeof estMaCaisse==='function')
+      ? estMaCaisse(_cc)
+      : (GP_POINT_VENTE ? (_cc?.point_vente===GP_POINT_VENTE) : (!_cc?.point_vente));
     if(!_mienne){
       err.textContent='🚫 Cette caisse n\'est pas la vôtre — choisissez votre propre caisse.';
       if(typeof notify==='function') notify('Paiement refusé : vous ne pouvez payer que depuis votre propre caisse','r');

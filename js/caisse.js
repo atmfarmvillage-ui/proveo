@@ -130,14 +130,30 @@ async function renderCaisse(){
   if(typeof renderTransfertsHistorique==='function') renderTransfertsHistorique(caisses, filtreActif);
 }
 
-// ── APPARTENANCE D'UNE CAISSE (qui a le droit d'AGIR dessus) ──
-// Admin / gérant : toutes. Membre d'un PDV : uniquement les caisses de SON PDV.
-// Membre du siège/production (sans PDV) : uniquement les caisses sans point_vente.
+// ── DROIT D'AGIR SUR UNE CAISSE (transferts / paiements / entrées-sorties) ──
+// Matrice validée :
+// - Admin / gérant : toutes.
+// - Membre SIÈGE / Production (sans PDV) : caisses du siège (physique ET banque, ex.
+//   Caisse Production + FECECAV) + caisses du/des PDV PRINCIPAL.
+// - Membre PDV PRINCIPAL : sa propre caisse + la caisse Production PHYSIQUE, mais PAS
+//   les banques du siège (FECECAV réservée à la Production).
+// - Membre PDV SECONDAIRE : uniquement sa propre caisse.
 function estMaCaisse(c){
   if(!c) return false;
   if(GP_ROLE==='admin' || GP_EST_GERANT) return true;
-  if(GP_POINT_VENTE) return c.point_vente===GP_POINT_VENTE;
-  return !c.point_vente;
+  const siege = !c.point_vente;                          // Caisse Production ou FECECAV
+  const banqueSiege = siege && c.type==='banque';        // FECECAV (banque du siège)
+  const principaux = (typeof GP_PDV_PRINCIPAUX!=='undefined' ? GP_PDV_PRINCIPAUX : []) || [];
+  const estPrincipal = !!c.point_vente && principaux.includes(c.point_vente);
+  // Siège / Production (sans PDV)
+  if(!GP_POINT_VENTE) return siege || estPrincipal;
+  // PDV principal
+  if(typeof GP_EST_PRINCIPAL!=='undefined' && GP_EST_PRINCIPAL){
+    if(c.point_vente===GP_POINT_VENTE) return true;      // sa caisse
+    return siege && !banqueSiege;                        // Caisse Production physique, pas FECECAV
+  }
+  // PDV secondaire (ou autre)
+  return c.point_vente===GP_POINT_VENTE;
 }
 function estMaCaisseId(id){
   return estMaCaisse((typeof GP_CAISSES_MAP!=='undefined'?GP_CAISSES_MAP:{})[id]);
