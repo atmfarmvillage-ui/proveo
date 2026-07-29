@@ -1243,6 +1243,15 @@ async function saveVente(){
     }
   }
 
+  // ── COMMISSION PDV (hors caisse) : registre séparé, aucun mouvement de caisse ──
+  try{
+    if(typeof enregistrerCommissionsVente==='function'){
+      const _estGros = clientId ? ((GP_CLIENTS.find(c=>c.id===clientId)?.type_client)==='gros') : false;
+      const _pvVente = (vente && vente.point_vente) || (typeof GP_POINT_VENTE!=='undefined'?GP_POINT_VENTE:null);
+      enregistrerCommissionsVente(vente.id, VT_LIGNES, _pvVente, _estGros);
+    }
+  }catch(_){}
+
   // ── BON DE FIDÉLITÉ utilisé : déduire du crédit du client ──
   if(clientId && bonFidelite>0){
     try{
