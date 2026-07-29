@@ -2607,7 +2607,8 @@ async function supprimerVente(id){
   const {data:lignes} = await SB.from('gp_ventes_lignes').select('*').eq('vente_id',id);
   const {data:caisseMvts} = await SB.from('gp_mouvements_caisse').select('*').eq('vente_id',id);
   const {data:fidMvts} = await SB.from('gp_fidelite_mouvements').select('*').eq('vente_id',id);
-  const L = lignes||[]; const CM = caisseMvts||[]; const FM = fidMvts||[];
+  let commMvts=[]; try{ const{data:_co}=await SB.from('gp_commissions').select('*').eq('vente_id',id).eq('statut','due'); commMvts=_co||[]; }catch(_){}
+  const L = lignes||[]; const CM = caisseMvts||[]; const FM = fidMvts||[]; const CO = commMvts;
 
   // 2. Construire la liste des reverts à montrer dans la confirmation
   const reverts = [];
@@ -2636,6 +2637,8 @@ async function supprimerVente(id){
   }
   const welcome = FM.find(f=>f.type==='bonus_parrainage');
   if(welcome) reverts.push(`Bon de bienvenue 1000 F retiré du filleul`);
+  const commDue = CO.reduce((s,c)=>s+Number(c.montant||0),0);
+  if(commDue > 0) reverts.push(`−${fmt(commDue)} F commission retirée (${CO[0]?.point_vente||'PDV'})`);
 
   // 3. Modal de confirmation détaillée
   const detailHtml = reverts.length
