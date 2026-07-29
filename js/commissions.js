@@ -40,14 +40,17 @@ function _commSacs(l){
   return ps>0 ? (qte/ps) : 0;
 }
 
-// Trouve la règle applicable pour (PDV, espèce). Règle sans PDV = tous PDV ; sans espèce = toutes espèces.
-function _commRegle(pointVente, espece){
+// Trouve la règle applicable pour (PDV, espèce, formule).
+// Règle sans PDV = tous PDV ; sans formule = toutes formules ; sans espèce = toutes espèces.
+// Priorité à la plus spécifique : formule > espèce > PDV.
+function _commRegle(pointVente, espece, formuleNom){
   const regles=GP_COMM_REGLES||[];
-  // priorité à la règle la plus spécifique (PDV+espèce > PDV > espèce > globale)
   const cands=regles.filter(r=>
     (!r.point_vente || r.point_vente===(pointVente||null)) &&
+    (!r.formule_nom || r.formule_nom===formuleNom) &&
     (!r.espece || r.espece===espece));
-  cands.sort((a,b)=> ((b.point_vente?1:0)+(b.espece?1:0)) - ((a.point_vente?1:0)+(a.espece?1:0)) );
+  const sc=r=>(r.formule_nom?4:0)+(r.espece?2:0)+(r.point_vente?1:0);
+  cands.sort((a,b)=> sc(b)-sc(a));
   return cands[0]||null;
 }
 
@@ -59,7 +62,7 @@ function calcCommissionVente(lignes, pointVente, estGros){
     if(l.type_produit!=='formule') return;
     const esp=_commEspece(l.formule_nom);
     if(!esp) return;
-    const r=_commRegle(pointVente, esp);
+    const r=_commRegle(pointVente, esp, l.formule_nom);
     if(!r || !Number(r.montant_par_sac)) return;
     const sacs=_commSacs(l);
     if(sacs<=0) return;
@@ -105,9 +108,13 @@ async function renderCommissions(){
   root.innerHTML='<div style="padding:20px;color:var(--textm)">⏳ Chargement…</div>';
   const gestion=_commPeutRegler();
   await chargerReglesCommission(true);
-  // Liste des PDV (pour la config) si pas déjà chargée par un autre module
+  // Liste des PDV (pour la config) si pas déjà chargée par un autre module.
+  // NB : GP_PDV_LIST est un `let` (distribution.js) → on assigne la variable, pas window.
   if(typeof GP_PDV_LIST==='undefined' || !GP_PDV_LIST || !GP_PDV_LIST.length){
-    try{ const{data:_p}=await SB.from('gp_points_vente').select('nom,type_pdv').eq('admin_id',GP_ADMIN_ID).order('nom'); window.GP_PDV_LIST=_p||[]; }catch(_){}
+    try{
+      const{data:_p}=await SB.from('gp_points_vente').select('nom,type_pdv').eq('admin_id',GP_ADMIN_ID).order('nom');
+      GP_PDV_LIST=_p||[];
+    }catch(_){}
   }
 
   // Commissions (scopées : un PDV ne voit que les siennes)
@@ -178,18 +185,32 @@ async function renderCommissions(){
 }
 
 // ── CONFIG DES RÈGLES (admin) ─────────────────────
+// Sélecteur d'aliment : "Toutes espèces", puis par espèce → "Toutes les formules X" + chaque formule.
+function _commAlimentOptions(){
+  const list=(typeof getAllFormules==='function'?getAllFormules():(typeof FORMULES_SADARI!=='undefined'?FORMULES_SADARI:[]))||[];
+  const byEsp={};
+  list.forEach(f=>{ if(!f||!f.nom) return; const e=f.espece||'autre'; (byEsp[e]=byEsp[e]||[]).push(f.nom); });
+  let html='<option value="">Toutes espèces / tous aliments</option>';
+  Object.keys(byEsp).sort().forEach(e=>{
+    const ic=(typeof ESPECE_ICON!=='undefined'&&ESPECE_ICON[e])||'🌾';
+    html+=`<optgroup label="${ic} ${e}">`;
+    html+=`<option value="esp:${e}">— Toutes les formules ${e} —</option>`;
+    byEsp[e].sort().forEach(n=>{ html+=`<option value="form:${String(n).replace(/"/g,'&quot;')}">${n}</option>`; });
+    html+='</optgroup>';
+  });
+  return html;
+}
 function _commConfigCard(){
-  const especes = (typeof ESPECE_ICON!=='undefined') ? Object.keys(ESPECE_ICON) : ['lapin','pondeuse','chair','porc','canard','tilapia'];
-  const optEsp = '<option value="">Toutes espèces</option>'+especes.map(e=>`<option value="${e}">${e}</option>`).join('');
+  const optEsp = _commAlimentOptions();
   const pdvs = (typeof GP_PDV_LIST!=='undefined' && GP_PDV_LIST.length) ? GP_PDV_LIST : [];
   const optPdv = '<option value="">Tous les PDV</option>'
     + pdvs.map(p=>`<option value="${(p.nom||'').replace(/"/g,'&quot;')}">${p.nom}${p.type_pdv==='principal'?' (principal)':''}</option>`).join('');
   const regles=GP_COMM_REGLES||[];
   const liste = regles.length ? `<div style="overflow-x:auto;margin-top:8px"><table class="tbl" style="font-size:11px"><thead><tr>
-      <th>PDV</th><th>Espèce</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
+      <th>PDV</th><th>Aliment</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
       ${regles.map(r=>`<tr>
         <td>${r.point_vente||'<i>Tous</i>'}</td>
-        <td style="text-transform:capitalize">${r.espece||'<i>Toutes</i>'}</td>
+        <td style="text-transform:capitalize">${r.formule_nom?('🎯 '+r.formule_nom):(r.espece?r.espece:'<i>Toutes</i>')}</td>
         <td class="num" style="font-weight:700">${fmt(r.montant_par_sac||0)} F</td>
         <td><button class="btn btn-red btn-sm" style="padding:2px 7px" onclick="supprimerRegleCommission('${r.id}')">🗑</button></td>
       </tr>`).join('')}
@@ -199,7 +220,7 @@ function _commConfigCard(){
     <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Montant versé au PDV vendeur, par sac d'aliment vendu au <b>détail</b> (les ventes en gros sont exclues).</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
       <div class="fr" style="margin:0"><label>PDV</label><select id="comm-r-pdv">${optPdv}</select></div>
-      <div class="fr" style="margin:0"><label>Espèce (aliment)</label><select id="comm-r-esp">${optEsp}</select></div>
+      <div class="fr" style="margin:0"><label>Aliment (formule ou espèce)</label><select id="comm-r-esp">${optEsp}</select></div>
       <div class="fr" style="margin:0"><label>Montant / sac (F)</label><input type="number" id="comm-r-montant" placeholder="500"></div>
       <button class="btn btn-g" onclick="ajouterRegleCommission()">+ Ajouter</button>
     </div>
@@ -210,12 +231,15 @@ function _commConfigCard(){
 async function ajouterRegleCommission(){
   if(!(GP_ROLE==='admin'||GP_EST_GERANT)){ notify('Réservé à l\'admin','r'); return; }
   let pv=document.getElementById('comm-r-pdv')?.value||'';
-  const esp=document.getElementById('comm-r-esp')?.value||'';
+  const sel=document.getElementById('comm-r-esp')?.value||''; // '', 'esp:lapin', 'form:LAPIN Repro A'
   const montant=+document.getElementById('comm-r-montant')?.value||0;
   if(!montant){ notify('Entre le montant par sac','r'); return; }
   const point_vente = pv||null; // vide = tous les PDV ; sinon nom du PDV
+  let espece=null, formule_nom=null;
+  if(sel.startsWith('form:')){ formule_nom=sel.slice(5); espece=_commEspece(formule_nom)||null; }
+  else if(sel.startsWith('esp:')){ espece=sel.slice(4); }
   const{error}=await SB.from('gp_commissions_regles').insert({
-    admin_id:GP_ADMIN_ID, point_vente, espece:esp||null,
+    admin_id:GP_ADMIN_ID, point_vente, espece, formule_nom,
     montant_par_sac:montant, actif:true
   });
   if(error){ notify('Erreur : '+error.message,'r'); return; }
