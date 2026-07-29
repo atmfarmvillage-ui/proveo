@@ -8,13 +8,14 @@ async function renderCaisse(){
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
-  // VISIBILITÉ :
-  // - PDV SECONDAIRE (revendeur indépendant, ex. Kegue) : cloisonné → ne voit QUE sa
-  //   propre caisse. Rien sur la production ni le PDV principal.
-  // - Admin / gérant / PDV PRINCIPAL / Siège : VUE RÉSEAU → voient toutes les caisses.
-  // Dans tous les cas, on n'AGIT que sur SA caisse (voir estMaCaisse()).
-  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
-    caisses = caisses.filter(c => c.point_vente === GP_POINT_VENTE);
+  // VISIBILITÉ STRICTE : chacun ne voit QUE sa caisse.
+  // - PDV (secondaire OU principal) → uniquement les caisses de SON point de vente.
+  // - Siège / Production (sans PDV) → uniquement les caisses Production (sans point_vente).
+  // - Admin / gérant → toutes les caisses.
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){
+    caisses = GP_POINT_VENTE
+      ? caisses.filter(c => c.point_vente === GP_POINT_VENTE)
+      : caisses.filter(c => !c.point_vente);
   }
   // Mémoriser les caisses VISIBLES pour les garde-fous d'action.
   window.GP_CAISSES_MAP={}; caisses.forEach(c=>{ GP_CAISSES_MAP[c.id]=c; });

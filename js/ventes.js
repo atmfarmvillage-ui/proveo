@@ -1439,12 +1439,12 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
     }catch(e){ console.warn('carte url:', e); }
 
     msg = `🌾 Bienvenue *${client.nom}* chez *${prov}* !\n\n` +
-          `✅ Ta 1ʳᵉ vente est enregistrée :\n${produitsLines}\n` +
+          `✅ Votre 1ʳᵉ vente est enregistrée :\n${produitsLines}\n` +
           `*Total : ${fmt(total)} F*\n` +
           `${payeLine}\n\n` +
           (carteUrl
-            ? `🎁 *Ta carte de fidélité numérique* (toujours dans ton téléphone) :\n${carteUrl}\n\n` +
-              `Présente ce QR à chaque achat pour cumuler des points et gagner des cadeaux 🎁\n\n`
+            ? `🎁 *Votre carte de fidélité numérique* (toujours dans votre téléphone) :\n${carteUrl}\n\n` +
+              `Présentez ce QR à chaque achat pour cumuler des points et gagner des cadeaux 🎁\n\n`
             : '') +
           `Bienvenue dans la famille ${prov} 🤝`;
   } else {
@@ -1453,10 +1453,10 @@ async function autoOuvrirWAApresVente(client, vente, isNewClient, lignes, total,
       ? `\n🎁 +${pts.gagnes} pts fidélité (total : ${pts.total} pts)`
       : '';
     msg = `🌾 Bonjour *${client.nom}*,\n\n` +
-          `✅ Ton achat chez *${prov}* :\n${produitsLines}\n` +
+          `✅ Votre achat chez *${prov}* :\n${produitsLines}\n` +
           `*Total : ${fmt(total)} F*\n` +
           `${payeLine}${ptsLine}\n\n` +
-          `Merci de ta confiance 🤝`;
+          `Merci de votre confiance 🤝`;
   }
 
   // Construire l'URL WhatsApp
