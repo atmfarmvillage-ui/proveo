@@ -2724,6 +2724,10 @@ async function supprimerVente(id){
   // Supprimer les mouvements fidélité
   await SB.from('gp_fidelite_mouvements').delete().eq('vente_id',id);
 
+  // Supprimer la/les commission(s) encore DUE(s) de cette vente (les déjà réglées =
+  // argent déjà versé au PDV → conservées comme trace comptable).
+  try{ await SB.from('gp_commissions').delete().eq('admin_id',GP_ADMIN_ID).eq('vente_id',id).eq('statut','due'); }catch(_){}
+
   // 4e. Soft-delete la vente
   await SB.from('gp_ventes').update({
     deleted_at: new Date().toISOString(),
