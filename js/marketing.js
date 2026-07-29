@@ -46,6 +46,14 @@ async function renderMarketing(){
   if(!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--textm)">⏳ Analyse en cours…</div>';
 
+  // Secrétaire : accès UNIQUEMENT aux outils de contact clients (fidélité, relances,
+  // campagne), scopés à SON PDV. Pas d'analyse réseau (marges, matrice, diagnostic).
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){
+    root.innerHTML = '<div style="font-size:12px;color:var(--textm);margin-bottom:10px">📣 Vos outils de relance et de fidélité clients.</div><div id="mkt-seg-zone"><div style="color:var(--textm);font-size:12px;padding:10px">⏳ Chargement…</div></div>';
+    if(typeof renderMarketingSegments==='function') renderMarketingSegments();
+    return;
+  }
+
   // Période
   const r = (typeof vtPeriodeRange==='function')
     ? vtPeriodeRange(MKT_PERIODE)
@@ -276,19 +284,22 @@ async function renderMarketingSegments(){
     <button class="mkt-seg-btn" data-seg="perdu" onclick="mktSetSeg('perdu')">🔴 Perdus (${cnt('perdu')})</button>
   </div>`;
 
+  // Admin/gérant : tout. Secrétaire : outils de contact clients uniquement (scopés à SON PDV),
+  // sans les données réseau (bulletin marketing, stats de relances tous-PDV).
+  const _mktAdm = (GP_ROLE==='admin' || GP_EST_GERANT);
   zone.innerHTML = `
     <style>
       .mkt-seg-btn{font-size:11px;padding:5px 10px;border:1px solid var(--border);background:var(--card2);color:var(--textm);border-radius:14px;cursor:pointer;font-weight:600}
       .mkt-seg-btn.on{background:var(--g4,#16A34A);color:#fff;border-color:var(--g4,#16A34A)}
     </style>
-    ${_mktBulletinCard()}
+    ${_mktAdm?_mktBulletinCard():''}
     ${_mktFicheCard()}
     <div id="mkt-cycle-zone"></div>
     <div id="mkt-downtrade-zone"></div>
     <div id="mkt-crosssell-zone"></div>
     <div id="mkt-fidelite-zone"></div>
     <div id="mkt-campagne-zone"></div>
-    <div id="mkt-relance-stats"></div>
+    ${_mktAdm?'<div id="mkt-relance-stats"></div>':''}
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>📣 Relances clients par segment</span></div></div>
       ${chips}
@@ -301,7 +312,7 @@ async function renderMarketingSegments(){
   mktRenderCrossSell();
   mktRenderFidelite();
   mktRenderCampagne();
-  mktRenderRelanceStats();
+  if(_mktAdm) mktRenderRelanceStats();
 }
 
 // ── CAMPAGNE GROUPÉE (segment → 1 message → envoi en série) ──
