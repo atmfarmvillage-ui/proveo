@@ -267,26 +267,60 @@ async function drillImpayes(toutePeriode){
   window._kpiDrillDebiteurs = byCli;
   const nbAvecTel = Object.values(byCli).filter(d=>d.tel).length;
 
-  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés${toutePeriode?' (tous mois)':''} — ${ventes.length} factures · ${Object.keys(byCli).length} clients`;
+  // ── DETTES PDV (livraisons à crédit non payées) — créances unifiées ──
+  // Une livraison "vente_gros" non réglée à un PDV (ex. VPS) = dette du PDV.
+  // Les transferts internes (vers le principal) sont exclus (_livInterne).
+  let totalLiv = 0, nbLiv = 0;
+  try{
+    if(typeof GP_PDV_LIST==='undefined' || !GP_PDV_LIST || !GP_PDV_LIST.length){
+      const{data:_pv}=await SB.from('gp_points_vente').select('id,nom,type_pdv').eq('admin_id',GP_ADMIN_ID);
+      GP_PDV_LIST=_pv||[];
+    }
+    let ql=SB.from('gp_livraisons_pdv').select('*').eq('admin_id',GP_ADMIN_ID)
+      .in('statut_paiement',['impaye','partiel']);
+    // Scope : un PDV réel ne voit que ce QU'IL a livré (sa créance) ; admin/siège = tout.
+    if(typeof estCloisonnePDV==='function' && estCloisonnePDV() && typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE){
+      ql = ql.eq('pdv_source_nom', GP_POINT_VENTE);
+    }
+    const{data:LV}=await ql;
+    (LV||[]).forEach(l=>{
+      if(l.type_relation!=='vente_gros') return;
+      if(typeof _livInterne==='function' && _livInterne(l)) return;
+      const reste=Math.max(0, Number(l.montant_total||0)-Number(l.montant_paye||0));
+      if(reste<=0) return;
+      const d=l.date_livraison||l.date||'';
+      if(!toutePeriode && d && (d<debut || d>fin)) return;
+      totalLiv += reste; nbLiv++;
+      ventes.push({ id:l.id, _isLiv:true, date:d,
+        client_nom:l.pdv_dest_nom||'PDV', point_vente:l.pdv_source_nom||null,
+        montant_total:Number(l.montant_total||0), montant_paye:Number(l.montant_paye||0),
+        _reste:reste, _tel:'' });
+    });
+  }catch(e){}
+  const totalGlobal = total + totalLiv;
+
+  document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés${toutePeriode?' (tous mois)':''} — ${ventes.length-nbLiv} factures${nbLiv?` + ${nbLiv} livraison(s) PDV`:''} · ${Object.keys(byCli).length} client(s)`;
   document.getElementById('kpi-drill-summary').innerHTML =
-    `<b style="color:var(--red);font-size:18px">${fmt(total)} F</b> à recouvrer${toutePeriode?' au total (toutes périodes)':' sur le mois'}`;
+    `<b style="color:var(--red);font-size:18px">${fmt(totalGlobal)} F</b> à recouvrer${toutePeriode?' au total (toutes périodes)':' sur le mois'}${nbLiv?` <span style="font-size:11px;color:var(--textm)">(dont ${fmt(totalLiv)} F de livraisons PDV)</span>`:''}`;
   document.getElementById('kpi-drill-actions').innerHTML = nbAvecTel
     ? `<button class="btn btn-g" onclick="relancerTousImpayes()" style="background:#25D366;color:#FFF;border:none">📞 Relancer ${nbAvecTel} client(s) par WhatsApp</button>`
     : '';
 
   const cols = [
     {key:'date', label:'Date'},
-    {key:'client_nom', label:'Client', render:r=>
-      `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${r._tel||'(sans tél)'}</div>${typeof pvBadgeHtml==='function'?'<div style="margin-top:3px">'+pvBadgeHtml(r.point_vente||'Production')+'</div>':''}`},
+    {key:'client_nom', label:'Client', render:r=> r._isLiv
+      ? `<div style="font-weight:600">🚚 ${r.client_nom||'PDV'}</div><div style="font-size:9px;color:var(--textm)">Livraison à crédit</div>${typeof pvBadgeHtml==='function'?'<div style="margin-top:3px">'+pvBadgeHtml(r.point_vente||'Production')+'</div>':''}`
+      : `<div style="font-weight:600">${r.client_nom||'—'}</div><div style="font-size:9px;color:var(--textm)">${r._tel||'(sans tél)'}</div>${typeof pvBadgeHtml==='function'?'<div style="margin-top:3px">'+pvBadgeHtml(r.point_vente||'Production')+'</div>':''}`},
     {key:'montant_total', label:'Total', align:'num', render:r=>fmt(r.montant_total||0)+' F'},
     {key:'montant_paye', label:'Payé', align:'num', style:'color:var(--green)', render:r=>fmt(r.montant_paye||0)+' F'},
     {key:'_reste', label:'Reste dû', align:'num', style:'color:var(--red);font-weight:700', render:r=>fmt(r._reste||0)+' F'},
-    {key:'_action', label:'', render:r=>
-      r._tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}')" title="Relancer ce client (total + détail)">📞</button>` : ''}
+    {key:'_action', label:'', render:r=> r._isLiv
+      ? `<button class="btn btn-out btn-sm" style="padding:4px 8px" onclick="(typeof fermerKpiDrill==='function'&&fermerKpiDrill());showGP('distribution')" title="Encaisser dans Distribution">📦</button>`
+      : (r._tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;padding:4px 8px" onclick="relancerImpayeWA('${r.id}')" title="Relancer ce client (total + détail)">📞</button>` : '')}
   ];
-  _renderKpiTable(cols, ventes, `TOTAL DÛ`, fmt(total)+' F');
+  _renderKpiTable(cols, ventes, `TOTAL DÛ`, fmt(totalGlobal)+' F');
   _renderKpiFooter('Voir Suivi & Appels', "showGP('suivi');fermerKpiDrill();");
-  window._kpiDrillData = { type:'impayes', titre:'Impayés du mois', rows:ventes, columns:cols, total };
+  window._kpiDrillData = { type:'impayes', titre:'Impayés du mois', rows:ventes, columns:cols, total:totalGlobal };
 }
 
 // Message de relance agrégé : total dû + détail des factures du client
