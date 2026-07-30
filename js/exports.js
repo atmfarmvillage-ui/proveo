@@ -41,6 +41,33 @@ function gpExportWord(titre, columns, rows, filename, sousTitre){
   notify('Word téléchargé ✓','gold');
 }
 
+// PDF à partir d'un TEXTE libre (ex. fiche technique), avec en-tête provenderie.
+function gpExportTextePDF(titre, texte, filename, sousTitre){
+  if(typeof window.jspdf==='undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2s','r'); return; }
+  const t=String(texte||'').trim();
+  if(!t){ notify('Rien à exporter','r'); return; }
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF({unit:'mm', format:'a4'});
+  const prov=(typeof GP_CONFIG!=='undefined' && GP_CONFIG && GP_CONFIG.nom_provenderie) || 'SADARI';
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  const M=16; let y=18;
+  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(0); doc.text(prov, M, y); y+=8;
+  doc.setFontSize(12); doc.setTextColor(22,163,74); doc.text(_gpStrip(titre), M, y); y+=7;
+  if(sousTitre){ doc.setTextColor(90); doc.setFontSize(9); doc.text(_gpStrip(sousTitre), M, y); y+=6; }
+  doc.setDrawColor(220); doc.line(M, y, W-M, y); y+=6;
+  doc.setTextColor(20); doc.setFontSize(10); doc.setFont('helvetica','normal');
+  const lines=doc.splitTextToSize(t, W-2*M);
+  const lh=5.3;
+  lines.forEach(ln=>{
+    if(y > H-16){ doc.addPage(); y=18; }
+    doc.text(ln, M, y); y+=lh;
+  });
+  doc.setFontSize(8); doc.setTextColor(120);
+  doc.text('Généré par '+prov, M, H-10);
+  doc.save(filename);
+  notify('PDF téléchargé ✓','gold');
+}
+
 function gpExportPDF(titre, columns, rows, filename, sousTitre){
   if(typeof window.jspdf==='undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2s','r'); return; }
   if(!rows||!rows.length){ notify('Rien à exporter','r'); return; }
