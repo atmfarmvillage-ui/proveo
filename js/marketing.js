@@ -609,7 +609,7 @@ async function argumentaireIA(tier){
   const q=`Tu es vendeur expert à la provenderie SADARI (Togo). Rédige un ARGUMENTAIRE DE VENTE convaincant et court pour l'aliment "${nom}"${p&&p.f.espece?` (${p.f.espece}${p.f.stade?' — '+p.f.stade:''})`:''}, à dire à un éleveur au comptoir.
 ${vals?`Valeurs nutritionnelles réelles : ${vals}.`:''}
 Mets en avant : bénéfices concrets pour l'éleveur (croissance/ponte, ROI, résultats), pourquoi choisir SADARI (qualité locale, régularité), et termine par une phrase qui pousse à l'achat. 3-5 arguments percutants, ton commercial mais honnête. Ne donne que l'argumentaire.`;
-  try{ out.textContent = await iaGenerate('marketing', q, tier) || '—'; }
+  try{ const _t=await iaGenerate('marketing', q, tier)||'—'; _MKT_FICHE_RAW=_t; out.innerHTML=mktFicheToHtml(_t); }
   catch(e){ out.innerHTML='⚠ '+(e.message||e); }
 }
 
@@ -981,6 +981,53 @@ function _mktFicheCard(){
     <div style="font-size:10px;color:var(--textm);margin-top:4px">Génère d'abord la fiche (🚀/💎), puis envoie-la au client ou exporte-la en PDF.</div>
   </div>`;
 }
+// ── Rendu Markdown léger de la fiche (tableaux | gras | titres | puces) ──
+var _MKT_FICHE_RAW = '';   // dernier texte brut généré (pour WhatsApp / PDF)
+function _mktInline(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/(^|[^\*])\*(?!\s)([^*]+?)\*(?!\*)/g,'$1<b>$2</b>');
+}
+function _mktEstLigneTab(l){ return /^\s*\|.*\|\s*$/.test(l); }
+function _mktEstSepTab(l){ return /^\s*\|[\s:|-]+\|\s*$/.test(l); }
+function _mktCellules(l){ return l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim()); }
+function mktFicheToHtml(md){
+  const lines=String(md||'').split(/\r?\n/);
+  let html='', i=0;
+  while(i<lines.length){
+    const l=lines[i];
+    if(_mktEstLigneTab(l)){
+      const block=[]; while(i<lines.length && _mktEstLigneTab(lines[i])){ block.push(lines[i]); i++; }
+      const rows=block.filter(x=>!_mktEstSepTab(x)).map(_mktCellules).filter(r=>r.length);
+      if(rows.length){
+        const head=rows[0], body=rows.slice(1);
+        html+='<div style="overflow-x:auto"><table class="tbl" style="font-size:12px;margin:6px 0;width:auto"><thead><tr>'
+          +head.map(h=>`<th>${_mktInline(h)}</th>`).join('')+'</tr></thead><tbody>'
+          +body.map(r=>'<tr>'+r.map((c,ci)=>`<td${ci>0?' class="num"':''}>${_mktInline(c)}</td>`).join('')+'</tr>').join('')
+          +'</tbody></table></div>';
+      }
+      continue;
+    }
+    const h=l.match(/^\s*#{1,6}\s+(.*)$/);
+    if(h){ html+=`<div style="font-weight:800;margin:9px 0 2px">${_mktInline(h[1])}</div>`; i++; continue; }
+    if(/^\s*\*\*[^*]+\*\*\s*:?\s*$/.test(l)){ html+=`<div style="font-weight:800;margin:9px 0 2px">${_mktInline(l.trim().replace(/^\*\*|\*\*\s*:?$/g,''))}</div>`; i++; continue; }
+    const b=l.match(/^\s*[-•]\s+(.*)$/);
+    if(b){ html+=`<div style="margin-left:10px">• ${_mktInline(b[1])}</div>`; i++; continue; }
+    if(l.trim()===''){ html+='<div style="height:6px"></div>'; i++; continue; }
+    html+=`<div>${_mktInline(l)}</div>`; i++;
+  }
+  return html;
+}
+// Version WhatsApp : tableaux → "col : col", gras markdown → *gras* WhatsApp
+function _mktFichePlain(md){
+  return String(md||'').split(/\r?\n/)
+    .filter(l=>!_mktEstSepTab(l))
+    .map(l=> _mktEstLigneTab(l) ? _mktCellules(l).join(' : ') : l)
+    .join('\n')
+    .replace(/\*\*(.+?)\*\*/g,'*$1*');
+}
+
 // Clients ayant un numéro (pour envoyer la fiche par WhatsApp)
 function _mktFicheClientOptions(){
   const cs=(typeof GP_CLIENTS!=='undefined'?GP_CLIENTS:[])||[];
@@ -989,24 +1036,24 @@ function _mktFicheClientOptions(){
 }
 // Envoyer la fiche technique générée au client par WhatsApp
 function envoyerFicheWA(){
-  const txt=(document.getElementById('mkt-ft-result')?.textContent||'').trim();
-  if(!txt || txt.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
+  const raw=(_MKT_FICHE_RAW||'').trim();
+  if(!raw || raw.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
   const nom=document.getElementById('mkt-ft-formule')?.value||'';
   let tel=(document.getElementById('mkt-ft-tel')?.value||'').trim();
   if(!tel) tel=document.getElementById('mkt-ft-client')?.value||'';
   tel=(tel||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
   if(!tel){ notify('Choisis un client ou entre un numéro','r'); return; }
   const prov=(typeof GP_CONFIG!=='undefined'&&GP_CONFIG&&GP_CONFIG.nom_provenderie)||'SADARI';
-  const msg=`📄 *Fiche technique — ${nom}*\n_${prov}_\n\n${txt}`;
+  const msg=`📄 *Fiche technique — ${nom}*\n_${prov}_\n\n${_mktFichePlain(raw)}`;
   window.open('https://wa.me/228'+tel+'?text='+encodeURIComponent(msg),'_blank');
 }
-// Exporter la fiche technique en PDF (en-tête provenderie)
+// Exporter la fiche technique en PDF (en-tête provenderie, tableaux rendus)
 function exporterFichePDF(){
-  const txt=(document.getElementById('mkt-ft-result')?.textContent||'').trim();
-  if(!txt || txt.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
+  const raw=(_MKT_FICHE_RAW||'').trim();
+  if(!raw || raw.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
   const nom=document.getElementById('mkt-ft-formule')?.value||'Formule';
-  if(typeof gpExportTextePDF!=='function'){ notify('Export PDF indisponible (recharge la page)','r'); return; }
-  gpExportTextePDF('Fiche technique — '+nom, txt, 'fiche_'+String(nom).replace(/\s+/g,'_')+'_'+today()+'.pdf');
+  if(typeof gpExportFichePDF!=='function'){ notify('Export PDF indisponible (recharge la page)','r'); return; }
+  gpExportFichePDF('Fiche technique — '+nom, raw, 'fiche_'+String(nom).replace(/\s+/g,'_')+'_'+today()+'.pdf');
 }
 
 // Profil nutritionnel + conformité aux normes pour une formule
@@ -1084,7 +1131,8 @@ Reste factuel, n'invente aucune valeur non fournie. Format lisible (WhatsApp/imp
 
   try{
     const txt = await iaGenerate('marketing', q, tier);
-    out.textContent = txt || 'Réponse vide.';
+    _MKT_FICHE_RAW = txt || '';
+    out.innerHTML = txt ? mktFicheToHtml(txt) : 'Réponse vide.';
   }catch(e){ out.innerHTML = '⚠ ' + (e.message||e); }
 }
 

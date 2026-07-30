@@ -68,6 +68,51 @@ function gpExportTextePDF(titre, texte, filename, sousTitre){
   notify('PDF téléchargé ✓','gold');
 }
 
+// PDF d'une fiche en Markdown léger (texte + tableaux |...| rendus en vrais tableaux).
+function gpExportFichePDF(titre, md, filename, sousTitre){
+  if(typeof window.jspdf==='undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2s','r'); return; }
+  const t=String(md||'').trim();
+  if(!t){ notify('Rien à exporter','r'); return; }
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF({unit:'mm', format:'a4'});
+  const prov=(typeof GP_CONFIG!=='undefined' && GP_CONFIG && GP_CONFIG.nom_provenderie) || 'SADARI';
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  const M=16; let y=18;
+  doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(0); doc.text(prov, M, y); y+=8;
+  doc.setFontSize(12); doc.setTextColor(22,163,74); doc.text(_gpStrip(titre), M, y); y+=7;
+  if(sousTitre){ doc.setTextColor(90); doc.setFontSize(9); doc.text(_gpStrip(sousTitre), M, y); y+=6; }
+  doc.setDrawColor(220); doc.line(M, y, W-M, y); y+=6;
+
+  const _md=s=>String(s||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/`/g,''); // enlever le gras markdown pour le PDF
+  const isRow=l=>/^\s*\|.*\|\s*$/.test(l), isSep=l=>/^\s*\|[\s:|-]+\|\s*$/.test(l);
+  const cells=l=>l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>_md(c.trim()));
+  const flush=buf=>{
+    if(!buf.length) return;
+    doc.setTextColor(20); doc.setFontSize(10); doc.setFont('helvetica','normal');
+    const wrapped=doc.splitTextToSize(_md(buf.join('\n')), W-2*M);
+    wrapped.forEach(ln=>{ if(y>H-16){ doc.addPage(); y=18; } doc.text(ln, M, y); y+=5.3; });
+  };
+  const lines=t.split(/\r?\n/); let buf=[], i=0;
+  while(i<lines.length){
+    if(isRow(lines[i])){
+      flush(buf); buf=[];
+      const block=[]; while(i<lines.length && isRow(lines[i])){ block.push(lines[i]); i++; }
+      const rows=block.filter(x=>!isSep(x)).map(cells).filter(r=>r.length);
+      if(rows.length && typeof doc.autoTable==='function'){
+        doc.autoTable({ startY:y+1, head:[rows[0]], body:rows.slice(1),
+          styles:{fontSize:9}, headStyles:{fillColor:[22,163,74],textColor:255}, margin:{left:M,right:M} });
+        y=(doc.lastAutoTable?doc.lastAutoTable.finalY:y)+4;
+      } else if(rows.length){ flush(rows.map(r=>r.join(' — '))); }
+      continue;
+    }
+    buf.push(lines[i]); i++;
+  }
+  flush(buf);
+  doc.setFontSize(8); doc.setTextColor(120); doc.text('Généré par '+prov, M, H-10);
+  doc.save(filename);
+  notify('PDF téléchargé ✓','gold');
+}
+
 function gpExportPDF(titre, columns, rows, filename, sousTitre){
   if(typeof window.jspdf==='undefined'){ notify('Lib PDF pas encore chargée — réessaie dans 2s','r'); return; }
   if(!rows||!rows.length){ notify('Rien à exporter','r'); return; }
