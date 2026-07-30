@@ -972,7 +972,41 @@ function _mktFicheCard(){
       <button class="btn btn-out btn-sm" onclick="argumentaireIA('pro')" title="Claude">💎 Premium</button>
     </div>
     <div id="mkt-ft-result" style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)"></div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <select id="mkt-ft-client" style="flex:1;min-width:150px"><option value="">— Client (avec n°) —</option>${_mktFicheClientOptions()}</select>
+      <input id="mkt-ft-tel" placeholder="ou n° manuel" style="width:120px">
+      <button class="btn btn-g btn-sm" onclick="envoyerFicheWA()" title="Envoyer la fiche au client par WhatsApp">📲 Envoyer</button>
+      <button class="btn btn-out btn-sm" onclick="exporterFichePDF()" title="Télécharger la fiche en PDF">📄 PDF</button>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:4px">Génère d'abord la fiche (🚀/💎), puis envoie-la au client ou exporte-la en PDF.</div>
   </div>`;
+}
+// Clients ayant un numéro (pour envoyer la fiche par WhatsApp)
+function _mktFicheClientOptions(){
+  const cs=(typeof GP_CLIENTS!=='undefined'?GP_CLIENTS:[])||[];
+  return cs.filter(c=>(c.telephone||'').replace(/\D/g,'').length>=6)
+    .map(c=>`<option value="${(c.telephone||'').replace(/"/g,'')}">${(c.nom||'—').replace(/</g,'&lt;')}</option>`).join('');
+}
+// Envoyer la fiche technique générée au client par WhatsApp
+function envoyerFicheWA(){
+  const txt=(document.getElementById('mkt-ft-result')?.textContent||'').trim();
+  if(!txt || txt.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
+  const nom=document.getElementById('mkt-ft-formule')?.value||'';
+  let tel=(document.getElementById('mkt-ft-tel')?.value||'').trim();
+  if(!tel) tel=document.getElementById('mkt-ft-client')?.value||'';
+  tel=(tel||'').replace(/[\s\-\+]/g,'').replace(/^00/,'').replace(/^228/,'');
+  if(!tel){ notify('Choisis un client ou entre un numéro','r'); return; }
+  const prov=(typeof GP_CONFIG!=='undefined'&&GP_CONFIG&&GP_CONFIG.nom_provenderie)||'SADARI';
+  const msg=`📄 *Fiche technique — ${nom}*\n_${prov}_\n\n${txt}`;
+  window.open('https://wa.me/228'+tel+'?text='+encodeURIComponent(msg),'_blank');
+}
+// Exporter la fiche technique en PDF (en-tête provenderie)
+function exporterFichePDF(){
+  const txt=(document.getElementById('mkt-ft-result')?.textContent||'').trim();
+  if(!txt || txt.length<20){ notify('Génère d\'abord la fiche (🚀 Pro / 💎 Premium)','r'); return; }
+  const nom=document.getElementById('mkt-ft-formule')?.value||'Formule';
+  if(typeof gpExportTextePDF!=='function'){ notify('Export PDF indisponible (recharge la page)','r'); return; }
+  gpExportTextePDF('Fiche technique — '+nom, txt, 'fiche_'+String(nom).replace(/\s+/g,'_')+'_'+today()+'.pdf');
 }
 
 // Profil nutritionnel + conformité aux normes pour une formule
