@@ -102,8 +102,22 @@ function calcNiveaux(mouvements){
   });
   return niveaux;
 }
+// Charge TOUS les mouvements de stock MP (Supabase plafonne à 1000 lignes par requête).
+// Sans pagination, les nets sont faux (entrées manquantes → stocks à 0 ou négatifs).
+async function _fetchAllStockMp(){
+  let all=[], from=0; const page=1000;
+  while(true){
+    const{data,error}=await SB.from('gp_stock_mp').select('*')
+      .eq('admin_id',GP_ADMIN_ID).order('id',{ascending:true}).range(from, from+page-1);
+    if(error||!data||!data.length) break;
+    all=all.concat(data);
+    if(data.length<page) break;
+    from+=page;
+  }
+  return all;
+}
 async function renderStockNiveaux(){
-  const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  const S = await _fetchAllStockMp();
   window._stockNiveaux=S;
   const niveaux=calcNiveaux(S);
   // Stock value
@@ -449,7 +463,7 @@ function filtrerStock(){
 // ── NOTIFICATION WHATSAPP STOCK BAS ───────────────
 // Envoie l'alerte au numéro principal + DAF + Logistique (un onglet wa.me par destinataire)
 async function verifierAlerteStock(){
-  const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  const S=await _fetchAllStockMp();
   if(!S)return;
   window._stockNiveaux=S;
   const niveaux=calcNiveaux(S);
