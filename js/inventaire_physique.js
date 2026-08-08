@@ -19,7 +19,7 @@ async function renderInventairePhysique(){
 
 async function creerNouvelInventaire(mois){
   // Calculer les niveaux théoriques
-  const{data:S}=await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  const S=await _fetchAllStockMp();
   const niveaux=calcNiveaux(S||[]);
 
   const lignes=Object.entries(niveaux)

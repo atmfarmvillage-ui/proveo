@@ -14,7 +14,7 @@ async function renderMatieresPremieresPage(){
   const sansSeuil = GP_INGREDIENTS.filter(i=>!i.seuil_alerte||i.seuil_alerte===0).length;
 
   // Calcul alertes depuis stock
-  const{data:S}=await SB.from('gp_stock_mp').select('ingredient_nom,type,quantite').eq('admin_id',GP_ADMIN_ID);
+  const S=await _fetchAllStockMp();
   const niveaux={};
   (S||[]).forEach(m=>{
     const q=Number(m.quantite||0);

@@ -159,7 +159,7 @@ async function renderDashboard(){
     safe(SB.from('gp_salaires').select('montant').eq('admin_id',GP_ADMIN_ID).eq('mois',m)),
     safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).gte('date',mDebut).lte('date',mFin)),
     safe(SB.from('gp_lots').select('qte_produite,nb_sacs,poids_sac,date,formule_nom,ref,espece').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(4)),
-    safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)),
+    (typeof _fetchAllStockMp==='function'?_fetchAllStockMp():Promise.resolve([])).then(d=>({data:d}),()=>({data:[]})),
     // r9 : caisses actives (pour Solde Caisse Total)
     safe(SB.from('gp_caisses').select('id,solde_initial,type,actif,point_vente').eq('admin_id',GP_ADMIN_ID).eq('actif',true)),
     // r10 : mouvements caisse (pour calculer le solde réel)

@@ -298,7 +298,7 @@ async function populateSelectMPDist(){
   }
   if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
 
-  const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID);
+  const S = await _fetchAllStockMp();
   window._stockNiveaux = S || [];
   const niveaux = (typeof calcNiveaux === 'function')
     ? calcNiveaux(window._stockNiveaux) : {};
