@@ -99,7 +99,7 @@ async function drillDetteFournisseurs(){
 async function drillAlertesMP(){
   if(_drillReserveSiege()) return;
   document.getElementById('kpi-drill-titre').textContent = '⚠ Alertes stock MP';
-  const {data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID);
+  const S = await _fetchAllStockMp();
   const stock = S||[];
   const niveaux = (typeof calcNiveaux==='function')?calcNiveaux(stock):{};
   const ingrs = (typeof GP_INGREDIENTS!=='undefined')?GP_INGREDIENTS:[];

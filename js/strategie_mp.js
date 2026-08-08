@@ -61,7 +61,7 @@ async function renderStrategieMP(){
     SB.from('gp_strategie_mp').select('*').eq('admin_id', GP_ADMIN_ID),
     _stratProdMois(moisPrec),
     _stratProdMois(moisCourant),
-    SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID)
+    (typeof _fetchAllStockMp==='function'?_fetchAllStockMp():Promise.resolve([])).then(d=>({data:d}),()=>({data:[]}))
   ]);
 
   GP_STRAT_PARAMS = {};

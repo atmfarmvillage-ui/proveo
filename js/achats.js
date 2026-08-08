@@ -53,7 +53,7 @@ async function renderAchats(){
 
   // Niveaux de stock MP (affichés dans la recherche d'ingrédient)
   try{
-    const{data:Smp}=await SB.from('gp_stock_mp').select('ingredient_nom,type,quantite').eq('admin_id',GP_ADMIN_ID);
+    const Smp=await _fetchAllStockMp();
     window._stockNiveaux=Smp||[];
     window._mpNiveaux=(typeof calcNiveaux==='function')?calcNiveaux(Smp||[]):{};
   }catch(e){ window._mpNiveaux=window._mpNiveaux||{}; }
@@ -478,7 +478,7 @@ async function saveModificationAchat(){
   MODIF_LIGNES.forEach(l=>{if(l.ingredient_id)nouvelApport[l.ingredient_id]=(nouvelApport[l.ingredient_id]||0)+Number(l.qte_commandee||0);});
 
   // Stock actuel par ingrédient (entrées − sorties)
-  const{data:tousStock}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+  const tousStock=await _fetchAllStockMp();
   const stockActuel={};
   (tousStock||[]).forEach(s=>{
     if(!s.ingredient_id)return;
@@ -731,7 +731,7 @@ async function _retirerStockAchat(id){
   entr=entr||[];
   if(!entr.length) return true; // rien à retirer
   // Niveau actuel par ingrédient
-  const{data:tous}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+  const tous=await _fetchAllStockMp();
   const niv={};
   (tous||[]).forEach(s=>{ if(!s.ingredient_id)return; niv[s.ingredient_id]=(niv[s.ingredient_id]||0)+(s.type==='entree'?1:-1)*Number(s.quantite||0); });
   // Apport de cet achat

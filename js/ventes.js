@@ -2138,7 +2138,7 @@ async function populateSelectMPVente(){
   }
   if(ingrFresh && ingrFresh.length) GP_INGREDIENTS = ingrFresh;
   // Niveaux de stock toujours frais
-  const{data:S} = await SB.from('gp_stock_mp').select('*').eq('admin_id', GP_ADMIN_ID);
+  const S = await _fetchAllStockMp();
   window._stockNiveaux = S || [];
   if(!ingrFresh || !ingrFresh.length){
     document.getElementById('vt-mp-stock-info').innerHTML =

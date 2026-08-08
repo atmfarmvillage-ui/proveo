@@ -21,7 +21,7 @@ async function renderAlertes(){
     safe(SB.from('gp_stock_veto').select('*').eq('admin_id',GP_ADMIN_ID).gt('qte',0)),
     safe(SB.from('gp_stock_produits_pdv').select('*').eq('admin_id',GP_ADMIN_ID)),
     safe(SB.from('gp_ventes').select('client_id,client_nom,point_vente,montant_total,montant_paye,date').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel'])),
-    estCentral ? safe(SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID)) : Promise.resolve({data:[]}),
+    estCentral ? (typeof _fetchAllStockMp==='function'?_fetchAllStockMp():Promise.resolve([])).then(d=>({data:d}),()=>({data:[]})) : Promise.resolve({data:[]}),
   ]);
 
   const L=liv||[], VL=vetoLots||[], SPF=stockPF||[], VI=ventesImp||[];

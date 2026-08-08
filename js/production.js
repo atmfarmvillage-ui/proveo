@@ -49,7 +49,7 @@ let LOT_STOCK_MP = {};  // {ingredient_id: kg disponible}
 async function loadStockMPLot(){
   LOT_STOCK_MP = {};
   try{
-    const{data}=await SB.from('gp_stock_mp').select('ingredient_id,type,quantite').eq('admin_id',GP_ADMIN_ID);
+    const data=await _fetchAllStockMp();
     (data||[]).forEach(r=>{
       if(!r.ingredient_id)return;
       LOT_STOCK_MP[r.ingredient_id]=(LOT_STOCK_MP[r.ingredient_id]||0)+(r.type==='entree'?1:-1)*Number(r.quantite||0);
