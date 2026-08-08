@@ -688,11 +688,35 @@ async function validerAchatDAF(achatId,approuve){
 async function recrediterAchat(id){
   if(!(['admin','secretaire','logistique','daf'].includes(GP_ROLE)||GP_EST_GERANT)){ notify('Action non autorisée pour votre rôle','r'); return; }
   try{
+    // État AVANT : entrées de stock déjà liées à cet achat ?
+    const{data:av}=await SB.from('gp_stock_mp').select('id').eq('achat_id',id).eq('admin_id',GP_ADMIN_ID);
+    const nAvant=(av||[]).length;
+
     await crediterStockDepuisAchat(id);
-    notify('Stock (re)crédité ✓','gold');
+
+    // État APRÈS
+    const{data:ap}=await SB.from('gp_stock_mp').select('id,type,quantite,ingredient_nom').eq('achat_id',id).eq('admin_id',GP_ADMIN_ID);
+    const nApres=(ap||[]).length;
+    const kgAchat=(ap||[]).filter(x=>x.type==='entree').reduce((s,x)=>s+Number(x.quantite||0),0);
+    const nom=(ap||[])[0]?.ingredient_nom||'';
+
     try{ if(document.getElementById('achats-liste') && typeof renderAchats==='function') await renderAchats(); }catch(_){}
     try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(_){}
-  }catch(e){ notify('⚠ Échec crédit stock : '+(e.message||e),'r'); }
+
+    if(nAvant>0 && nApres===nAvant){
+      // Rien ajouté : l'entrée existait déjà → le stock à 0 vient d'une CONSOMMATION.
+      let net=null;
+      if(nom){
+        const{data:all}=await SB.from('gp_stock_mp').select('type,quantite').eq('admin_id',GP_ADMIN_ID).eq('ingredient_nom',nom);
+        net=(all||[]).reduce((s,x)=>s+(x.type==='entree'?1:-1)*Number(x.quantite||0),0);
+      }
+      alert(`ℹ️ L'entrée de cet achat EXISTE déjà (${fmtKg(kgAchat)} kg reçus).\n\nStock net actuel de « ${nom} » : ${net!=null?fmtKg(net)+' kg':'—'}.\n\n➡️ Le stock à 0 ne vient PAS d'un crédit manquant, mais d'une CONSOMMATION en production (le maïs/concentré a déjà été utilisé dans un lot). Ce n'est donc pas un bug.`);
+    } else if(nApres>nAvant){
+      alert(`✅ Stock crédité : +${fmtKg(kgAchat)} kg de « ${nom} » ajoutés.\n\nL'entrée n'était effectivement pas passée — c'est réparé.`);
+    } else {
+      alert('⚠️ Aucune entrée de stock trouvée pour cet achat, et rien n\'a pu être ajouté. Vérifie que le bon a bien des lignes (ingrédient + quantité). Envoie-moi une capture du détail 👁 du bon.');
+    }
+  }catch(e){ alert('⚠️ Échec crédit stock : '+(e.message||e)+'\n\nCopie ce message — c\'est la cause exacte (droits/RLS/contrainte).'); }
 }
 
 // ── ANNULER UN BON ────────────────────────────────
