@@ -704,13 +704,18 @@ async function recrediterAchat(id){
     try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(_){}
 
     if(nAvant>0 && nApres===nAvant){
-      // Rien ajouté : l'entrée existait déjà → le stock à 0 vient d'une CONSOMMATION.
+      // Rien ajouté : l'entrée existait déjà.
       let net=null;
       if(nom){
         const{data:all}=await SB.from('gp_stock_mp').select('type,quantite').eq('admin_id',GP_ADMIN_ID).eq('ingredient_nom',nom);
         net=(all||[]).reduce((s,x)=>s+(x.type==='entree'?1:-1)*Number(x.quantite||0),0);
       }
-      alert(`ℹ️ L'entrée de cet achat EXISTE déjà (${fmtKg(kgAchat)} kg reçus).\n\nStock net actuel de « ${nom} » : ${net!=null?fmtKg(net)+' kg':'—'}.\n\n➡️ Le stock à 0 ne vient PAS d'un crédit manquant, mais d'une CONSOMMATION en production (le maïs/concentré a déjà été utilisé dans un lot). Ce n'est donc pas un bug.`);
+      if(net!=null && net>0.01){
+        // Stock présent sous ce libellé → si l'écran affiche 0 pour un libellé proche = DOUBLON de nom.
+        alert(`✅ Le stock N'EST PAS perdu.\n\n« ${nom} » a un stock net de ${fmtKg(net)} kg (dont ${fmtKg(kgAchat)} kg de ce bon).\n\n⚠️ Si « Niveaux actuels » affiche 0 pour un libellé quasi identique, c'est un DOUBLON d'écriture (majuscule/espace/accent). Le stock est bien là, juste sous une autre orthographe. → À fusionner (l'admin a le SQL).`);
+      } else {
+        alert(`ℹ️ L'entrée de cet achat existe (${fmtKg(kgAchat)} kg) mais le stock net de « ${nom} » est ${net!=null?fmtKg(net)+' kg':'0'}.\n\n➡️ Le 0 vient d'une CONSOMMATION en production, pas d'un crédit manquant. Ce n'est pas un bug.`);
+      }
     } else if(nApres>nAvant){
       alert(`✅ Stock crédité : +${fmtKg(kgAchat)} kg de « ${nom} » ajoutés.\n\nL'entrée n'était effectivement pas passée — c'est réparé.`);
     } else {
