@@ -142,8 +142,9 @@ function actionsAchat(a){
   if(a.statut!=='annule' && gereMP){
     btns+=`<button class="btn btn-red btn-sm" onclick="annulerAchat('${a.id}')" title="Annuler le bon">❌</button>`;
   }
-  // Re-créditer le stock (admin) — répare un achat dont l'entrée n'est pas passée. Idempotent.
-  if((GP_ROLE==='admin'||GP_EST_GERANT) && a.statut!=='annule' && a.statut!=='brouillon'){
+  // Re-créditer le stock — répare un achat dont l'entrée n'est pas passée. Idempotent.
+  // Visible pour les rôles qui gèrent les MP (mêmes que la réception).
+  if((['admin','secretaire','logistique','daf'].includes(GP_ROLE)||GP_EST_GERANT) && a.statut!=='annule' && a.statut!=='brouillon'){
     btns+=`<button class="btn btn-out btn-sm" style="border-color:var(--g6);color:var(--g6)" onclick="recrediterAchat('${a.id}')" title="Re-créditer le stock si l'entrée n'est pas passée">🔄 Stock</button>`;
   }
   // Supprimer définitivement — n'importe quel bon, admin seul
@@ -685,7 +686,7 @@ async function validerAchatDAF(achatId,approuve){
 // Re-créditer le stock d'un achat (admin) — idempotent : répare un achat dont l'entrée
 // n'est pas passée (crédit échoué). Sûr : si déjà crédité, crediterStockDepuisAchat ne double pas.
 async function recrediterAchat(id){
-  if(GP_ROLE!=='admin' && !GP_EST_GERANT){ notify('Réservé à l\'admin','r'); return; }
+  if(!(['admin','secretaire','logistique','daf'].includes(GP_ROLE)||GP_EST_GERANT)){ notify('Action non autorisée pour votre rôle','r'); return; }
   try{
     await crediterStockDepuisAchat(id);
     notify('Stock (re)crédité ✓','gold');
