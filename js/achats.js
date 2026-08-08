@@ -142,6 +142,10 @@ function actionsAchat(a){
   if(a.statut!=='annule' && gereMP){
     btns+=`<button class="btn btn-red btn-sm" onclick="annulerAchat('${a.id}')" title="Annuler le bon">❌</button>`;
   }
+  // Re-créditer le stock (admin) — répare un achat dont l'entrée n'est pas passée. Idempotent.
+  if((GP_ROLE==='admin'||GP_EST_GERANT) && a.statut!=='annule' && a.statut!=='brouillon'){
+    btns+=`<button class="btn btn-out btn-sm" style="border-color:var(--g6);color:var(--g6)" onclick="recrediterAchat('${a.id}')" title="Re-créditer le stock si l'entrée n'est pas passée">🔄 Stock</button>`;
+  }
   // Supprimer définitivement — n'importe quel bon, admin seul
   if(GP_ROLE==='admin'){
     btns+=`<button class="btn btn-red btn-sm" onclick="supprimerAchat('${a.id}')" title="Supprimer définitivement">🗑</button>`;
@@ -627,23 +631,29 @@ async function confirmerReception(){
     recu_par:GP_USER.id,recu_par_nom:GP_USER.email
   }).eq('id',achatId);
 
-  // 🔓 Plus de validation DAF bloquante : la réception crédite DIRECTEMENT le stock
+  // 🔓 La réception crédite DIRECTEMENT le stock — AVEC remontée d'erreur visible.
   window._mpAjustCredit=false;
-  await crediterStockDepuisAchat(achatId);
+  let _creditOk=true, _creditErr='';
+  try{ await crediterStockDepuisAchat(achatId); }
+  catch(e){ _creditOk=false; _creditErr=(e.message||e); }
   document.getElementById('modal-reception').style.display='none';
 
   // 🔔 Notifier l'admin (push + WhatsApp) — il garde le contrôle a posteriori
   const{data:a}=await SB.from('gp_achats').select('fournisseur_nom,ref,montant_total').eq('id',achatId).maybeSingle();
   const qui=GP_USER?.email?.split('@')[0]||'secrétaire';
   const ecartTxt=aDesEcarts?' ⚠️ avec écarts':'';
+  const stockTxt=_creditOk?'Stock crédité automatiquement.':('⚠️ STOCK NON CRÉDITÉ ('+_creditErr+') — à re-créditer (bouton 🔄 Stock).');
   notifierAdmin(
-    '📦 Réception MP'+ecartTxt,
+    '📦 Réception MP'+ecartTxt+(_creditOk?'':' — STOCK NON CRÉDITÉ'),
     `${a?.fournisseur_nom||'Fournisseur'} · ${fmt(a?.montant_total||0)} F — reçu par ${qui}${ecartTxt}`,
-    `📦 *Réception MP*${ecartTxt}\nFournisseur : ${a?.fournisseur_nom||'—'}\nRéf : ${a?.ref||'—'}\nMontant : ${fmt(a?.montant_total||0)} F\nReçu par : ${qui}\nStock crédité automatiquement.\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
+    `📦 *Réception MP*${ecartTxt}\nFournisseur : ${a?.fournisseur_nom||'—'}\nRéf : ${a?.ref||'—'}\nMontant : ${fmt(a?.montant_total||0)} F\nReçu par : ${qui}\n${stockTxt}\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
     true /* ouvrir WhatsApp admin */
   );
 
-  notify(aDesEcarts?'Réception (avec écarts) — stock crédité ✓':'Réception confirmée — stock crédité ✓','gold');
+  notify(_creditOk
+    ? (aDesEcarts?'Réception (avec écarts) — stock crédité ✓':'Réception confirmée — stock crédité ✓')
+    : ('⚠ Réception enregistrée mais STOCK NON CRÉDITÉ : '+_creditErr),
+    _creditOk?'gold':'r');
   // Rafraîchir seulement les vues présentes (le bouton Ajuster vient de la page Stock,
   // où renderAchats() planterait car ses éléments DOM n'existent pas).
   try{ if(document.getElementById('achats-liste') && typeof renderAchats==='function') await renderAchats(); }catch(e){}
@@ -664,11 +674,24 @@ async function validerAchatDAF(achatId,approuve){
     return;
   }
 
-  // Valider — créditer le stock MP (logique partagée avec la file "à confirmer" de Stock MP)
-  await crediterStockDepuisAchat(achatId);
+  // Valider — créditer le stock MP (erreur remontée clairement, plus de crédit silencieux)
+  try{ await crediterStockDepuisAchat(achatId); }
+  catch(e){ notify('⚠ STOCK NON CRÉDITÉ : '+(e.message||e)+' — clique « 🔄 Stock » (admin) ou vérifie les droits/RLS.','r'); return; }
   notify('Achat validé et stock mis à jour ✓','gold');
   try{ renderAchats(); }catch(e){}
   try{ renderStockNiveaux(); }catch(e){}
+}
+
+// Re-créditer le stock d'un achat (admin) — idempotent : répare un achat dont l'entrée
+// n'est pas passée (crédit échoué). Sûr : si déjà crédité, crediterStockDepuisAchat ne double pas.
+async function recrediterAchat(id){
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){ notify('Réservé à l\'admin','r'); return; }
+  try{
+    await crediterStockDepuisAchat(id);
+    notify('Stock (re)crédité ✓','gold');
+    try{ if(document.getElementById('achats-liste') && typeof renderAchats==='function') await renderAchats(); }catch(_){}
+    try{ if(typeof renderStockNiveaux==='function') await renderStockNiveaux(); }catch(_){}
+  }catch(e){ notify('⚠ Échec crédit stock : '+(e.message||e),'r'); }
 }
 
 // ── ANNULER UN BON ────────────────────────────────
