@@ -260,6 +260,20 @@ async function renderDashboard(){
     return n<(ingr?.seuil_alerte||200);
   });
 
+  // Valeur du stock MP au prix courant. Les libellés sans fiche sont écartés
+  // (gp_stock_mp porte aussi les produits finis partis en distribution) et les
+  // nets négatifs ignorés : un stock négatif est une anomalie de saisie, pas une
+  // dette. Les MP sans prix comptent pour 0 → on affiche le compte pour que le
+  // chiffre ne soit pas pris pour argent comptant.
+  let valeurStockMP=0, mpSansPrix=0;
+  Object.entries(niveaux).forEach(([nom,n])=>{
+    if(!(n>0)) return;
+    const ingr=GP_INGREDIENTS.find(i=>i.nom===nom);
+    if(!ingr) return;
+    const prix=Number(ingr.prix_actuel||0);
+    if(prix>0) valeurStockMP+=n*prix; else mpSansPrix++;
+  });
+
   // ── KPIs SUPPLÉMENTAIRES ─────────────────────────
   // 1. Solde caisse total (somme des soldes de toutes les caisses actives)
   const soldesCaisse = {};
@@ -332,6 +346,8 @@ async function renderDashboard(){
       detteFournisseurs>0?{type:'down',text:`${nbAchatsAvecDette} à payer`}:{type:'up',text:'soldé'},"dashKpiDrill('dette_fourn')")}
     ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock MP',alertes.length,
       alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
+    ${kpi('🌾','green','Valeur stock MP',fmt(Math.round(valeurStockMP)),
+      mpSansPrix>0?{type:'down',text:`${mpSansPrix} MP sans prix`}:{type:'flat',text:'au prix du jour'},"dashKpiDrill('stock_mp')")}
     `:`
     ${kpi('💰','gold','Mon CA ce mois',fmt(caMois),null,"dashKpiDrill('ca')")}
     ${kpi('✓','green','Encaissé',fmt(encaisseMois),caMois>0?{type:'up',text:Math.round(encaisseMois/caMois*100)+' % du CA'}:null,"dashKpiDrill('encaisse')")}
