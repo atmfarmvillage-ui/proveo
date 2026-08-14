@@ -93,14 +93,35 @@ document.addEventListener('click',e=>{
 });
 
 // ── STOCK MP ───────────────────────────────────────
+// Niveaux de stock par MP. Les mouvements sont d'abord rattachés à leur FICHE
+// (ingredient_id, puis nom normalisé) et le total est empilé sous le nom de
+// cette fiche. Empiler sur ingredient_nom brut, comme avant, scindait le stock
+// dès qu'un libellé variait : les entrées partaient sous « Son Cubé » et les
+// sorties sous « Son de blé/cubé », d'où des nets négatifs sur du stock réel.
+// La clé de sortie reste le NOM de la fiche : tous les appelants lisent
+// niveaux[ingredient.nom].
+// Les mouvements sans fiche (produits finis de la distribution, libellés
+// orphelins) gardent leur libellé brut — c'est l'écran MP orphelines qui les
+// traite, pas cette fonction.
 function calcNiveaux(mouvements){
+  const L=GP_INGREDIENTS||[];
+  const parId={}, parNom={};
+  L.forEach(i=>{ parId[i.id]=i.nom; parNom[_normStockMp(i.nom)]=i.nom; });
   const niveaux={};
   (mouvements||[]).forEach(m=>{
-    if(!niveaux[m.ingredient_nom])niveaux[m.ingredient_nom]=0;
-    if(m.type==='entree')niveaux[m.ingredient_nom]+=Number(m.quantite||0);
-    else niveaux[m.ingredient_nom]-=Number(m.quantite||0);
+    const cle = (m.ingredient_id && parId[m.ingredient_id])
+             || parNom[_normStockMp(m.ingredient_nom)]
+             || m.ingredient_nom || '';
+    const q=Number(m.quantite||0);
+    niveaux[cle]=(niveaux[cle]||0)+(m.type==='entree'?q:-q);
   });
   return niveaux;
+}
+function _normStockMp(s){
+  return (typeof normalizeMpNom==='function')
+    ? normalizeMpNom(s)
+    : (s||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu,'')
+        .replace(/\s+/g,' ').trim().toLowerCase();
 }
 // Charge TOUS les mouvements de stock MP (Supabase plafonne à 1000 lignes par requête).
 // Sans pagination, les nets sont faux (entrées manquantes → stocks à 0 ou négatifs).
