@@ -13,6 +13,7 @@ let _STRAT_MARGE = [];      // rentabilité par formule (pour l'IA)
 let _STRAT_HAS_INCLUS = true; // colonne `inclus` présente en base ?
 let _STRAT_COMM = false;    // déduire la commission PDV du coût de revient
 let _STRAT_PICKER = false;  // panneau déroulant de sélection des formules ouvert ?
+let _STRAT_PERSIST_MSG = null; // avertissement si l'enregistrement en base échoue
 const _STRAT_OPEN_F  = new Set(); // formules dépliées (voir leurs MP)
 const _STRAT_OPEN_MP = new Set(); // MP dépliées (voir les formules qui la consomment)
 
@@ -352,7 +353,14 @@ function _stratPickerHtml(groupes){
       }).join('')}
     </div>`;
 
-  return `<div style="position:relative;margin-bottom:12px">
+  const alerte = _STRAT_PERSIST_MSG
+    ? `<div style="background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:var(--red)">
+         ⚠ ${_STRAT_PERSIST_MSG}<br>
+         <span style="color:var(--textm)">La sélection reste active tant que tu ne quittes pas la page, mais elle repartira à zéro au prochain chargement.</span>
+       </div>`
+    : '';
+
+  return `<div style="position:relative;margin-bottom:12px">${alerte}
     <button id="strat-picker-btn" class="btn ${nbInc<nbTot?'btn-out':'btn-g'} btn-sm" onclick="stratTogglePicker()"
       style="font-weight:700">📋 Formules incluses : ${nbInc} / ${nbTot} ${_STRAT_PICKER?'▴':'▾'}</button>
     ${nbInc<nbTot?`<span style="font-size:11px;color:var(--gold);margin-left:8px">${nbTot-nbInc} formule${nbTot-nbInc>1?'s':''} exclue${nbTot-nbInc>1?'s':''} du calcul</span>`:''}
@@ -657,10 +665,25 @@ async function _stratUpsert(rows){
   const payload = _STRAT_HAS_INCLUS ? rows : rows.map(r=>{ const {inclus, ...rest} = r; return rest; });
   const { error } = await SB.from('gp_strategie_mp').upsert(payload, { onConflict:'admin_id,formule_nom' });
   if(error && _STRAT_HAS_INCLUS && /inclus/i.test(error.message||'')){
+    // La colonne n'existe pas encore : on sauve au moins mode et tonnes, mais on
+    // le DIT. En silence, la sélection semblait fonctionner puis se réinitialisait
+    // au retour sur la page — impossible à comprendre pour l'utilisateur.
     _STRAT_HAS_INCLUS = false;
+    _stratAvertirPersist('La sélection des formules n\'est pas mémorisée : la colonne <b>inclus</b> manque dans la table <b>gp_strategie_mp</b>. Le mode et les tonnes, eux, sont bien enregistrés.');
     return _stratUpsert(rows);
   }
-  if(error) console.warn('strat persist', error);
+  if(error){
+    console.warn('strat persist', error);
+    _stratAvertirPersist('Les paramètres n\'ont pas pu être enregistrés : ' + (error.message||error));
+  }
+}
+
+// Affiche l'avertissement une seule fois, sans boucler sur le rendu.
+function _stratAvertirPersist(msg){
+  if(_STRAT_PERSIST_MSG === msg) return;
+  _STRAT_PERSIST_MSG = msg;
+  if(typeof notify === 'function') notify('⚠ Sélection non mémorisée — voir le bandeau','red');
+  _stratRenderUI();
 }
 
 async function _stratPersist(formule){
