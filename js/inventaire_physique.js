@@ -224,16 +224,25 @@ async function validerInventaire(invId){
     const confirm2=confirm(`Cet inventaire a ${avecEcarts.length} écart(s).\nValider va ajuster le stock automatiquement.\n\nConfirmer ?`);
     if(!confirm2)return;
 
-    // Créer des mouvements d'ajustement
-    const ajustements=avecEcarts.map(l=>({
-      admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
-      type:'ajustement',date:today(),
-      ingredient_nom:l.ingredient_nom,
-      quantite:Math.abs(l.ecart),
-      prix_unit:l.prix_unitaire,
-      ref:'Inventaire physique '+inv.mois,
-      note:l.ecart>0?'Excédent inventaire':'Manque inventaire'
-    }));
+    // Créer des mouvements d'ajustement.
+    // Le type porte le SENS de l'écart : la quantité est stockée en valeur
+    // absolue et tout ce qui n'est pas 'entree' est décompté du stock partout
+    // dans l'app. Avec l'ancien type 'ajustement' unique, un EXCÉDENT était
+    // retranché comme une perte — l'écart était donc doublé au lieu d'être
+    // corrigé.
+    const ajustements=avecEcarts.map(l=>{
+      const fiche=(GP_INGREDIENTS||[]).find(i=>i.nom===l.ingredient_nom)||null;
+      return{
+        admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
+        type:l.ecart>0?'entree':'sortie',date:today(),
+        ingredient_id:fiche?.id||null,
+        ingredient_nom:fiche?.nom||l.ingredient_nom,
+        quantite:Math.abs(l.ecart),
+        prix_unit:l.prix_unitaire,
+        ref:'Inventaire physique '+inv.mois,
+        note:l.ecart>0?'Excédent inventaire':'Manque inventaire'
+      };
+    });
     await SB.from('gp_stock_mp').insert(ajustements);
   }
 

@@ -15,11 +15,9 @@ async function renderMatieresPremieresPage(){
 
   // Calcul alertes depuis stock
   const S=await _fetchAllStockMp();
-  const niveaux={};
-  (S||[]).forEach(m=>{
-    const q=Number(m.quantite||0);
-    niveaux[m.ingredient_nom]=(niveaux[m.ingredient_nom]||0)+(m.type==='entree'?q:-q);
-  });
+  // calcNiveaux rattache chaque mouvement à sa fiche (id puis nom normalisé) :
+  // l'agrégation locale par ingredient_nom brut affichait un stock scindé.
+  const niveaux=(typeof calcNiveaux==='function')?calcNiveaux(S||[]):{};
   const enAlerte=GP_INGREDIENTS.filter(i=>{
     const qte=niveaux[i.nom]||0;
     return qte<(i.seuil_alerte||200);
