@@ -148,21 +148,26 @@ function _stratRenderUI(){
     const manq = Math.max(0, ant - stk);
     const ingr = (typeof GP_INGREDIENTS !== 'undefined' ? GP_INGREDIENTS : []).find(i=>i.nom===nom);
     const prix = Number(ingr?.prix_actuel || 0);
-    return { nom, ant, stk, manq, cout: manq*prix };
+    return { nom, ant, stk, manq, prix, coutAnt: ant*prix, cout: manq*prix };
   }).sort((a,b)=> b.manq - a.manq);
 
   const totalManq = rows.filter(r=>r.manq>0).length;
   const totalCout = rows.reduce((s,r)=>s + r.cout, 0);
+  const totalCoutAnt = rows.reduce((s,r)=>s + r.coutAnt, 0);
+  const totalAntKg = rows.reduce((s,r)=>s + r.ant, 0);
+  const totalStkKg = rows.reduce((s,r)=>s + r.stk, 0);
+  const totalManqKg = rows.reduce((s,r)=>s + r.manq, 0);
 
   // Mémoriser pour le conseiller IA
   _STRAT_ROWS = rows;
-  _STRAT_TOTAUX = { nbManq: totalManq, cout: Math.round(totalCout) };
+  _STRAT_TOTAUX = { nbManq: totalManq, cout: Math.round(totalCout), coutAnt: Math.round(totalCoutAnt) };
   _stratRenderIA();
 
   const kpis = document.getElementById('strat-kpis');
   if(kpis) kpis.innerHTML = `
     <div class="econo-box"><div class="econo-val">${rows.length}</div><div class="econo-lbl">Matières concernées</div></div>
     <div class="econo-box"><div class="econo-val" style="color:${totalManq>0?'var(--red)':'var(--green)'}">${totalManq}</div><div class="econo-lbl">En manque</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(Math.round(totalCoutAnt))}</div><div class="econo-lbl">Coût total anticipé (F)</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(Math.round(totalCout))}</div><div class="econo-lbl">Budget achat (F)</div></div>`;
 
   const res = document.getElementById('strat-result');
@@ -170,18 +175,25 @@ function _stratRenderUI(){
     res.innerHTML = rows.length ? `<table class="tbl"><thead><tr>
       <th>Matière première</th>
       <th class="num">Total anticipé</th>
+      <th class="num">Coût total anticipé</th>
       <th class="num">Total stock</th>
       <th class="num">Manquant</th>
       <th class="num">Coût estimé</th>
     </tr></thead><tbody>${rows.map(r=>`<tr>
       <td style="font-weight:600">${r.nom}</td>
       <td class="num">${fmt(Math.round(r.ant))} kg</td>
+      <td class="num" style="color:var(--g6)">${r.coutAnt>0?fmt(Math.round(r.coutAnt))+' F':'—'}</td>
       <td class="num">${fmt(Math.round(r.stk))} kg</td>
       <td class="num" style="font-weight:700;color:${r.manq>0?'var(--red)':'var(--green)'}">${r.manq>0?fmt(Math.round(r.manq))+' kg':'✅ 0'}</td>
       <td class="num" style="color:var(--gold)">${r.manq>0?fmt(Math.round(r.cout))+' F':'—'}</td>
     </tr>`).join('')}</tbody>
-    <tfoot><tr style="font-weight:700;border-top:2px solid var(--border2)">
-      <td colspan="4" class="num">Budget d'achat total estimé</td>
+    <tfoot>
+    <tr style="font-weight:700;border-top:2px solid var(--border2)">
+      <td>TOTAL</td>
+      <td class="num">${fmt(Math.round(totalAntKg))} kg</td>
+      <td class="num" style="color:var(--g6)">${fmt(Math.round(totalCoutAnt))} F</td>
+      <td class="num">${fmt(Math.round(totalStkKg))} kg</td>
+      <td class="num" style="color:${totalManqKg>0?'var(--red)':'var(--green)'}">${fmt(Math.round(totalManqKg))} kg</td>
       <td class="num" style="color:var(--gold)">${fmt(Math.round(totalCout))} F</td>
     </tr></tfoot></table>`
     : '<div class="card" style="text-align:center;color:var(--textm);font-size:13px;padding:20px">Configure tes paramètres ci-dessus (tonnes manuelles ou base mensuelle) pour voir le besoin en matières premières.</div>';
@@ -218,13 +230,14 @@ async function analyserStrategieMpIA(tier){
   out.innerHTML = `<span style="color:var(--textm)">⏳ Analyse des achats (${tier==='eco'?'Pro · DeepSeek':'Premium · Claude'})…</span>`;
 
   const lignes = rows.map(r=>
-    `- ${r.nom} : besoin ${fmt(Math.round(r.ant))} kg, stock ${fmt(Math.round(r.stk))} kg, manquant ${r.manq>0?fmt(Math.round(r.manq))+' kg':'0 (OK)'}, coût estimé ${r.manq>0?fmt(Math.round(r.cout))+' F':'0'}`
+    `- ${r.nom} : besoin ${fmt(Math.round(r.ant))} kg (valeur totale ${fmt(Math.round(r.coutAnt))} F), stock ${fmt(Math.round(r.stk))} kg, manquant ${r.manq>0?fmt(Math.round(r.manq))+' kg':'0 (OK)'}, coût estimé ${r.manq>0?fmt(Math.round(r.cout))+' F':'0'}`
   ).join('\n');
 
   const q = `Tu es le responsable des achats matières premières de la provenderie SADARI (Togo). Voici le besoin RÉEL en MP pour la production anticipée (chiffres calculés) :
 ${lignes}
 
-Budget d'achat total estimé : ${fmt(_STRAT_TOTAUX.cout||0)} F · ${_STRAT_TOTAUX.nbManq||0} matières en manque.
+Coût total des MP anticipées (besoin complet, stock inclus) : ${fmt(_STRAT_TOTAUX.coutAnt||0)} F.
+Budget d'achat total estimé (manquant seulement) : ${fmt(_STRAT_TOTAUX.cout||0)} F · ${_STRAT_TOTAUX.nbManq||0} matières en manque.
 
 Donne un plan d'achat CONCRET et chiffré :
 1) Quelles MP acheter EN PRIORITÉ (risque de rupture / impact production) et dans quel ordre.
