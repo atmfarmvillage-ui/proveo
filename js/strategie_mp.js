@@ -12,6 +12,7 @@ let _STRAT_TOTAUX = {};     // { nbManq, cout, coutAnt, marge, taux }
 let _STRAT_MARGE = [];      // rentabilité par formule (pour l'IA)
 let _STRAT_HAS_INCLUS = true; // colonne `inclus` présente en base ?
 let _STRAT_COMM = false;    // déduire la commission PDV du coût de revient
+let _STRAT_PICKER = false;  // panneau déroulant de sélection des formules ouvert ?
 const _STRAT_OPEN_F  = new Set(); // formules dépliées (voir leurs MP)
 const _STRAT_OPEN_MP = new Set(); // MP dépliées (voir les formules qui la consomment)
 
@@ -160,7 +161,8 @@ function _stratRenderUI(){
   if(paramsEl){
     paramsEl.innerHTML = `<div style="font-size:11px;color:var(--textm);margin-bottom:10px">
       📅 Mois précédent = <b>${_STRAT.moisPrecLabel}</b> · Mois en cours = <b>${_STRAT.moisCourantLabel}</b>
-      · <span style="color:var(--g6)">Décoche une formule pour la sortir du calcul · clique son nom pour voir ses MP</span></div>` +
+      · <span style="color:var(--g6)">Clique le nom d'une formule pour voir ses MP</span></div>`
+      + _stratPickerHtml(groupes) +
       Object.keys(groupes).sort().map(esp=>{
         const espEsc = esp.replace(/'/g,"\\'");
         const rows = groupes[esp].sort((a,b)=>a.nom.localeCompare(b.nom)).map(f=>{
@@ -171,10 +173,6 @@ function _stratRenderUI(){
           const open = _STRAT_OPEN_F.has(f.nom);
           const sel = (v)=> p.mode===v ? 'selected' : '';
           return `<tr style="opacity:${inc?1:.45}">
-            <td style="width:26px">
-              <input type="checkbox" ${inc?'checked':''} onchange="stratSetInclus('${nEsc}',this.checked)"
-                title="Inclure dans le calcul" style="width:16px;height:16px;accent-color:var(--g6);cursor:pointer">
-            </td>
             <td style="font-size:12px">
               <span onclick="stratToggleFormule('${nEsc}')" style="cursor:pointer;user-select:none"
                 title="Voir les matières premières de cette formule">${open?'▾':'▸'} ${f.nom}</span>
@@ -201,12 +199,10 @@ function _stratRenderUI(){
               <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','mois_precedent')">Tout : mois préc.</button>
               <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','mois_courant')">Tout : mois en cours</button>
               <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','manuel')">Tout : manuel</button>
-              <button class="btn btn-out btn-sm" onclick="stratQuickInclus('${espEsc}',true)" title="Tout inclure">☑ Tout</button>
-              <button class="btn btn-out btn-sm" onclick="stratQuickInclus('${espEsc}',false)" title="Tout exclure">☐ Aucun</button>
             </span>
           </div>
           <table class="tbl" style="font-size:12px"><thead><tr>
-            <th></th><th>Formule</th><th>Mode</th><th class="num">Tonnes</th><th class="num">Anticipé</th>
+            <th>Formule</th><th>Mode</th><th class="num">Tonnes</th><th class="num">Anticipé</th>
           </tr></thead><tbody>${rows}</tbody></table>
         </div>`;
       }).join('');
@@ -314,6 +310,72 @@ function _stratRenderUI(){
   _stratRenderMarge(marge, caTot, margeTot, taux);
 }
 
+// ── SÉLECTEUR DÉROULANT DES FORMULES ──────────────
+// La sélection est la première action de l'écran : elle vit dans un seul
+// endroit compact plutôt qu'en cases dispersées sur six tableaux d'espèces.
+function _stratPickerHtml(groupes){
+  const toutes = FORMULES_SADARI || [];
+  const nbTot = toutes.length;
+  const nbInc = toutes.filter(f=>_stratInclus(f.nom)).length;
+
+  const panneau = !_STRAT_PICKER ? '' : `
+    <div id="strat-picker" style="position:absolute;z-index:40;top:calc(100% + 6px);left:0;min-width:290px;max-width:min(420px,92vw);max-height:60vh;overflow-y:auto;background:var(--card);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:10px">
+      <div style="display:flex;gap:6px;margin-bottom:8px;position:sticky;top:-10px;background:var(--card);padding:2px 0 6px">
+        <button class="btn btn-out btn-sm" onclick="stratToutInclus(true)">☑ Tout sélectionner</button>
+        <button class="btn btn-out btn-sm" onclick="stratToutInclus(false)">☐ Tout désélectionner</button>
+      </div>
+      ${Object.keys(groupes).sort().map(esp=>{
+        const espEsc = esp.replace(/'/g,"\\'");
+        const fs = groupes[esp].slice().sort((a,b)=>a.nom.localeCompare(b.nom));
+        const n = fs.filter(f=>_stratInclus(f.nom)).length;
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:3px">
+            <span style="font-size:11px;font-weight:700;color:var(--g6);text-transform:capitalize">${esp} <span style="color:var(--textm);font-weight:400">${n}/${fs.length}</span></span>
+            <span style="display:flex;gap:4px">
+              <button class="btn btn-out btn-sm" style="padding:1px 6px;font-size:9px" onclick="stratQuickInclus('${espEsc}',true)">tout</button>
+              <button class="btn btn-out btn-sm" style="padding:1px 6px;font-size:9px" onclick="stratQuickInclus('${espEsc}',false)">aucun</button>
+            </span>
+          </div>
+          ${fs.map(f=>{
+            const nEsc = f.nom.replace(/'/g,"\\'");
+            const inc = _stratInclus(f.nom);
+            const kg = _stratAnticipeKg(f);
+            return `<label style="display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:11px;${inc?'':'opacity:.5'}"
+              onmouseover="this.style.background='var(--card2)'" onmouseout="this.style.background='transparent'">
+              <input type="checkbox" ${inc?'checked':''} onchange="stratSetInclus('${nEsc}',this.checked)"
+                style="width:15px;height:15px;accent-color:var(--g6);cursor:pointer;flex:none">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nom}</span>
+              <span style="color:var(--textm);font-family:'DM Mono',monospace;flex:none">${fmt(Math.round(kg))} kg</span>
+            </label>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  return `<div style="position:relative;margin-bottom:12px">
+    <button id="strat-picker-btn" class="btn ${nbInc<nbTot?'btn-out':'btn-g'} btn-sm" onclick="stratTogglePicker()"
+      style="font-weight:700">📋 Formules incluses : ${nbInc} / ${nbTot} ${_STRAT_PICKER?'▴':'▾'}</button>
+    ${nbInc<nbTot?`<span style="font-size:11px;color:var(--gold);margin-left:8px">${nbTot-nbInc} formule${nbTot-nbInc>1?'s':''} exclue${nbTot-nbInc>1?'s':''} du calcul</span>`:''}
+    ${panneau}
+  </div>`;
+}
+
+function stratTogglePicker(){
+  _STRAT_PICKER = !_STRAT_PICKER;
+  _stratRenderUI();
+}
+// Fermeture au clic à côté (le panneau est recréé à chaque rendu, donc on écoute
+// au niveau du document plutôt que sur l'élément).
+document.addEventListener('click', function(e){
+  if(!_STRAT_PICKER) return;
+  const p = document.getElementById('strat-picker');
+  const b = document.getElementById('strat-picker-btn');
+  if(p && p.contains(e.target)) return;
+  if(b && b.contains(e.target)) return;
+  _STRAT_PICKER = false;
+  _stratRenderUI();
+});
+
 // Bandeau d'alerte : prix manquants, MP inconnues, stocks négatifs.
 // Sans ça, un coût sous-estimé passe pour une bonne marge.
 function _stratAlerteDonnees(rows, nbRetenues){
@@ -336,7 +398,7 @@ function _stratAlerteDonnees(rows, nbRetenues){
 // Détail déplié : les MP d'une formule, avec leur poids réel dans le tonnage anticipé.
 function _stratDetailFormule(f, kg){
   const ings = (f.ingredients||[]).slice().sort((a,b)=>Number(b.pct||0)-Number(a.pct||0));
-  if(!ings.length) return `<tr><td colspan="5" style="font-size:11px;color:var(--textm);padding:6px 10px">Aucune MP dans cette formule.</td></tr>`;
+  if(!ings.length) return `<tr><td colspan="4" style="font-size:11px;color:var(--textm);padding:6px 10px">Aucune MP dans cette formule.</td></tr>`;
   const c = _stratCoutsFormule(f);
   const lignes = ings.map(ing=>{
     const mp   = _stratMp(ing);
@@ -352,7 +414,7 @@ function _stratDetailFormule(f, kg){
       <td class="num" style="color:var(--g6)">${prix>0?fmt(Math.round(q*prix))+' F':'—'}</td>
     </tr>`;
   }).join('');
-  return `<tr><td colspan="5" style="padding:0 0 8px 0;background:var(--card2)">
+  return `<tr><td colspan="4" style="padding:0 0 8px 0;background:var(--card2)">
     <table class="tbl" style="font-size:11px;margin:0"><thead><tr>
       <th style="padding-left:24px">Matière première</th><th class="num">%</th>
       <th class="num">kg anticipés</th><th class="num">Prix</th><th class="num">Coût</th>
@@ -648,6 +710,12 @@ async function stratQuickEspece(espece, mode){
 }
 async function stratQuickInclus(espece, inclus){
   const cibles = FORMULES_SADARI.filter(f=>(f.espece||'autre')===espece);
+  cibles.forEach(f=>{ _stratParam(f.nom).inclus = !!inclus; });
+  _stratRenderUI();
+  await _stratQuickPersist(cibles);
+}
+async function stratToutInclus(inclus){
+  const cibles = FORMULES_SADARI.slice();
   cibles.forEach(f=>{ _stratParam(f.nom).inclus = !!inclus; });
   _stratRenderUI();
   await _stratQuickPersist(cibles);
