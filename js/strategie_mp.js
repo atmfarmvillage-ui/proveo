@@ -119,9 +119,10 @@ function _stratRenderUI(){
         return `<div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
             <span style="font-size:12px;font-weight:700;color:var(--g6);text-transform:capitalize">${esp}</span>
-            <span style="display:flex;gap:6px">
+            <span style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','mois_precedent')">Tout : mois préc.</button>
               <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','mois_courant')">Tout : mois en cours</button>
+              <button class="btn btn-out btn-sm" onclick="stratQuickEspece('${espEsc}','manuel')">Tout : manuel</button>
             </span>
           </div>
           <table class="tbl" style="font-size:12px"><thead><tr>
