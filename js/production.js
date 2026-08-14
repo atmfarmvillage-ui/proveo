@@ -57,13 +57,31 @@ async function loadStockMPLot(){
   }catch(e){}
 }
 
-// Retrouve une MP de GP_INGREDIENTS à partir d'un nom de formule.
+// Retrouve la fiche MP d'un ingrédient de formule ({id, nom}) : par id d'abord —
+// fiable même si la fiche a été renommée — puis par nom normalisé.
+// AUCUNE correspondance approximative : l'ancienne version cherchait sur les
+// 6 premiers caractères et imputait « Son de blé/cubé » à la première fiche
+// commençant par « son de » dans l'ordre alphabétique. Des sorties de production
+// sont ainsi parties sur la mauvaise MP pendant des mois. Mieux vaut ne rien
+// trouver et le dire que deviner faux.
+function trouverIngr(ing){
+  const L=GP_INGREDIENTS||[];
+  if(ing&&ing.id){
+    const byId=L.find(i=>i.id===ing.id);
+    if(byId)return byId;
+  }
+  const n=_normMp(ing&&ing.nom);
+  if(!n)return null;
+  return L.find(i=>_normMp(i.nom)===n)||null;
+}
+function _normMp(s){
+  return (typeof normalizeMpNom==='function')
+    ? normalizeMpNom(s)
+    : (s||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/\s+/g,' ').trim().toLowerCase();
+}
+// Conservé pour les appelants qui n'ont que le nom (marketing.js).
 function trouverIngrParNom(nom){
-  if(!nom)return null;
-  const n=nom.toLowerCase();
-  return (GP_INGREDIENTS||[]).find(i=>i.nom.toLowerCase()===n)
-      || (GP_INGREDIENTS||[]).find(i=>i.nom.toLowerCase().includes(n.slice(0,6)))
-      || null;
+  return trouverIngr({nom});
 }
 
 // (Re)construit la composition du lot depuis la formule × quantité à produire.
@@ -74,10 +92,13 @@ function rebuildLotCompo(){
   LOT_COMPO=[];
   if(f&&qte>0&&Array.isArray(f.ingredients)){
     f.ingredients.forEach(ing=>{
-      const ingData=trouverIngrParNom(ing.nom);
+      const ingData=trouverIngr(ing);   // id d'abord, puis nom normalisé
       LOT_COMPO.push({
         id: ingData?.id||null,
-        nom: ing.nom,
+        // Nom de la FICHE quand elle est trouvée : c'est elle qui sera débitée.
+        // Garder le libellé de la formule ferait diverger stock et composition.
+        nom: ingData?.nom || ing.nom,
+        nomFormule: ing.nom,
         kg: Math.round((Number(ing.pct||0)/100)*qte*100)/100,
         prix: ingData?.prix_actuel||0
       });
@@ -98,14 +119,18 @@ function renderLotMP(){
   if(!wrap||!list)return;
   if(!LOT_COMPO.length){wrap.style.display='none';return;}
   wrap.style.display='block';
-  let nbRupture=0,totalKg=0;
+  let nbRupture=0,totalKg=0,nbOrphelines=0;
   list.innerHTML=LOT_COMPO.map((c,i)=>{
     const dispo=c.id?(LOT_STOCK_MP[c.id]||0):null;
     const manque=dispo!=null && Number(c.kg||0)>dispo+0.001;
     if(manque)nbRupture++;
     totalKg+=Number(c.kg||0);
-    const dispoTxt=dispo==null
-      ? '<span style="color:var(--textm)">stock inconnu</span>'
+    // MP non résolue = aucune fiche : elle ne sera PAS débitée du stock.
+    // Silencieux avant, ça laissait produire sans consommer.
+    const orpheline=!c.id;
+    if(orpheline)nbOrphelines++;
+    const dispoTxt=orpheline
+      ? `<span style="color:var(--red);font-weight:700">⚠ aucune fiche MP${c.nomFormule&&c.nomFormule!==c.nom?' pour « '+c.nomFormule+' »':''} — non déduite du stock</span>`
       : `<span style="color:${manque?'var(--red)':'var(--green)'};font-weight:${manque?'700':'500'}">${fmtKg(dispo)} kg en stock</span>`;
     return `<div style="display:grid;grid-template-columns:1fr 84px 28px;gap:6px;align-items:center;padding:5px 7px;background:${manque?'rgba(239,68,68,.08)':'var(--card2)'};border:1px solid ${manque?'rgba(239,68,68,.4)':'var(--border)'};border-radius:6px;margin-bottom:4px">
       <div style="min-width:0">
@@ -119,7 +144,10 @@ function renderLotMP(){
   }).join('')+`<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--textm);padding:3px 7px 0">
     <span>Total composition</span><span style="font-weight:700">${fmtKg(totalKg)} kg</span></div>`;
   if(rupt){
-    if(nbRupture>0){
+    if(nbOrphelines>0){
+      rupt.style.display='block';
+      rupt.textContent=`⛔ ${nbOrphelines} matière(s) première(s) sans fiche — corrigez la composition de la formule (Formules & Prix) ou créez la fiche MP. Le lot ne peut pas être enregistré : ces MP ne seraient pas déduites du stock.`;
+    }else if(nbRupture>0){
       rupt.style.display='block';
       rupt.textContent=`⛔ ${nbRupture} matière(s) première(s) en rupture — ajustez la composition avant d'enregistrer le lot.`;
     }else rupt.style.display='none';
@@ -162,7 +190,7 @@ function filtrerMPLot(){
 
 function selectionnerMPLot(id,nom){
   const ingData=(GP_INGREDIENTS||[]).find(x=>x.id===id);
-  LOT_COMPO.push({id, nom, kg:0, prix:ingData?.prix_actuel||0});
+  LOT_COMPO.push({id, nom:ingData?.nom||nom, kg:0, prix:ingData?.prix_actuel||0});
   const s=document.getElementById('lot_mp_search'); if(s)s.value='';
   const r=document.getElementById('lot_mp_results'); if(r)r.style.display='none';
   renderLotMP();
@@ -335,10 +363,18 @@ async function saveLot(){
   err.textContent='Enregistrement...';
   let coutMP=0;const mpSorties=[];
   LOT_COMPO.forEach(c=>{
-    const ingData=(GP_INGREDIENTS||[]).find(i=>i.id===c.id)||trouverIngrParNom(c.nom);
+    const ingData=trouverIngr(c);
     coutMP+=Number(c.kg||0)*(ingData?.prix_actuel||c.prix||0);
     mpSorties.push({nom:c.nom,kg:Number(c.kg||0),ingrData:ingData});
   });
+  // Refus explicite : une MP sans fiche ne serait pas débitée du stock et le lot
+  // paraîtrait produit sans consommation. Mieux vaut bloquer que fausser le stock.
+  const _sansFiche=mpSorties.filter(s=>!s.ingrData).map(s=>s.nom);
+  if(_sansFiche.length){
+    err.textContent='⛔ Aucune fiche MP pour : '+_sansFiche.join(', ')
+      +'. Corrigez la composition de la formule ou créez ces matières premières avant d\'enregistrer.';
+    return;
+  }
   const coutTotal=coutMP+mo+emb+(transport||0);
   const prixVente=getPrix(nom);
   const espece=FORMULES_SADARI.find(x=>x.nom===nom)?.espece||'';
@@ -359,11 +395,14 @@ async function saveLot(){
     if(s.ingrData){
       const{error:eS}=await SB.from('gp_stock_mp').insert({
         admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,type:'sortie_production',date,
-        ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,
+        // ingredient_nom = nom de la FICHE, jamais le libellé de la formule :
+        // écrire le libellé créait des mouvements « Son de blé/cubé » rattachés
+        // à la fiche « Son de blé » → stock scindé en deux et net négatif.
+        ingredient_id:s.ingrData.id,ingredient_nom:s.ingrData.nom,quantite:s.kg,
         prix_unit:s.ingrData.prix_actuel,lot_id:lot?.id,ref:'Production '+ref
       });
       if(eS) _mpOk=false;
-      _mpDetails.push({ingredient_id:s.ingrData.id,ingredient_nom:s.nom,quantite:s.kg,prix_unit:s.ingrData.prix_actuel});
+      _mpDetails.push({ingredient_id:s.ingrData.id,ingredient_nom:s.ingrData.nom,quantite:s.kg,prix_unit:s.ingrData.prix_actuel});
       if(typeof verifierAlerteStockMP === 'function') verifierAlerteStockMP(s.ingrData.id);
     }
   }
