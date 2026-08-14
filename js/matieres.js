@@ -31,6 +31,9 @@ async function renderMatieresPremieresPage(){
     <div class="econo-box"><div class="econo-val" style="color:${sansPrix>0?'var(--gold)':'var(--green)'}">${sansPrix}</div><div class="econo-lbl">Sans prix</div></div>
     <div class="econo-box"><div class="econo-val" style="color:${sansSeuil>0?'var(--gold)':'var(--green)'}">${sansSeuil}</div><div class="econo-lbl">Sans seuil</div></div>`;
 
+  // MP utilisées en production/stock sans fiche (bandeau au-dessus de la liste)
+  if(typeof renderMpOrphelines === 'function') renderMpOrphelines();
+
   if(!filtered.length){
     document.getElementById('mp-liste-page').innerHTML='<div style="color:var(--textm);font-size:12px;padding:12px">Aucune matière première trouvée.</div>';
     return;
