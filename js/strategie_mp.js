@@ -17,8 +17,11 @@ const _STRAT_OPEN_MP = new Set(); // MP dépliées (voir les formules qui la con
 
 // Nom normalisé : casse, accents et espaces (dont insécables) ignorés.
 // Sans ça, « Sel (NaCl) » et « Sel (NaCl) » comptent pour deux MP différentes.
+// Délègue à normalizeMpNom (config.js) : une seule règle d'identité pour toute
+// l'app — production, stock et stratégie doivent recoller les mêmes libellés.
 const _RE_DIACRITIQUES = new RegExp('[\\u0300-\\u036f]', 'g'); // accents décomposés
 function _stratNorm(s){
+  if(typeof normalizeMpNom === 'function') return normalizeMpNom(s);
   return String(s||'').normalize('NFD').replace(_RE_DIACRITIQUES,'')
     .replace(/\s+/g,' ').trim().toLowerCase();
 }

@@ -32,6 +32,17 @@ function normalizeSearch(s){
     .replace(/\s+/g,' ').trim();
 }
 
+// Nom de MP normalisé pour l'IDENTITÉ (pas la recherche) : casse, accents et
+// espaces (dont insécables) ignorés, MAIS ponctuation conservée — « Manioc 65 »
+// et « Manioc 65 (INRA 200) » restent deux produits distincts.
+// Référence unique : production, stratégie d'achat et stock doivent l'utiliser,
+// sinon les mêmes sacs repartent sur deux libellés.
+function normalizeMpNom(s){
+  return (s||'').toString()
+    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+
 // ── FORMULES (chargées dynamiquement depuis la DB par loadFormules) ─
 // Le tableau est rempli au boot par loadFormules() depuis gp_formules.
 // Toutes les références FORMULES_SADARI dans les autres modules
