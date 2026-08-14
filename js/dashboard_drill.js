@@ -30,8 +30,45 @@ async function dashKpiDrill(type){
     case 'caisse':     await drillSoldeCaisse(); break;
     case 'dette_fourn':await drillDetteFournisseurs(); break;
     case 'alertes_mp': await drillAlertesMP(); break;
+    case 'stock_mp':   await drillValeurStockMP(); break;
     default: document.getElementById('kpi-drill-content').innerHTML = '<div>Type inconnu : '+type+'</div>';
   }
+}
+
+// ── DRILL : VALEUR DU STOCK MP ─────────────────────
+async function drillValeurStockMP(){
+  if(_drillReserveSiege()) return;
+  document.getElementById('kpi-drill-titre').textContent = '🌾 Valeur du stock matières premières';
+  const S = await _fetchAllStockMp();
+  const niveaux = (typeof calcNiveaux==='function')?calcNiveaux(S||[]):{};
+  const ingrs = (typeof GP_INGREDIENTS!=='undefined')?GP_INGREDIENTS:[];
+  // Seuls les libellés ayant une fiche MP : gp_stock_mp porte aussi les produits
+  // finis envoyés en distribution.
+  const lignes = Object.entries(niveaux).map(([nom,n])=>{
+    const ingr = ingrs.find(i=>i.nom===nom);
+    if(!ingr) return null;
+    const prix = Number(ingr.prix_actuel||0);
+    return { nom, kg:n, prix, valeur: n>0 ? n*prix : 0 };
+  }).filter(Boolean).filter(r=>r.kg!==0).sort((a,b)=>b.valeur-a.valeur);
+
+  const total     = lignes.reduce((s,r)=>s+r.valeur,0);
+  const sansPrix  = lignes.filter(r=>r.kg>0 && r.prix<=0);
+  const negatifs  = lignes.filter(r=>r.kg<0);
+  const totalKg   = lignes.filter(r=>r.kg>0).reduce((s,r)=>s+r.kg,0);
+
+  document.getElementById('kpi-drill-summary').innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(34,197,94,.08);border-radius:8px">
+       <span>${lignes.filter(r=>r.kg>0).length} MP en stock · ${fmt(Math.round(totalKg))} kg</span>
+       <b style="font-size:14px;color:var(--gold)">${fmt(Math.round(total))} F</b></div>`
+    + (sansPrix.length?`<div style="font-size:11px;color:var(--gold);margin-top:6px">⚠ ${sansPrix.length} MP sans prix comptée${sansPrix.length>1?'s':''} pour 0 F : ${sansPrix.map(r=>r.nom).join(', ')} — la valeur réelle est plus élevée.</div>`:'')
+    + (negatifs.length?`<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ ${negatifs.length} stock${negatifs.length>1?'s':''} négatif${negatifs.length>1?'s':''} (non valorisé${negatifs.length>1?'s':''}) : ${negatifs.map(r=>r.nom).join(', ')}.</div>`:'');
+
+  _renderKpiTable([
+    {label:'Matière première',key:'nom'},
+    {label:'Stock (kg)',align:'num',render:r=>`<span style="color:${r.kg<0?'var(--red)':'inherit'};font-weight:${r.kg<0?'700':'400'}">${fmt(Math.round(r.kg))}</span>`},
+    {label:'Prix/kg',align:'num',render:r=>r.prix>0?fmt(r.prix)+' F':'<span style="color:var(--gold)">⚠ 0</span>'},
+    {label:'Valeur (F)',align:'num',render:r=>r.valeur>0?fmt(Math.round(r.valeur)):'—'}
+  ], lignes, 'VALEUR TOTALE DU STOCK MP', fmt(Math.round(total))+' F');
 }
 
 // ── DRILL : SOLDE CAISSE TOTAL ─────────────────────
