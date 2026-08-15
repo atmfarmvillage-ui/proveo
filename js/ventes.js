@@ -865,9 +865,16 @@ function vtDateChange(){
   zone.style.display = (v && v < today()) ? 'block' : 'none';
 }
 // Remet la date du jour (appelé à l'ouverture et après enregistrement).
+// Le champ est visible par tous les rôles mais seul l'admin peut le changer :
+// on le verrouille plutôt que d'ignorer la saisie en silence.
 function vtResetDate(){
   const el = document.getElementById('vt_date');
-  if(el){ el.value = today(); el.max = today(); }
+  if(el){
+    el.value = today();
+    el.max = today();
+    el.disabled = (GP_ROLE !== 'admin');
+    el.title = (GP_ROLE !== 'admin') ? 'Seul un administrateur peut dater une vente dans le passé' : 'Date de la vente — passer une date antérieure pour un rattrapage';
+  }
   vtDateChange();
 }
 
