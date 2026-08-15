@@ -178,7 +178,9 @@ function exportVentes(type){
     {label:'Statut',key:'statut_paiement'}
   ];
   const fn=`ventes_${(E.pdv||'tous')}_${today()}`;
+  const st=(E.pdv||'Tous PDV')+(E.label?' · '+E.label:'');
   if(type==='pdf') gpExportPDF('Ventes — '+(E.label||''), cols, E.rows, fn+'.pdf', (E.pdv||'Tous PDV'));
+  else if(type==='word') gpExportWord('Ventes — '+(E.label||''), cols, E.rows, fn+'.doc', st);
   else gpExportExcel('Ventes', cols, E.rows, fn+'.xlsx');
 }
 

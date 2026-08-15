@@ -849,8 +849,33 @@ function calcPointsVente(lignes){
 // (formules → gp_stock_produits_pdv · MP → gp_stock_mp · véto → deduireStockVeto).
 // Utilisé par la vente ET par le rattrapage auto. LÈVE en cas d'erreur réseau,
 // pour que l'appelant sache que ce n'est pas fait (et laisse stock_deduit=false).
+// ── DATE DE VENTE (rattrapage) ────────────────────
+// Le champ n'est visible que pour l'admin ; pour tout autre rôle, ou s'il est
+// vide, la vente est datée du jour. Une date future est refusée.
+function _vtDateSaisie(){
+  const v = document.getElementById('vt_date')?.value;
+  if(!v || GP_ROLE !== 'admin') return today();
+  return v > today() ? today() : v;
+}
+// Affiche le bloc « rattrapage » dès que la date choisie est antérieure à aujourd'hui.
+function vtDateChange(){
+  const zone = document.getElementById('vt-retro-zone');
+  if(!zone) return;
+  const v = document.getElementById('vt_date')?.value;
+  zone.style.display = (v && v < today()) ? 'block' : 'none';
+}
+// Remet la date du jour (appelé à l'ouverture et après enregistrement).
+function vtResetDate(){
+  const el = document.getElementById('vt_date');
+  if(el){ el.value = today(); el.max = today(); }
+  vtDateChange();
+}
+
 async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
   const alerter = opts && opts.alerter;
+  // Date de la vente : en rattrapage, la sortie de stock doit porter la date du
+  // jour où la marchandise est réellement partie, pas celle de la saisie.
+  const dateMvt = (opts && opts.date) || today();
   const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   pdvStock = pdvStock || 'Production';
   for(const l of (lignes||[])){
@@ -863,7 +888,7 @@ async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
     if(tp==='mp'){
       if(l.ingredient_id){
         const{error:eMp}=await SB.from('gp_stock_mp').insert({
-          admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, type:'sortie_vente', date:today(),
+          admin_id:GP_ADMIN_ID, saisi_par:GP_USER?.id, type:'sortie_vente', date:dateMvt,
           ingredient_id:l.ingredient_id, ingredient_nom:l.formule_nom, quantite:l.quantite,
           prix_unit:l.prix_unitaire, ref:'Vente '+String(refVente||'').slice(0,8)
         });
@@ -1085,6 +1110,16 @@ async function saveVente(){
     }
   }
 
+  // ── DATE DE LA VENTE — rattrapage possible (admin) ──
+  // Par défaut aujourd'hui. Si l'admin saisit une date passée, elle est propagée
+  // à la vente, à la sortie de stock et à la caisse : sans ça, une vente de mai
+  // gonflerait le CA d'août et fausserait tous les comparatifs mensuels.
+  const dateVente = _vtDateSaisie();
+  const retro = dateVente < today();
+  // En rattrapage, l'argent et la commission ont souvent déjà été traités hors app.
+  const sansCaisse = retro && document.getElementById('vt_retro_caisse')?.checked;
+  const sansComm   = retro && document.getElementById('vt_retro_comm')?.checked;
+
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,
     client_id:clientId||null,
@@ -1098,7 +1133,7 @@ async function saveVente(){
     nb_produits:VT_LIGNES.length,
     point_vente:pv,
     note:note||null,
-    date:today(),
+    date:dateVente,
     saisi_par:GP_USER?.id,
     formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', '),
     qte_vendue:VT_LIGNES.reduce((s,l)=>s+Number(l.quantite||0),0)||0,
@@ -1131,7 +1166,7 @@ async function saveVente(){
   // false → RATTRAPÉ automatiquement au prochain refresh (synchroniserStockVentes). ──
   try{
     const pdvStock = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : (GP_POINT_VENTE || 'Production')) || 'Production';
-    await _appliquerDeductionStock(VT_LIGNES, pdvStock, vente.id, {alerter:true});
+    await _appliquerDeductionStock(VT_LIGNES, pdvStock, vente.id, {alerter:true, date:dateVente});
     // Déduction OK → marquer la vente (dans son propre try : inoffensif si la colonne n'existe pas encore)
     try{ await SB.from('gp_ventes').update({stock_deduit:true}).eq('id',vente.id); }catch(_){}
   }catch(e){
@@ -1144,8 +1179,10 @@ async function saveVente(){
   // 3. fallback : N'IMPORTE quelle caisse physique active
   // 4. AUCUNE caisse → notification rouge claire à l'admin
   window._lastVenteCaisseNom = null;
-  let _caisseVenteOk = !(paye>0); // rien à créditer si paye=0 → OK
-  if(paye>0){
+  // sansCaisse : rattrapage d'une vente dont l'argent a déjà été compté dans la
+  // caisse physique (ou recollé par une clôture) — le recréditer le doublerait.
+  let _caisseVenteOk = !(paye>0) || sansCaisse;
+  if(paye>0 && !sansCaisse){
     let caisseTarget = null;
     if(pv){
       const{data:cPdv}=await SB.from('gp_caisses').select('id,nom')
@@ -1169,7 +1206,7 @@ async function saveVente(){
       const{error:eCa}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
         type:'entree', categorie:'vente',
-        montant:paye, date_mouvement:today(),
+        montant:paye, date_mouvement:dateVente,
         description:'Vente '+vente.id.slice(0,8),
         vente_id:vente.id,
         enregistre_par:GP_USER?.id,
@@ -1245,7 +1282,7 @@ async function saveVente(){
 
   // ── COMMISSION PDV (hors caisse) : registre séparé, aucun mouvement de caisse ──
   try{
-    if(typeof enregistrerCommissionsVente==='function'){
+    if(typeof enregistrerCommissionsVente==='function' && !sansComm){
       const _estGros = clientId ? ((GP_CLIENTS.find(c=>c.id===clientId)?.type_client)==='gros') : false;
       const _pvVente = (vente && vente.point_vente) || (typeof GP_POINT_VENTE!=='undefined'?GP_POINT_VENTE:null);
       enregistrerCommissionsVente(vente.id, VT_LIGNES, _pvVente, _estGros);
@@ -1367,6 +1404,9 @@ async function saveVente(){
     'vt_tel_search',
     'vt_cl_nom','vt_cl_tel','vt_cl_ferme','vt_cl_localite'
   ].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  // La date repasse à aujourd'hui : une session de rattrapage ne doit pas
+  // continuer à dater les ventes suivantes dans le passé sans qu'on le veuille.
+  if(typeof vtResetDate==='function') vtResetDate();
   // Resets sélecteurs
   const sel = (id,val)=>{const e=document.getElementById(id);if(e)e.value=val;};
   sel('vt_remise_type','totale');
@@ -1781,6 +1821,9 @@ function setVtPeriode(p){
 }
 async function renderVentes(){
   initRemiseVente();
+  // Date du jour par défaut dans le formulaire (et bornée à aujourd'hui)
+  const _vd=document.getElementById('vt_date');
+  if(_vd && !_vd.value && typeof vtResetDate==='function') vtResetDate();
   const filtStatut=document.getElementById('vt-filtre-statut')?.value||'';
   const filtDate=document.getElementById('vt-filtre-date')?.value||'';
   // Une date fixe sélectionnée prime sur les boutons période
