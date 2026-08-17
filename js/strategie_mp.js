@@ -550,6 +550,73 @@ function _stratRenderMarge(marge, caTot, margeTot, taux){
     </tr></tfoot></table></div>`;
 }
 
+// ── EXPORTS (PDF / Excel) ─────────────────────────
+// Les deux tableaux sont exportés tels qu'affichés : mêmes chiffres, même
+// périmètre (formules cochées), avec la ligne TOTAL et, en sous-titre, les MP
+// sans prix — sans quoi un lecteur du fichier prendrait un coût sous-évalué
+// pour un coût complet.
+function _stratSousTitre(){
+  const bits = [];
+  bits.push(`${_STRAT_TOTAUX.nbFormules||0} formule(s) retenue(s)`);
+  const sansPrix = (_STRAT_ROWS||[]).filter(r=>r.statut==='sans_prix').map(r=>r.nom);
+  const inconnues = (_STRAT_ROWS||[]).filter(r=>r.statut==='inconnue').map(r=>r.nom);
+  if(sansPrix.length)  bits.push(`⚠ sans prix (comptées 0 F) : ${sansPrix.join(', ')}`);
+  if(inconnues.length) bits.push(`⚠ sans fiche MP : ${inconnues.join(', ')}`);
+  return bits.join(' · ');
+}
+
+function exportStrategieMP(type){
+  const rows = _STRAT_ROWS || [];
+  if(!rows.length){ if(typeof notify==='function') notify('Rien à exporter','r'); return; }
+  const cols = [
+    {label:'Matière première', key:'nom'},
+    {label:'Total anticipé (kg)', render:r=>Math.round(r.ant)},
+    {label:'Coût total anticipé (F)', render:r=>r.prix>0?Math.round(r.coutAnt):'—'},
+    {label:'Total stock (kg)', render:r=>Math.round(r.stk)},
+    {label:'Manquant (kg)', render:r=>Math.round(r.manq)},
+    {label:'Coût estimé (F)', render:r=>r.manq>0&&r.prix>0?Math.round(r.cout):'—'}
+  ];
+  const tot = {
+    nom:'TOTAL',
+    ant: rows.reduce((s,r)=>s+r.ant,0), stk: rows.reduce((s,r)=>s+r.stk,0),
+    manq: rows.reduce((s,r)=>s+r.manq,0), prix:1,
+    coutAnt: rows.reduce((s,r)=>s+r.coutAnt,0), cout: rows.reduce((s,r)=>s+r.cout,0)
+  };
+  const fn = `besoin_mp_${today()}`;
+  if(type==='pdf') gpExportPDF('Besoin en matières premières', cols, rows.concat(tot), fn+'.pdf', _stratSousTitre());
+  else gpExportExcel('Besoin MP', cols, rows.concat(tot), fn+'.xlsx');
+}
+
+function exportRentabiliteMP(type){
+  const m = _STRAT_MARGE || [];
+  if(!m.length){ if(typeof notify==='function') notify('Rien à exporter','r'); return; }
+  const cols = [
+    {label:'Formule', key:'nom'},
+    {label:'kg anticipés', render:r=>Math.round(r.kg)},
+    {label:'Prix vente (F/kg)', render:r=>Math.round(r.prix)},
+    {label:'Coût MP (F/kg)', render:r=>Math.round(r.mpKg)},
+    {label:'Transfo (F/kg)', render:r=>Math.round(r.transfoKg)},
+    {label:'Coût revient (F/kg)', render:r=>Math.round(r.revient)},
+    {label:'Réel M-1 (F/kg)', render:r=>r.reel>0?Math.round(r.reel):'—'},
+    {label:'Marge (F/kg)', render:r=>Math.round(r.margeKg)},
+    {label:'Marge totale (F)', render:r=>Math.round(r.margeTot)},
+    {label:'Taux (%)', render:r=>r.prix>0?((r.margeKg/r.prix)*100).toFixed(1):'—'}
+  ];
+  const kg = m.reduce((s,r)=>s+r.kg,0);
+  const tot = {
+    nom:'TOTAL', kg, prix: kg>0 ? _STRAT_TOTAUX.ca/kg : 0,
+    mpKg: kg>0 ? m.reduce((s,r)=>s+r.mpKg*r.kg,0)/kg : 0,
+    transfoKg: kg>0 ? m.reduce((s,r)=>s+r.transfoKg*r.kg,0)/kg : 0,
+    revient: kg>0 ? m.reduce((s,r)=>s+r.revient*r.kg,0)/kg : 0,
+    reel:0, margeKg: kg>0 ? _STRAT_TOTAUX.marge/kg : 0,
+    margeTot: _STRAT_TOTAUX.marge||0
+  };
+  const st = _stratSousTitre() + ` · CA anticipé ${fmt(_STRAT_TOTAUX.ca||0)} F · marge ${fmt(_STRAT_TOTAUX.marge||0)} F (${(_STRAT_TOTAUX.taux||0).toFixed(1)} %)`;
+  const fn = `rentabilite_anticipee_${today()}`;
+  if(type==='pdf') gpExportPDF('Rentabilité anticipée par formule', cols, m.concat(tot), fn+'.pdf', st);
+  else gpExportExcel('Rentabilité', cols, m.concat(tot), fn+'.xlsx');
+}
+
 // ── CONSEILLER IA ACHATS (admin uniquement) ───────
 function _stratRenderIA(){
   const zone = document.getElementById('strat-ia-zone');
