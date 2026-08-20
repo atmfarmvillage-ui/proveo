@@ -692,7 +692,7 @@ async function renderInventaire(){
       + '<a href="#" onclick="invResetMp();return false" style="color:var(--g6)">Tout afficher</a>';
   }
   document.getElementById('inv-sorties').innerHTML=sorties.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
-    ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':'bdg-r'}" style="font-size:9px">${m.type==='sortie_production'?'Production':'Perte'}</span></td></tr>`).join('')}
+    ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':(m.type==='sortie_vente'?'bdg-gold':'bdg-r')}" style="font-size:9px">${_invLibelleSortie(m.type)}</span></td></tr>`).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
   // Consommation par ingrédient
   const conso={};
