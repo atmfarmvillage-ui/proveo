@@ -774,8 +774,6 @@ function _invNomMp(m){
 function _invPeuplerFiltreMp(mouvements){
   const sel = document.getElementById('inv-mp');
   if(!sel) return '';
-  const selT = document.getElementById('inv-type');
-  if(selT) selT.value = '';
   const noms = [...new Set((mouvements||[]).map(_invNomMp).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const courant = sel.value;
   const garde = noms.includes(courant) ? courant : '';
@@ -787,6 +785,8 @@ function _invPeuplerFiltreMp(mouvements){
 function invSetMp(){ renderInventaire(); }
 function invResetMp(){
   const sel = document.getElementById('inv-mp');
+  const selType = document.getElementById('inv-type');
+  if(selType) selType.value = '';
   if(sel) sel.value = '';
   renderInventaire();
 }
