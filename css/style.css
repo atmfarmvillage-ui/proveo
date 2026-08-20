@@ -454,7 +454,7 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
 .bdg-g{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
 .bdg-r{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
 .bdg-gold{background:rgba(232,197,71,.15);color:var(--gold);border:1px solid rgba(232,197,71,.3)}
-.bdg-b{background:rgba(26,86,219,.15);color:#93C5FD;border:1px solid rgba(26,86,219,.3)}
+.bdg-b{background:rgba(26,86,219,.12);color:#1D4ED8;border:1px solid rgba(26,86,219,.3)}
 
 /* ── MISC ───────────────────────────── */
 .sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(30,51,32,.5)}
