@@ -646,7 +646,7 @@ async function renderInventaire(){
   const debut=mois+'-01';
   const fin=finMois(mois);
   const[{data:S},{data:L},{data:Sprev}]=await Promise.all([
-    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
+    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date',{ascending:false}),
     SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
     SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).lt('date',debut),
   ]);
@@ -663,8 +663,8 @@ async function renderInventaire(){
   // une matière est partie. Les lots d'un autre mois ne sont pas chargés, donc
   // une sortie rattachée à un vieux lot reste sans badge plutôt que mal étiquetée.
   _INV_LOT_FORMULE = {};
-  lots.forEach(l => { if(l.id) _INV_LOT_FORMULE[l.id] = l.formule_nom; });
-  _INV_COULEURS = _invAttribuerCouleurs(Object.values(_INV_LOT_FORMULE));
+  lots.forEach(l => { if(l.id) _INV_LOT_FORMULE[l.id] = { nom:l.formule_nom, qte:Number(l.qte_produite||0) }; });
+  _INV_COULEURS = _invAttribuerCouleurs(Object.values(_INV_LOT_FORMULE).map(v => v.nom));
   const typeFiltre = document.getElementById('inv-type')?.value || '';
   const sorties = typeFiltre ? stock.filter(m => m.type === typeFiltre)
                              : stock.filter(m => m.type !== 'entree');
@@ -836,16 +836,26 @@ function _invCouleurFormule(nom){
 
 // Formule d'un mouvement de sortie, via le lot qui l'a consommée.
 let _INV_LOT_FORMULE = {};
+// _INV_LOT_FORMULE stocke { nom, qte } : le nom sert au badge, la quantité
+// produite permet de lire « 540 kg de maïs ont servi à faire 3 000 kg de X ».
+function _invLotDuMvt(m){
+  return (m.lot_id && _INV_LOT_FORMULE[m.lot_id]) || null;
+}
 function _invFormuleDuMvt(m){
-  if(m.lot_id && _INV_LOT_FORMULE[m.lot_id]) return _INV_LOT_FORMULE[m.lot_id];
-  return null;
+  const l = _invLotDuMvt(m);
+  return l ? l.nom : null;
 }
 function _invBadgeFormule(m){
-  const f = _invFormuleDuMvt(m);
-  if(!f) return '<span style="color:var(--textm);font-size:10px">—</span>';
-  const c = _invCouleurFormule(f);
+  const l = _invLotDuMvt(m);
+  if(!l) return '<span style="color:var(--textm);font-size:10px">—</span>';
+  const c = _invCouleurFormule(l.nom);
+  // Ambre foncé pour la quantité : distinct des badges de formule (fonds pâles)
+  // et des badges de type, sans le côté alarmant du rouge, déjà pris par les
+  // pertes et les stocks négatifs sur cette page.
   return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;'
-    + 'background:' + c.bg + ';color:' + c.txt + ';border:1px solid ' + c.bord + '" title="' + f + '">' + f + '</span>';
+    + 'background:' + c.bg + ';color:' + c.txt + ';border:1px solid ' + c.bord + '" title="' + l.nom + '">' + l.nom + '</span>'
+    + (l.qte > 0 ? '<div style="font-size:9px;font-weight:700;color:#B45309;margin-top:2px">→ '
+        + fmt(Math.round(l.qte)) + ' kg produits</div>' : '');
 }
 
 function _invLibelleSortie(t){
@@ -863,10 +873,13 @@ function exportInventaire(type, portee){
   const admin = GP_ROLE === 'admin';
   const val = m => Number(m.quantite||0) * Number(m.prix_unit||0);
 
+  // L'écran affiche du plus récent au plus ancien ; un document exporté se lit
+  // au contraire dans l'ordre chronologique.
+  const chrono = a => a.slice().sort((x,y)=> String(x.date).localeCompare(String(y.date)));
   let cols, rows, titre;
   if(portee === 'entrees'){
     titre = 'Entrées MP';
-    rows = entrees;
+    rows = chrono(entrees);
     cols = [
       {label:'Date', key:'date'},
       {label:'Ingrédient', render:r=>_invNomMp(r)},
@@ -877,13 +890,14 @@ function exportInventaire(type, portee){
     ];
   } else if(portee === 'sorties'){
     titre = 'Sorties MP';
-    rows = sorties;
+    rows = chrono(sorties);
     cols = [
       {label:'Date', key:'date'},
       {label:'Ingrédient', render:r=>_invNomMp(r)},
       {label:'Qté (kg)', render:r=>Number(r.quantite||0)},
       {label:'Type', render:r=>_invLibelleSortie(r.type)},
       {label:'Formule', render:r=>_invFormuleDuMvt(r)||''},
+      {label:'Aliment produit (kg)', render:r=>{const l=_invLotDuMvt(r);return l&&l.qte>0?Math.round(l.qte):'';}},
       {label:'Référence', render:r=>r.ref||''}
     ];
   } else {
@@ -901,6 +915,7 @@ function exportInventaire(type, portee){
       {label:'Qté (kg)', render:r=> r._sens==='Entrée' ? Number(r.quantite||0) : -Number(r.quantite||0)},
       {label:'Type', render:r=> r._sens==='Entrée' ? 'Réception' : _invLibelleSortie(r.type)},
       {label:'Formule', render:r=> r._sens==='Entrée' ? '' : (_invFormuleDuMvt(r)||'')},
+      {label:'Aliment produit (kg)', render:r=>{if(r._sens==='Entrée')return '';const l=_invLotDuMvt(r);return l&&l.qte>0?Math.round(l.qte):'';}},
       ...(admin ? [{label:'Valeur (F)', render:r=> r._sens==='Entrée' ? Math.round(val(r)) : ''}] : []),
       {label:'Référence', render:r=>r.ref||''}
     ];
