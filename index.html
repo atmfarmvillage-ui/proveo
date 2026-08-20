@@ -533,9 +533,25 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <label class="lbl">Mois</label>
       <input type="month" id="inv-mois" style="width:auto" onchange="renderInventaire()">
     </div>
+    <div>
+      <label class="lbl">Matière première</label>
+      <select id="inv-mp" onchange="invSetMp()" style="width:auto;min-width:210px;max-width:320px">
+        <option value="">Toutes les matières</option>
+      </select>
+    </div>
+    <div>
+      <label class="lbl">Contenu de l'export</label>
+      <select id="inv-portee" style="width:auto">
+        <option value="tout">Entrées + Sorties (même fiche)</option>
+        <option value="entrees">Entrées uniquement</option>
+        <option value="sorties">Sorties uniquement</option>
+      </select>
+    </div>
     <button class="btn btn-print no-print" onclick="window.print()">🖨️ Imprimer</button>
-    <button class="btn btn-out no-print" onclick="exportInventaireExcel()">📊 Exporter Excel</button>
+    <button class="btn btn-out no-print" onclick="exportInventaire('pdf', document.getElementById('inv-portee').value)">📄 PDF</button>
+    <button class="btn btn-out no-print" onclick="exportInventaire('excel', document.getElementById('inv-portee').value)">📊 Excel</button>
   </div>
+  <div id="inv-filtre-info" style="display:none;font-size:11px;color:var(--gold);margin:-8px 0 12px"></div>
   <div class="g4" id="inv-kpis" style="margin-bottom:14px"></div>
   <div class="g2">
     <div class="card">

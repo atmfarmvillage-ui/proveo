@@ -650,7 +650,12 @@ async function renderInventaire(){
     SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
     SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).lt('date',debut),
   ]);
-  const stock=S||[];const lots=L||[];
+  const lots=L||[];
+  // Filtre MP : ne garder que les mouvements de la matière choisie. Le filtre
+  // porte sur les MP, donc la production par formule (plus bas) reste globale.
+  const stockTout = S||[];
+  const mpFiltre = _invPeuplerFiltreMp(stockTout);
+  const stock = mpFiltre ? stockTout.filter(m => _invNomMp(m) === mpFiltre) : stockTout;
   const niveauxDebut=calcNiveaux(Sprev||[]);
   const niveauxFin={...niveauxDebut};
   stock.forEach(m=>{
@@ -675,6 +680,17 @@ async function renderInventaire(){
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
   // Sorties
   const sorties=stock.filter(m=>m.type!=='entree');
+  _INV_EXPORT = { mois, mpFiltre, entrees, sorties };
+  // Rappel visible du filtre : sans ça, des KPI à 500 kg au lieu de 18 000
+  // se lisent comme un mois creux et non comme une vue filtrée.
+  const infoEl = document.getElementById('inv-filtre-info');
+  if(infoEl){
+    infoEl.style.display = mpFiltre ? 'block' : 'none';
+    if(mpFiltre) infoEl.innerHTML = '🔎 Vue filtrée sur <b>' + mpFiltre + '</b> — '
+      + entrees.length + ' entrée(s), ' + sorties.length + ' sortie(s). '
+      + 'La production par formule ci-dessous reste globale. '
+      + '<a href="#" onclick="invResetMp();return false" style="color:var(--g6)">Tout afficher</a>';
+  }
   document.getElementById('inv-sorties').innerHTML=sorties.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
     ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':'bdg-r'}" style="font-size:9px">${m.type==='sortie_production'?'Production':'Perte'}</span></td></tr>`).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
@@ -720,7 +736,118 @@ async function renderInventaire(){
         <td><span class="badge ${fin2<=0?'bdg-r':fin2<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${fin2<=0?'Épuisé':fin2<seuil?'Bas':'OK'}</span></td>
       </tr>`;}).join('')}</tbody></table>`;
 }
-function exportInventaireExcel(){notify('Fonction export Excel — en cours de développement','gold');}
+// ── INVENTAIRE MENSUEL : filtre MP + exports ──────
+let _INV_EXPORT = { mois:null, mpFiltre:'', entrees:[], sorties:[] };
+
+// Nom de la FICHE d'un mouvement (id d'abord, puis nom normalisé) : deux
+// libellés du même produit ne doivent pas donner deux entrées de filtre.
+function _invNomMp(m){
+  const L = GP_INGREDIENTS || [];
+  if(m.ingredient_id){
+    const f = L.find(i => i.id === m.ingredient_id);
+    if(f) return f.nom;
+  }
+  const norm = s => (typeof normalizeMpNom==='function') ? normalizeMpNom(s)
+    : String(s||'').trim().toLowerCase();
+  const n = norm(m.ingredient_nom);
+  const f2 = L.find(i => norm(i.nom) === n);
+  return f2 ? f2.nom : (m.ingredient_nom || '');
+}
+
+// (Re)construit la liste déroulante avec les seules MP ayant bougé ce mois-ci,
+// et renvoie la sélection courante. Proposer les 150 fiches du catalogue quand
+// 12 ont bougé rendrait le filtre inutilisable.
+function _invPeuplerFiltreMp(mouvements){
+  const sel = document.getElementById('inv-mp');
+  if(!sel) return '';
+  const noms = [...new Set((mouvements||[]).map(_invNomMp).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const courant = sel.value;
+  const garde = noms.includes(courant) ? courant : '';
+  sel.innerHTML = '<option value="">Toutes les matières (' + noms.length + ')</option>'
+    + noms.map(nm => '<option value="' + nm.replace(/"/g,'&quot;') + '"' + (nm===garde?' selected':'') + '>' + nm + '</option>').join('');
+  return garde;
+}
+
+function invSetMp(){ renderInventaire(); }
+function invResetMp(){
+  const sel = document.getElementById('inv-mp');
+  if(sel) sel.value = '';
+  renderInventaire();
+}
+
+function _invLibelleSortie(t){
+  if(t==='sortie_production') return 'Production';
+  if(t==='sortie_vente')      return 'Vente';
+  if(t==='sortie_distribution') return 'Distribution';
+  if(t==='transfert')         return 'Transfert';
+  return 'Perte / ajustement';
+}
+
+// portee : 'entrees' | 'sorties' | 'tout'  ·  type : 'pdf' | 'excel'
+function exportInventaire(type, portee){
+  const E = _INV_EXPORT;
+  const entrees = E.entrees || [], sorties = E.sorties || [];
+  const admin = GP_ROLE === 'admin';
+  const val = m => Number(m.quantite||0) * Number(m.prix_unit||0);
+
+  let cols, rows, titre;
+  if(portee === 'entrees'){
+    titre = 'Entrées MP';
+    rows = entrees;
+    cols = [
+      {label:'Date', key:'date'},
+      {label:'Ingrédient', render:r=>_invNomMp(r)},
+      {label:'Qté (kg)', render:r=>Number(r.quantite||0)},
+      ...(admin ? [{label:'Prix unit. (F)', render:r=>Number(r.prix_unit||0)},
+                   {label:'Valeur (F)', render:r=>Math.round(val(r))}] : []),
+      {label:'Référence', render:r=>r.ref||''}
+    ];
+  } else if(portee === 'sorties'){
+    titre = 'Sorties MP';
+    rows = sorties;
+    cols = [
+      {label:'Date', key:'date'},
+      {label:'Ingrédient', render:r=>_invNomMp(r)},
+      {label:'Qté (kg)', render:r=>Number(r.quantite||0)},
+      {label:'Type', render:r=>_invLibelleSortie(r.type)},
+      {label:'Référence', render:r=>r.ref||''}
+    ];
+  } else {
+    // Entrées ET sorties sur une seule fiche : une colonne Sens les distingue,
+    // et la quantité des sorties est signée pour que le total du tableur
+    // donne directement le mouvement net.
+    titre = 'Mouvements MP (entrées + sorties)';
+    rows = entrees.map(m=>({...m, _sens:'Entrée'}))
+      .concat(sorties.map(m=>({...m, _sens:'Sortie'})))
+      .sort((a,b)=> String(a.date).localeCompare(String(b.date)) || a._sens.localeCompare(b._sens));
+    cols = [
+      {label:'Date', key:'date'},
+      {label:'Sens', key:'_sens'},
+      {label:'Ingrédient', render:r=>_invNomMp(r)},
+      {label:'Qté (kg)', render:r=> r._sens==='Entrée' ? Number(r.quantite||0) : -Number(r.quantite||0)},
+      {label:'Type', render:r=> r._sens==='Entrée' ? 'Réception' : _invLibelleSortie(r.type)},
+      ...(admin ? [{label:'Valeur (F)', render:r=> r._sens==='Entrée' ? Math.round(val(r)) : ''}] : []),
+      {label:'Référence', render:r=>r.ref||''}
+    ];
+  }
+
+  if(!rows.length){
+    if(typeof notify==='function') notify('Rien à exporter pour cette sélection','r');
+    return;
+  }
+
+  const mois = E.mois || (document.getElementById('inv-mois')?.value || '');
+  const st = 'Mois : ' + mois
+    + ' · ' + (E.mpFiltre ? 'Matière : ' + E.mpFiltre : 'Toutes les matières')
+    + ' · ' + rows.length + ' mouvement(s)';
+  const fn = 'inventaire_' + portee + '_' + (E.mpFiltre ? E.mpFiltre.replace(/[^a-zA-Z0-9]+/g,'_') + '_' : '') + mois;
+
+  if(type === 'pdf') gpExportPDF(titre, cols, rows, fn + '.pdf', st);
+  else               gpExportExcel(titre, cols, rows, fn + '.xlsx');
+}
+
+// Ancien bouton « Exporter Excel » : conserve son comportement par défaut.
+function exportInventaireExcel(){ exportInventaire('excel','tout'); }
 
 // ── RAPPORT PRODUCTION ─────────────────────────────
 async function renderRapport(){
