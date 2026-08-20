@@ -656,6 +656,18 @@ async function renderInventaire(){
   const stockTout = S||[];
   const mpFiltre = _invPeuplerFiltreMp(stockTout);
   const stock = mpFiltre ? stockTout.filter(m => _invNomMp(m) === mpFiltre) : stockTout;
+  // Filtre « type de consommation » : il ne porte que sur les SORTIES — une
+  // réception n'est ni une vente ni une production. Les entrées restent donc
+  // affichées telles quelles, et le bandeau le précise.
+  // Table lot → formule : c'est elle qui permet de dire dans QUELLE formule
+  // une matière est partie. Les lots d'un autre mois ne sont pas chargés, donc
+  // une sortie rattachée à un vieux lot reste sans badge plutôt que mal étiquetée.
+  _INV_LOT_FORMULE = {};
+  lots.forEach(l => { if(l.id) _INV_LOT_FORMULE[l.id] = l.formule_nom; });
+  _INV_COULEURS = _invAttribuerCouleurs(Object.values(_INV_LOT_FORMULE));
+  const typeFiltre = document.getElementById('inv-type')?.value || '';
+  const sorties = typeFiltre ? stock.filter(m => m.type === typeFiltre)
+                             : stock.filter(m => m.type !== 'entree');
   const niveauxDebut=calcNiveaux(Sprev||[]);
   const niveauxFin={...niveauxDebut};
   stock.forEach(m=>{
@@ -665,7 +677,7 @@ async function renderInventaire(){
   });
   // KPIs
   const totEntrees=stock.filter(m=>m.type==='entree').reduce((s,m)=>s+Number(m.quantite||0),0);
-  const totSorties=stock.filter(m=>m.type!=='entree').reduce((s,m)=>s+Number(m.quantite||0),0);
+  const totSorties=sorties.reduce((s,m)=>s+Number(m.quantite||0),0);
   const totProd=lots.reduce((s,l)=>s+Number(l.qte_produite||0),0);
   const valEntrees=GP_ROLE==='admin'?stock.filter(m=>m.type==='entree').reduce((s,m)=>s+Number(m.quantite||0)*Number(m.prix_unit||0),0):0;
   document.getElementById('inv-kpis').innerHTML=`
@@ -679,20 +691,22 @@ async function renderInventaire(){
     ${entrees.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num good">${fmtKg(m.quantite)}</td>${GP_ROLE==='admin'?`<td class="num">${fmt(Number(m.quantite)*Number(m.prix_unit||0))} F</td>`:''}</tr>`).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
   // Sorties
-  const sorties=stock.filter(m=>m.type!=='entree');
-  _INV_EXPORT = { mois, mpFiltre, entrees, sorties };
+  _INV_EXPORT = { mois, mpFiltre, typeFiltre, entrees, sorties };
   // Rappel visible du filtre : sans ça, des KPI à 500 kg au lieu de 18 000
   // se lisent comme un mois creux et non comme une vue filtrée.
   const infoEl = document.getElementById('inv-filtre-info');
   if(infoEl){
-    infoEl.style.display = mpFiltre ? 'block' : 'none';
-    if(mpFiltre) infoEl.innerHTML = '🔎 Vue filtrée sur <b>' + mpFiltre + '</b> — '
+    const actif = mpFiltre || typeFiltre;
+    infoEl.style.display = actif ? 'block' : 'none';
+    if(actif) infoEl.innerHTML = '🔎 Vue filtrée sur <b>'
+      + (mpFiltre || 'toutes les matières') + '</b>'
+      + (typeFiltre ? ' · consommation : <b>' + _invLibelleSortie(typeFiltre) + '</b>' : '') + ' — '
       + entrees.length + ' entrée(s), ' + sorties.length + ' sortie(s). '
       + 'La production par formule ci-dessous reste globale. '
       + '<a href="#" onclick="invResetMp();return false" style="color:var(--g6)">Tout afficher</a>';
   }
-  document.getElementById('inv-sorties').innerHTML=sorties.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th></tr></thead><tbody>
-    ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':(m.type==='sortie_vente'?'bdg-gold':'bdg-r')}" style="font-size:9px">${_invLibelleSortie(m.type)}</span></td></tr>`).join('')}
+  document.getElementById('inv-sorties').innerHTML=sorties.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th><th>Formule</th></tr></thead><tbody>
+    ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${m.type==='sortie_production'?'bdg-b':(m.type==='sortie_vente'?'bdg-gold':'bdg-r')}" style="font-size:9px">${_invLibelleSortie(m.type)}</span></td><td>${_invBadgeFormule(m)}</td></tr>`).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
   // Consommation par ingrédient
   const conso={};
@@ -760,6 +774,8 @@ function _invNomMp(m){
 function _invPeuplerFiltreMp(mouvements){
   const sel = document.getElementById('inv-mp');
   if(!sel) return '';
+  const selT = document.getElementById('inv-type');
+  if(selT) selT.value = '';
   const noms = [...new Set((mouvements||[]).map(_invNomMp).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const courant = sel.value;
   const garde = noms.includes(courant) ? courant : '';
@@ -773,6 +789,63 @@ function invResetMp(){
   const sel = document.getElementById('inv-mp');
   if(sel) sel.value = '';
   renderInventaire();
+}
+
+// Couleur stable d'une formule : dérivée de son nom, donc identique d'un mois
+// et d'un écran à l'autre. Fond clair + texte foncé de la même teinte : lisible
+// quelle que soit la teinte tirée, contrairement à du blanc sur couleur vive.
+// Palette de teintes volontairement espacées : une teinte calculée en continu
+// (hash % 360) donnait des couleurs à 2° d'écart, indiscernables à l'œil.
+// 12 teintes x 2 intensités = 24 combinaisons nettement distinctes.
+const _INV_TEINTES = [8, 30, 45, 88, 140, 168, 192, 212, 240, 272, 300, 330];
+let _INV_COULEURS = {};
+
+const _INV_INTENSITES = [
+  { bg:93, txt:27, bord:78, sat:72 },
+  { bg:86, txt:22, bord:68, sat:72 },
+  { bg:90, txt:25, bord:73, sat:38 }   // teintes désaturées : 3e tour bien distinct
+];
+function _invTon(i){
+  const t = _INV_TEINTES[i % _INV_TEINTES.length];
+  const n = _INV_INTENSITES[Math.floor(i / _INV_TEINTES.length) % _INV_INTENSITES.length];
+  return { bg:'hsl('+t+' '+n.sat+'% '+n.bg+'%)',
+           txt:'hsl('+t+' 62% '+n.txt+'%)',
+           bord:'hsl('+t+' 55% '+n.bord+'%)' };
+}
+
+// Les couleurs sont attribuées par RANG dans la liste des formules du mois, pas
+// par hash du nom : un hash répartit au hasard dans 24 cases et donnait la même
+// couleur à quatre formules sur vingt-cinq. Par rang, elles sont toutes
+// distinctes tant qu'il y a moins de 24 formules dans le mois, et l'ordre
+// alphabétique rend l'attribution stable et prévisible.
+function _invAttribuerCouleurs(noms){
+  const tri = [...new Set((noms||[]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const map = {};
+  tri.forEach((nom,i)=>{ map[nom] = _invTon(i); });
+  return map;
+}
+
+function _invCouleurFormule(nom){
+  if(!nom) return null;
+  if(_INV_COULEURS[nom]) return _INV_COULEURS[nom];
+  // Repli (formule hors du mois affiché) : teinte dérivée du nom.
+  let h = 0;
+  for(let i=0; i<nom.length; i++) h = (h*131 + nom.charCodeAt(i)) >>> 0;
+  return _invTon(h % (_INV_TEINTES.length * 2));
+}
+
+// Formule d'un mouvement de sortie, via le lot qui l'a consommée.
+let _INV_LOT_FORMULE = {};
+function _invFormuleDuMvt(m){
+  if(m.lot_id && _INV_LOT_FORMULE[m.lot_id]) return _INV_LOT_FORMULE[m.lot_id];
+  return null;
+}
+function _invBadgeFormule(m){
+  const f = _invFormuleDuMvt(m);
+  if(!f) return '<span style="color:var(--textm);font-size:10px">—</span>';
+  const c = _invCouleurFormule(f);
+  return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;'
+    + 'background:' + c.bg + ';color:' + c.txt + ';border:1px solid ' + c.bord + '" title="' + f + '">' + f + '</span>';
 }
 
 function _invLibelleSortie(t){
@@ -810,6 +883,7 @@ function exportInventaire(type, portee){
       {label:'Ingrédient', render:r=>_invNomMp(r)},
       {label:'Qté (kg)', render:r=>Number(r.quantite||0)},
       {label:'Type', render:r=>_invLibelleSortie(r.type)},
+      {label:'Formule', render:r=>_invFormuleDuMvt(r)||''},
       {label:'Référence', render:r=>r.ref||''}
     ];
   } else {
@@ -826,6 +900,7 @@ function exportInventaire(type, portee){
       {label:'Ingrédient', render:r=>_invNomMp(r)},
       {label:'Qté (kg)', render:r=> r._sens==='Entrée' ? Number(r.quantite||0) : -Number(r.quantite||0)},
       {label:'Type', render:r=> r._sens==='Entrée' ? 'Réception' : _invLibelleSortie(r.type)},
+      {label:'Formule', render:r=> r._sens==='Entrée' ? '' : (_invFormuleDuMvt(r)||'')},
       ...(admin ? [{label:'Valeur (F)', render:r=> r._sens==='Entrée' ? Math.round(val(r)) : ''}] : []),
       {label:'Référence', render:r=>r.ref||''}
     ];
@@ -839,6 +914,7 @@ function exportInventaire(type, portee){
   const mois = E.mois || (document.getElementById('inv-mois')?.value || '');
   const st = 'Mois : ' + mois
     + ' · ' + (E.mpFiltre ? 'Matière : ' + E.mpFiltre : 'Toutes les matières')
+    + (E.typeFiltre ? ' · Consommation : ' + _invLibelleSortie(E.typeFiltre) : '')
     + ' · ' + rows.length + ' mouvement(s)';
   const fn = 'inventaire_' + portee + '_' + (E.mpFiltre ? E.mpFiltre.replace(/[^a-zA-Z0-9]+/g,'_') + '_' : '') + mois;
 
