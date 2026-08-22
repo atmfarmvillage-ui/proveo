@@ -161,3 +161,59 @@ function exportMargeAliment(type){
   if(type === 'pdf') gpExportPDF('Marge par tonne d\'aliment', cols, L, fn + '.pdf', st);
   else gpExportExcel('Marge par tonne', cols, L, fn + '.xlsx');
 }
+
+// ── COÛT ET MARGE D'UNE VENTE ─────────────────────
+// Une vente n'est PAS rattachée à un lot : la déduction de stock passe par un
+// solde courant, sans traçabilité vers le lot d'origine. Le coût est donc le
+// coût THÉORIQUE de la formule aux prix MP du jour — d'où le terme « estimée »
+// partout où ce chiffre est affiché.
+function coutRevientKgFormule(nom){
+  const f = (FORMULES_SADARI || []).find(x => x.nom === nom);
+  if(!f) return null;
+  const c = _maCoutTonne(f);
+  return { kg: c.revient / 1000, sansPrix: c.sansPrix };
+}
+
+// Coût d'une ligne de vente. null = coût inconnu (produit ferme, prestation,
+// véto) : la ligne est alors exclue du calcul plutôt que comptée à coût nul,
+// ce qui gonflerait la marge.
+function coutLigneVente(l){
+  const tp = (l && l.type_produit) || 'formule';
+  const qte = Number((l && (l.quantite != null ? l.quantite : l.qte)) || 0);
+  if(qte <= 0) return null;
+  if(tp === 'formule'){
+    const c = coutRevientKgFormule(l.formule_nom);
+    return c ? { cout: c.kg * qte, sansPrix: c.sansPrix } : null;
+  }
+  if(tp === 'mp'){
+    const L = (typeof GP_INGREDIENTS !== 'undefined' ? GP_INGREDIENTS : []) || [];
+    const fiche = (l.ingredient_id && L.find(i => i.id === l.ingredient_id))
+      || L.find(i => _maNormNom(i.nom) === _maNormNom(l.formule_nom));
+    const prix = Number(fiche && fiche.prix_actuel || 0);
+    if(!fiche || prix <= 0) return { cout: 0, sansPrix: [(fiche && fiche.nom) || l.formule_nom] };
+    return { cout: prix * qte, sansPrix: [] };
+  }
+  return null;   // ferme / prestation / véto : pas de coût de revient connu
+}
+
+// Marge d'un ensemble de lignes. exclues = lignes sans coût connu,
+// sansPrix = MP comptées à 0 F, qui rendent la marge trop belle.
+function margeLignesVente(lignes){
+  let ca = 0, cout = 0, exclues = 0, caExclu = 0;
+  const sansPrix = new Set();
+  (lignes || []).forEach(l => {
+    const montant = Number((l.montant_ligne != null ? l.montant_ligne : 0)) || 0;
+    const c = coutLigneVente(l);
+    if(!c){ exclues++; caExclu += montant; return; }
+    ca += montant;
+    cout += c.cout;
+    (c.sansPrix || []).forEach(x => sansPrix.add(x));
+  });
+  if(ca <= 0 && !exclues) return null;
+  return {
+    ca: ca, cout: cout, marge: ca - cout,
+    taux: ca > 0 ? ((ca - cout) / ca) * 100 : 0,
+    exclues: exclues, caExclu: caExclu,
+    sansPrix: [...sansPrix]
+  };
+}

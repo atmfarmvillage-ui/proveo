@@ -1826,6 +1826,26 @@ function setVtPeriode(p){
   document.querySelectorAll('.vt-per-btn').forEach(b=>b.classList.toggle('on', b.dataset.per===p));
   renderVentes();
 }
+// Marge estimée d'un ensemble de ventes. Les lignes ne sont pas chargées avec
+// les ventes : une requête dédiée les récupère par paquets de 200 ids, la limite
+// pratique d'un filtre .in() sur PostgREST.
+async function _vtMargePeriode(ventes){
+  if(GP_ROLE !== 'admin') return null;
+  if(typeof margeLignesVente !== 'function') return null;
+  const ids = (ventes || []).map(v => v.id).filter(Boolean);
+  if(!ids.length) return null;
+  const lignes = [];
+  try{
+    for(let i = 0; i < ids.length; i += 200){
+      const { data } = await SB.from('gp_ventes_lignes')
+        .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id')
+        .in('vente_id', ids.slice(i, i + 200));
+      if(data) lignes.push(...data);
+    }
+  }catch(e){ return null; }
+  return margeLignesVente(lignes);
+}
+
 async function renderVentes(){
   initRemiseVente();
   // Date du jour par défaut dans le formulaire (et bornée à aujourd'hui)
@@ -1859,6 +1879,9 @@ async function renderVentes(){
   const totCA=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
   const totKg=V.reduce((s,v)=>s+Number(v.qte_vendue||0),0);
   const totImp=V.reduce((s,v)=>s+(v.statut_paiement!=='paye'?Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)):0),0);
+  // Marge estimée de la période : nécessite les LIGNES, que la requête
+  // ci-dessus ne charge pas (elle ne lit que gp_ventes).
+  const totMarge = await _vtMargePeriode(V);
   // Détail par jour (CA + nb ventes par date)
   const parJourV={};
   V.forEach(v=>{const k=v.date||'?'; if(!parJourV[k])parJourV[k]={ca:0,n:0,kg:0}; parJourV[k].ca+=Number(v.montant_total||0); parJourV[k].n++; parJourV[k].kg+=Number(v.qte_vendue||0);});
@@ -1869,6 +1892,7 @@ async function renderVentes(){
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totCA)} F</div><div class="econo-lbl">CA total</div></div>`:''}
     <div class="econo-box"><div class="econo-val">${fmtKg(totKg)}</div><div class="econo-lbl">Kg vendus</div></div>
     ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:${totImp>0?'var(--red)':'var(--green)'}">${fmt(totImp)} F</div><div class="econo-lbl">Impayés</div></div>`:''}
+    ${GP_ROLE==='admin'&&totMarge?`<div class="econo-box"><div class="econo-val" style="color:${totMarge.marge>=0?'var(--green)':'var(--red)'}">${fmt(Math.round(totMarge.marge))} F</div><div class="econo-lbl">Marge estimée (${totMarge.taux.toFixed(1)} %)</div></div>`:''}
   </div>
   ${GP_ROLE==='admin'&&joursV.length?`<details style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
     <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">📅 Détail par jour${vtFiltPdv?' · '+vtFiltPdv:''} (${joursV.length} jour(s))</summary>
@@ -2438,6 +2462,28 @@ async function supprimerLigneVente(idx){
   calcVente();
 }
 
+// Marge estimée de la vente en cours de saisie. Affichée sous le total pour
+// qu'une remise excessive se voie AVANT la validation, pas après.
+function _vtLigneMarge(){
+  if(GP_ROLE !== 'admin') return '';
+  if(typeof margeLignesVente !== 'function') return '';
+  const m = margeLignesVente(VT_LIGNES);
+  if(!m || (m.ca <= 0 && !m.exclues)) return '';
+  const col = m.marge >= 0 ? 'var(--green)' : 'var(--red)';
+  const notes = [];
+  if(m.exclues) notes.push(m.exclues + ' ligne(s) sans coût de revient exclue(s) — ' + fmt(Math.round(m.caExclu)) + ' F');
+  if(m.sansPrix.length) notes.push('MP sans prix : ' + m.sansPrix.join(', ') + ' — marge surévaluée');
+  return '<div style="margin-top:6px;padding:7px 10px;border-radius:8px;background:'
+    + (m.marge >= 0 ? 'rgba(34,197,94,.10)' : 'rgba(239,68,68,.10)')
+    + ';border:1px solid ' + (m.marge >= 0 ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.35)') + '">'
+    + '<span style="font-size:11px;color:var(--textm)">Marge estimée</span> '
+    + '<b style="color:' + col + ';font-size:13px">' + fmt(Math.round(m.marge)) + ' F</b>'
+    + '<span style="color:' + col + ';font-size:11px"> (' + m.taux.toFixed(1) + ' %)</span>'
+    + (m.marge < 0 ? '<span style="color:var(--red);font-size:11px;font-weight:700"> — vente à perte</span>' : '')
+    + (notes.length ? '<div style="font-size:10px;color:var(--textm);margin-top:3px">' + notes.join(' · ') + '</div>' : '')
+    + '</div>';
+}
+
 async function renderLignesVente(){
   const total=VT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
   const container=document.getElementById('vt-lignes-preview');
@@ -2461,7 +2507,7 @@ async function renderLignesVente(){
         <td></td>
       </tr>
       </tbody>
-    </table>`:'';
+    </table>` + _vtLigneMarge() :'';
 }
 
 async function onClientChange(){
