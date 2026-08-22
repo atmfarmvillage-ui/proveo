@@ -435,10 +435,13 @@ var PAGE_RENDERERS = {
     loadFormules().then(()=>{
       renderPrixFormules();
       if(typeof renderCustomFormules==='function') renderCustomFormules();
+      if(typeof renderMargeAliment==='function') renderMargeAliment();
       populateSelects();
       if(typeof ensureFavorisFormules==='function') ensureFavorisFormules();
     });
-    loadIngredients().then(()=>{renderIngrAdmin();populateSelects();});
+    loadIngredients().then(()=>{renderIngrAdmin();populateSelects();
+      if(typeof renderMargeAliment==='function') renderMargeAliment();});
+    if(typeof loadPrix==='function') loadPrix().then(()=>{ if(typeof renderMargeAliment==='function') renderMargeAliment(); });
   },
   ventes: async function(){
     if(!GP_CLIENTS.length)await loadClients();
