@@ -465,14 +465,14 @@ async function renderLots(){
   const total=L.reduce((s,l)=>s+Number(l.qte_produite||0),0);
   const periodeLabel = filtMois ? 'Ce mois' : '📊 Cumul total (tous les mois)';
   document.getElementById('lots-liste').innerHTML=`
-    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${periodeLabel} : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots</div>
-    <div style="overflow-x:auto">${L.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th>':''}<th></th></tr></thead><tbody>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">${periodeLabel} : <strong style="color:var(--g6)">${fmt(total)} kg</strong> produits · ${L.length} lots${GP_ROLE==='admin'?_lotBandeauMarge(L):''}</div>
+    <div style="overflow-x:auto">${L.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Formule</th><th>Réf</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Coût/kg</th><th class="num">Prix/kg</th><th class="num">Marge/kg</th><th class="num">Marge du lot</th>':''}<th></th></tr></thead><tbody>
     ${L.map(l=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${l.date}</td>
       <td><div style="font-weight:600">${ESPECE_ICON[l.espece]||''} ${l.formule_nom}</div></td>
       <td style="font-size:10px;color:var(--textm)">${l.ref||'—'}</td>
       <td class="num" style="color:var(--g6)">${fmt(l.qte_produite)}</td>
-      ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${l.qte_produite>0?fmt(Math.round(Number(l.cout_total||0)/l.qte_produite)):0} F</td>`:''}
+      ${GP_ROLE==='admin'?_lotCellulesMarge(l):''}
       <td style="white-space:nowrap;display:flex;gap:3px;align-items:center">
         ${Number(l.nb_sacs)>0
           ? `<span class="badge bdg-g" style="font-size:9px" title="Cliquer pour corriger">📦 ${l.nb_sacs} sacs${Number(l.kg_pertes)>0?' · perte '+fmt(l.kg_pertes)+' kg':''}</span>
@@ -1075,6 +1075,56 @@ async function verifierFeuillesIncompletes(){
 }
 
 // ── BILAN PRODUCTION DU MOIS ─────────────────────
+// Les quatre cellules chiffrées d'un lot (admin). Le marqueur ~ signale un
+// prix de vente non figé sur le lot : la marge est alors une estimation faite
+// au prix courant, pas le résultat historique.
+function _lotCellulesMarge(l){
+  const m = _lotMarge(l);
+  const vide = '<span style="color:var(--textm)">—</span>';
+  if(!m) return '<td class="num">' + vide + '</td><td class="num">' + vide + '</td><td class="num">' + vide + '</td><td class="num">' + vide + '</td>';
+  const col = m.margeKg === null ? 'var(--textm)' : (m.margeKg >= 0 ? 'var(--green)' : 'var(--red)');
+  const marq = m.estime ? ' <span style="color:var(--gold)" title="Prix de vente non figé sur ce lot : estimation au prix courant">~</span>' : '';
+  return '<td class="num" style="color:var(--textm)">' + fmt(Math.round(m.coutKg)) + ' F</td>'
+    + '<td class="num" style="color:var(--textm)">' + (m.prixKg > 0 ? fmt(Math.round(m.prixKg)) + ' F' + marq : vide) + '</td>'
+    + '<td class="num" style="color:' + col + ';font-weight:700">' + (m.margeKg === null ? vide : fmt(Math.round(m.margeKg)) + ' F') + '</td>'
+    + '<td class="num" style="color:' + col + ';font-weight:700">' + (m.margeLot === null ? vide : fmt(Math.round(m.margeLot)) + ' F') + '</td>';
+}
+
+// Marge cumulée de la période affichée, à côté des kilos produits.
+function _lotBandeauMarge(L){
+  let tot = 0, nb = 0, estimes = 0;
+  (L||[]).forEach(l => {
+    const m = _lotMarge(l);
+    if(m && m.margeLot !== null){ tot += m.margeLot; nb++; if(m.estime) estimes++; }
+  });
+  if(!nb) return '';
+  const col = tot >= 0 ? 'var(--green)' : 'var(--red)';
+  return ' · marge <strong style="color:' + col + '">' + fmt(Math.round(tot)) + ' F</strong>'
+    + (estimes ? ' <span style="color:var(--gold)" title="' + estimes + ' lot(s) sans prix de vente figé : estimation au prix courant">(~' + estimes + ')</span>' : '');
+}
+
+// ── MARGE D'UN LOT ────────────────────────────────
+// coutKg vient du lot lui-même (cout_total / qte_produite) : ce sont les prix
+// MP du jour de fabrication, pas ceux d'aujourd'hui. C'est la marge réellement
+// réalisée, à ne pas confondre avec la marge théorique de Formules & Prix.
+function _lotMarge(l){
+  const qte = Number(l.qte_produite || 0);
+  if(qte <= 0) return null;
+  const coutKg = Number(l.cout_total || 0) / qte;
+  const fige = Number(l.prix_vente_kg || 0);
+  let prixKg = fige, estime = false;
+  if(prixKg <= 0){
+    // Repli : prix de gros courant, puis prix de détail courant.
+    const gros = Number((typeof GP_PRIX_GROS !== 'undefined' && GP_PRIX_GROS[l.formule_nom]) || 0);
+    const det  = Number((typeof getPrix === 'function' ? getPrix(l.formule_nom) : 0) || 0);
+    prixKg = gros > 0 ? gros : det;
+    estime = prixKg > 0;
+  }
+  if(!(prixKg > 0)) return { coutKg: coutKg, prixKg: 0, margeKg: null, margeLot: null, estime: false };
+  const margeKg = prixKg - coutKg;
+  return { coutKg: coutKg, prixKg: prixKg, margeKg: margeKg, margeLot: margeKg * qte, estime: estime };
+}
+
 async function renderBilanProduction(lotsData){
   const mois=document.getElementById('lot-filtre-mois')?.value||
     (typeof _thisMonth==='function'?_thisMonth():new Date().toISOString().slice(0,7));
