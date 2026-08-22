@@ -31,8 +31,80 @@ async function dashKpiDrill(type){
     case 'dette_fourn':await drillDetteFournisseurs(); break;
     case 'alertes_mp': await drillAlertesMP(); break;
     case 'stock_mp':   await drillValeurStockMP(); break;
+    case 'marge_mois': await drillMargeMois(); break;
     default: document.getElementById('kpi-drill-content').innerHTML = '<div>Type inconnu : '+type+'</div>';
   }
+}
+
+// ── DRILL : MARGE ESTIMÉE DU MOIS ──────────────────
+// Détail par formule : ce qui rapporte, ce qui coûte, et surtout ce qui est
+// vendu à perte. Coût théorique aux prix MP du jour — une vente n'étant pas
+// rattachée à un lot, le coût réel de fabrication n'est pas récupérable.
+async function drillMargeMois(){
+  if(_drillReserveSiege()) return;
+  document.getElementById('kpi-drill-titre').textContent = '📈 Marge estimée du mois par formule';
+  const mois = new Date().toISOString().slice(0,7);
+  const debut = mois + '-01';
+  const fin = (function(){ const [y,m]=mois.split('-').map(Number); return mois+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0'); })();
+
+  const { data: V } = await SB.from('gp_ventes').select('id')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin);
+  const ids = (V||[]).map(v=>v.id);
+  const lignes = [];
+  for(let i=0;i<ids.length;i+=200){
+    const { data } = await SB.from('gp_ventes_lignes')
+      .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id')
+      .in('vente_id', ids.slice(i,i+200));
+    if(data) lignes.push(...data);
+  }
+
+  const par = {};
+  let exclues = 0, caExclu = 0;
+  const sansPrix = new Set();
+  lignes.forEach(l => {
+    const c = (typeof coutLigneVente==='function') ? coutLigneVente(l) : null;
+    const montant = Number(l.montant_ligne||0);
+    if(!c){ exclues++; caExclu += montant; return; }
+    const k = l.formule_nom || '—';
+    if(!par[k]) par[k] = { nom:k, kg:0, ca:0, cout:0 };
+    par[k].kg += Number(l.quantite||0);
+    par[k].ca += montant;
+    par[k].cout += c.cout;
+    (c.sansPrix||[]).forEach(x => sansPrix.add(x));
+  });
+  const rows = Object.values(par).map(r => ({
+    ...r, marge: r.ca - r.cout,
+    margeKg: r.kg > 0 ? (r.ca - r.cout) / r.kg : 0,
+    taux: r.ca > 0 ? ((r.ca - r.cout) / r.ca) * 100 : 0
+  })).sort((a,b) => a.marge - b.marge);
+
+  const totCA = rows.reduce((s,r)=>s+r.ca,0);
+  const totMarge = rows.reduce((s,r)=>s+r.marge,0);
+  const perte = rows.filter(r => r.marge < 0);
+
+  document.getElementById('kpi-drill-summary').innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:'
+    + (totMarge>=0?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)') + ';border-radius:8px">'
+    + '<span>CA ' + fmt(Math.round(totCA)) + ' F sur ' + rows.length + ' formule(s)</span>'
+    + '<b style="font-size:14px;color:' + (totMarge>=0?'var(--green)':'var(--red)') + '">'
+    + fmt(Math.round(totMarge)) + ' F · ' + (totCA>0?((totMarge/totCA)*100).toFixed(1):0) + ' %</b></div>'
+    + (perte.length ? '<div style="font-size:11px;color:var(--red);margin-top:6px">🚨 Vendues à perte ce mois : '
+        + perte.map(r=>r.nom).join(', ') + '</div>' : '')
+    + (sansPrix.size ? '<div style="font-size:11px;color:var(--gold);margin-top:4px">⚠ MP sans prix comptées à 0 F : '
+        + [...sansPrix].join(', ') + ' — marge surévaluée</div>' : '')
+    + (exclues ? '<div style="font-size:11px;color:var(--textm);margin-top:4px">' + exclues
+        + ' ligne(s) sans coût de revient exclue(s) du calcul (ferme, prestation, véto) — '
+        + fmt(Math.round(caExclu)) + ' F de CA</div>' : '');
+
+  _renderKpiTable([
+    {label:'Formule',key:'nom'},
+    {label:'Kg vendus',align:'num',render:r=>fmt(Math.round(r.kg))},
+    {label:'CA (F)',align:'num',render:r=>fmt(Math.round(r.ca))},
+    {label:'Coût estimé (F)',align:'num',render:r=>fmt(Math.round(r.cout))},
+    {label:'Marge (F)',align:'num',render:r=>'<span style="color:'+(r.marge>=0?'var(--green)':'var(--red)')+';font-weight:700">'+fmt(Math.round(r.marge))+'</span>'},
+    {label:'Marge/kg',align:'num',render:r=>fmt(Math.round(r.margeKg))},
+    {label:'Taux',align:'num',render:r=>r.taux.toFixed(1)+' %'}
+  ], rows, 'MARGE TOTALE ESTIMÉE', fmt(Math.round(totMarge))+' F');
 }
 
 // ── DRILL : VALEUR DU STOCK MP ─────────────────────

@@ -265,6 +265,25 @@ async function renderDashboard(){
   // nets négatifs ignorés : un stock négatif est une anomalie de saisie, pas une
   // dette. Les MP sans prix comptent pour 0 → on affiche le compte pour que le
   // chiffre ne soit pas pris pour argent comptant.
+  // Marge estimée du mois : CA des lignes de vente moins leur coût de revient
+  // théorique. Cumulative par construction — elle grandit avec les ventes du mois.
+  let margeMois = null;
+  try{
+    if(GP_ROLE === 'admin' && typeof margeLignesVente === 'function'){
+      const idsMois = (ventesMoisD || []).map(v => v.id).filter(Boolean);
+      if(idsMois.length){
+        const lignesMois = [];
+        for(let i = 0; i < idsMois.length; i += 200){
+          const { data: lm } = await SB.from('gp_ventes_lignes')
+            .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id')
+            .in('vente_id', idsMois.slice(i, i + 200));
+          if(lm) lignesMois.push(...lm);
+        }
+        margeMois = margeLignesVente(lignesMois);
+      }
+    }
+  }catch(e){ margeMois = null; }
+
   let valeurStockMP=0, mpSansPrix=0;
   Object.entries(niveaux).forEach(([nom,n])=>{
     if(!(n>0)) return;
@@ -346,6 +365,8 @@ async function renderDashboard(){
       detteFournisseurs>0?{type:'down',text:`${nbAchatsAvecDette} à payer`}:{type:'up',text:'soldé'},"dashKpiDrill('dette_fourn')")}
     ${kpi('⚠',alertes.length>0?'red':'green','Alertes stock MP',alertes.length,
       alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
+    ${margeMois?kpi('📈',margeMois.marge>=0?'green':'red','Marge estimée ce mois',fmt(Math.round(margeMois.marge)),
+      {type:margeMois.marge>=0?'up':'down',text:margeMois.taux.toFixed(1)+' % du CA'},"dashKpiDrill('marge_mois')"):''}
     ${kpi('🌾','green','Valeur stock MP',fmt(Math.round(valeurStockMP)),
       mpSansPrix>0?{type:'down',text:`${mpSansPrix} MP sans prix`}:{type:'flat',text:'au prix du jour'},"dashKpiDrill('stock_mp')")}
     `:`
