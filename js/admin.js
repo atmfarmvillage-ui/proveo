@@ -1928,6 +1928,77 @@ function toggleContratFields(){
   fields.style.display=role==='directeur'?'block':'none';
 }
 
+// ═══ TABLEAU DES ACCÈS (Phase 1 : rend VISIBLE le moteur d'accès existant) ═══
+// Lit le MÊME moteur que applyRoleRestrictions() : nav-items (data-roles / .admin-only)
+// + listes blanches PAGES_TECHNICIEN / PAGES_PDV_SECONDAIRE. Zéro duplication, zéro risque.
+const PVO_MATRIX_ROLES = [
+  {key:'admin',      lbl:'Admin',      ic:'🔑'},
+  {key:'gerant',     lbl:'Gérant',     ic:'🎖️'},
+  {key:'directeur',  lbl:'Directeur',  ic:'🎯'},
+  {key:'daf',        lbl:'DAF',        ic:'💼'},
+  {key:'logistique', lbl:'Logistique', ic:'🚚'},
+  {key:'secretaire', lbl:'Secrétaire', ic:'📋'},
+  {key:'technicien', lbl:'Technicien', ic:'🧪'},
+];
+// Réplique fidèle de la logique de pageAutoriseePourRole() / applyRoleRestrictions().
+function _pvoCanSee(role, page, item){
+  if(role==='technicien') return (typeof PAGES_TECHNICIEN!=='undefined') && PAGES_TECHNICIEN.includes(page);
+  if(role==='gerant'){ if(page==='config') return false; role='admin'; }  // gérant = admin sauf Config
+  const roles=item.dataset.roles;
+  if(roles) return roles.split(',').map(r=>r.trim()).includes(role);
+  if(item.classList.contains('admin-only')) return role==='admin';
+  return true;   // par défaut : visible
+}
+function _pvoCell(ok){
+  return ok
+    ? '<span title="Accès" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;border-radius:6px;background:rgba(34,197,94,.15);color:#15803d;font-size:12px;font-weight:800">✓</span>'
+    : '<span title="Pas d’accès" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;color:var(--textm);opacity:.45;font-size:13px">—</span>';
+}
+function renderProveoAccessMatrix(){
+  const host=document.getElementById('proveo-access-matrix');
+  if(!host) return;
+  const items=Array.prototype.slice.call(document.querySelectorAll('#sidebar .nav-item[data-page]'));
+  if(!items.length){ host.innerHTML=''; return; }
+  const myRole=(typeof GP_EST_GERANT!=='undefined'&&GP_EST_GERANT)?'gerant':(typeof GP_ROLE!=='undefined'?GP_ROLE:'admin');
+  const head=PVO_MATRIX_ROLES.map(r=>{
+    const mine=r.key===myRole;
+    return `<th style="padding:7px 4px;text-align:center;font-size:10px;font-weight:700;color:var(--text);${mine?'background:rgba(212,160,23,.12);border-radius:8px 8px 0 0':''}">
+      <div style="font-size:14px;line-height:1.1">${r.ic}</div>${r.lbl}${mine?'<div style="font-size:8px;color:var(--gold);font-weight:800">VOUS</div>':''}</th>`;
+  }).join('');
+  const rows=items.map(item=>{
+    const page=item.dataset.page;
+    const clone=item.cloneNode(true);
+    clone.querySelectorAll('.nav-badge').forEach(b=>b.remove());
+    const icon=(clone.querySelector('.nav-icon')?.textContent||'').trim();
+    const label=(clone.textContent||'').replace(icon,'').replace(/\s+/g,' ').trim();
+    const cells=PVO_MATRIX_ROLES.map(r=>{
+      const mine=r.key===myRole;
+      return `<td style="padding:4px;text-align:center;${mine?'background:rgba(212,160,23,.06)':''}">${_pvoCell(_pvoCanSee(r.key,page,item))}</td>`;
+    }).join('');
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:11px;font-weight:600;color:var(--text);white-space:nowrap"><span style="margin-right:6px">${icon}</span>${label}</td>
+      ${cells}</tr>`;
+  }).join('');
+  host.innerHTML=`
+    <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Qui accède à quel module, selon son rôle. Règles <strong>appliquées automatiquement</strong> à la connexion (menu + garde-fou anti-URL).</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:520px">
+        <thead><tr>
+          <th style="padding:7px 8px;text-align:left;font-size:10px;color:var(--textm);text-transform:uppercase;letter-spacing:.5px">Module</th>
+          ${head}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:10px;color:var(--textm)">
+      <span style="display:inline-flex;align-items:center;gap:5px">${_pvoCell(true)} Accès</span>
+      <span style="display:inline-flex;align-items:center;gap:5px">${_pvoCell(false)} Pas d’accès</span>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:10px;padding:8px 10px;background:var(--card2);border-radius:7px;border-left:3px solid var(--gold)">
+      🏪 <strong>Revendeur (PDV secondaire)</strong> : quel que soit son rôle, il est limité à une liste fixe (ventes, clients, caisse, distribution…).${myRole==='admin'?' <br>💡 <strong>Bientôt</strong> : vous pourrez ajuster ces accès vous-même.':''}
+    </div>`;
+}
+
 async function renderPDV(){
   // Cacher section création PDV pour non-admin
   const creationSection=document.getElementById('pdv-creation-section');
