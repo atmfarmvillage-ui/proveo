@@ -493,7 +493,7 @@ var PAGE_RENDERERS = {
     if(typeof showSalTab==='function')showSalTab('bulletins'); else renderSalaires();
   },
   dettes:        renderDettes,
-  equipe:        function(){renderPDV();initChat();},
+  equipe:        function(){renderPDV();initChat();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix();},
   licence:       renderPageLicenceClient,
   config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); if(typeof loadReglesPaie==='function') loadReglesPaie(); if(typeof loadEtatEntete==='function') loadEtatEntete(); },
   directeur:     function(){
