@@ -234,6 +234,8 @@ async function bootApp(user){
       el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');
     });
   });
+  // Charger les surcharges d'accès du tenant (Phase 2) AVANT d'appliquer les restrictions
+  await loadAccessOverrides();
   // Gérer visibilité nav selon rôle (appel unique)
   applyRoleRestrictions();
   // Transformer le menu en accordéon (groupes repliés par défaut)
@@ -329,9 +331,32 @@ var GP_EST_SECONDAIRE = false;
 var GP_EST_PRINCIPAL = false;   // secrétaire du PDV principal → vue stock réseau (lecture seule)
 const PAGES_PDV_SECONDAIRE=['dashboard','ventes','reservations','clients','suivi','classement','distribution','equipe','caisse','stock_central','marketing'];
 
+// ── Surcharges d'accès par tenant (Phase 2 : grille éditable) ──
+// GP_ACCESS_OVERRIDES = { "<page>": { "<role>": true|false } }. Vide = comportement par défaut.
+var GP_ACCESS_OVERRIDES = {};
+async function loadAccessOverrides(){
+  GP_ACCESS_OVERRIDES = {};
+  try{
+    const{data}=await SB.from('gp_role_access').select('overrides').eq('admin_id',GP_ADMIN_ID).maybeSingle();
+    if(data&&data.overrides&&typeof data.overrides==='object') GP_ACCESS_OVERRIDES=data.overrides;
+  }catch(e){ GP_ACCESS_OVERRIDES={}; }
+}
+// Surcharge éventuelle pour le rôle courant sur `page` : true/false, ou null si aucune (→ moteur inchangé).
+// Admin toujours tout ; Config non surchargeable ; PDV secondaire = profil "hard" non surchargé.
+function _surchargeAcces(page){
+  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE) return null;
+  const realRole=(typeof GP_EST_GERANT!=='undefined'&&GP_EST_GERANT)?'gerant':(GP_ROLE||'admin');
+  if(realRole==='admin'||page==='config') return null;
+  const o=GP_ACCESS_OVERRIDES&&GP_ACCESS_OVERRIDES[page];
+  if(o&&typeof o[realRole]==='boolean') return o[realRole];
+  return null;
+}
 function applyRoleRestrictions(){
   document.querySelectorAll('.nav-item').forEach(el=>{
     const page=el.dataset.page;
+    // Surcharge d'accès (Phase 2) : prioritaire si définie par l'admin
+    const _sa=_surchargeAcces(page);
+    if(_sa!==null){ el.style.display=_sa?'flex':'none'; return; }
     // PDV secondaire : liste blanche stricte (revendeur cloisonné)
     if(GP_EST_SECONDAIRE){
       el.style.display=PAGES_PDV_SECONDAIRE.includes(page)?'flex':'none';
@@ -493,7 +518,7 @@ var PAGE_RENDERERS = {
     if(typeof showSalTab==='function')showSalTab('bulletins'); else renderSalaires();
   },
   dettes:        renderDettes,
-  equipe:        function(){renderPDV();initChat();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix();},
+  equipe:        function(){renderPDV();initChat();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix(true);},
   licence:       renderPageLicenceClient,
   config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); if(typeof loadReglesPaie==='function') loadReglesPaie(); if(typeof loadEtatEntete==='function') loadEtatEntete(); },
   directeur:     function(){
@@ -508,6 +533,9 @@ var PAGE_RENDERERS = {
 // Renvoie true si le rôle courant a le droit d'ouvrir cette page.
 // Même logique que applyRoleRestrictions() — les sous-pages sans entrée de menu ne sont pas restreintes ici.
 function pageAutoriseePourRole(page){
+  // Surcharge d'accès (Phase 2) : prioritaire si définie
+  const _sa=_surchargeAcces(page);
+  if(_sa!==null) return _sa;
   // PDV secondaire : liste blanche stricte (cohérent avec applyRoleRestrictions)
   if(GP_EST_SECONDAIRE)return PAGES_PDV_SECONDAIRE.includes(page);
   // Technicien : liste blanche stricte (cohérent avec applyRoleRestrictions)
