@@ -1928,9 +1928,10 @@ function toggleContratFields(){
   fields.style.display=role==='directeur'?'block':'none';
 }
 
-// ═══ TABLEAU DES ACCÈS (Phase 1 : rend VISIBLE le moteur d'accès existant) ═══
-// Lit le MÊME moteur que applyRoleRestrictions() : nav-items (data-roles / .admin-only)
-// + listes blanches PAGES_TECHNICIEN / PAGES_PDV_SECONDAIRE. Zéro duplication, zéro risque.
+// ═══ TABLEAU DES ACCÈS (Phase 2 : grille ÉDITABLE, surcharge par admin_id) ═══
+// Lit le moteur existant (nav-items data-roles / .admin-only + listes blanches) ; l'admin peut
+// accorder/retirer un module par rôle. Surcharge persistée dans gp_role_access, appliquée par
+// applyRoleRestrictions/pageAutoriseePourRole. Sans surcharge → comportement identique à avant.
 const PVO_MATRIX_ROLES = [
   {key:'admin',      lbl:'Admin',      ic:'🔑'},
   {key:'gerant',     lbl:'Gérant',     ic:'🎖️'},
@@ -1940,26 +1941,71 @@ const PVO_MATRIX_ROLES = [
   {key:'secretaire', lbl:'Secrétaire', ic:'📋'},
   {key:'technicien', lbl:'Technicien', ic:'🧪'},
 ];
-// Réplique fidèle de la logique de pageAutoriseePourRole() / applyRoleRestrictions().
+// Défaut moteur (sans surcharge) — réplique fidèle de pageAutoriseePourRole().
 function _pvoCanSee(role, page, item){
   if(role==='technicien') return (typeof PAGES_TECHNICIEN!=='undefined') && PAGES_TECHNICIEN.includes(page);
   if(role==='gerant'){ if(page==='config') return false; role='admin'; }  // gérant = admin sauf Config
   const roles=item.dataset.roles;
   if(roles) return roles.split(',').map(r=>r.trim()).includes(role);
   if(item.classList.contains('admin-only')) return role==='admin';
-  return true;   // par défaut : visible
+  return true;
 }
-function _pvoCell(ok){
-  return ok
-    ? '<span title="Accès" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;border-radius:6px;background:rgba(34,197,94,.15);color:#15803d;font-size:12px;font-weight:800">✓</span>'
-    : '<span title="Pas d’accès" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;color:var(--textm);opacity:.45;font-size:13px">—</span>';
+function _pvoCell(ok, editable, overridden){
+  const style = ok ? 'background:rgba(34,197,94,.15);color:#15803d;font-weight:800'
+                   : 'color:var(--textm);opacity:.5';
+  const ring = overridden ? 'box-shadow:0 0 0 2px var(--gold) inset;' : '';
+  const cur  = editable ? 'cursor:pointer;' : '';
+  const tip  = editable ? 'Cliquer pour changer' : (ok?'Accès':'Pas d’accès');
+  return `<span title="${tip}" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;border-radius:6px;${cur}${ring}${style};font-size:12px">${ok?'✓':'—'}</span>`;
 }
-function renderProveoAccessMatrix(){
+// ── Buffer d'édition des surcharges ──
+let GP_ACCESS_EDIT = null;
+function _pvoDefault(role,page){
+  const item=document.querySelector('#sidebar .nav-item[data-page="'+page+'"]');
+  return item ? _pvoCanSee(role,page,item) : true;
+}
+function _pvoEff(role,page){
+  const o=GP_ACCESS_EDIT&&GP_ACCESS_EDIT[page];
+  if(o&&typeof o[role]==='boolean') return o[role];
+  return _pvoDefault(role,page);
+}
+function _pvoEditDirty(){
+  const ov=(typeof GP_ACCESS_OVERRIDES!=='undefined'?GP_ACCESS_OVERRIDES:{})||{};
+  return JSON.stringify(GP_ACCESS_EDIT||{})!==JSON.stringify(ov);
+}
+function pvoToggleCell(page,role){
+  if(role==='admin'||page==='config') return;   // Admin & Config verrouillés
+  if(!GP_ACCESS_EDIT) GP_ACCESS_EDIT={};
+  const nv=!_pvoEff(role,page), def=_pvoDefault(role,page);
+  if(nv===def){ if(GP_ACCESS_EDIT[page]){ delete GP_ACCESS_EDIT[page][role]; if(!Object.keys(GP_ACCESS_EDIT[page]).length) delete GP_ACCESS_EDIT[page]; } }
+  else { (GP_ACCESS_EDIT[page]=GP_ACCESS_EDIT[page]||{})[role]=nv; }
+  renderProveoAccessMatrix();
+}
+async function pvoSaveAccess(){
+  if(typeof GP_ADMIN_ID==='undefined'||!GP_ADMIN_ID){ notify('Session invalide','r'); return; }
+  try{
+    const{error}=await SB.from('gp_role_access').upsert({admin_id:GP_ADMIN_ID,overrides:(GP_ACCESS_EDIT||{}),updated_at:new Date().toISOString()},{onConflict:'admin_id'});
+    if(error){ notify('Erreur: '+error.message,'r'); return; }
+    GP_ACCESS_OVERRIDES=JSON.parse(JSON.stringify(GP_ACCESS_EDIT||{}));
+    if(typeof applyRoleRestrictions==='function') applyRoleRestrictions();
+    notify('Accès enregistrés ✓');
+    renderProveoAccessMatrix();
+  }catch(e){ notify('Erreur: '+(e.message||e),'r'); }
+}
+function pvoCancelAccess(){
+  const ov=(typeof GP_ACCESS_OVERRIDES!=='undefined'?GP_ACCESS_OVERRIDES:{})||{};
+  GP_ACCESS_EDIT=JSON.parse(JSON.stringify(ov)); renderProveoAccessMatrix();
+}
+function pvoResetAccess(){ GP_ACCESS_EDIT={}; renderProveoAccessMatrix(); }
+function renderProveoAccessMatrix(fresh){
   const host=document.getElementById('proveo-access-matrix');
   if(!host) return;
   const items=Array.prototype.slice.call(document.querySelectorAll('#sidebar .nav-item[data-page]'));
   if(!items.length){ host.innerHTML=''; return; }
+  const ov=(typeof GP_ACCESS_OVERRIDES!=='undefined'?GP_ACCESS_OVERRIDES:{})||{};
+  if(fresh || GP_ACCESS_EDIT===null) GP_ACCESS_EDIT=JSON.parse(JSON.stringify(ov));
   const myRole=(typeof GP_EST_GERANT!=='undefined'&&GP_EST_GERANT)?'gerant':(typeof GP_ROLE!=='undefined'?GP_ROLE:'admin');
+  const canEdit=(myRole==='admin');   // vrai admin uniquement (gérant → 'gerant')
   const head=PVO_MATRIX_ROLES.map(r=>{
     const mine=r.key===myRole;
     return `<th style="padding:7px 4px;text-align:center;font-size:10px;font-weight:700;color:var(--text);${mine?'background:rgba(212,160,23,.12);border-radius:8px 8px 0 0':''}">
@@ -1973,14 +2019,25 @@ function renderProveoAccessMatrix(){
     const label=(clone.textContent||'').replace(icon,'').replace(/\s+/g,' ').trim();
     const cells=PVO_MATRIX_ROLES.map(r=>{
       const mine=r.key===myRole;
-      return `<td style="padding:4px;text-align:center;${mine?'background:rgba(212,160,23,.06)':''}">${_pvoCell(_pvoCanSee(r.key,page,item))}</td>`;
+      const ok=_pvoEff(r.key,page);
+      const editable=canEdit && r.key!=='admin' && page!=='config';
+      const overridden=!!(GP_ACCESS_EDIT&&GP_ACCESS_EDIT[page]&&typeof GP_ACCESS_EDIT[page][r.key]==='boolean');
+      const clk=editable?` onclick="pvoToggleCell('${page}','${r.key}')"`:'';
+      return `<td style="padding:4px;text-align:center;${mine?'background:rgba(212,160,23,.06);':''}${editable?'cursor:pointer;':''}"${clk}>${_pvoCell(ok,editable,overridden)}</td>`;
     }).join('');
     return `<tr style="border-top:1px solid var(--border)">
       <td style="padding:6px 8px;font-size:11px;font-weight:600;color:var(--text);white-space:nowrap"><span style="margin-right:6px">${icon}</span>${label}</td>
       ${cells}</tr>`;
   }).join('');
+  const dirty=_pvoEditDirty();
+  const toolbar = canEdit ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+      <button class="btn btn-g btn-sm" onclick="pvoSaveAccess()"${dirty?'':' disabled style="opacity:.5;cursor:default"'}>💾 Enregistrer</button>
+      ${dirty?'<button class="btn btn-out btn-sm" onclick="pvoCancelAccess()">Annuler</button>':''}
+      <button class="btn btn-out btn-sm" onclick="pvoResetAccess()">↺ Tout par défaut</button>
+      ${dirty?'<span style="font-size:10px;color:var(--gold);font-weight:700">● modifications non enregistrées</span>':''}
+    </div>` : '';
   host.innerHTML=`
-    <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Qui accède à quel module, selon son rôle. Règles <strong>appliquées automatiquement</strong> à la connexion (menu + garde-fou anti-URL).</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Qui accède à quel module, selon son rôle.${canEdit?' <strong>Cliquez une case</strong> pour accorder/retirer un accès, puis <strong>Enregistrer</strong>.':' Règles appliquées automatiquement à la connexion.'}</div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:520px">
         <thead><tr>
@@ -1990,12 +2047,14 @@ function renderProveoAccessMatrix(){
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${toolbar}
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:10px;color:var(--textm)">
       <span style="display:inline-flex;align-items:center;gap:5px">${_pvoCell(true)} Accès</span>
       <span style="display:inline-flex;align-items:center;gap:5px">${_pvoCell(false)} Pas d’accès</span>
+      ${canEdit?'<span style="display:inline-flex;align-items:center;gap:5px">'+_pvoCell(true,false,true)+' Personnalisé (≠ défaut)</span>':''}
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:10px;padding:8px 10px;background:var(--card2);border-radius:7px;border-left:3px solid var(--gold)">
-      🏪 <strong>Revendeur (PDV secondaire)</strong> : quel que soit son rôle, il est limité à une liste fixe (ventes, clients, caisse, distribution…).${myRole==='admin'?' <br>💡 <strong>Bientôt</strong> : vous pourrez ajuster ces accès vous-même.':''}
+      🏪 <strong>Revendeur (PDV secondaire)</strong> : quel que soit son rôle, il reste limité à une liste fixe (ventes, clients, caisse, distribution…), non modifiable ici.${canEdit?' La colonne <strong>Admin</strong> et la ligne <strong>Configuration</strong> sont verrouillées (sécurité).':''}
     </div>`;
 }
 
