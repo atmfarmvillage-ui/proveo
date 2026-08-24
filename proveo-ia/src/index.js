@@ -6,6 +6,8 @@
 // Secrets : DEEPSEEK_API_KEY (défaut) · ANTHROPIC_API_KEY (premium).
 // ══════════════════════════════════════════════════
 
+import { handleRapport } from './rapport.js';
+
 // Niveaux → moteur + modèle
 const TIERS = {
   eco: { provider: 'deepseek', model: 'deepseek-chat' },      // défaut, économique
@@ -109,6 +111,12 @@ async function callClaude(system, messages, model, env) {
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+
+    // Rapport pour KEPELA (plateforme MIGNA) : lecture seule, protegee par un
+    // secret partage. Doit passer AVANT le garde POST ci-dessous.
+    const url = new URL(request.url);
+    if (url.pathname === '/rapport') return handleRapport(request, env, url);
+
     if (request.method !== 'POST') return json({ error: 'POST uniquement' }, 405);
 
     // Auth : jeton Supabase de l'appelant

@@ -9,6 +9,8 @@
   "main": "src/index.js",
   "compatibility_date": "2026-06-01",
   "vars": {
+    // Entreprise servie par ce worker (SADARI). Sert au point d'acces /rapport.
+    "ADMIN_ID": "11fdf99b-f2f3-48f9-907d-0c32944c46f6",
     // URL et clé ANON de TON projet Supabase PROVENDA (publiques, OK ici)
     "SUPABASE_URL": "https://edvgtxzwpopqflaxbown.supabase.co",
     "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdmd0eHp3cG9wcWZsYXhib3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMTQ3MDksImV4cCI6MjA5MTY5MDcwOX0.kLbvBJUg91_6yp_MXcf0RrozQ6qB3R7ZOXuMcmiVXoY"
