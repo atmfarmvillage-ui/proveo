@@ -1110,6 +1110,7 @@ async function loadConfigForm(){
   if(promoEl && GP_CONFIG.promo_message) promoEl.value=GP_CONFIG.promo_message;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
+  if(GP_CONFIG.tel_dirigeant)document.getElementById('cfg_tel_dirigeant').value=GP_CONFIG.tel_dirigeant;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1126,7 +1127,8 @@ async function saveConfig(){
     localisation:document.getElementById('cfg_loc').value.trim(),
     promo_message:(document.getElementById('cfg_promo')?.value.trim()||null),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte
+    tel_alerte_stock:telAlerte,
+    tel_dirigeant:(document.getElementById('cfg_tel_dirigeant')?.value.trim()||null)
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
@@ -1819,6 +1821,7 @@ async function loadConfigForm(){
   if(promoEl && GP_CONFIG.promo_message) promoEl.value=GP_CONFIG.promo_message;
   if(GP_CONFIG.couleur)document.getElementById('cfg_couleur').value=GP_CONFIG.couleur;
   if(GP_CONFIG.tel_alerte_stock)document.getElementById('cfg_tel_alerte').value=GP_CONFIG.tel_alerte_stock;
+  if(GP_CONFIG.tel_dirigeant)document.getElementById('cfg_tel_dirigeant').value=GP_CONFIG.tel_dirigeant;
   if(GP_CONFIG.logo_url)applyLogo(GP_CONFIG.logo_url);
 }
 async function saveConfig(){
@@ -1835,7 +1838,8 @@ async function saveConfig(){
     localisation:document.getElementById('cfg_loc').value.trim(),
     promo_message:(document.getElementById('cfg_promo')?.value.trim()||null),
     couleur,logo_url:GP_CONFIG.logo_url||null,
-    tel_alerte_stock:telAlerte
+    tel_alerte_stock:telAlerte,
+    tel_dirigeant:(document.getElementById('cfg_tel_dirigeant')?.value.trim()||null)
   },{onConflict:'user_id'});
   if(error){err.textContent='Erreur: '+error.message;return;}
   GP_CONFIG.nom_provenderie=nom;GP_CONFIG.couleur=couleur;
