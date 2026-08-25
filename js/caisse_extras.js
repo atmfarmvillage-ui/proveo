@@ -66,9 +66,7 @@ async function preselectCaissePDV(selectId){
 async function calcSoldesCaisses(caisses){
   const ids = caisses.map(c=>c.id);
   if(!ids.length) return {};
-  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID).in('caisse_id', ids);
-  const M = mvts||[];
+  const M = await _fetchAllMvtsCaisse(q=>q.in('caisse_id', ids));
   const soldes = {};
   caisses.forEach(c=>{soldes[c.id] = Number(c.solde_initial||0);});
   M.forEach(m=>{
@@ -237,9 +235,7 @@ async function ouvrirModifSoldeInit(caisseId){
   const{data:c}=await SB.from('gp_caisses').select('*').eq('id',caisseId).maybeSingle();
   if(!c){ notify('Caisse introuvable','r'); return; }
   // Calculer solde actuel (entrées + sorties + ajustements + transferts entrants/sortants)
-  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID)
-    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`);
+  const mvts=await _fetchAllMvtsCaisse(q=>q.or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`));
   let soldeAct = Number(c.solde_initial||0);
   (mvts||[]).forEach(m=>{
     if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);

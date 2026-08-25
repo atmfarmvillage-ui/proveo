@@ -33,9 +33,7 @@ async function renderCaisse(){
   }
 
   // Calculer soldes actuels depuis les mouvements
-  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID);
-  const M=mvts||[];
+  const M=await _fetchAllMvtsCaisse();
 
   const soldes={};
   caisses.forEach(c=>{soldes[c.id]=Number(c.solde_initial||0);});
@@ -491,9 +489,10 @@ async function exporterHistoriqueCaisses(type){
   const filtreActif=document.getElementById('caisse-filtre')?.value||'';
 
   // Historique limité aux caisses visibles
-  const{data:mvts,error}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID).order('date_mouvement',{ascending:false});
-  if(error){ notify('Erreur chargement : '+error.message,'r'); return; }
+  // Historique complet : tronque, il donnait l'illusion qu'un vieux mouvement
+  // n'existait pas. On trie apres coup, la pagination imposant son propre ordre.
+  const mvts=await _fetchAllMvtsCaisse();
+  mvts.sort((a,b)=>String(b.date_mouvement||'').localeCompare(String(a.date_mouvement||'')));
   let M=(mvts||[]).filter(m=> idsVisibles.has(m.caisse_id) || idsVisibles.has(m.caisse_dest_id));
   if(filtreActif) M=M.filter(m=> m.caisse_id===filtreActif || m.caisse_dest_id===filtreActif);
   if(!M.length){ notify('Aucun mouvement à exporter','r'); return; }
