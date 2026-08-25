@@ -322,6 +322,116 @@ async function rapportImpayes(env, adminId) {
 }
 
 // ══════════════════════════════════════════════════
+// CLÔTURE DE CAISSE — rappel du soir et contrôle
+//
+// Une caisse non clôturée ne laisse AUCUNE trace : c'est précisément le cas
+// qui devrait alerter le plus, et c'est le seul qui passe inaperçu. D'où deux
+// messages distincts — le rappel à qui doit clôturer, le constat à la direction.
+// ══════════════════════════════════════════════════
+
+// Qui doit clôturer une caisse : ceux qui tiennent le tiroir, pas la direction.
+const ROLES_CLOTURE = ['secretaire', 'gerant'];
+
+async function etatClotures(env, adminId) {
+  const jour = aujourdhui();
+  const [caisses, clotures] = await Promise.all([
+    sb(env, `gp_caisses?admin_id=eq.${adminId}&type=eq.physique&select=id,nom,point_vente,actif`).catch(() => []),
+    sb(env, `gp_clotures?admin_id=eq.${adminId}&date=eq.${jour}&select=caisse_id,ecart,cash_compte,valide_par_nom`).catch(() => []),
+  ]);
+  // Une caisse désactivée ne doit plus être réclamée : sinon le rappel du soir
+  // finit par citer des caisses fermées, et on cesse de le lire.
+  const actives = (caisses || []).filter((c) => c.actif !== false);
+  const parCaisse = {};
+  (clotures || []).forEach((c) => { parCaisse[c.caisse_id] = c; });
+  return {
+    jour,
+    faites: actives.filter((c) => parCaisse[c.id]).map((c) => ({ ...c, cloture: parCaisse[c.id] })),
+    manquantes: actives.filter((c) => !parCaisse[c.id]),
+  };
+}
+
+// ── Rappel du soir, aux seuls concernés ───────────
+// Celui qui a clôturé ne reçoit rien. Un rappel qui arrive alors que le travail
+// est fait apprend à ignorer les rappels.
+async function rapportClotureRappel(env, adminId) {
+  const { jour, manquantes } = await etatClotures(env, adminId);
+  const base = { type: 'cloture_rappel', date: jour, parametres: [jour] };
+  if (!manquantes.length) {
+    return { ...base, titre: 'Toutes les caisses sont clôturées', texte: null, destinataires: [] };
+  }
+
+  const pdvConcernes = new Set(manquantes.map((c) => c.point_vente || 'Production'));
+  const membres = await sb(env, `gp_membres?admin_id=eq.${adminId}&select=nom,email,role,telephone,point_vente,actif`).catch(() => []);
+  const vus = new Set();
+  const cibles = (membres || [])
+    .filter((m) => m.actif !== false && ROLES_CLOTURE.includes(m.role))
+    .filter((m) => pdvConcernes.has(m.point_vente || 'Production'))
+    .map((m) => ({ nom: m.nom || m.email || 'Secrétaire', role: m.role, tel: normaliserTel(m.telephone) }))
+    .filter((d) => { if (!d.tel || vus.has(d.tel)) return false; vus.add(d.tel); return true; });
+
+  const lignes = [
+    `🌙 *Clôture de caisse — ${jour}*`,
+    '',
+    'Votre caisse n\'est pas encore clôturée pour aujourd\'hui.',
+    '',
+    'Ouvrez « Bilan journalier », comptez le cash du tiroir et saisissez le montant. Deux minutes suffisent.',
+  ];
+  return {
+    ...base,
+    titre: `${manquantes.length} caisse(s) non clôturée(s)`,
+    caisses: manquantes.map((c) => ({ nom: c.nom, point_vente: c.point_vente || 'Production' })),
+    // Sans personne à joindre, le rappel n'a pas d'objet : c'est le bilan
+    // envoyé à la direction qui signalera la caisse oubliée.
+    texte: cibles.length ? lignes.join('\n') : null,
+    destinataires: cibles,
+  };
+}
+
+// ── Constat du soir, à la direction ───────────────
+async function rapportClotureBilan(env, adminId) {
+  const { jour, faites, manquantes } = await etatClotures(env, adminId);
+  const ecarts = faites.filter((c) => Math.abs(Number(c.cloture.ecart || 0)) >= 1);
+  const justes = faites.length - ecarts.length;
+
+  const base = {
+    type: 'cloture_bilan', date: jour,
+    parametres: [jour, String(manquantes.length), String(ecarts.length)],
+    alertes: [
+      ...manquantes.map((c) => ({ nom: c.nom, stock: null, seuil: 'non cloturee' })),
+      ...ecarts.map((c) => ({ nom: c.nom, stock: Math.round(Number(c.cloture.ecart || 0)), seuil: 'ecart' })),
+    ],
+  };
+
+  // Tout est clôturé et juste : on se tait. Le rapport quotidien de 21 h dit
+  // déjà que la journée s'est bien passée.
+  if (!manquantes.length && !ecarts.length) {
+    return { ...base, titre: 'Toutes les caisses clôturées et justes', texte: null };
+  }
+
+  const l = [`🌙 *Clôture du ${jour}*`, ''];
+  if (manquantes.length) {
+    l.push(`❌ Non clôturée(s) : ${manquantes.length}`);
+    manquantes.slice(0, 8).forEach((c) => l.push(`   • ${c.nom} — ${c.point_vente || 'Production'}`));
+    if (manquantes.length > 8) l.push(`   … et ${manquantes.length - 8} autre(s)`);
+    l.push('');
+  }
+  if (ecarts.length) {
+    l.push(`⚖️ Écart constaté : ${ecarts.length}`);
+    ecarts.slice(0, 8).forEach((c) => {
+      const e = Math.round(Number(c.cloture.ecart || 0));
+      l.push(`   • ${c.nom} — ${e > 0 ? '+' : ''}${fmt(e)} F (${c.cloture.valide_par_nom || '?'})`);
+    });
+    l.push('');
+  }
+  if (justes > 0) l.push(`✅ ${justes} caisse(s) justes.`);
+
+  return {
+    ...base,
+    titre: `${manquantes.length} oubli(s), ${ecarts.length} écart(s)`,
+    texte: l.join('\n'),
+  };
+}
+// ══════════════════════════════════════════════════
 // POINT D'ACCÈS
 // ══════════════════════════════════════════════════
 export async function handleRapport(request, env, url) {
@@ -344,13 +454,19 @@ export async function handleRapport(request, env, url) {
     let corps;
     if (type === 'stock') corps = await rapportStock(env, adminId);
     else if (type === 'impayes') corps = await rapportImpayes(env, adminId);
+    else if (type === 'cloture_rappel') corps = await rapportClotureRappel(env, adminId);
+    else if (type === 'cloture_bilan') corps = await rapportClotureBilan(env, adminId);
     else corps = await rapportQuotidien(env, adminId);
 
     // L'entreprise fournit elle-même ses destinataires : KEPELA n'a pas à
     // connaître le modèle utilisateur de chaque tenant.
     const cfg = (await sb(env, `gp_config?user_id=eq.${adminId}&select=nom_provenderie`).catch(() => []))[0] || {};
     corps.entreprise = cfg.nom_provenderie || 'SADARI';
-    corps.destinataires = await destinataires(env, adminId, type);
+    // Le rappel de clôture vise des personnes précises — celles dont la caisse
+    // manque. Un rapport qui a déjà désigné ses destinataires garde les siens.
+    if (!Array.isArray(corps.destinataires)) {
+      corps.destinataires = await destinataires(env, adminId, type);
+    }
     return j(corps);
   } catch (e) {
     return j({ error: 'Rapport indisponible', detail: String(e && e.message || e).slice(0, 300) }, 502);
