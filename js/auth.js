@@ -324,12 +324,12 @@ async function bootApp(user){
   initRealtimeSync();
 }
 // Pages visibles par le technicien nutritionniste (liste blanche stricte)
-const PAGES_TECHNICIEN=['dashboard','achats','matieres','stock','inventaire_physique','production','formules','licence'];
+const PAGES_TECHNICIEN=['dashboard','achats','matieres','stock','inventaire_physique','production','formules','licence','aide'];
 // PDV SECONDAIRE (revendeur cloisonné) : menu restreint à ses propres opérations.
 // 'stock_central' (consultation stock principal/production + réappro) sera ajouté à l'étape 3.
 var GP_EST_SECONDAIRE = false;
 var GP_EST_PRINCIPAL = false;   // secrétaire du PDV principal → vue stock réseau (lecture seule)
-const PAGES_PDV_SECONDAIRE=['dashboard','ventes','reservations','clients','suivi','classement','distribution','equipe','caisse','stock_central','marketing'];
+const PAGES_PDV_SECONDAIRE=['dashboard','ventes','reservations','clients','suivi','classement','distribution','equipe','caisse','stock_central','marketing','aide'];
 
 // ── Surcharges d'accès par tenant (Phase 2 : grille éditable) ──
 // GP_ACCESS_OVERRIDES = { "<page>": { "<role>": true|false } }. Vide = comportement par défaut.
@@ -444,6 +444,7 @@ function initMobileTabbar(){
 
 // ── ROUTER COMPLET ────────────────────────────────
 var PAGE_RENDERERS = {
+  aide:          function(){ if(typeof renderAide==='function') renderAide(); },
   dashboard:     renderDashboard,
   stock:         function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderStockNiveaux(); },
   matieres:      function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderMatieresPremieresPage(); },
