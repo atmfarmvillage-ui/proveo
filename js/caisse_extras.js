@@ -66,9 +66,7 @@ async function preselectCaissePDV(selectId){
 async function calcSoldesCaisses(caisses){
   const ids = caisses.map(c=>c.id);
   if(!ids.length) return {};
-  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID).in('caisse_id', ids);
-  const M = mvts||[];
+  const M = await _fetchAllMvtsCaisse(q=>q.in('caisse_id', ids));
   const soldes = {};
   caisses.forEach(c=>{soldes[c.id] = Number(c.solde_initial||0);});
   M.forEach(m=>{
@@ -183,13 +181,19 @@ async function synchroniserCaisseDepenses(){
   if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
   _syncCaisseDepEnCours = true;
   try{
+    // « eq(false) » laissait passer les lignes NULL : en SQL, NULL n'est pas
+    // false. Une depense sans le drapeau n'etait donc ni debitee ni rattrapee,
+    // et le silence du rattrapage la rendait invisible.
     const{data:deps}=await SB.from('gp_depenses').select('*')
-      .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false).order('date',{ascending:true}).limit(100);
+      .eq('admin_id',GP_ADMIN_ID).or('caisse_debitee.is.null,caisse_debitee.eq.false')
+      .order('date',{ascending:true}).limit(100);
     if(!deps || !deps.length) return;
     let n=0;
     for(const d of deps){
+      // Le claim doit accepter NULL pour la meme raison, sinon la depense est
+      // lue puis jamais reservee : boucle a vide a chaque ouverture.
       const{data:claim}=await SB.from('gp_depenses').update({caisse_debitee:true})
-        .eq('id',d.id).eq('caisse_debitee',false).select('id');
+        .eq('id',d.id).or('caisse_debitee.is.null,caisse_debitee.eq.false').select('id');
       if(!claim || !claim.length) continue;
       try{ await _debiterCaisseDepense(d, null); n++; }
       catch(e){ try{ await SB.from('gp_depenses').update({caisse_debitee:false}).eq('id',d.id); }catch(_){} }
@@ -237,9 +241,7 @@ async function ouvrirModifSoldeInit(caisseId){
   const{data:c}=await SB.from('gp_caisses').select('*').eq('id',caisseId).maybeSingle();
   if(!c){ notify('Caisse introuvable','r'); return; }
   // Calculer solde actuel (entrées + sorties + ajustements + transferts entrants/sortants)
-  const{data:mvts}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID)
-    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`);
+  const mvts=await _fetchAllMvtsCaisse(q=>q.or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`));
   let soldeAct = Number(c.solde_initial||0);
   (mvts||[]).forEach(m=>{
     if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);

@@ -163,7 +163,7 @@ async function renderDashboard(){
     // r9 : caisses actives (pour Solde Caisse Total)
     safe(SB.from('gp_caisses').select('id,solde_initial,type,actif,point_vente').eq('admin_id',GP_ADMIN_ID).eq('actif',true)),
     // r10 : mouvements caisse (pour calculer le solde réel)
-    safe(SB.from('gp_mouvements_caisse').select('caisse_id,caisse_dest_id,type,montant,statut_transfert').eq('admin_id',GP_ADMIN_ID)),
+    _fetchAllMvtsCaisse().then(d=>({data:d}),()=>({data:[]})),
     // r11 : achats fournisseurs avec dette résiduelle (pour Dette Fournisseurs)
     safe(SB.from('gp_achats').select('id,montant_total,montant_paye').eq('admin_id',GP_ADMIN_ID).gt('montant_total',0)),
     // r12 : livraisons inter-PDV du mois (ventes en gros) — pour le CA "ventes en gros" par PDV source

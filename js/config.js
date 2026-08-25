@@ -107,3 +107,30 @@ window.addEventListener('online', function(){
   if(typeof synchroniserStockProduction==='function'){ try{ synchroniserStockProduction(); }catch(e){} }
   if(typeof synchroniserStockAchats==='function'){ try{ synchroniserStockAchats(); }catch(e){} }
 });
+
+// ── Lecture complete d une table, page par page ──
+// Supabase plafonne CHAQUE requete a 1000 lignes. Pour un CALCUL sur tout
+// un historique (solde de caisse, niveau de stock), lire une seule page rend
+// un resultat faux sans lever la moindre erreur — le pire des cas, parce que
+// le chiffre a l ecran reste credible.
+// `construire` doit rendre une NOUVELLE requete a chaque appel : une requete
+// Supabase deja executee ne peut pas etre rejouee.
+async function _fetchAllPages(construire, page=1000){
+  let all=[], from=0;
+  for(;;){
+    const{data,error}=await construire().order('id',{ascending:true}).range(from, from+page-1);
+    if(error||!data||!data.length) break;
+    all=all.concat(data);
+    if(data.length<page) break;
+    from+=page;
+  }
+  return all;
+}
+
+// Tous les mouvements de caisse : le seul point d entree pour un calcul de solde.
+function _fetchAllMvtsCaisse(affiner){
+  return _fetchAllPages(()=>{
+    let q=SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID);
+    return affiner ? affiner(q) : q;
+  });
+}

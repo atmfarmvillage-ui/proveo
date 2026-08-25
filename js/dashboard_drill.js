@@ -152,7 +152,7 @@ async function drillSoldeCaisse(){
   if(typeof appartientAuPDV==='function'){
     caisses = caisses.filter(c=> appartientAuPDV(c.point_vente));
   }
-  const {data:M} = await SB.from('gp_mouvements_caisse').select('*').eq('admin_id',GP_ADMIN_ID);
+  const M = await _fetchAllMvtsCaisse();
   const soldes = {};
   caisses.forEach(c=>{ soldes[c.id]=Number(c.solde_initial||0); });
   (M||[]).forEach(m=>{
