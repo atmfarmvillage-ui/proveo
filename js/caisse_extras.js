@@ -181,13 +181,19 @@ async function synchroniserCaisseDepenses(){
   if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
   _syncCaisseDepEnCours = true;
   try{
+    // « eq(false) » laissait passer les lignes NULL : en SQL, NULL n'est pas
+    // false. Une depense sans le drapeau n'etait donc ni debitee ni rattrapee,
+    // et le silence du rattrapage la rendait invisible.
     const{data:deps}=await SB.from('gp_depenses').select('*')
-      .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false).order('date',{ascending:true}).limit(100);
+      .eq('admin_id',GP_ADMIN_ID).or('caisse_debitee.is.null,caisse_debitee.eq.false')
+      .order('date',{ascending:true}).limit(100);
     if(!deps || !deps.length) return;
     let n=0;
     for(const d of deps){
+      // Le claim doit accepter NULL pour la meme raison, sinon la depense est
+      // lue puis jamais reservee : boucle a vide a chaque ouverture.
       const{data:claim}=await SB.from('gp_depenses').update({caisse_debitee:true})
-        .eq('id',d.id).eq('caisse_debitee',false).select('id');
+        .eq('id',d.id).or('caisse_debitee.is.null,caisse_debitee.eq.false').select('id');
       if(!claim || !claim.length) continue;
       try{ await _debiterCaisseDepense(d, null); n++; }
       catch(e){ try{ await SB.from('gp_depenses').update({caisse_debitee:false}).eq('id',d.id); }catch(_){} }

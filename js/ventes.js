@@ -2044,9 +2044,15 @@ async function saveDep(){
     categorie:document.getElementById('dep_cat').value,
     description:desc,montant,
     beneficiaire:document.getElementById('dep_benef').value.trim()||null,
-    point_vente:(GP_ROLE==='admin' ? (document.getElementById('dep_pv').value.trim()||null) : (GP_POINT_VENTE||'Production'))
+    point_vente:(GP_ROLE==='admin' ? (document.getElementById('dep_pv').value.trim()||null) : (GP_POINT_VENTE||'Production')),
+    // Sans ce drapeau la ligne restait NULL, donc invisible au rattrapage :
+    // la depense apparaissait dans les comptes sans jamais sortir de la caisse.
+    caisse_debitee:false
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
+  // Debit immediat, via le meme moteur atomique que les salaires. En cas d'echec
+  // (hors ligne, aucune caisse), le drapeau reste false et le rattrapage prendra.
+  if(typeof synchroniserCaisseDepenses==='function'){ try{ await synchroniserCaisseDepenses(); }catch(_){} }
   err.textContent='';
   // 📲 Si un secrétaire de PDV saisit une dépense → prévenir l'admin par WhatsApp
   if(GP_ROLE!=='admin' && GP_POINT_VENTE && typeof notifierConfirmeurWA==='function'){
