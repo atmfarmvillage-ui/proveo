@@ -149,24 +149,50 @@ async function doLogout(){
 async function bootApp(user){
   GP_USER=user;
   // Check if admin or member
-  // Chercher le membre par user_id d'abord
-  let{data:membre}=await SB.from('gp_membres').select('*').eq('user_id',user.id).maybeSingle();
+  // Recherche du membre. maybeSingle() renvoyait une ERREUR des qu'il trouvait
+  // plus d'une ligne, et cette erreur etait traitee comme « aucun membre » :
+  // l'app basculait alors sur l'espace personnel de l'utilisateur — vide — sans
+  // rien dire. Un doublon dans gp_membres suffisait a ejecter un admin de son
+  // entreprise. On distingue les trois cas, et on ordonne pour que le compte
+  // retenu soit toujours le meme en cas de doublon.
+  const _lireMembre = async (champ, valeur) => {
+    const{data,error}=await SB.from('gp_membres').select('*')
+      .eq(champ,valeur).order('id',{ascending:true}).limit(2);
+    if(error) return {erreur:error.message};
+    return {membre:(data&&data[0])||null, doublon:!!(data&&data.length>1)};
+  };
 
-  // Si pas trouvé par user_id, chercher par email (compte récemment créé via code)
-  if(!membre){
-    const{data:membreEmail}=await SB.from('gp_membres').select('*')
-      .eq('email',user.email).maybeSingle();
-    if(membreEmail){
-      membre=membreEmail;
-      // Lier le user_id — utiliser l'email comme clé (RLS autorise user_id = auth.uid() OR admin_id)
-      // On tente les deux approches
-      const{error:updErr}=await SB.from('gp_membres').update({
-        user_id:user.id,
-        code_invitation:null,
-        code_expire_le:null
-      }).eq('email',user.email).is('user_id',null);
-      if(updErr) console.warn('Update user_id failed silently:', updErr.message);
-    }
+  let res = await _lireMembre('user_id', user.id);
+  let trouveParEmail = false;
+  // Pas trouvé par user_id : compte récemment créé via code d'invitation.
+  if(!res.erreur && !res.membre && user.email){
+    res = await _lireMembre('email', user.email);
+    trouveParEmail = !!res.membre;
+  }
+
+  // Un echec de lecture n'est PAS un compte sans entreprise : le dire, plutot
+  // que d'ouvrir un espace vide qui ferait croire a une perte de donnees.
+  if(res.erreur){
+    document.getElementById('authScreen').classList.remove('hidden');
+    ['topbar','sidebar','main'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
+    document.body.classList.remove('app-ready');
+    const e=document.getElementById('a_err');
+    if(e)e.textContent='Impossible de lire votre compte : '+res.erreur+'. Vos données sont intactes — reessayez, puis prevenez votre administrateur.';
+    return;
+  }
+
+  let membre = res.membre;
+  if(res.doublon){
+    console.warn('gp_membres : plusieurs lignes pour ce compte — la premiere est retenue. A dedoublonner.');
+  }
+  if(membre && trouveParEmail){
+    // Lier le user_id — l'email sert de clé (RLS autorise user_id = auth.uid() OR admin_id)
+    const{error:updErr}=await SB.from('gp_membres').update({
+      user_id:user.id,
+      code_invitation:null,
+      code_expire_le:null
+    }).eq('email',user.email).is('user_id',null);
+    if(updErr) console.warn('Update user_id failed silently:', updErr.message);
   }
 
   if(membre){
