@@ -1206,6 +1206,14 @@ const _CT_COLONNES = [
 
 // Le contrat parle en francs par SAC, la base stocke des francs par TONNE.
 // On affiche les deux : personne ne doit avoir à faire la conversion de tête.
+// Quelles colonnes servent reellement, selon le role. Une valeur saisie dans
+// une colonne inutilisee n'est jamais versee : mieux vaut le montrer que de
+// laisser croire a une erreur de calcul le mois suivant.
+const _CT_UTILES = {
+  commercial: ['p1', 'detail', 'gros', 'residuel'],
+  reprise:    ['reprise'],
+};
+
 const _ctParSac = (parTonne, kgSac) => Math.round((Number(parTonne) || 0) * kgSac / 1000);
 const _ctParTonne = (parSac, kgSac) => Math.round((Number(parSac) || 0) * 1000 / kgSac);
 
@@ -1359,7 +1367,7 @@ function _ctEditer(id){
 
     <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px">
       <label style="font-weight:600">Rôle dans le barème
-        <select id="ct-role" style="margin-left:8px;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px">
+        <select id="ct-role" onchange="_ctMajRole()" style="margin-left:8px;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px">
           <option value="commercial" ${role === 'commercial' ? 'selected' : ''}>Commercial — vend et développe son portefeuille</option>
           <option value="reprise" ${role === 'reprise' ? 'selected' : ''}>Reprise — suit les clients passés au Groupe</option>
         </select>
@@ -1371,12 +1379,13 @@ function _ctEditer(id){
     </div>
 
     <div style="font-weight:600;font-size:13px;margin-bottom:4px">Commission — en francs par sac</div>
+    <div id="ct-note-role" style="font-size:11px;color:var(--gold);margin-bottom:4px"></div>
     <div style="font-size:11px;color:var(--textm,#888);margin-bottom:6px">
       Tu saisis au sac, comme dans le contrat. La conversion en francs par tonne, que l'app utilise pour calculer, s'affiche sous chaque case.
     </div>
     <div style="overflow:auto">
       <table style="border-collapse:collapse;font-size:12px">
-        <tr><th></th>${_CT_COLONNES.map(col => `<th style="padding:4px 6px;font-size:11px;text-align:center">${col.lib}<br>
+        <tr><th></th>${_CT_COLONNES.map(col => `<th id="ct-th-${col.cle}" style="padding:4px 6px;font-size:11px;text-align:center">${col.lib}<br>
           <span style="font-weight:400;color:var(--textm,#888);font-size:9px">${col.aide}</span></th>`).join('')}</tr>
         ${grille}
       </table>
@@ -1412,6 +1421,34 @@ function _ctEditer(id){
       <button class="btn btn-g btn-sm" onclick="_ctRenderListe()">Annuler</button>
       <button class="btn btn-gold" onclick="_ctSauver()">💾 Enregistrer</button>
     </div>`);
+  _ctMajRole();   // estompe d'emblee les colonnes sans effet
+}
+
+// Estompe les colonnes sans effet pour le role choisi. On ne desactive pas les
+// champs : le patron doit pouvoir basculer de role sans reperdre ses chiffres.
+function _ctMajRole(){
+  const role = document.getElementById('ct-role')?.value || 'commercial';
+  const utiles = _CT_UTILES[role] || _CT_UTILES.commercial;
+  _CT_COLONNES.forEach(col => {
+    const sert = utiles.includes(col.cle);
+    const enTete = document.getElementById('ct-th-' + col.cle);
+    if(enTete){
+      enTete.style.opacity = sert ? '1' : '.35';
+      enTete.title = sert ? '' : 'Sans effet pour ce rôle';
+    }
+    _CT_GROUPES.forEach(g => {
+      const inp = document.getElementById(`ct-t-${g.cle}-${col.cle}`);
+      const sous = document.getElementById(`ct-tt-${g.cle}-${col.cle}`);
+      if(inp){ inp.style.opacity = sert ? '1' : '.35'; inp.title = sert ? '' : 'Sans effet pour ce rôle'; }
+      if(sous) sous.style.opacity = sert ? '1' : '.35';
+    });
+  });
+  const note = document.getElementById('ct-note-role');
+  if(note){
+    note.textContent = role === 'reprise'
+      ? 'Seule la colonne « Reprise » est utilisée pour ce rôle. Les autres sont estompées : ce qu\u2019on y saisit n\u2019est jamais versé.'
+      : 'La colonne « Reprise » ne concerne pas ce rôle : elle est réservée à la personne qui reprend le suivi du client.';
+  }
 }
 
 function _ctMajTonne(groupe, colonne, kgSac){
