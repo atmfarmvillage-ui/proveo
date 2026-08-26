@@ -3006,7 +3006,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
     <div><label class="lbl">Mois</label><input type="month" id="dir-mois" onchange="renderDirecteur()" style="width:auto"></div>
     <button class="btn btn-out btn-sm" onclick="renderDirecteur()">🔄 Actualiser</button>
-    <button class="btn btn-g btn-sm admin-only" onclick="ouvrirCreerContrat()">➕ Nouveau contrat</button>
+      <div class="admin-only"><label class="lbl">Personne</label>
+        <select id="dir-qui" onchange="changerContratRegarde(this.value)" style="width:auto"></select></div>
+      <button class="btn btn-gold btn-sm admin-only" onclick="ouvrirEditeurContrats()">📄 Contrats &amp; barèmes</button>
   </div>
   <div id="dir-content"><div style="color:var(--textm);font-size:12px">Chargement...</div></div>
 </div>
@@ -3363,7 +3365,7 @@ try{
 <script src="js/bilanss.js?v=2.26.1"></script>
 <script src="js/benefices.js?v=2.26.1"></script>
 <script src="js/messages_pdv.js?v=2.26.1"></script>
-<script src="js/directeur.js?v=2.26.1"></script>
+<script src="js/directeur.js?v=2.26.3"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
 <script src="js/auth.js?v=2.26.1"></script>

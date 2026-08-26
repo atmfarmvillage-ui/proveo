@@ -42,6 +42,15 @@ function _joursOuvresEntre(debut, fin, exemptDimanche=true){
 }
 
 // ── CHARGER LE CONTRAT ACTIF ──────────────────────
+let CONTRATS_DISPO = [];      // tous les contrats actifs, pour le sélecteur admin
+let CONTRAT_CHOISI_ID = null;  // celui que l'admin regarde en ce moment
+
+async function changerContratRegarde(id){
+  CONTRAT_CHOISI_ID = id || null;
+  await loadContratActif();
+  await renderDirecteur();
+}
+
 async function loadContratActif(){
   // Si membre connecté : charger SON contrat
   // Si admin : charger le 1er contrat actif (ou laisser sélectionner)
@@ -55,7 +64,13 @@ async function loadContratActif(){
       .select('id').eq('user_id', GP_USER.id).maybeSingle();
     CONTRAT_ACTIF = contrats.find(c => c.membre_id === monMembre?.id) || null;
   } else {
-    CONTRAT_ACTIF = contrats[0] || null;
+    // L'admin CHOISIT qui il regarde. Avant, on prenait contrats[0] : avec
+    // plusieurs personnes sous contrat, les autres étaient invisibles et leur
+    // commission n'était jamais consultée.
+    CONTRATS_DISPO = contrats;
+    const choisi = contrats.find(c => c.id === CONTRAT_CHOISI_ID);
+    CONTRAT_ACTIF = choisi || contrats[0] || null;
+    CONTRAT_CHOISI_ID = CONTRAT_ACTIF ? CONTRAT_ACTIF.id : null;
   }
   return CONTRAT_ACTIF;
 }
@@ -63,6 +78,226 @@ async function loadContratActif(){
 // ══════════════════════════════════════════════════
 // CALCUL DES COMMISSIONS DU MOIS
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// MODÈLE « SACS » — contrats commerciaux 2026
+// ══════════════════════════════════════════════════
+// Le contrat raisonne au SAC, l'app compte en KG. La conversion est faite une
+// fois pour toutes dans les règles, en francs par TONNE :
+//     100 F le sac de 25 kg = 4 000 F/t   ·   100 F le sac de 50 kg = 2 000 F/t
+// Trois choses que l'ancien modèle ne savait pas faire, et que le contrat exige :
+//   1. le taux change au 4e mois, ET selon que la vente est au détail ou en gros ;
+//   2. un client quitte le portefeuille 6 mois après sa PREMIÈRE VENTE ENCAISSÉE ;
+//   3. passé ce délai il ne rapporte plus qu'un résiduel — et seulement s'il
+//      achète encore : 60 jours sans achat et la rente s'éteint définitivement.
+// Ce modèle ne s'active que si regles_commissions.modele === 'sacs_v2'.
+// Les contrats existants continuent d'utiliser le calcul par tonne d'origine.
+
+function _moisEcoules(depuis, jusqua){
+  // Nombre de mois pleins entre deux dates 'YYYY-MM-DD'. Sert à savoir si un
+  // client a dépassé les 6 mois : on compte en mois de calendrier, pas en jours,
+  // parce que c'est ce que dit le contrat et ce qu'une personne vérifie.
+  if(!depuis || !jusqua) return 0;
+  const a = new Date(depuis + 'T00:00:00Z'), b = new Date(jusqua + 'T00:00:00Z');
+  let m = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+  if(b.getUTCDate() < a.getUTCDate()) m--;
+  return Math.max(0, m);
+}
+
+function _joursEntre(d1, d2){
+  if(!d1 || !d2) return 0;
+  return Math.round((new Date(d2 + 'T00:00:00Z') - new Date(d1 + 'T00:00:00Z')) / 86400000);
+}
+
+function _plusMois(d, n){
+  const x = new Date(d + 'T00:00:00Z');
+  const jour = x.getUTCDate();
+  x.setUTCMonth(x.getUTCMonth() + n);
+  if(x.getUTCDate() < jour) x.setUTCDate(0);   // 31 janv. + 1 mois = 28/29 fév.
+  return x.toISOString().slice(0, 10);
+}
+
+// La rente résiduelle s'éteint DÉFINITIVEMENT au premier trou de plus de N jours
+// après la sortie du portefeuille. Renvoie la date après laquelle plus rien
+// n'est dû, ou null si la rente est toujours vivante.
+// C'est volontairement irréversible : le contrat dit « ne reprend pas ».
+function _renteMorteApres(datesPayees, premierePayee, dureeMois, inactJours){
+  if(!premierePayee) return null;
+  const sortie = _plusMois(premierePayee, dureeMois);
+  const apres = datesPayees.filter(d => d > sortie).sort();
+  // Le compteur part de la SORTIE, pas du dernier achat qui la precede : la
+  // rente nait a ce moment-la, le client dispose donc d'une fenetre pleine
+  // pour racheter. Faire courir l'inactivite avant la sortie punirait un
+  // creux survenu alors qu'elle etait encore payee au taux plein.
+  let ref = sortie;
+  for(const d of apres){
+    if(_joursEntre(ref, d) > inactJours){
+      const mort = new Date(ref + 'T00:00:00Z');
+      mort.setUTCDate(mort.getUTCDate() + inactJours);
+      return mort.toISOString().slice(0, 10);
+    }
+    ref = d;
+  }
+  return null;
+}
+
+// Statuts qui valent « encaissé ». La commission est acquise à l'encaissement,
+// jamais à la commande — c'est écrit noir sur blanc dans le contrat.
+const _PAYE = ['paye', 'payé', 'solde', 'soldé', 'complet'];
+const _estPaye = (s) => _PAYE.includes(String(s || '').toLowerCase());
+
+async function _commissionsSacs(c, mois, debutCalc, finCalc, userIdTitulaire){
+  const R      = c.regles_commissions || {};
+  const taux   = R.taux || {};
+  const role   = R.role || 'commercial';                 // 'commercial' | 'reprise'
+  const dureeM = Number(R.portefeuille_mois  || 6);
+  const inact  = Number(R.inactivite_jours   || 60);
+  const ph1    = Number(R.phase1_mois        || 3);
+
+  // Phase du contrat pour le mois calculé : les 3 premiers mois sont au taux
+  // unique de lancement, ensuite le barème distingue détail et gros.
+  const moisContrat = _moisEcoules(c.date_debut, mois + '-01') + 1;
+  const phase = moisContrat <= ph1 ? 1 : 2;
+
+  // ── Ventes du mois ──────────────────────────────────────────────────────
+  const { data: ventes } = await SB.from('gp_ventes')
+    .select('id,date,statut_paiement,saisi_par,client_id')
+    .eq('admin_id', GP_ADMIN_ID).is('deleted_at', null)
+    .gte('date', debutCalc).lte('date', finCalc);
+  const vParId = {}; (ventes || []).forEach(v => vParId[v.id] = v);
+  const venteIds = (ventes || []).map(v => v.id);
+
+  let lignes = [];
+  if(venteIds.length){
+    const { data: L } = await SB.from('gp_ventes_lignes')
+      .select('vente_id,formule_nom,quantite,type_produit,sous_type,type_prix')
+      .in('vente_id', venteIds);
+    lignes = L || [];
+  }
+
+  // ── Histoire de chaque client concerné ───────────────────────────────────
+  // On a besoin, pour CHAQUE client touché ce mois-ci, de sa première vente
+  // encaissée (le point de départ des 6 mois) et de sa dernière vente (pour
+  // savoir s'il est encore actif). Ces deux dates se calculent : aucune
+  // colonne à stocker, donc rien qui puisse se désynchroniser.
+  const clientIds = [...new Set((ventes || []).map(v => v.client_id).filter(Boolean))];
+  const histo = {};
+  if(clientIds.length){
+    const { data: H } = await SB.from('gp_ventes')
+      .select('client_id,date,statut_paiement')
+      .eq('admin_id', GP_ADMIN_ID).is('deleted_at', null)
+      .in('client_id', clientIds);
+    (H || []).forEach(v => {
+      const h = histo[v.client_id] || (histo[v.client_id] = { premierePayee: null, payees: [] });
+      if(!_estPaye(v.statut_paiement)) return;
+      if(!h.premierePayee || v.date < h.premierePayee) h.premierePayee = v.date;
+      h.payees.push(v.date);
+    });
+    // Une fois par client : la date après laquelle la rente est éteinte.
+    Object.values(histo).forEach(h => {
+      h.morteApres = _renteMorteApres(h.payees, h.premierePayee, dureeM, inact);
+    });
+  }
+  // Qui a apporté le client — pivot de toute prime d'apport.
+  const apporteur = {};
+  if(clientIds.length){
+    const { data: CL } = await SB.from('gp_clients')
+      .select('id,cree_par,enregistre_le').in('id', clientIds);
+    (CL || []).forEach(x => apporteur[x.id] = x);
+  }
+
+  // ── Ventilation ─────────────────────────────────────────────────────────
+  const seaux = { propre_detail: {}, propre_gros: {}, residuel: {}, reprise: {} };
+  const vide  = () => ({ lapin: 0, autres: 0, poisson: 0 });
+  Object.keys(seaux).forEach(k => seaux[k] = vide());
+  const ignores = { pas_a_moi: 0, client_inactif: 0, non_encaisse: 0 };
+
+  for(const l of lignes){
+    const v = vParId[l.vente_id]; if(!v) continue;
+    if(l.type_produit === 'ferme' || l.type_produit === 'veto') continue;   // hors barème sacs
+    const kg = Number(l.quantite || 0); if(!kg) continue;
+
+    // Acquise à l'encaissement, jamais à la commande.
+    if(!_estPaye(v.statut_paiement)){ ignores.non_encaisse += kg; continue; }
+
+    const grp = (l.type_produit === 'mp') ? 'autres'
+              : _groupeCommission(_especeDepuisFormule(l.formule_nom));
+    const h   = histo[v.client_id] || {};
+    const age = _moisEcoules(h.premierePayee, v.date);
+    const sorti = h.premierePayee && age >= dureeM;
+    // « actif » ne veut pas dire « a acheté récemment » : la rente est morte
+    // ou vivante, et une fois morte elle ne revit pas.
+    const actif = !h.morteApres || v.date <= h.morteApres;
+
+    if(role === 'reprise'){
+      // La secrétaire ne touche QUE sur les clients passés au Groupe, encore
+      // actifs, et sur les ventes qu'elle enregistre elle-même. Un même sac ne
+      // donne jamais lieu à deux commissions de reprise : c'est cette double
+      // condition qui l'empêche.
+      if(!sorti){ ignores.pas_a_moi += kg; continue; }
+      if(userIdTitulaire && v.saisi_par !== userIdTitulaire){ ignores.pas_a_moi += kg; continue; }
+      if(!actif){ ignores.client_inactif += kg; continue; }
+      seaux.reprise[grp] += kg;
+      continue;
+    }
+
+    // Commercial : ses ventes propres, ET les clients de son portefeuille même
+    // si la vente est saisie par quelqu'un d'autre — c'est l'article 6.6.
+    const sienne = (userIdTitulaire && v.saisi_par === userIdTitulaire)
+                || (userIdTitulaire && apporteur[v.client_id]?.cree_par === userIdTitulaire);
+    if(!sienne){ ignores.pas_a_moi += kg; continue; }
+
+    if(sorti){
+      // Sorti du portefeuille : résiduel, et seulement tant qu'il achète.
+      if(!actif){ ignores.client_inactif += kg; continue; }
+      seaux.residuel[grp] += kg;
+    } else {
+      const canal = (phase === 1) ? 'propre_detail'                 // taux unique en phase 1
+                  : (String(l.type_prix || 'detail') === 'gros' ? 'propre_gros' : 'propre_detail');
+      seaux[canal][grp] += kg;
+    }
+  }
+
+  // ── Francs ──────────────────────────────────────────────────────────────
+  const tarif = (grp, quoi) => Number((taux[grp] || {})[quoi] || 0);
+  const clefTaux = { propre_detail: (phase === 1 ? 'p1' : 'detail'),
+                     propre_gros:   (phase === 1 ? 'p1' : 'gros'),
+                     residuel: 'residuel', reprise: 'reprise' };
+  const parSeau = {}; let totalAliments = 0;
+  for(const [seau, kgs] of Object.entries(seaux)){
+    const q = clefTaux[seau];
+    const m = { lapin: 0, autres: 0, poisson: 0 };
+    for(const g of ['lapin', 'autres', 'poisson']){
+      m[g] = Math.round((kgs[g] / 1000) * tarif(g, q));
+    }
+    parSeau[seau] = { kg: kgs, montants: m, total: m.lapin + m.autres + m.poisson };
+    totalAliments += parSeau[seau].total;
+  }
+
+  // ── Prime d'apport ──────────────────────────────────────────────────────
+  // Due seulement si le prospect a été enregistré AVANT sa première vente, et
+  // dans les 90 jours qui l'ont précédée. Un client qui se présente seul, sans
+  // enregistrement antérieur, est un client du Groupe : rien n'est dû.
+  const pa = R.prime_apport || {};
+  const montantApport = Number(pa.montant || 0), validite = Number(pa.validite_jours || 90);
+  const apports = [];
+  if(montantApport && userIdTitulaire){
+    for(const cid of clientIds){
+      const a = apporteur[cid], h = histo[cid] || {};
+      if(!a || a.cree_par !== userIdTitulaire) continue;
+      if(!h.premierePayee) continue;
+      if(h.premierePayee < debutCalc || h.premierePayee > finCalc) continue;   // acquise le mois de la 1re vente
+      const enr = String(a.enregistre_le || '').slice(0, 10);
+      if(!enr || enr > h.premierePayee) continue;                              // enregistré APRÈS : rien
+      if(_joursEntre(enr, h.premierePayee) > validite) continue;               // enregistrement périmé
+      apports.push({ client_id: cid, enregistre_le: enr, premiere_vente: h.premierePayee });
+    }
+  }
+  const totalApports = apports.length * montantApport;
+
+  return { phase, moisContrat, role, seaux: parSeau, ignores,
+           apports, montantApport, totalApports, totalAliments };
+}
+
 async function calculerCommissionsMois(contratId, mois){
   // 1. Charger le contrat
   const { data: c } = await SB.from('gp_contrats').select('*').eq('id', contratId).maybeSingle();
@@ -90,6 +325,47 @@ async function calculerCommissionsMois(contratId, mois){
   if(c.membre_id){
     const { data: mb } = await SB.from('gp_membres').select('user_id').eq('id', c.membre_id).maybeSingle();
     userIdDirecteur = mb?.user_id || null;
+  }
+
+  // 2c. MODÈLE « SACS » (contrats commerciaux 2026) — barème au sac converti en
+  //     F/tonne, phases, détail/gros, cycle de vie du client. On ne dérive que
+  //     si les règles le demandent : les contrats existants ne bougent pas.
+  if(String(regles.modele || '') === 'sacs_v2'){
+    const sacs = await _commissionsSacs(c, mois, debutCalc, finCalc, userIdDirecteur);
+    const kgParGroupe = { lapin: 0, autres: 0, poisson: 0 };
+    Object.values(sacs.seaux).forEach(sq => {
+      kgParGroupe.lapin   += sq.kg.lapin;
+      kgParGroupe.autres  += sq.kg.autres;
+      kgParGroupe.poisson += sq.kg.poisson;
+    });
+    const commissions = { lapin: 0, autres: 0, poisson: 0, lapinVif: 0, oeuf: 0, poulet: 0, autreFerme: 0 };
+    Object.values(sacs.seaux).forEach(sq => {
+      commissions.lapin   += sq.montants.lapin;
+      commissions.autres  += sq.montants.autres;
+      commissions.poisson += sq.montants.poisson;
+    });
+    // Pénalité de rapport : le modèle sacs s'appuie sur un rapport HEBDOMADAIRE,
+    // pas quotidien. On laisse le compteur à zéro plutôt que d'inventer.
+    return {
+      contrat: c, mois, bornes: { debut: debutCalc, fin: finCalc },
+      kgParGroupe,
+      tonnes: { lapin: kgParGroupe.lapin / 1000, autres: kgParGroupe.autres / 1000, poisson: kgParGroupe.poisson / 1000 },
+      unitesFerme: { lapinVif: 0, oeuf: 0, poulet: 0, autreFerme: 0 },
+      // Taux AFFICHÉS : ceux réellement appliqués ce mois-ci. Sans ça l'écran
+      // montrerait « 0 F/tonne » à côté d'une commission bien calculée — le
+      // genre d'incohérence qui fait douter de tout le reste.
+      tarifs: {
+        lapin:   Number(((regles.taux || {}).lapin   || {})[sacs.phase === 1 ? 'p1' : 'detail'] || 0),
+        autres:  Number(((regles.taux || {}).autres  || {})[sacs.phase === 1 ? 'p1' : 'detail'] || 0),
+        poisson: Number(((regles.taux || {}).poisson || {})[sacs.phase === 1 ? 'p1' : 'detail'] || 0),
+        lapinVif: 0, oeuf: 0, poulet: 0, autreFerme: 0,
+      },
+      commissions,
+      totalCommissionsAliments: sacs.totalAliments,
+      totalCommissionsFerme: 0,
+      sacs,
+      rapports: { obligatoire: false, joursAttendus: 0, manques: 0, penalite_unitaire: 0, penalite_totale: 0 },
+    };
   }
 
   // 3. Charger les ventes du mois (filtrées par saisi_par si membre lié)
@@ -206,8 +482,91 @@ async function showDirecteur(){
   await renderDirecteur();
 }
 
+// Remplit le sélecteur de personne. Sans lui, l'admin ne voyait qu'un seul
+// contrat — celui qui sortait en tête — et les autres n'étaient jamais consultés.
+function _dirRemplirSelecteur(){
+  const sel = document.getElementById('dir-qui');
+  if(!sel || !CONTRATS_DISPO.length) return;
+  sel.innerHTML = CONTRATS_DISPO.map(c => {
+    const r = (c.regles_commissions || {}).role;
+    const suffixe = r === 'reprise' ? ' · reprise' : (r === 'commercial' ? ' · commercial' : '');
+    return `<option value="${c.id}" ${c.id === CONTRAT_CHOISI_ID ? 'selected' : ''}>${c.nom_complet || c.poste || '—'}${suffixe}</option>`;
+  }).join('');
+}
+
+// Le detail du calcul, seau par seau. C'est ce qu'on montre a la personne
+// concernee en fin de mois : un montant sans son chemin se conteste.
+// On affiche aussi ce qui a ete ECARTE — c'est toujours la premiere question.
+function _dirVentilation(calc){
+  const S = calc.sacs;
+  if(!S) return '';   // ancien modele : rien a ventiler
+
+  const LIB = {
+    propre_detail: { t: 'Ses ventes \u2014 prix de d\u00e9tail', a: S.phase === 1 ? 'taux de lancement' : 'taux plein d\u00e9tail' },
+    propre_gros:   { t: 'Ses ventes \u2014 prix de gros',   a: S.phase === 1 ? 'taux de lancement' : 'taux gros' },
+    residuel:      { t: 'Clients pass\u00e9s au Groupe',    a: 'r\u00e9siduel, tant que le client ach\u00e8te encore' },
+    reprise:       { t: 'Clients repris et suivis',    a: 'commission de suivi' },
+  };
+  const G = [['lapin', '\ud83d\udc30 Lapin'], ['poisson', '\ud83d\udc1f Poisson'], ['autres', '\ud83c\udf3e Autres']];
+
+  const lignes = Object.entries(S.seaux)
+    .filter(([, v]) => v.total > 0)
+    .map(([cle, v]) => {
+      const kgTot = v.kg.lapin + v.kg.poisson + v.kg.autres;
+      const detail = G.filter(([g]) => v.kg[g] > 0)
+        .map(([g, lib]) => lib + ' ' + fmtKg(v.kg[g] / 1000) + ' t').join(' \u00b7 ');
+      return '<tr>'
+        + '<td><div style="font-weight:600">' + (LIB[cle] ? LIB[cle].t : cle) + '</div>'
+        + '<div style="font-size:10px;color:var(--textm)">' + (LIB[cle] ? LIB[cle].a : '') + '</div>'
+        + (detail ? '<div style="font-size:10px;color:var(--textm);margin-top:2px">' + detail + '</div>' : '')
+        + '</td>'
+        + '<td class="num">' + fmtKg(kgTot / 1000) + ' t</td>'
+        + '<td class="num" style="color:var(--gold);font-weight:700">' + fmt(v.total) + ' F</td>'
+        + '</tr>';
+    }).join('');
+
+  const inact = (calc.contrat && calc.contrat.regles_commissions && calc.contrat.regles_commissions.inactivite_jours) || 60;
+  const ecarte = [];
+  if(S.ignores.non_encaisse > 0)
+    ecarte.push(fmtKg(S.ignores.non_encaisse / 1000) + ' t non encaiss\u00e9es \u2014 la commission est acquise au paiement, pas \u00e0 la commande');
+  if(S.ignores.client_inactif > 0)
+    ecarte.push(fmtKg(S.ignores.client_inactif / 1000) + ' t sur des clients dont la rente est \u00e9teinte (plus de ' + inact + ' jours sans achat)');
+  if(S.ignores.pas_a_moi > 0)
+    ecarte.push(fmtKg(S.ignores.pas_a_moi / 1000) + ' t hors de son p\u00e9rim\u00e8tre');
+
+  const apports = S.apports.length
+    ? '<tr><td><div style="font-weight:600">Primes d\u2019apport</div>'
+      + '<div style="font-size:10px;color:var(--textm)">' + S.apports.length
+      + ' nouveau(x) client(s), enregistr\u00e9(s) avant leur premi\u00e8re vente</div></td>'
+      + '<td class="num">' + S.apports.length + '</td>'
+      + '<td class="num" style="color:var(--gold);font-weight:700">' + fmt(S.totalApports) + ' F</td></tr>'
+    : '';
+
+  const corps = lignes
+    ? '<table class="tbl" style="font-size:11px;width:100%">'
+      + '<thead><tr><th>Origine</th><th class="num">Volume</th><th class="num">Montant</th></tr></thead>'
+      + '<tbody>' + lignes + apports
+      + '<tr style="background:rgba(22,163,74,.05);font-weight:700"><td colspan="2">Total</td>'
+      + '<td class="num" style="color:var(--gold)">' + fmt(S.totalAliments + S.totalApports) + ' F</td></tr>'
+      + '</tbody></table>'
+    : '<div style="padding:14px;color:var(--textm);font-size:12px">Aucune commission ce mois-ci.</div>';
+
+  const blocEcarte = ecarte.length
+    ? '<div style="margin-top:10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:9px;font-size:11px">'
+      + '<div style="font-weight:600;margin-bottom:3px">\u00c9cart\u00e9 du calcul</div>'
+      + ecarte.map(e => '<div style="color:var(--textm)">\u2022 ' + e + '</div>').join('')
+      + '</div>'
+    : '';
+
+  return '<div class="card" style="margin-bottom:14px">'
+    + '<div class="card-title"><div class="ct-left"><span>\ud83e\uddee Comment ce montant est calcul\u00e9</span></div>'
+    + '<span class="badge bdg-gold" style="font-size:10px">Mois ' + S.moisContrat + ' \u00b7 phase ' + S.phase + '</span></div>'
+    + corps + blocEcarte + '</div>';
+}
+
 async function renderDirecteur(){
   const c = CONTRAT_ACTIF;
+  _dirRemplirSelecteur();
   const mois = document.getElementById('dir-mois')?.value || thisMonth();
   const calc = await calculerCommissionsMois(c.id, mois);
   if(!calc) return;
@@ -239,6 +598,8 @@ async function renderDirecteur(){
   const ligneFerme = (icone, label, qte, tarif, comm) => qte>0 || tarif>0 ? `
     <tr><td>${icone} ${label}</td><td class="num">${qte} u</td><td class="num">${fmt(tarif)} F/u</td><td class="num" style="color:var(--gold);font-weight:700">${fmt(comm)} F</td></tr>
   ` : '';
+
+  const ventilation = _dirVentilation(calc);
 
   const detailCommissions = `
     <div class="card" style="margin-bottom:14px">
@@ -313,6 +674,7 @@ async function renderDirecteur(){
   document.getElementById('dir-content').innerHTML = `
     ${enTete}
     ${objectifsHtml}
+    ${ventilation}
     ${detailCommissions}
     ${rapportsHtml}
     ${boutonGen}
@@ -817,4 +1179,301 @@ async function saveContrat(){
   fermerCreerContrat();
   notify('Contrat créé ✓', 'gold');
   await showDirecteur();
+}
+
+// ══════════════════════════════════════════════════
+// ÉDITEUR DE CONTRATS — l'admin change le barème lui-même
+// ══════════════════════════════════════════════════
+// Sans cet écran, chaque taux, chaque durée, chaque prime passait par du SQL.
+// Un système dont on ne peut pas changer les règles soi-même n'appartient pas
+// à celui qui l'exploite. Tout ce qui est négociable dans le contrat papier est
+// éditable ici : taux par phase et par canal, durée du portefeuille, délai
+// d'inactivité, prime d'apport, salaire, dates.
+// L'écran se construit tout seul : rien à ajouter dans index.html.
+
+const _CT_GROUPES = [
+  { cle: 'lapin',   lib: '🐰 Lapin',   sac: '25 kg' },
+  { cle: 'poisson', lib: '🐟 Poisson', sac: '25 kg' },
+  { cle: 'autres',  lib: '🌾 Autres formules', sac: '50 kg' },
+];
+const _CT_COLONNES = [
+  { cle: 'p1',       lib: 'Phase 1',   aide: 'les 3 premiers mois, taux unique' },
+  { cle: 'detail',   lib: 'Détail',    aide: 'à partir du mois 4' },
+  { cle: 'gros',     lib: 'Gros',      aide: 'à partir du mois 4' },
+  { cle: 'residuel', lib: 'Résiduel',  aide: 'client passé au Groupe après 6 mois' },
+  { cle: 'reprise',  lib: 'Reprise',   aide: 'ce que touche la secrétaire qui suit le client' },
+];
+
+// Le contrat parle en francs par SAC, la base stocke des francs par TONNE.
+// On affiche les deux : personne ne doit avoir à faire la conversion de tête.
+const _ctParSac = (parTonne, kgSac) => Math.round((Number(parTonne) || 0) * kgSac / 1000);
+const _ctParTonne = (parSac, kgSac) => Math.round((Number(parSac) || 0) * 1000 / kgSac);
+
+async function ouvrirEditeurContrats(){
+  const { data: contrats } = await SB.from('gp_contrats')
+    .select('*').eq('admin_id', GP_ADMIN_ID).order('actif', { ascending: false }).order('nom_complet');
+  const { data: membres } = await SB.from('gp_membres')
+    .select('id,nom,role,point_vente').eq('admin_id', GP_ADMIN_ID).order('nom');
+  window._CT = { contrats: contrats || [], membres: membres || [] };
+
+  let el = document.getElementById('modal-contrats');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'modal-contrats';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  _ctRenderListe();
+}
+
+function fermerEditeurContrats(){
+  const el = document.getElementById('modal-contrats');
+  if(el) el.style.display = 'none';
+}
+
+function _ctCadre(contenu){
+  return `<div style="background:var(--card,#fff);border-radius:14px;max-width:900px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3)">${contenu}</div>`;
+}
+
+function _ctRenderListe(){
+  const { contrats, membres } = window._CT;
+  const nomMembre = {}; membres.forEach(m => nomMembre[m.id] = m.nom);
+  const lignes = contrats.length ? contrats.map(c => {
+    const R = c.regles_commissions || {};
+    const sacs = String(R.modele || '') === 'sacs_v2';
+    const roleLib = R.role === 'reprise' ? 'Reprise (secrétaire)' : (sacs ? 'Commercial' : 'Ancien modèle');
+    return `<tr style="border-bottom:1px solid var(--border,#eee)">
+      <td style="padding:8px 6px">
+        <div style="font-weight:600">${c.nom_complet || nomMembre[c.membre_id] || '—'}</div>
+        <div style="font-size:11px;color:var(--textm,#888)">${c.poste || ''}</div>
+      </td>
+      <td style="padding:8px 6px;font-size:12px">${roleLib}</td>
+      <td style="padding:8px 6px;font-size:12px">${fmt(c.salaire_base || 0)} F</td>
+      <td style="padding:8px 6px;font-size:12px">${c.date_debut || '—'}${c.date_fin ? ' → ' + c.date_fin : ''}</td>
+      <td style="padding:8px 6px">
+        <span class="badge ${c.actif ? 'bdg-g' : 'bdg-neutre'}" style="font-size:10px">${c.actif ? 'ACTIF' : 'inactif'}</span>
+      </td>
+      <td style="padding:8px 6px;text-align:right">
+        <button class="btn btn-g btn-sm" onclick="_ctEditer('${c.id}')">Éditer</button>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--textm,#888)">Aucun contrat. Crée le premier ci-dessous.</td></tr>`;
+
+  document.getElementById('modal-contrats').innerHTML = _ctCadre(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <h3 style="margin:0">📄 Contrats et barèmes</h3>
+        <div style="font-size:12px;color:var(--textm,#888)">Tout ce qui se négocie se change ici, sans passer par la base.</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="fermerEditeurContrats()">Fermer</button>
+    </div>
+    <div style="overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;border-bottom:2px solid var(--border,#eee)">
+          <th style="padding:6px">Personne</th><th style="padding:6px">Barème</th>
+          <th style="padding:6px">Fixe</th><th style="padding:6px">Période</th>
+          <th style="padding:6px">État</th><th></th>
+        </tr>
+        ${lignes}
+      </table>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="ct-new-membre" style="padding:8px;border:1px solid var(--border,#ddd);border-radius:8px">
+        <option value="">— choisir une personne —</option>
+        ${membres.map(m => `<option value="${m.id}">${m.nom}${m.point_vente ? ' · ' + m.point_vente : ''}</option>`).join('')}
+      </select>
+      <button class="btn btn-gold btn-sm" onclick="_ctEditer(null)">➕ Nouveau contrat</button>
+    </div>`);
+}
+
+function _ctEditer(id){
+  const { contrats, membres } = window._CT;
+  const c = id ? contrats.find(x => x.id === id) : null;
+  if(!c){
+    const mid = document.getElementById('ct-new-membre')?.value;
+    if(!mid){ notify('Choisis d\'abord la personne', 'r'); return; }
+    var membre = membres.find(m => m.id === mid);
+  }
+  const R = (c && c.regles_commissions) || {};
+  const role = R.role || 'commercial';
+
+  // ANCIEN MODÈLE : taux plats par tonne, sans phase ni canal. Ouvrir un tel
+  // contrat ici afficherait des cases vides — et l'enregistrer mettrait la
+  // commission à zéro. On reprend ses taux comme point de départ pour les trois
+  // colonnes de vente, et on prévient en haut de l'écran.
+  const ancienModele = !!c && String(R.modele || '') !== 'sacs_v2';
+  let T = R.taux || {};
+  if(ancienModele){
+    const rep = (v) => ({ p1: v, detail: v, gros: v, residuel: 0, reprise: 0 });
+    T = {
+      lapin:   rep(Number(R.lapin_par_tonne   || 0)),
+      poisson: rep(Number(R.poisson_par_tonne || 0)),
+      autres:  rep(Number(R.autres_par_tonne  || 0)),
+    };
+  }
+  const val = (g, k) => Number((T[g] || {})[k] || 0);
+
+  const grille = _CT_GROUPES.map(g => `
+    <tr>
+      <td style="padding:5px 6px;font-size:12px;white-space:nowrap">${g.lib}<br>
+        <span style="font-size:10px;color:var(--textm,#888)">sac de ${g.sac}</span></td>
+      ${_CT_COLONNES.map(col => `<td style="padding:4px">
+        <input id="ct-t-${g.cle}-${col.cle}" type="number" min="0" step="10"
+               value="${_ctParSac(val(g.cle, col.cle), g.sac === '25 kg' ? 25 : 50)}"
+               oninput="_ctMajTonne('${g.cle}','${col.cle}',${g.sac === '25 kg' ? 25 : 50})"
+               style="width:74px;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px;text-align:right">
+        <div id="ct-tt-${g.cle}-${col.cle}" style="font-size:9px;color:var(--textm,#888);text-align:right">
+          ${fmt(val(g.cle, col.cle))} F/t</div>
+      </td>`).join('')}
+    </tr>`).join('');
+
+  document.getElementById('modal-contrats').innerHTML = _ctCadre(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h3 style="margin:0">${c ? 'Éditer' : 'Nouveau'} — ${c ? (c.nom_complet || '') : (membre ? membre.nom : '')}</h3>
+      <button class="btn btn-g btn-sm" onclick="_ctRenderListe()">← Retour</button>
+    </div>
+    ${ancienModele ? `<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:10px;margin:8px 0;font-size:12px;color:#92400e">
+      <b>⚠️ Ce contrat utilise l'ancien barème</b> — un taux unique par tonne, sans phase ni distinction détail/gros.
+      Les cases ci-dessous ont été pré-remplies avec ses taux actuels. <b>Enregistrer le convertira au nouveau modèle.</b>
+      Vérifie chaque valeur avant de sauver, ou reviens en arrière pour n'y rien changer.
+    </div>` : ''}
+    <input type="hidden" id="ct-id" value="${c ? c.id : ''}">
+    <input type="hidden" id="ct-membre" value="${c ? (c.membre_id || '') : (membre ? membre.id : '')}">
+    <input type="hidden" id="ct-nom" value="${c ? (c.nom_complet || '') : (membre ? membre.nom : '')}">
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+      <label style="flex:1;min-width:200px;font-size:12px">Poste
+        <input id="ct-poste" value="${c ? (c.poste || '') : ''}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px">
+      </label>
+      <label style="width:150px;font-size:12px">Salaire fixe
+        <input id="ct-salaire" type="number" min="0" step="1000" value="${c ? Number(c.salaire_base || 0) : 0}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="width:150px;font-size:12px">Début
+        <input id="ct-debut" type="date" value="${c ? (c.date_debut || '') : ''}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px">
+      </label>
+      <label style="width:150px;font-size:12px">Fin (facultatif)
+        <input id="ct-fin" type="date" value="${c ? (c.date_fin || '') : ''}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px">
+      </label>
+    </div>
+
+    <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px">
+      <label style="font-weight:600">Rôle dans le barème
+        <select id="ct-role" style="margin-left:8px;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px">
+          <option value="commercial" ${role === 'commercial' ? 'selected' : ''}>Commercial — vend et développe son portefeuille</option>
+          <option value="reprise" ${role === 'reprise' ? 'selected' : ''}>Reprise — suit les clients passés au Groupe</option>
+        </select>
+      </label>
+      <div style="margin-top:6px;color:var(--textm,#888)">
+        Le <b>commercial</b> touche sur ses ventes et sur les clients qu'il a apportés, puis un résiduel après six mois.
+        La <b>reprise</b> ne touche que sur les clients déjà sortis du portefeuille, et seulement sur les ventes qu'elle saisit elle-même.
+      </div>
+    </div>
+
+    <div style="font-weight:600;font-size:13px;margin-bottom:4px">Commission — en francs par sac</div>
+    <div style="font-size:11px;color:var(--textm,#888);margin-bottom:6px">
+      Tu saisis au sac, comme dans le contrat. La conversion en francs par tonne, que l'app utilise pour calculer, s'affiche sous chaque case.
+    </div>
+    <div style="overflow:auto">
+      <table style="border-collapse:collapse;font-size:12px">
+        <tr><th></th>${_CT_COLONNES.map(col => `<th style="padding:4px 6px;font-size:11px;text-align:center">${col.lib}<br>
+          <span style="font-weight:400;color:var(--textm,#888);font-size:9px">${col.aide}</span></th>`).join('')}</tr>
+        ${grille}
+      </table>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
+      <label style="width:170px;font-size:12px">Portefeuille (mois)
+        <input id="ct-portef" type="number" min="1" value="${Number(R.portefeuille_mois || 6)}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="width:190px;font-size:12px">Inactivité (jours)
+        <input id="ct-inact" type="number" min="1" value="${Number(R.inactivite_jours || 60)}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="width:150px;font-size:12px">Phase 1 (mois)
+        <input id="ct-ph1" type="number" min="0" value="${Number(R.phase1_mois || 3)}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="width:170px;font-size:12px">Prime d'apport (F)
+        <input id="ct-apport" type="number" min="0" step="500" value="${Number((R.prime_apport || {}).montant || 0)}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="width:190px;font-size:12px">Validité prospect (jours)
+        <input id="ct-validite" type="number" min="1" value="${Number((R.prime_apport || {}).validite_jours || 90)}" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;text-align:right">
+      </label>
+      <label style="align-self:flex-end;font-size:12px;padding-bottom:8px">
+        <input id="ct-actif" type="checkbox" ${(!c || c.actif) ? 'checked' : ''}> Contrat actif
+      </label>
+    </div>
+
+    <div style="font-size:11px;color:var(--textm,#888);margin-bottom:10px">
+      Un client quitte le portefeuille après le nombre de mois indiqué, à compter de sa <b>première vente encaissée</b>.
+      Passé ce délai, il ne rapporte plus que le résiduel — et si l'inactivité est dépassée, plus rien du tout, définitivement.
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-g btn-sm" onclick="_ctRenderListe()">Annuler</button>
+      <button class="btn btn-gold" onclick="_ctSauver()">💾 Enregistrer</button>
+    </div>`);
+}
+
+function _ctMajTonne(groupe, colonne, kgSac){
+  const v = +document.getElementById(`ct-t-${groupe}-${colonne}`).value || 0;
+  const el = document.getElementById(`ct-tt-${groupe}-${colonne}`);
+  if(el) el.textContent = fmt(_ctParTonne(v, kgSac)) + ' F/t';
+}
+
+async function _ctSauver(){
+  const id = document.getElementById('ct-id').value || null;
+  const membreId = document.getElementById('ct-membre').value || null;
+  const debut = document.getElementById('ct-debut').value;
+  if(!debut){ notify('La date de début est obligatoire', 'r'); return; }
+
+  const taux = {};
+  for(const g of _CT_GROUPES){
+    const kg = g.sac === '25 kg' ? 25 : 50;
+    taux[g.cle] = {};
+    for(const col of _CT_COLONNES){
+      taux[g.cle][col.cle] = _ctParTonne(+document.getElementById(`ct-t-${g.cle}-${col.cle}`).value || 0, kg);
+    }
+  }
+  const regles = {
+    modele: 'sacs_v2',
+    role: document.getElementById('ct-role').value,
+    taux,
+    portefeuille_mois: +document.getElementById('ct-portef').value || 6,
+    inactivite_jours:  +document.getElementById('ct-inact').value  || 60,
+    phase1_mois:       +document.getElementById('ct-ph1').value    || 0,
+    prime_apport: {
+      montant:        +document.getElementById('ct-apport').value   || 0,
+      validite_jours: +document.getElementById('ct-validite').value || 90,
+    },
+  };
+  const ligne = {
+    admin_id: GP_ADMIN_ID,
+    membre_id: membreId,
+    nom_complet: document.getElementById('ct-nom').value || null,
+    poste: document.getElementById('ct-poste').value || null,
+    type_contrat: 'CDD',
+    date_debut: debut,
+    date_fin: document.getElementById('ct-fin').value || null,
+    salaire_base: +document.getElementById('ct-salaire').value || 0,
+    regles_commissions: regles,
+    rapport_quotidien_obligatoire: false,   // les contrats 2026 prévoient un rapport hebdomadaire
+    penalite_rapport_manquant: 0,
+    exempt_dimanche: true,
+    actif: document.getElementById('ct-actif').checked,
+  };
+
+  // Deux contrats actifs pour la même personne = le module en choisirait un au
+  // hasard et la paie serait fausse. On désactive l'ancien plutôt que d'empiler.
+  if(ligne.actif && membreId){
+    await SB.from('gp_contrats').update({ actif: false })
+      .eq('admin_id', GP_ADMIN_ID).eq('membre_id', membreId).eq('actif', true)
+      .then(() => {}, () => {});
+  }
+
+  const { error } = id
+    ? await SB.from('gp_contrats').update(ligne).eq('id', id)
+    : await SB.from('gp_contrats').insert(ligne);
+  if(error){ notify('Erreur : ' + error.message, 'r'); return; }
+  notify('Contrat enregistré ✓', 'gold');
+  await ouvrirEditeurContrats();
 }
