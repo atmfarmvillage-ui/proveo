@@ -154,12 +154,19 @@ async function openClientDetail(id){
   const moisKeys=Object.keys(byMonth).sort().reverse();
   const parMois=moisKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr>
       <th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Reste</th>
-    </tr></thead><tbody>${moisKeys.map(ym=>{const m=byMonth[ym],r=m.achete-m.paye,mm=ym.split('-');return `<tr>
-      <td style="font-size:10px">${_MOISFR[+mm[1]-1]} ${mm[0]}</td>
+    </tr></thead><tbody>${moisKeys.map(ym=>{const m=byMonth[ym],r=m.achete-m.paye,mm=ym.split('-');
+      const det=rows.filter(v=>String(v.date||'').slice(0,7)===ym).map(v=>{const tot=Number(v.montant_total)||0,pay=Number(v.montant_paye)||0,rr=tot-pay;return `<tr style="background:var(--card2,#f5f5f9)">
+        <td style="font-size:9px;padding-left:16px">${fmtDate?fmtDate(v.date):v.date}</td>
+        <td style="font-size:9px">${v.formule_nom||'—'}</td>
+        <td class="num" style="font-size:9px">${fmt(tot)}</td>
+        <td class="num" style="font-size:9px;color:#0a8a4f">${fmt(pay)}${rr>0?' <span style="color:#c0392b">(−'+fmt(rr)+')</span>':''}</td>
+      </tr>`;}).join('');
+      return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')">
+      <td style="font-size:10px"><span id="mi-${ym}">▸</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td>
       <td class="num">${fmt(m.achete)} F</td>
       <td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td>
       <td class="num" style="color:${r>0?'#c0392b':'var(--textm)'}">${fmt(r)} F</td>
-    </tr>`;}).join('')}</tbody></table>`
+    </tr><tr id="md-${ym}" style="display:none"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`
     :'<div style="color:var(--textm);font-size:12px">Aucun mois.</div>';
   const hist=rows.length?`<table class="tbl" style="font-size:11px"><thead><tr>
       <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th class="num">Payé</th><th class="num">Reste</th>
@@ -195,13 +202,14 @@ async function openClientDetail(id){
       <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
       ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
     </div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📅 Par mois <span style="font-weight:400;color:var(--textm);font-size:10px">(payé = réglé sur les ventes du mois)</span></div>
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📅 Par mois <span style="font-weight:400;color:var(--textm);font-size:10px">(clique un mois → détail daté · payé = réglé sur les ventes du mois)</span></div>
     <div style="max-height:190px;overflow:auto;margin-bottom:14px">${parMois}</div>
     <div style="font-weight:700;font-size:12px;margin-bottom:6px">🧾 Historique des achats</div>
     <div style="max-height:240px;overflow:auto">${hist}</div>`;
   document.getElementById('modal-client-detail').style.display='flex';
 }
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
+function _toggleMois(ym){ const d=document.getElementById('md-'+ym),i=document.getElementById('mi-'+ym); if(!d)return; const show=d.style.display==='none'; d.style.display=show?'table-row':'none'; if(i)i.textContent=show?'▾':'▸'; }
 
 // Relance rédigée par l'IA (marketing) → ouvre la modale WhatsApp pré-remplie
 // tier : 'eco' = 🚀 Pro (DeepSeek, défaut) · 'pro' = 💎 Premium (Claude)
