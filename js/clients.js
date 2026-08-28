@@ -145,6 +145,12 @@ async function openClientDetail(id){
   if(typeof scopeQueryClientsPole==='function') _qDet=scopeQueryClientsPole(_qDet); // historique partagé dans le pôle central
   const{data:V}=await _qDet.order('date',{ascending:false}).limit(2000);
   const rows=V||[];
+  // Registre des paiements DATÉS (règlements clients) : la vraie date de chaque versement.
+  let _qReg=SB.from('gp_reglements_clients').select('date_paiement,montant,mode,note').eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
+  const{data:REG}=await _qReg.order('date_paiement',{ascending:false}).limit(500);
+  const regs=REG||[];
+  const totEncaisse=regs.reduce((s,r)=>s+(Number(r.montant)||0),0);
+  const paiementsHtml=regs.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Mode</th><th class="num">Montant</th></tr></thead><tbody>${regs.map(r=>`<tr><td style="font-size:10px">${fmtDate?fmtDate(r.date_paiement):r.date_paiement}</td><td style="font-size:10px">${r.mode||r.note||'—'}</td><td class="num" style="color:#0a8a4f">${fmt(r.montant)} F</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement daté encore. Les prochains (à la vente, ou via « Encaisser ») s\'afficheront ici avec leur date.</div>';
   // Totaux + agrégat PAR MOIS (basé sur la date de VENTE : le paiement client n'a pas de date propre).
   let totAchete=0,totPaye=0; const byMonth={};
   rows.forEach(v=>{ const tot=Number(v.montant_total)||0, pay=Number(v.montant_paye)||0; totAchete+=tot; totPaye+=pay;
@@ -198,10 +204,13 @@ async function openClientDetail(id){
       <div class="econo-box"><div class="econo-val" style="color:${st.color}">${jours!=null?jours+' j':'—'}</div><div class="econo-lbl">Depuis dernier achat</div></div>
     </div>
     ${s.produitHabituel?`<div style="font-size:12px;margin-bottom:10px">🌾 Produit habituel : <b>${s.produitHabituel}</b></div>`:''}
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
-      ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-g btn-sm" style="flex:1;min-width:110px;justify-content:center" onclick="encaisserReglement('${c.id}')">💰 Encaisser</button>
+      <button class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
+      ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
     </div>
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">💰 Paiements reçus (datés) <span style="font-weight:400;color:var(--textm);font-size:10px">· total ${fmt(totEncaisse)} F</span></div>
+    <div style="max-height:160px;overflow:auto;margin-bottom:14px">${paiementsHtml}</div>
     <div style="font-weight:700;font-size:12px;margin-bottom:6px">📅 Par mois <span style="font-weight:400;color:var(--textm);font-size:10px">(clique un mois → détail daté · payé = réglé sur les ventes du mois)</span></div>
     <div style="max-height:190px;overflow:auto;margin-bottom:14px">${parMois}</div>
     <div style="font-weight:700;font-size:12px;margin-bottom:6px">🧾 Historique des achats</div>
@@ -210,6 +219,61 @@ async function openClientDetail(id){
 }
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
 function _toggleMois(ym){ const d=document.getElementById('md-'+ym),i=document.getElementById('mi-'+ym); if(!d)return; const show=d.style.display==='none'; d.style.display=show?'table-row':'none'; if(i)i.textContent=show?'▾':'▸'; }
+
+// ── ENCAISSER UN RÈGLEMENT CLIENT (paiement daté) ──────────
+let _REGL_IMPAYES=[];
+async function encaisserReglement(clientId){
+  const c=GP_CLIENTS.find(x=>x.id===clientId); if(!c)return;
+  let _q=SB.from('gp_ventes').select('id,date,montant_total,montant_paye,statut_paiement').eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
+  if(typeof scopeQueryPDV==='function') _q=scopeQueryPDV(_q);
+  const{data:imp}=await _q.order('date',{ascending:true});
+  _REGL_IMPAYES=imp||[];
+  const dette=_REGL_IMPAYES.reduce((s,v)=>s+Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
+  const today=new Date().toISOString().slice(0,10);
+  const ov=document.createElement('div'); ov.id='regl-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML=`<div style="background:var(--card,#fff);border-radius:14px;padding:18px;max-width:360px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.3)">
+    <div style="font-weight:800;font-size:15px;margin-bottom:2px;color:var(--text)">💰 Encaisser un règlement</div>
+    <div style="font-size:12px;color:var(--textm);margin-bottom:12px">${c.nom} · dette actuelle : <b style="color:#c0392b">${fmt(dette)} F</b></div>
+    <label style="font-size:12px;font-weight:600;color:var(--text)">Montant reçu (F)</label>
+    <input id="regl-montant" type="number" min="1" step="100" value="${dette>0?Math.round(dette):''}" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 10px">
+    <label style="font-size:12px;font-weight:600;color:var(--text)">Date du paiement</label>
+    <input id="regl-date" type="date" value="${today}" max="${today}" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 10px">
+    <label style="font-size:12px;font-weight:600;color:var(--text)">Mode</label>
+    <select id="regl-mode" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 14px">
+      <option value="espèces">Espèces</option><option value="mobile money">Mobile Money</option><option value="virement">Virement</option><option value="autre">Autre</option>
+    </select>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-out btn-sm" style="flex:1;justify-content:center" onclick="document.getElementById('regl-overlay').remove()">Annuler</button>
+      <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="confirmerReglement('${clientId}')">✅ Encaisser</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+async function confirmerReglement(clientId){
+  const montant=Number(document.getElementById('regl-montant')?.value)||0;
+  const date=document.getElementById('regl-date')?.value||new Date().toISOString().slice(0,10);
+  const mode=document.getElementById('regl-mode')?.value||'espèces';
+  if(montant<=0){ if(typeof notify==='function')notify('Montant invalide','r'); return; }
+  const c=GP_CLIENTS.find(x=>x.id===clientId);
+  const pv=(c&&c.point_vente)||(typeof GP_POINT_VENTE!=='undefined'&&GP_POINT_VENTE)||'Production';
+  try{
+    await SB.from('gp_reglements_clients').insert({ admin_id:GP_ADMIN_ID, client_id:clientId, montant:montant, date_paiement:date, mode:mode, point_vente:pv, created_by:(typeof GP_USER!=='undefined'&&GP_USER)?GP_USER.id:null });
+    let reste=montant;
+    for(const v of (_REGL_IMPAYES||[])){
+      if(reste<=0)break;
+      const du=Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)); if(du<=0)continue;
+      const applique=Math.min(reste,du); const np=Number(v.montant_paye||0)+applique;
+      await SB.from('gp_ventes').update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'}).eq('id',v.id);
+      reste-=applique;
+    }
+    document.getElementById('regl-overlay')?.remove();
+    if(typeof notify==='function')notify('✅ Règlement de '+fmt(montant)+' F encaissé'+(reste>0?' ('+fmt(reste)+' F en avance)':''),'g');
+    if(typeof loadClients==='function'){ try{ await loadClients(); }catch(_){}}
+    if(typeof loadClientStats==='function'){ try{ await loadClientStats(true); }catch(_){}}
+    openClientDetail(clientId);
+  }catch(e){ if(typeof notify==='function')notify('Erreur : '+(e.message||e),'r'); }
+}
 
 // Relance rédigée par l'IA (marketing) → ouvre la modale WhatsApp pré-remplie
 // tier : 'eco' = 🚀 Pro (DeepSeek, défaut) · 'pro' = 💎 Premium (Claude)

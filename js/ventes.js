@@ -1153,6 +1153,11 @@ async function saveVente(){
 
   if(error){_showErr('Erreur enregistrement vente : '+error.message);return;}
 
+  // Registre des règlements clients (paiement DATÉ) — trace le paiement immédiat de cette vente.
+  if(clientId && Number(paye)>0){
+    try{ await SB.from('gp_reglements_clients').insert({ admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id, montant:Number(paye), date_paiement:dateVente, mode:null, point_vente:pv, note:'Paiement à la vente', created_by:GP_USER?.id }); }catch(_){}
+  }
+
   // Insérer les lignes
   await SB.from('gp_ventes_lignes').insert(
     VT_LIGNES.map(l=>({
