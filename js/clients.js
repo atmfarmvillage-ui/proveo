@@ -143,16 +143,34 @@ async function openClientDetail(id){
     .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement,point_vente')
     .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
   if(typeof scopeQueryClientsPole==='function') _qDet=scopeQueryClientsPole(_qDet); // historique partagé dans le pôle central
-  const{data:V}=await _qDet.order('date',{ascending:false}).limit(50);
-  const hist=(V||[]).length?`<table class="tbl" style="font-size:11px"><thead><tr>
-      <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th></th>
-    </tr></thead><tbody>${(V||[]).map(v=>`<tr>
+  const{data:V}=await _qDet.order('date',{ascending:false}).limit(2000);
+  const rows=V||[];
+  // Totaux + agrégat PAR MOIS (basé sur la date de VENTE : le paiement client n'a pas de date propre).
+  let totAchete=0,totPaye=0; const byMonth={};
+  rows.forEach(v=>{ const tot=Number(v.montant_total)||0, pay=Number(v.montant_paye)||0; totAchete+=tot; totPaye+=pay;
+    const ym=String(v.date||'').slice(0,7); if(!ym)return; if(!byMonth[ym])byMonth[ym]={achete:0,paye:0}; byMonth[ym].achete+=tot; byMonth[ym].paye+=pay; });
+  const totReste=totAchete-totPaye;
+  const _MOISFR=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const moisKeys=Object.keys(byMonth).sort().reverse();
+  const parMois=moisKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Reste</th>
+    </tr></thead><tbody>${moisKeys.map(ym=>{const m=byMonth[ym],r=m.achete-m.paye,mm=ym.split('-');return `<tr>
+      <td style="font-size:10px">${_MOISFR[+mm[1]-1]} ${mm[0]}</td>
+      <td class="num">${fmt(m.achete)} F</td>
+      <td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td>
+      <td class="num" style="color:${r>0?'#c0392b':'var(--textm)'}">${fmt(r)} F</td>
+    </tr>`;}).join('')}</tbody></table>`
+    :'<div style="color:var(--textm);font-size:12px">Aucun mois.</div>';
+  const hist=rows.length?`<table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th class="num">Payé</th><th class="num">Reste</th>
+    </tr></thead><tbody>${rows.map(v=>{const tot=Number(v.montant_total)||0,pay=Number(v.montant_paye)||0,r=tot-pay;return `<tr>
       <td style="font-size:10px">${fmtDate?fmtDate(v.date):v.date}</td>
       <td style="font-size:10px">${v.formule_nom||'—'}</td>
       <td class="num">${v.qte_vendue?fmtKg(v.qte_vendue)+' kg':'—'}</td>
-      <td class="num">${fmt(v.montant_total||0)} F</td>
-      <td><span class="badge ${v.statut_paiement==='paye'?'bdg-g':v.statut_paiement==='partiel'?'bdg-gold':'bdg-r'}" style="font-size:8px">${v.statut_paiement||'—'}</span></td>
-    </tr>`).join('')}</tbody></table>`
+      <td class="num">${fmt(tot)} F</td>
+      <td class="num" style="color:#0a8a4f">${fmt(pay)} F</td>
+      <td class="num" style="color:${r>0?'#c0392b':'var(--textm)'}">${fmt(r)} F</td>
+    </tr>`;}).join('')}</tbody></table>`
     :'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
 
   const telClean=c.telephone?String(c.telephone).replace(/\s/g,''):'';
@@ -165,8 +183,10 @@ async function openClientDetail(id){
       <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')">✏️ Modifier</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
-      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt((s.totalCA)||c.total_achats||0)}</div><div class="econo-lbl">CA total (F)</div></div>
-      <div class="econo-box"><div class="econo-val">${s.nbAchats||0}</div><div class="econo-lbl">Achats</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totAchete||(s.totalCA)||c.total_achats||0)}</div><div class="econo-lbl">Acheté total (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:#0a8a4f">${fmt(totPaye)}</div><div class="econo-lbl">Total payé (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:${totReste>0?'#c0392b':'var(--textm)'}">${fmt(totReste)}</div><div class="econo-lbl">Reste à payer (F)</div></div>
+      <div class="econo-box"><div class="econo-val">${s.nbAchats||rows.length||0}</div><div class="econo-lbl">Achats</div></div>
       <div class="econo-box"><div class="econo-val">${s.freqMoyenne?s.freqMoyenne+' j':'—'}</div><div class="econo-lbl">Fréquence moy.</div></div>
       <div class="econo-box"><div class="econo-val" style="color:${st.color}">${jours!=null?jours+' j':'—'}</div><div class="econo-lbl">Depuis dernier achat</div></div>
     </div>
@@ -175,6 +195,8 @@ async function openClientDetail(id){
       <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
       ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
     </div>
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📅 Par mois <span style="font-weight:400;color:var(--textm);font-size:10px">(payé = réglé sur les ventes du mois)</span></div>
+    <div style="max-height:190px;overflow:auto;margin-bottom:14px">${parMois}</div>
     <div style="font-weight:700;font-size:12px;margin-bottom:6px">🧾 Historique des achats</div>
     <div style="max-height:240px;overflow:auto">${hist}</div>`;
   document.getElementById('modal-client-detail').style.display='flex';
