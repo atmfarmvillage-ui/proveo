@@ -273,6 +273,15 @@ async function confirmerReglement(clientId){
       await SB.from('gp_ventes').update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'}).eq('id',v.id);
       reste-=applique;
     }
+    // ── Crédit CAISSE : entrée d'argent (même cascade que la vente : PDV → siège → toute caisse active) ──
+    try{
+      let ct=null;
+      if(pv){ const{data:cP}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('point_vente',pv).maybeSingle(); if(cP)ct=cP; }
+      if(!ct){ const{data:cS}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle(); if(cS)ct=cS; }
+      if(!ct){ const{data:cA}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').limit(1).maybeSingle(); if(cA)ct=cA; }
+      if(ct){ await SB.from('gp_mouvements_caisse').insert({ admin_id:GP_ADMIN_ID, caisse_id:ct.id, type:'entree', categorie:'reglement_client', montant:montant, date_mouvement:date, description:'Règlement '+((c&&c.nom)||'client'), enregistre_par:(typeof GP_USER!=='undefined'&&GP_USER)?GP_USER.id:null, enregistre_par_nom:(typeof GP_USER!=='undefined'&&GP_USER&&GP_USER.email)?GP_USER.email.split('@')[0]:null }); }
+      else if(typeof notify==='function'){ notify('⚠ Règlement enregistré, mais aucune caisse active trouvée pour le crédit.','r'); }
+    }catch(_){}
     document.getElementById('regl-overlay')?.remove();
     if(typeof notify==='function')notify('✅ Règlement de '+fmt(montant)+' F encaissé'+(reste>0?' ('+fmt(reste)+' F en avance)':''),'g');
     if(typeof loadClients==='function'){ try{ await loadClients(); }catch(_){}}
