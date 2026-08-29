@@ -155,7 +155,7 @@ async function openClientDetail(id){
   let totAchete=0,totPaye=0; const byMonth={};
   rows.forEach(v=>{ const tot=Number(v.montant_total)||0, pay=Number(v.montant_paye)||0; totAchete+=tot; totPaye+=pay;
     const ym=String(v.date||'').slice(0,7); if(!ym)return; if(!byMonth[ym])byMonth[ym]={achete:0,paye:0}; byMonth[ym].achete+=tot; byMonth[ym].paye+=pay; });
-  const totReste=totAchete-totPaye;
+  const totReste=totAchete-totEncaisse;   // reste RÉEL = acheté − paiements datés (règlements)
   const _MOISFR=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
   const moisKeys=Object.keys(byMonth).sort().reverse();
   const parMois=moisKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr>
@@ -186,6 +186,16 @@ async function openClientDetail(id){
     </tr>`;}).join('')}</tbody></table>`
     :'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
 
+  // ── RELEVÉ DE COMPTE : achats (débit) + paiements DATÉS (crédit) + solde courant ──
+  const evts=[];
+  rows.forEach(v=>evts.push({d:String(v.date||'').slice(0,10),t:'a',lib:v.formule_nom||'Achat',mt:Number(v.montant_total)||0}));
+  regs.forEach(r=>evts.push({d:String(r.date_paiement||'').slice(0,10),t:'p',lib:(r.mode||r.note||'Paiement'),mt:Number(r.montant)||0}));
+  evts.sort((a,b)=> a.d<b.d?-1:a.d>b.d?1:(a.t==='a'?-1:1));
+  let _sld=0; evts.forEach(e=>{ _sld+=(e.t==='a'?e.mt:-e.mt); e.solde=_sld; });
+  const byM={};
+  evts.forEach(e=>{ const ym=e.d.slice(0,7); if(!ym)return; if(!byM[ym])byM[ym]={achete:0,paye:0,evts:[],soldeFin:0}; if(e.t==='a')byM[ym].achete+=e.mt; else byM[ym].paye+=e.mt; byM[ym].evts.push(e); byM[ym].soldeFin=e.solde; });
+  const mKeys=Object.keys(byM).sort().reverse();
+  const releve=mKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Solde</th></tr></thead><tbody>${mKeys.map(ym=>{const m=byM[ym],mm=ym.split('-');const det=m.evts.slice().reverse().map(e=>`<tr style="background:var(--card2,#f5f5f9)"><td style="font-size:9px;padding-left:14px">${fmtDate?fmtDate(e.d):e.d}</td><td style="font-size:9px">${e.t==='a'?'🛒 ':'💰 '}${e.lib}</td><td class="num" style="font-size:9px;color:${e.t==='a'?'#c0392b':'#0a8a4f'}">${e.t==='a'?'+':'−'}${fmt(e.mt)}</td><td class="num" style="font-size:9px;color:${e.solde>0?'#c0392b':'var(--textm)'}">${fmt(e.solde)}</td></tr>`).join('');return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')"><td style="font-size:10px"><span id="mi-${ym}">▸</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td><td class="num">${fmt(m.achete)} F</td><td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td><td class="num" style="color:${m.soldeFin>0?'#c0392b':'var(--textm)'}">${fmt(m.soldeFin)} F</td></tr><tr id="md-${ym}" style="display:none"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><thead><tr><th style="font-size:8px">Date</th><th style="font-size:8px">Opération</th><th class="num" style="font-size:8px">Montant</th><th class="num" style="font-size:8px">Solde</th></tr></thead><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune transaction.</div>';
   const telClean=c.telephone?String(c.telephone).replace(/\s/g,''):'';
   document.getElementById('cd-content').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
@@ -197,7 +207,7 @@ async function openClientDetail(id){
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
       <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totAchete||(s.totalCA)||c.total_achats||0)}</div><div class="econo-lbl">Acheté total (F)</div></div>
-      <div class="econo-box"><div class="econo-val" style="color:#0a8a4f">${fmt(totPaye)}</div><div class="econo-lbl">Total payé (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:#0a8a4f">${fmt(totEncaisse)}</div><div class="econo-lbl">Total payé (F)</div></div>
       <div class="econo-box"><div class="econo-val" style="color:${totReste>0?'#c0392b':'var(--textm)'}">${fmt(totReste)}</div><div class="econo-lbl">Reste à payer (F)</div></div>
       <div class="econo-box"><div class="econo-val">${s.nbAchats||rows.length||0}</div><div class="econo-lbl">Achats</div></div>
       <div class="econo-box"><div class="econo-val">${s.freqMoyenne?s.freqMoyenne+' j':'—'}</div><div class="econo-lbl">Fréquence moy.</div></div>
@@ -209,12 +219,8 @@ async function openClientDetail(id){
       <button class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
       ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
     </div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:6px">💰 Paiements reçus (datés) <span style="font-weight:400;color:var(--textm);font-size:10px">· total ${fmt(totEncaisse)} F</span></div>
-    <div style="max-height:160px;overflow:auto;margin-bottom:14px">${paiementsHtml}</div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📅 Par mois <span style="font-weight:400;color:var(--textm);font-size:10px">(clique un mois → détail daté · payé = réglé sur les ventes du mois)</span></div>
-    <div style="max-height:190px;overflow:auto;margin-bottom:14px">${parMois}</div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:6px">🧾 Historique des achats</div>
-    <div style="max-height:240px;overflow:auto">${hist}</div>`;
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📒 Relevé de compte <span style="font-weight:400;color:var(--textm);font-size:10px">· total encaissé ${fmt(totEncaisse)} F · clique un mois pour le détail daté (achats 🛒, paiements 💰 & solde)</span></div>
+    <div style="max-height:340px;overflow:auto">${releve}</div>`;
   document.getElementById('modal-client-detail').style.display='flex';
 }
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
