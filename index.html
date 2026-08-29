@@ -1197,6 +1197,27 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         </div>
         <div class="fr"><label>Note</label><input type="text" id="ecl_note"></div>
       </div>
+      <!-- Suivi commercial : décide QUI touche la commission sur ce client. « Groupe » = client réservé. -->
+      <div class="fg2">
+        <div class="fr"><label>Suivi par</label>
+          <select id="ecl_attribution" onchange="majSuiviClient()">
+            <option value="pdv">🏪 Point de vente</option>
+            <option value="commerciale">👤 Commercial(e)</option>
+            <option value="secretaire">📋 Secrétaire</option>
+            <option value="groupe">🏢 Groupe — client réservé</option>
+          </select>
+        </div>
+        <div class="fr"><label>Personne</label>
+          <select id="ecl_responsable"><option value="">—</option></select>
+        </div>
+      </div>
+      <div class="fr" id="ecl_residuel_ligne" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ecl_residuel" style="width:auto;margin:0">
+          <span>Client passé au Groupe — taux résiduel</span>
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--textm);margin-top:2px" id="ecl_attr_aide"></div>
       <div style="display:flex;gap:8px;margin-top:6px">
         <button class="btn btn-g" onclick="saveClientEdit()" style="flex:1;justify-content:center">💾 Enregistrer</button>
         <button class="btn btn-out" onclick="closeEditClient()" style="flex:1;justify-content:center">Annuler</button>
@@ -3327,15 +3348,15 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.26.1"></script>
+<script src="js/config.js?v=2.27.0"></script>
 <script src="js/print.js?v=2.26.1"></script>
 <script src="js/dashboard.js?v=2.26.1"></script>
 <script src="js/stock.js?v=2.26.1"></script>
 <script src="js/matieres.js?v=2.26.1"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
-<script src="js/ventes.js?v=2.26.2"></script>
-<script src="js/clients.js?v=2.26.6"></script>
+<script src="js/ventes.js?v=2.27.0"></script>
+<script src="js/clients.js?v=2.27.0"></script>
 <script src="js/admin.js?v=2.26.1"></script>
 <script src="js/marge_aliment.js?v=2.26.1"></script>
 <script src="js/aide.js?v=2.26.1"></script>
@@ -3368,13 +3389,13 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.26.1"></script>
+<script src="js/auth.js?v=2.27.0"></script>
 <script src="js/reservations_admin.js?v=2.26.1"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
 <script src="js/reappro.js?v=2.26.1"></script>
 <script src="js/ia.js?v=2.26.1"></script>
 <script src="js/marketing.js?v=2.26.1"></script>
-<script src="js/commissions.js?v=2.26.1"></script>
+<script src="js/commissions.js?v=2.27.0"></script>
 <script src="js/rh.js?v=2.26.1"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 

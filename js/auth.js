@@ -208,6 +208,7 @@ async function bootApp(user){
     GP_ROLE=membre.role;
     GP_ADMIN_ID=membre.admin_id;
     GP_POINT_VENTE=membre.point_vente||null;
+    GP_MEMBRE_ID=membre.id||null;
     // Le gérant représente l'administration : traité comme un admin
     // dans toute l'app (sauf la page Configuration, cachée plus bas).
     GP_EST_GERANT=(membre.role==='gerant');

@@ -63,8 +63,64 @@ function clientStatut(s){
   return {key:'regulier',label:'Régulier',color:'var(--green)',emoji:'🟢',jours};
 }
 
+// ── SUIVI COMMERCIAL DU CLIENT (badge d'attribution) ───────────────
+// Le badge décide QUI est crédité de la commission à chaque vente de ce client.
+// « Groupe » = client réservé : aucune commission de personne. Il remplace la liste
+// de clients réservés qu'il aurait fallu tenir à la main dans le contrat commercial.
+var GP_EQUIPE = null;
+async function chargerEquipe(force){
+  if(GP_EQUIPE && !force) return GP_EQUIPE;
+  try{
+    const{data}=await SB.from('gp_membres').select('id,nom,email,role,point_vente,actif')
+      .eq('admin_id',GP_ADMIN_ID).order('nom');
+    GP_EQUIPE=(data||[]).filter(m=>m.actif!==false);
+  }catch(e){ GP_EQUIPE=[]; }
+  return GP_EQUIPE;
+}
+function _nomMembre(m){ return m.nom || String(m.email||'').split('@')[0] || '—'; }
+
+function majSuiviClient(){
+  const a=document.getElementById('ecl_attribution'); if(!a) return;
+  const v=a.value;
+  const perso=(v==='commerciale'||v==='secretaire');
+  const selP=document.getElementById('ecl_responsable');
+  const lgR=document.getElementById('ecl_residuel_ligne');
+  const aide=document.getElementById('ecl_attr_aide');
+  if(selP && selP.parentElement) selP.parentElement.style.visibility = perso?'visible':'hidden';
+  if(lgR)  lgR.style.display = (v==='commerciale')?'':'none';
+  if(aide) aide.textContent = ({
+    pdv:'Les ventes de ce client commissionnent le point de vente, comme aujourd’hui.',
+    commerciale:'La commerciale est créditée à chaque vente de ce client, en plus du point de vente.',
+    secretaire:'La secrétaire est créditée à chaque vente de ce client, en plus du point de vente.',
+    groupe:'Client réservé : aucune commission de personne.'
+  })[v]||'';
+}
+
+// Champs de suivi à enregistrer. Renvoie {} si la modale n'a pas les champs
+// (cache HTML ancien) : l'enregistrement d'un client ne doit jamais casser pour ça.
+// La date d'attribution ne bouge QUE si le suivi change réellement — c'est elle qui
+// date le point de départ des six mois avant passage du client au Groupe.
+function _suiviClientMaj(prev){
+  const a=document.getElementById('ecl_attribution'); if(!a) return {};
+  const v=a.value||'pdv';
+  const perso=(v==='commerciale'||v==='secretaire');
+  const selP=document.getElementById('ecl_responsable');
+  const rid=(perso&&selP)?(selP.value||null):null;
+  const opt=(rid&&selP)?selP.options[selP.selectedIndex]:null;
+  const chk=document.getElementById('ecl_residuel');
+  const change = !prev || (prev.attribution||'pdv')!==v || (prev.responsable_id||null)!==rid;
+  return {
+    attribution:v,
+    responsable_id:rid,
+    responsable_nom:opt?(opt.getAttribute('data-nom')||null):null,
+    residuel:(v==='commerciale'&&chk)?!!chk.checked:false,
+    attribue_le: change ? new Date().toISOString().slice(0,10) : (prev.attribue_le||null),
+    attribue_par_nom: change ? (String(GP_USER?.email||'').split('@')[0]||null) : (prev.attribue_par_nom||null)
+  };
+}
+
 // ── ÉDITION CLIENT ─────────────────────────────────
-function openEditClient(id){
+async function openEditClient(id){
   const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
   document.getElementById('ecl_id').value=c.id;
   document.getElementById('ecl_nom').value=c.nom||'';
@@ -73,6 +129,22 @@ function openEditClient(id){
   document.getElementById('ecl_type').value=c.type_elevage||'autre';
   document.getElementById('ecl_typeclient').value=c.type_client||'detail';
   document.getElementById('ecl_note').value=c.note||'';
+  // Badge de suivi : la liste d'équipe est chargée à la demande (une seule fois).
+  const selA=document.getElementById('ecl_attribution');
+  if(selA){
+    selA.value=c.attribution||'pdv';
+    const eq=await chargerEquipe();
+    const selP=document.getElementById('ecl_responsable');
+    if(selP){
+      selP.innerHTML='<option value="">—</option>'+eq.map(m=>{
+        const n=_nomMembre(m).replace(/</g,'&lt;');
+        return `<option value="${m.id}" data-nom="${n}">${n}${m.point_vente?' · '+String(m.point_vente).replace(/</g,'&lt;'):''}</option>`;
+      }).join('');
+      selP.value=c.responsable_id||'';
+    }
+    const chk=document.getElementById('ecl_residuel'); if(chk) chk.checked=!!c.residuel;
+    majSuiviClient();
+  }
   document.getElementById('ecl_err').textContent='';
   document.getElementById('modal-edit-client').style.display='flex';
 }
@@ -123,7 +195,8 @@ async function saveClientEdit(){
     localisation:document.getElementById('ecl_loc').value.trim()||null,
     type_elevage:document.getElementById('ecl_type').value,
     type_client:document.getElementById('ecl_typeclient').value,
-    note:document.getElementById('ecl_note').value.trim()||null
+    note:document.getElementById('ecl_note').value.trim()||null,
+    ..._suiviClientMaj(GP_CLIENTS.find(x=>x.id===id))
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){err.textContent='Erreur: '+error.message;return;}
   closeEditClient();
