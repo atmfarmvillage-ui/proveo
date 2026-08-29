@@ -40,12 +40,24 @@ function _commSacs(l){
   return ps>0 ? (qte/ps) : 0;
 }
 
-// Trouve la règle applicable pour (PDV, espèce, formule).
+// Rôle de commission déduit du BADGE du client (gp_clients.attribution).
+// Un client badgé « groupe » (réservé) ou non badgé n'ouvre aucune commission de personne :
+// seule la règle PDV s'applique. C'est ce qui remplace la liste de clients réservés en annexe.
+function _commRoleClient(client){
+  if(!client) return null;
+  if(client.attribution==='commerciale') return client.residuel ? 'commerciale_residuelle' : 'commerciale';
+  if(client.attribution==='secretaire')  return 'secretaire';
+  return null;
+}
+
+// Trouve la règle applicable pour (rôle, PDV, espèce, formule).
 // Règle sans PDV = tous PDV ; sans formule = toutes formules ; sans espèce = toutes espèces.
 // Priorité à la plus spécifique : formule > espèce > PDV.
-function _commRegle(pointVente, espece, formuleNom, typeVente){
+// Les règles existantes n'ont pas de rôle → 'pdv' par défaut : l'ancien comportement est intact.
+function _commRegle(pointVente, espece, formuleNom, typeVente, role){
   const regles=GP_COMM_REGLES||[];
   const cands=regles.filter(r=>
+    ((r.role_beneficiaire||'pdv')===(role||'pdv')) &&
     (!r.point_vente || r.point_vente===(pointVente||null)) &&
     (!r.formule_nom || r.formule_nom===formuleNom) &&
     (!r.espece || r.espece===espece) &&
@@ -57,22 +69,55 @@ function _commRegle(pointVente, espece, formuleNom, typeVente){
 
 // Calcule les commissions d'une vente. estGros → type de vente ('gros' sinon 'detail').
 // La règle applicable dépend du type de vente (détail et gros = 2 barèmes distincts).
-function calcCommissionVente(lignes, pointVente, estGros){
+// `client` = la fiche gp_clients (badge d'attribution). Une même vente peut produire
+// PLUSIEURS commissions : celle du PDV (comme avant) ET celle de la personne qui suit
+// le client. La part de la secrétaire SE DÉDUIT de celle de la commerciale (décision DG
+// du 29/08/2026) : ex. barème résiduel 50 F = 25 F secrétaire + 25 F commerciale.
+function calcCommissionVente(lignes, pointVente, estGros, client){
   const typeVente = estGros ? 'gros' : 'detail';
+  // Client badgé « Groupe » : AUCUNE commission, pas même celle du point de vente.
+  // C'est ce que « réservé » veut dire — sinon le badge ne tient pas sa promesse.
+  if(client && client.attribution==='groupe') return [];
+  const roles=['pdv'];
+  const rc=_commRoleClient(client);
+  if(rc) roles.push(rc);
   const out=[];
   (lignes||[]).forEach(l=>{
     if(l.type_produit!=='formule') return;
     const esp=_commEspece(l.formule_nom);
     if(!esp) return;
-    const r=_commRegle(pointVente, esp, l.formule_nom, typeVente);
-    if(!r || !Number(r.montant_par_sac)) return;
     const sacs=_commSacs(l);
     if(sacs<=0) return;
-    const montant=Math.round(sacs*Number(r.montant_par_sac));
-    if(montant>0) out.push({
-      espece:esp, formule_nom:l.formule_nom, type_vente:typeVente,
-      nb_sacs:Math.round(sacs*100)/100,
-      montant_unitaire:Number(r.montant_par_sac), montant
+    const nbSacs=Math.round(sacs*100)/100;
+    // Le bénéficiaire est FIGÉ ici, à la vente : réattribuer le client demain
+    // ne doit jamais réécrire les commissions déjà acquises.
+    const push=(role, parSac)=>{
+      const montant=Math.round(sacs*Number(parSac));
+      if(montant<=0) return;
+      const perso=(role!=='pdv' && role!=='secretaire_pdv');
+      out.push({
+        espece:esp, formule_nom:l.formule_nom, type_vente:typeVente, nb_sacs:nbSacs,
+        montant_unitaire:Number(parSac), montant,
+        role_beneficiaire: role==='secretaire_pdv' ? 'secretaire' : role,
+        beneficiaire_id: perso ? ((client&&client.responsable_id)||null) : null,
+        beneficiaire_nom: perso ? ((client&&client.responsable_nom)||null) : null
+      });
+    };
+    roles.forEach(role=>{
+      const r=_commRegle(pointVente, esp, l.formule_nom, typeVente, role);
+      if(!r || !Number(r.montant_par_sac)) return;
+      const parSac=Number(r.montant_par_sac);
+      // Quand la commerciale suit le client mais que la vente est traitée au point de vente,
+      // la part de la secrétaire SE DÉDUIT de la sienne — elle ne s'y ajoute pas.
+      // Le coût total pour le Groupe reste donc celui du barème commercial.
+      if(role==='commerciale' || role==='commerciale_residuelle'){
+        const rs=_commRegle(pointVente, esp, l.formule_nom, typeVente, 'secretaire');
+        const partSec=Math.min(Number(rs&&rs.montant_par_sac)||0, parSac);
+        if(partSec>0) push('secretaire_pdv', partSec);      // créditée au point de vente
+        push(role, parSac-partSec);
+        return;
+      }
+      push(role, parSac);
     });
   });
   return out;
@@ -80,16 +125,18 @@ function calcCommissionVente(lignes, pointVente, estGros){
 
 // Enregistre les commissions d'une vente (appelé à la vente). ZÉRO mouvement de caisse.
 // Ne doit JAMAIS bloquer la vente (try/catch silencieux).
-async function enregistrerCommissionsVente(venteId, lignes, pointVente, estGros){
+async function enregistrerCommissionsVente(venteId, lignes, pointVente, estGros, client){
   try{
     await chargerReglesCommission();
     if(!(GP_COMM_REGLES||[]).length) return;
-    const comms=calcCommissionVente(lignes, pointVente, estGros);
+    const comms=calcCommissionVente(lignes, pointVente, estGros, client);
     if(!comms.length) return;
     const rows=comms.map(c=>({
       admin_id:GP_ADMIN_ID, vente_id:venteId, point_vente:pointVente||null,
       espece:c.espece, formule_nom:c.formule_nom, type_vente:c.type_vente, nb_sacs:c.nb_sacs,
       montant_unitaire:c.montant_unitaire, montant:c.montant,
+      client_id:(client&&client.id)||null,
+      role_beneficiaire:c.role_beneficiaire, beneficiaire_id:c.beneficiaire_id, beneficiaire_nom:c.beneficiaire_nom,
       date:today(), statut:'due',
       enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
     }));
@@ -97,11 +144,21 @@ async function enregistrerCommissionsVente(venteId, lignes, pointVente, estGros)
   }catch(e){ /* silencieux : la commission ne bloque jamais la vente */ }
 }
 
+// Libellé lisible du titre auquel la commission est due.
+function _commLibelleRole(r){
+  return ({ pdv:'🏪 Point de vente', commerciale:'👤 Commercial(e)',
+            commerciale_residuelle:'👤 Résiduel', secretaire:'📋 Secrétaire' })[r||'pdv'] || (r||'—');
+}
+
 // ── AFFICHAGE ─────────────────────────────────────
 // Admin / gérant / siège : voient TOUTES les commissions (par PDV) + peuvent régler.
 // Un membre de PDV : voit uniquement SES commissions (créance due), sans réglage.
 function _commPeutRegler(){
-  return GP_ROLE==='admin' || GP_EST_GERANT || (typeof GP_POINT_VENTE==='undefined' || !GP_POINT_VENTE);
+  // AVANT : « pas de point de vente » suffisait à pouvoir régler. Depuis que des personnes
+  // (commerciales) sont bénéficiaires SANS être rattachées à un PDV, cette condition leur
+  // aurait permis de solder leurs PROPRES commissions et de créer la sortie de caisse.
+  // Le règlement est donc réservé à l'admin et au gérant.
+  return GP_ROLE==='admin' || GP_EST_GERANT;
 }
 
 async function renderCommissions(){
@@ -121,7 +178,15 @@ async function renderCommissions(){
 
   // Commissions (scopées : un PDV ne voit que les siennes)
   let q=SB.from('gp_commissions').select('*').eq('admin_id',GP_ADMIN_ID).order('date',{ascending:false}).limit(5000);
-  if(!gestion && typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) q=q.eq('point_vente',GP_POINT_VENTE);
+  if(!gestion){
+    // Une commerciale n'est rattachée à aucun PDV : sans ce filtre elle ne verrait rien.
+    const mien=(typeof GP_MEMBRE_ID!=='undefined' && GP_MEMBRE_ID) ? GP_MEMBRE_ID : null;
+    const pv=(typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) ? GP_POINT_VENTE : null;
+    if(pv && mien)      q=q.or(`point_vente.eq.${pv},beneficiaire_id.eq.${mien}`);
+    else if(pv)         q=q.eq('point_vente',pv);
+    else if(mien)       q=q.eq('beneficiaire_id',mien);
+    else                q=q.eq('point_vente','__aucun__');   // ni PDV ni identité : on ne montre rien
+  }
   const{data,error}=await q;
   if(error){
     root.innerHTML=`<div class="card"><div style="padding:16px;color:var(--textm)">Le suivi des commissions n'est pas encore activé. Passe le SQL <b>gp_commissions</b> (fourni dans le chat).</div></div>`;
@@ -133,8 +198,11 @@ async function renderCommissions(){
   const parPdv={};
   const moisCourant=(typeof thisMonth==='function'?thisMonth():new Date().toISOString().slice(0,7));
   C.forEach(c=>{
-    const pv=c.point_vente||'—';
-    const p=parPdv[pv]=parPdv[pv]||{due:0,dueMois:0,regle:0,lignes:[]};
+    // Regroupement par BÉNÉFICIAIRE : une personne quand la vente était rattachée à un
+    // client qu'elle suit, le point de vente sinon. On règle ensuite groupe par groupe.
+    const pv=c.beneficiaire_nom || c.point_vente || '—';
+    const p=parPdv[pv]=parPdv[pv]||{due:0,dueMois:0,regle:0,lignes:[],personne:!!c.beneficiaire_nom};
+    if(c.beneficiaire_nom) p.personne=true;
     const m=Number(c.montant||0);
     if(c.statut==='regle'){ p.regle+=m; }
     else { p.due+=m; if((c.date||'').startsWith(moisCourant)) p.dueMois+=m; }
@@ -152,7 +220,7 @@ async function renderCommissions(){
     const p=parPdv[pv];
     const detId='comm-det-'+pv.replace(/[^a-zA-Z0-9]/g,'');
     return `<div class="card">
-      <div class="card-title"><div class="ct-left"><span>🧾 ${pv==='—'?'Production':pv}</span></div>
+      <div class="card-title"><div class="ct-left"><span>${p.personne?'👤':'🧾'} ${pv==='—'?'Production':pv}</span></div>
         ${gestion&&p.due>0?`<button class="btn btn-g btn-sm" onclick="reglerCommissions('${pv.replace(/'/g,"\\'")}')">✅ Régler ${fmt(p.due)} F</button>`:''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -162,13 +230,14 @@ async function renderCommissions(){
       </div>
       <div style="font-size:11px;color:var(--textm);cursor:pointer" onclick="var e=document.getElementById('${detId}');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Détail des ventes (${p.lignes.length})</div>
       <div id="${detId}" style="display:none;overflow-x:auto;margin-top:6px"><table class="tbl" style="font-size:11px"><thead><tr>
-        <th>Date</th><th>Espèce</th><th>Formule</th><th>Type</th><th class="num">Sacs</th><th class="num">/sac</th><th class="num">Commission</th><th>Statut</th>
+        <th>Date</th><th>Espèce</th><th>Formule</th><th>Type</th><th>Titre</th><th class="num">Sacs</th><th class="num">/sac</th><th class="num">Commission</th><th>Statut</th>
       </tr></thead><tbody>
         ${p.lignes.slice(0,300).map(c=>`<tr>
           <td style="font-size:10px">${c.date||''}</td>
           <td style="text-transform:capitalize">${c.espece||'—'}</td>
           <td style="font-size:10px">${c.formule_nom||'—'}</td>
           <td style="font-size:10px">${c.type_vente==='gros'?'💼 Gros':'🛒 Détail'}</td>
+          <td style="font-size:10px">${_commLibelleRole(c.role_beneficiaire)}</td>
           <td class="num">${c.nb_sacs||0}</td>
           <td class="num">${fmt(c.montant_unitaire||0)}</td>
           <td class="num" style="font-weight:700">${fmt(c.montant||0)}</td>
@@ -210,8 +279,9 @@ function _commConfigCard(){
     + pdvs.map(p=>`<option value="${(p.nom||'').replace(/"/g,'&quot;')}">${p.nom}${p.type_pdv==='principal'?' (principal)':''}</option>`).join('');
   const regles=GP_COMM_REGLES||[];
   const liste = regles.length ? `<div style="overflow-x:auto;margin-top:8px"><table class="tbl" style="font-size:11px"><thead><tr>
-      <th>PDV</th><th>Aliment</th><th>Type</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
+      <th>Pour qui</th><th>PDV</th><th>Aliment</th><th>Type</th><th class="num">Montant / sac</th><th></th></tr></thead><tbody>
       ${regles.map(r=>`<tr>
+        <td style="font-size:10px">${_commLibelleRole(r.role_beneficiaire)}</td>
         <td>${r.point_vente||'<i>Tous</i>'}</td>
         <td style="text-transform:capitalize">${r.formule_nom?('🎯 '+r.formule_nom):(r.espece?r.espece:'<i>Toutes</i>')}</td>
         <td style="font-size:10px">${r.type_vente==='gros'?'💼 Gros':r.type_vente==='detail'?'🛒 Détail':'Les deux'}</td>
@@ -222,7 +292,15 @@ function _commConfigCard(){
   return `<div class="card">
     <div class="card-title"><div class="ct-left"><span>⚙️ Règles de commission (admin)</span></div></div>
     <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Montant versé au PDV vendeur, par sac d'aliment vendu. Barème distinct possible pour le <b>détail</b> et le <b>gros</b> (ex. détail 500 F, gros 200 F).</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 0.9fr 0.9fr auto;gap:8px;align-items:end">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 0.9fr 0.9fr auto;gap:8px;align-items:end">
+      <div class="fr" style="margin:0"><label>Pour qui</label>
+        <select id="comm-r-role">
+          <option value="pdv">🏪 Point de vente</option>
+          <option value="commerciale">👤 Commercial(e) — client qu'elle a gagné</option>
+          <option value="commerciale_residuelle">👤 Commercial(e) — taux résiduel</option>
+          <option value="secretaire">📋 Secrétaire — se déduit de la part commerciale</option>
+        </select>
+      </div>
       <div class="fr" style="margin:0"><label>PDV</label><select id="comm-r-pdv">${optPdv}</select></div>
       <div class="fr" style="margin:0"><label>Aliment (formule ou espèce)</label><select id="comm-r-esp">${optEsp}</select></div>
       <div class="fr" style="margin:0"><label>Type de vente</label>
@@ -246,8 +324,9 @@ async function ajouterRegleCommission(){
   let espece=null, formule_nom=null;
   if(sel.startsWith('form:')){ formule_nom=sel.slice(5); espece=_commEspece(formule_nom)||null; }
   else if(sel.startsWith('esp:')){ espece=sel.slice(4); }
+  const role_beneficiaire=document.getElementById('comm-r-role')?.value||'pdv';
   const{error}=await SB.from('gp_commissions_regles').insert({
-    admin_id:GP_ADMIN_ID, point_vente, espece, formule_nom, type_vente:type_vente||null,
+    admin_id:GP_ADMIN_ID, point_vente, espece, formule_nom, type_vente:type_vente||null, role_beneficiaire,
     montant_par_sac:montant, actif:true
   });
   if(error){ notify('Erreur : '+error.message,'r'); return; }

@@ -1295,9 +1295,10 @@ async function saveVente(){
   // ── COMMISSION PDV (hors caisse) : registre séparé, aucun mouvement de caisse ──
   try{
     if(typeof enregistrerCommissionsVente==='function' && !sansComm){
-      const _estGros = clientId ? ((GP_CLIENTS.find(c=>c.id===clientId)?.type_client)==='gros') : false;
+      const _cliComm = clientId ? (GP_CLIENTS.find(c=>c.id===clientId)||null) : null;
+      const _estGros = (_cliComm?.type_client)==='gros';
       const _pvVente = (vente && vente.point_vente) || (typeof GP_POINT_VENTE!=='undefined'?GP_POINT_VENTE:null);
-      enregistrerCommissionsVente(vente.id, VT_LIGNES, _pvVente, _estGros);
+      enregistrerCommissionsVente(vente.id, VT_LIGNES, _pvVente, _estGros, _cliComm);
     }
   }catch(_){}
 
