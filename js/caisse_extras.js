@@ -11,8 +11,12 @@ async function caissesAccessibles(){
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   const C = data||[];
   if(GP_ROLE === 'admin' || GP_EST_GERANT) return C;
-  if(!GP_POINT_VENTE) return C; // siège : voit les caisses (le paiement est bloqué si ce n'est pas la sienne)
-  return C.filter(c => !c.point_vente || c.point_vente === GP_POINT_VENTE);
+  if(!GP_POINT_VENTE) return C.filter(c => !c.point_vente || c.point_vente === 'Production');   // siège
+  // CLOISONNEMENT STRICT : chaque point de vente ne voit QUE ses caisses.
+  // Avant, une caisse sans point de vente (créée à la main : MIX BY YAS, FECECAV…) était
+  // visible de TOUS — c'est ainsi que le tiroir du Principal a payé 1 885 200 F de dépenses
+  // de Production. Une caisse non rattachée n'appartient plus à tout le monde.
+  return C.filter(c => c.point_vente === GP_POINT_VENTE);
 }
 
 // Remplir un <select> avec les caisses accessibles
@@ -110,6 +114,16 @@ async function saveDep(){
     const err = document.getElementById('dep_err');
     if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
     const caisseSel = document.getElementById('dep_caisse_id')?.value || null;
+    // La dépense est imputée AU POINT DE VENTE DE LA CAISSE QUI PAIE. Les deux ne peuvent
+    // plus diverger : c'est cette divergence qui a fait payer 1 885 200 F de dépenses
+    // Production par le tiroir du Principal entre juillet et août 2026.
+    let _pvDep = (typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) || 'Production';
+    if(caisseSel){
+      try{
+        const{data:_cs}=await SB.from('gp_caisses').select('nom,point_vente').eq('id',caisseSel).maybeSingle();
+        if(_cs) _pvDep = _cs.point_vente || 'Production';
+      }catch(_){ /* la lecture ne doit jamais bloquer une dépense */ }
+    }
     const categorie = document.getElementById('dep_cat').value;
 
     // Anti-doublon : une dépense identique (même jour, même libellé, même montant, même catégorie) existe déjà ?
@@ -127,7 +141,10 @@ async function saveDep(){
       admin_id: GP_ADMIN_ID, saisi_par: GP_USER?.id, date,
       categorie, description: desc, montant,
       beneficiaire: document.getElementById('dep_benef').value.trim() || null,
-      point_vente: document.getElementById('dep_pv').value.trim() || null
+      // Le point de vente doit être EXPLICITE. Laissé vide, il était lu « Production »
+      // par le bilan et « PDV de l'utilisateur » par le débit de caisse : la dépense
+      // s'affichait d'un côté et l'argent sortait de l'autre tiroir.
+      point_vente: _pvDep
     }).select().maybeSingle();
     if(error){ err.textContent = 'Erreur: '+error.message; return; }
 
@@ -154,9 +171,15 @@ async function saveDep(){
 async function _debiterCaisseDepense(dep, preferredCaisseId){
   let caisseId = preferredCaisseId || null;
   if(!caisseId){
-    const pv = dep.point_vente || GP_POINT_VENTE || null;
+    // MÊME lecture que le bilan journalier : un point de vente absent = Production (le siège).
+    // Se rabattre sur le PDV de l'utilisateur ferait sortir l'argent d'un autre tiroir que
+    // celui où la dépense est affichée — c'est ce qui creusait le solde de Lomé Sanguéra.
+    const pv = dep.point_vente || 'Production';
     let cq = SB.from('gp_caisses').select('id').eq('admin_id',dep.admin_id).eq('type','physique');
-    cq = pv ? cq.eq('point_vente',pv) : cq.is('point_vente',null);
+    // Une caisse du siège porte soit NULL, soit littéralement 'Production' : on accepte les deux.
+    cq = (pv === 'Production')
+       ? cq.or('point_vente.is.null,point_vente.eq.Production')
+       : cq.eq('point_vente',pv);
     let{data:cc}=await cq.limit(1);
     if(!cc || !cc.length){ const r=await SB.from('gp_caisses').select('id').eq('admin_id',dep.admin_id).eq('type','physique').limit(1); cc=r.data; }
     caisseId = cc?.[0]?.id || null;
