@@ -2246,8 +2246,16 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         </div>
       </div>
       <div class="fg2">
+        <!-- OBLIGATOIRE : une caisse sans point de vente devient visible de tous et n'importe
+             quel PDV peut y puiser. C'est ce qui a permis de vider le tiroir d'un autre. -->
+        <div class="fr"><label>Point de vente propriétaire *</label>
+          <select id="caisse_pdv"><option value="">— Choisir —</option></select>
+        </div>
         <div class="fr"><label>Solde initial (F)</label><input type="number" id="caisse_solde_init" value="0"></div>
+      </div>
+      <div class="fg2">
         <div class="fr"><label>Couleur</label><input type="color" id="caisse_couleur" value="#16A34A" style="height:40px;padding:4px"></div>
+        <div class="fr"></div>
       </div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveCaisse()">➕ Créer</button>
       <div class="a-err" id="caisse_err"></div>
@@ -3360,15 +3368,15 @@ try{
 <script src="js/admin.js?v=2.26.1"></script>
 <script src="js/marge_aliment.js?v=2.26.1"></script>
 <script src="js/aide.js?v=2.26.1"></script>
-<script src="js/bilan_jour.js?v=2.26.1"></script>
-<script src="js/caisse_extras.js?v=2.26.1"></script>
+<script src="js/bilan_jour.js?v=2.27.1"></script>
+<script src="js/caisse_extras.js?v=2.27.1"></script>
 <script src="js/corbeille.js?v=2.26.1"></script>
 <script src="js/dashboard_drill.js?v=2.26.1"></script>
 <script src="js/fournisseurs.js?v=2.26.1"></script>
 <script src="js/achats.js?v=2.26.1"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
-<script src="js/caisse.js?v=2.26.1"></script>
-<script src="js/inventaire_physique.js?v=2.26.1"></script>
+<script src="js/caisse.js?v=2.27.1"></script>
+<script src="js/inventaire_physique.js?v=2.27.1"></script>
 <script src="js/distribution.js?v=2.26.1"></script>
 <script src="js/salaires.js?v=2.26.1"></script>
 <script src="js/rapports.js?v=2.26.1"></script>

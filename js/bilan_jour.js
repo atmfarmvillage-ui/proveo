@@ -39,6 +39,13 @@ async function renderBilanJour(){
     const cur=selEl.value;
     selEl.innerHTML=caisses.map(c=>`<option value="${c.id}">${c.nom}${c.point_vente?' ('+c.point_vente+')':' (Siège)'}</option>`).join('');
     if(cur && caisses.some(c=>c.id===cur)) selEl.value=cur;
+    else{
+      // Par défaut : la caisse de MON point de vente, pas la première de la liste.
+      // Sans ça la page s'ouvrait sur une caisse vide et laissait croire à une journée sans vente.
+      const mien=(typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) ? GP_POINT_VENTE : null;
+      const def=(mien ? caisses.find(c=>c.point_vente===mien) : caisses.find(c=>!c.point_vente||c.point_vente==='Production'))||caisses[0];
+      if(def) selEl.value=def.id;
+    }
   }
   const selectedId=selEl?.value||caisses[0]?.id||null;
   const caisse=caisses.find(c=>c.id===selectedId)||caisses[0]||null;

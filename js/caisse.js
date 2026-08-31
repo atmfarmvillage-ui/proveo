@@ -4,7 +4,23 @@
 // ══════════════════════════════════════════════════
 
 // ── CHARGER LES CAISSES ───────────────────────────
+// Remplit le sélecteur « point de vente propriétaire » du formulaire de création.
+// « Production » = le siège ; les autres viennent de la table des points de vente.
+async function _remplirPdvCaisse(){
+  const sel=document.getElementById('caisse_pdv');
+  if(!sel) return;
+  try{
+    const{data:P}=await SB.from('gp_points_vente').select('nom').eq('admin_id',GP_ADMIN_ID).order('nom');
+    const cur=sel.value;
+    const noms=['Production',...((P||[]).map(p=>p.nom).filter(n=>n && n!=='Production'))];
+    sel.innerHTML='<option value="">— Choisir —</option>'
+      + noms.map(n=>`<option value="${String(n).replace(/"/g,'&quot;')}">${n==='Production'?'🏭 Production (siège)':'🏪 '+n}</option>`).join('');
+    if(cur) sel.value=cur;
+  }catch(e){}
+}
+
 async function renderCaisse(){
+  _remplirPdvCaisse();
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
@@ -360,10 +376,15 @@ async function saveCaisse(){
   const type=document.getElementById('caisse_type')?.value||'physique';
   const solde=+document.getElementById('caisse_solde_init')?.value||0;
   const couleur=document.getElementById('caisse_couleur')?.value||'#16A34A';
+  const pdv=document.getElementById('caisse_pdv')?.value||'';
   const err=document.getElementById('caisse_err');
   if(!nom){err.textContent='Nom requis.';return;}
+  // Le point de vente propriétaire est OBLIGATOIRE : sans lui la caisse appartient à tout le
+  // monde, et n'importe quel PDV peut y prendre l'argent d'un autre.
+  if(!pdv){err.textContent='Choisis le point de vente propriétaire de cette caisse.';return;}
   const{error}=await SB.from('gp_caisses').insert({
-    admin_id:GP_ADMIN_ID,nom,type,solde_initial:solde,solde_actuel:solde,couleur
+    admin_id:GP_ADMIN_ID,nom,type,solde_initial:solde,solde_actuel:solde,couleur,
+    point_vente:(pdv==='Production'?'Production':pdv)
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   err.textContent='';

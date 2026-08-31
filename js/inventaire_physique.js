@@ -17,18 +17,36 @@ async function renderInventairePhysique(){
   }
 }
 
+// Matières premières RÉELLEMENT UTILISÉES = celles qui entrent dans au moins une formule.
+// Le reste (anciens lots, achats ponctuels, essais) encombre l'inventaire sans être consommé.
+function _mpUtilisees(){
+  const set=new Set();
+  try{
+    (getAllFormules()||[]).forEach(f=>{
+      (f.ingredients||[]).forEach(ing=>{
+        const ingData=(typeof trouverIngr==='function') ? trouverIngr(ing) : null;
+        set.add(normalizeMpNom(ingData?.nom || ing.nom));
+      });
+    });
+  }catch(e){}
+  return set;
+}
+
 async function creerNouvelInventaire(mois){
   // Calculer les niveaux théoriques
   const S=await _fetchAllStockMp();
   const niveaux=calcNiveaux(S||[]);
 
+  const utilisees=_mpUtilisees();
   const lignes=Object.entries(niveaux)
     .filter(([nom,qte])=>qte>0)
-    .sort((a,b)=>a[0].localeCompare(b[0]))
     .map(([nom,qte])=>{
       const ingr=GP_INGREDIENTS.find(i=>i.nom===nom);
-      return{nom,qte_theorique:Math.max(0,qte),prix:ingr?.prix_actuel||0};
-    });
+      return{nom,qte_theorique:Math.max(0,qte),prix:ingr?.prix_actuel||0,
+             utilisee:utilisees.has(normalizeMpNom(nom))};
+    })
+    // Les matières utilisées d'abord, alphabétiques dans chaque groupe.
+    .sort((a,b)=> (b.utilisee-a.utilisee) || a.nom.localeCompare(b.nom));
 
   document.getElementById('invp-content').innerHTML=`
     <div style="background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--textm)">
@@ -44,7 +62,7 @@ async function creerNouvelInventaire(mois){
         <th class="num">Coût écart</th>
       </tr></thead>
       <tbody>
-      ${lignes.map(l=>`<tr id="invp-row-${l.nom.replace(/\s/g,'-')}">
+      ${lignes.map((l,i)=>`${(i===0||lignes[i-1].utilisee!==l.utilisee) ? `<tr><td colspan="6" style="background:var(--card2);font-weight:700;font-size:11px;padding:7px 8px;border-top:2px solid var(--border)">${l.utilisee?'✅ Matières utilisées dans les formules ('+lignes.filter(x=>x.utilisee).length+')':'💤 Non utilisées dans aucune formule ('+lignes.filter(x=>!x.utilisee).length+')'}</td></tr>` : ''}<tr id="invp-row-${l.nom.replace(/\s/g,'-')}">
         <td style="font-weight:600">${l.nom}</td>
         <td class="num" style="color:var(--textm)">${fmtKg(l.qte_theorique)}</td>
         <td class="num">
@@ -280,7 +298,15 @@ async function imprimerFicheInventaire(mois){
   if(inv){
     const{data:lignes}=await SB.from('gp_inventaires_lignes').select('*')
       .eq('inventaire_id',inv.id).order('ingredient_nom');
-    lignesHtml=(lignes||[]).map(l=>`
+    // Même ordre que l'écran : les matières utilisées en tête. C'est la feuille qu'on
+    // emporte pour compter — celles qu'on ne consomme jamais ne doivent pas ouvrir la liste.
+    const _ut=_mpUtilisees();
+    const _tri=(lignes||[]).slice().sort((a,b)=>{
+      const ua=_ut.has(normalizeMpNom(a.ingredient_nom))?1:0;
+      const ub=_ut.has(normalizeMpNom(b.ingredient_nom))?1:0;
+      return (ub-ua) || String(a.ingredient_nom).localeCompare(String(b.ingredient_nom));
+    });
+    lignesHtml=_tri.map(l=>`
       <tr>
         <td>${l.ingredient_nom}</td>
         <td style="text-align:right">${fmtKg(l.qte_theorique)}</td>
