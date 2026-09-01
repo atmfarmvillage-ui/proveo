@@ -24,6 +24,7 @@ async function renderCaisse(){
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
+  const toutesCaisses=(C||[]).slice();   // liste COMPLÈTE : destination possible d'un transfert
   // VISIBILITÉ : on VOIT les caisses (nécessaire pour les transferts/reversements).
   // L'ACTION (entrée/sortie/transfert/paiement) est refusée sur une caisse qui n'est
   // pas la sienne, avec un message (voir estMaCaisse() + garde-fous). Un PDV SECONDAIRE
@@ -125,7 +126,7 @@ async function renderCaisse(){
   }).join('');
 
   // Remplir les selects de transfert
-  populateCaisseSelects(caisses,soldes);
+  populateCaisseSelects(caisses,soldes,toutesCaisses);
 
   // Remplir les selects de transfert (après rendu)
   // Mouvements récents — LIMITÉS aux caisses visibles par le membre (cloisonnement).
@@ -267,13 +268,17 @@ async function renderTransfertsHistorique(caisses, filtreId){
     </table></div>` : '<div style="color:var(--textm);font-size:12px">Aucun transfert entre caisses.</div>';
 }
 
-function populateCaisseSelects(caisses,soldes){
-  ['mvt-caisse','transfert-source','transfert-dest'].forEach(id=>{
+// La SOURCE d'un mouvement est limitée à ses propres caisses, mais la DESTINATION d'un
+// transfert doit rester ouverte à tout le groupe : c'est ainsi que Production alimente
+// le Principal. Les restreindre pareil supprimerait le seul pont entre points de vente.
+function populateCaisseSelects(caisses,soldes,toutes){
+  const dest=(toutes&&toutes.length)?toutes:caisses;
+  [['mvt-caisse',caisses],['transfert-source',caisses],['transfert-dest',dest]].forEach(([id,liste])=>{
     const el=document.getElementById(id);
     if(!el)return;
     const cur=el.value; // Garder la sélection actuelle
     el.innerHTML='<option value="">— Sélectionner —</option>'+
-      caisses.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
+      liste.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}${c.point_vente?' · '+c.point_vente:''} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
   });
 }
 
