@@ -761,12 +761,20 @@ function calcVente(){
   if(sousTotalEl)sousTotalEl.textContent=fmt(sousTotal)+' F';
   if(totalEl)totalEl.textContent=fmt(total)+' F';
 
+  // La case « le client laisse la monnaie » n'a de sens que s'il y a de la monnaie.
+  const laisseeRow=document.getElementById('vt-monnaie-laissee-row');
+  const laisseeVal=document.getElementById('vt-monnaie-laissee-val');
+  const laisseeChk=document.getElementById('vt_monnaie_laissee');
   if(monnaie > 0){
     if(monnaieRow) monnaieRow.style.display='flex';
     if(monnaieEl) monnaieEl.textContent='+'+fmt(monnaie)+' F';
     if(resteRow) resteRow.style.display='none';
+    if(laisseeRow) laisseeRow.style.display='flex';
+    if(laisseeVal) laisseeVal.textContent='('+fmt(monnaie)+' F)';
   } else {
     if(monnaieRow) monnaieRow.style.display='none';
+    if(laisseeRow) laisseeRow.style.display='none';
+    if(laisseeChk) laisseeChk.checked=false;   // pas de monnaie → la case ne doit pas rester armée
     if(resteRow) resteRow.style.display='flex';
     if(resteEl){
       resteEl.textContent=fmt(reste)+' F';
@@ -1226,6 +1234,25 @@ async function saveVente(){
       });
       _caisseVenteOk = !eCa;
       if(!eCa) window._lastVenteCaisseNom = caisseTarget.nom;
+      // 💰 Monnaie laissée par le client : entrée de caisse SÉPARÉE, jamais ajoutée à la vente.
+      // Un montant_paye supérieur au montant_total fausserait le statut de paiement, les
+      // créances et les commissions. Ici la vente reste juste, et le tiroir dit la vérité.
+      const _mLaissee = document.getElementById('vt_monnaie_laissee')?.checked
+        ? Math.round(Number(window._vtMonnaie?.monnaie) || 0) : 0;
+      if(_mLaissee > 0){
+        try{
+          await SB.from('gp_mouvements_caisse').insert({
+            admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
+            type:'entree', categorie:'monnaie_non_rendue',
+            montant:_mLaissee, date_mouvement:dateVente,
+            description:'Monnaie laissée par le client — vente '+vente.id.slice(0,8),
+            vente_id:vente.id,
+            enregistre_par:GP_USER?.id,
+            enregistre_par_nom:GP_USER?.email?.split('@')[0]
+          });
+          if(typeof notify==='function') notify(`💰 ${fmt(_mLaissee)} F de monnaie laissée enregistrés en caisse`,'gold');
+        }catch(_){ /* la vente ne doit jamais échouer pour ça */ }
+      }
     } else if(typeof notify==='function'){
       notify(`⚠ ${fmt(paye)} F — aucune caisse trouvée. L'encaissement sera rattrapé au refresh.`,'r');
     }
@@ -1417,6 +1444,10 @@ async function saveVente(){
     'vt_tel_search',
     'vt_cl_nom','vt_cl_tel','vt_cl_ferme','vt_cl_localite'
   ].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  // La case « monnaie laissée » ne doit JAMAIS survivre à la vente : oubliée cochée,
+  // elle créditerait la caisse d'une monnaie que le client suivant a bien reprise.
+  const _chkML=document.getElementById('vt_monnaie_laissee'); if(_chkML) _chkML.checked=false;
+  const _rowML=document.getElementById('vt-monnaie-laissee-row'); if(_rowML) _rowML.style.display='none';
   // La date repasse à aujourd'hui : une session de rattrapage ne doit pas
   // continuer à dater les ventes suivantes dans le passé sans qu'on le veuille.
   if(typeof vtResetDate==='function') vtResetDate();
