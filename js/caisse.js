@@ -28,8 +28,12 @@ async function renderCaisse(){
   // L'ACTION (entrée/sortie/transfert/paiement) est refusée sur une caisse qui n'est
   // pas la sienne, avec un message (voir estMaCaisse() + garde-fous). Un PDV SECONDAIRE
   // reste cloisonné à sa seule caisse.
-  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
-    caisses = caisses.filter(c => c.point_vente === GP_POINT_VENTE);
+  // Ce que l'on VOIT doit correspondre a ce que l'on PEUT utiliser. Avant, seul un PDV
+  // « secondaire » etait filtre : un membre sans point de vente renseigne voyait TOUTES
+  // les caisses du groupe et pouvait y puiser. C'est exactement ce qui a permis de payer
+  // 1 885 200 F de depenses de Production depuis le tiroir de Lome Sanguera.
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){
+    caisses = caisses.filter(c => estMaCaisse(c));
   }
   // Mémoriser les caisses VISIBLES pour les garde-fous d'action.
   window.GP_CAISSES_MAP={}; caisses.forEach(c=>{ GP_CAISSES_MAP[c.id]=c; });
@@ -159,7 +163,9 @@ async function renderCaisse(){
 function estMaCaisse(c){
   if(!c) return false;
   if(GP_ROLE==='admin' || GP_EST_GERANT) return true;
-  const siege = !c.point_vente;                          // Caisse Production ou FECECAV
+  // Le siege s'ecrit soit NULL, soit 'Production' depuis que toutes les caisses ont ete
+  // rattachees a un proprietaire. Tester seulement NULL ne reconnaissait plus aucune caisse.
+  const siege = !c.point_vente || c.point_vente==='Production';   // Caisse Production ou FECECAV
   const banqueSiege = siege && c.type==='banque';        // FECECAV (banque du siège)
   const principaux = (typeof GP_PDV_PRINCIPAUX!=='undefined' ? GP_PDV_PRINCIPAUX : []) || [];
   const estPrincipal = !!c.point_vente && principaux.includes(c.point_vente);
