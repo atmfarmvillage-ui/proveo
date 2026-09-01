@@ -167,15 +167,17 @@ function estMaCaisse(c){
   // Le siege s'ecrit soit NULL, soit 'Production' depuis que toutes les caisses ont ete
   // rattachees a un proprietaire. Tester seulement NULL ne reconnaissait plus aucune caisse.
   const siege = !c.point_vente || c.point_vente==='Production';   // Caisse Production ou FECECAV
-  const banqueSiege = siege && c.type==='banque';        // FECECAV (banque du siège)
   const principaux = (typeof GP_PDV_PRINCIPAUX!=='undefined' ? GP_PDV_PRINCIPAUX : []) || [];
   const estPrincipal = !!c.point_vente && principaux.includes(c.point_vente);
   // Siège / Production (sans PDV)
   if(!GP_POINT_VENTE) return siege || estPrincipal;
-  // PDV principal
+  // PDV principal — PLUS d'exception sur la caisse du siege. Cette tolerance datait de
+  // l'epoque ou le siege et le PDV principal partageaient le meme comptoir ; depuis que
+  // Production est un point de vente a part entiere, elle permettrait a Lome Sanguera de
+  // puiser dans le tiroir de la provenderie. Regle du DG : personne ne depense dans la
+  // caisse d'un autre — le seul pont est le TRANSFERT.
   if(typeof GP_EST_PRINCIPAL!=='undefined' && GP_EST_PRINCIPAL){
-    if(c.point_vente===GP_POINT_VENTE) return true;      // sa caisse
-    return siege && !banqueSiege;                        // Caisse Production physique, pas FECECAV
+    return c.point_vente===GP_POINT_VENTE;
   }
   // PDV secondaire (ou autre)
   return c.point_vente===GP_POINT_VENTE;
