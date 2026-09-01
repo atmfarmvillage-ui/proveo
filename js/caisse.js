@@ -37,10 +37,14 @@ async function renderCaisse(){
   // Auto-création de la caisse du Siège/Production si aucune caisse "siège" n'existe.
   // Une caisse de PDV a un point_vente ; la caisse siège/production n'en a pas.
   // Sans ça, impossible de faire un transfert Production <-> PDV (il faut 2 caisses).
-  if(GP_ROLE==='admin' && !caisses.some(c=>!c.point_vente)){
+  // Le filet de secours ne doit se declencher que si le SIEGE n'a vraiment aucune caisse.
+  // Avant, il testait « aucune caisse sans point de vente » : une fois toutes les caisses
+  // rattachees a leur PDV, il en recreait une ORPHELINE — visible de tous, et le
+  // cloisonnement sautait. La caisse creee porte desormais son proprietaire.
+  if(GP_ROLE==='admin' && !caisses.some(c=>(c.point_vente||'Production')==='Production')){
     const{data:nouv,error:eNouv}=await SB.from('gp_caisses').insert({
       admin_id:GP_ADMIN_ID, nom:'Caisse Production', type:'physique',
-      solde_initial:0, solde_actuel:0, couleur:'#16A34A'
+      point_vente:'Production', solde_initial:0, couleur:'#16A34A'
     }).select().maybeSingle();
     if(!eNouv && nouv){
       caisses.push(nouv);
@@ -383,7 +387,7 @@ async function saveCaisse(){
   // monde, et n'importe quel PDV peut y prendre l'argent d'un autre.
   if(!pdv){err.textContent='Choisis le point de vente propriétaire de cette caisse.';return;}
   const{error}=await SB.from('gp_caisses').insert({
-    admin_id:GP_ADMIN_ID,nom,type,solde_initial:solde,solde_actuel:solde,couleur,
+    admin_id:GP_ADMIN_ID,nom,type,solde_initial:solde,couleur,
     point_vente:(pdv==='Production'?'Production':pdv)
   });
   if(error){err.textContent='Erreur: '+error.message;return;}

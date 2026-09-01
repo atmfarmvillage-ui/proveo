@@ -1256,7 +1256,6 @@ async function savePDV(){
     type:'physique',
     point_vente:nom,
     solde_initial:0,
-    solde_actuel:0,
     couleur:pvPalette(nom).border,
     actif:true
   });
@@ -2207,7 +2206,6 @@ async function savePDV(){
     type:'physique',
     point_vente:nom,
     solde_initial:0,
-    solde_actuel:0,
     couleur:pvPalette(nom).border,
     actif:true
   });
