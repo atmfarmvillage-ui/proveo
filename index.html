@@ -210,6 +210,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="nav-item admin-only" onclick="showGP('dettes')" data-page="dettes"><span class="nav-icon">💳</span>Dettes secrétaires</div>
   <div class="nav-item admin-only" id="nav-remises" onclick="showGP('remises')" data-page="remises"><span class="nav-icon">🔔</span>Remises à valider</div>
   <div class="nav-item" onclick="showGP('commissions')" data-page="commissions" data-roles="admin,secretaire"><span class="nav-icon">🧾</span>Commissions PDV</div>
+  <div class="nav-item admin-only" onclick="showGP('emprunts')" data-page="emprunts"><span class="nav-icon">🏦</span>Emprunts</div>
   <div class="nav-item admin-only" onclick="showGP('dossier')" data-page="dossier"><span class="nav-icon">🏦</span>Dossier de financement</div>
 
   <!-- ÉTAPE 7 : RAPPORTS & CONTRÔLE -->
@@ -3049,6 +3050,12 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 </div>
 
 <!-- DIRECTEUR MARKETING IA -->
+<div class="page" id="page-emprunts">
+  <div class="page-title">🏦 Emprunts</div>
+  <div class="page-sub">Prêts bancaires et microfinance — capital dû, échéancier, remboursements</div>
+  <div id="emprunts-content"><div style="color:var(--textm);font-size:12px">Chargement…</div></div>
+</div>
+
 <div class="page" id="page-commissions">
   <div class="page-title">🧾 Commissions PDV</div>
   <div class="page-sub">Commission par sac vendu au détail — enregistrée hors caisse</div>
@@ -3410,6 +3417,7 @@ try{
 <script src="js/ia.js?v=2.26.1"></script>
 <script src="js/marketing.js?v=2.26.1"></script>
 <script src="js/commissions.js?v=2.27.0"></script>
+<script src="js/emprunts.js?v=2.27.9"></script>
 <script src="js/rh.js?v=2.26.1"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 
