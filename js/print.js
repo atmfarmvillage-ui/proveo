@@ -10,7 +10,13 @@ const NUTRI_DB = {
   'son de ble': {prot:15.0, mg:3.5,  cb:10.5, mm:5.5,  em:1630, ca:0.14, lys:0.60, met:0.24},
   'son de riz': {prot:12.0, mg:13.0, cb:12.0, mm:10.0, em:2800, ca:0.08, lys:0.45, met:0.20},
   'soja':       {prot:44.0, mg:1.8,  cb:6.5,  mm:6.5,  em:2240, ca:0.30, lys:2.80, met:0.62},
+  // « huile » et « graisse » AVANT « palmiste » : « Huile Palmiste » contient les deux mots
+  // et la 1re cle trouvee gagne. Sans cet ordre, une HUILE (8800 kcal) etait lue comme un
+  // TOURTEAU (1670 kcal) — a elle seule, l'erreur amputait l'energie de l'aliment.
+  'huile':      {prot:0.0,  mg:99.0, cb:0.0,  mm:0.0,  em:8800, ca:0.00, lys:0.00, met:0.00},
+  'graisse':    {prot:0.0,  mg:99.0, cb:0.0,  mm:0.0,  em:8800, ca:0.00, lys:0.00, met:0.00},
   'palmiste':   {prot:16.0, mg:7.5,  cb:17.0, mm:4.5,  em:1670, ca:0.29, lys:0.58, met:0.36},
+
   'poisson':    {prot:65.0, mg:9.5,  cb:0.5,  mm:18.0, em:2890, ca:5.50, lys:5.10, met:1.90},
   'premix':     {prot:0.0,  mg:0.0,  cb:0.0,  mm:60.0, em:0,    ca:20.0, lys:0.00, met:0.00},
   'coquilles':  {prot:0.0,  mg:0.0,  cb:0.0,  mm:97.0, em:0,    ca:38.0, lys:0.00, met:0.00},
@@ -35,26 +41,42 @@ function normalise(s){
     .replace(/'/g,' ').replace(/-/g,' ');
 }
 
+// La FICHE de la matiere premiere fait foi. NUTRI_DB n'est qu'un secours pour les
+// ingredients jamais renseignes. Renvoie null si l'ingredient est INCONNU : avant, on
+// renvoyait des zeros et l'etiquette s'imprimait quand meme — un aliment lapin sortait
+// a 901 kcal au lieu de 2527, sur un document remis au client.
 function findNutri(nom){
+  const G = (typeof GP_INGREDIENTS !== 'undefined' && GP_INGREDIENTS) || [];
+  const ing = G.find(i => normalise(i.nom || '') === normalise(nom || ''));
+  if(ing && ing.nutri_prot != null){
+    return { prot:+ing.nutri_prot||0, mg:+ing.nutri_mg||0, cb:+ing.nutri_cb||0, mm:+ing.nutri_mm||0,
+             em:+ing.nutri_em||0, ca:+ing.nutri_ca||0, lys:+ing.nutri_lys||0, met:+ing.nutri_met||0 };
+  }
   const n = normalise(nom);
   for(const [key, val] of Object.entries(NUTRI_DB)){
     if(n.includes(key)) return val;
   }
-  return {prot:0, mg:0, cb:0, mm:2, em:0, ca:0, lys:0, met:0};
+  return null;
 }
 
 function calcNutri(formule){
   let prot=0, mg=0, cb=0, mm=0, em=0, ca=0, lys=0, met=0;
+  const manquants=[];
   (formule.ingredients||[]).forEach(ing=>{
     const pct=ing.pct/100;
     const v=findNutri(ing.nom);
+    if(!v){ manquants.push(ing.nom); return; }   // jamais de zero silencieux
     prot+=pct*v.prot; mg+=pct*v.mg; cb+=pct*v.cb; mm+=pct*v.mm;
     em+=pct*v.em; ca+=pct*v.ca; lys+=pct*v.lys; met+=pct*v.met;
   });
   return{
     mm:mm.toFixed(2), prot:prot.toFixed(2), mg:mg.toFixed(2),
     cb:cb.toFixed(2), lys:lys.toFixed(2), met:met.toFixed(2),
-    ca:ca.toFixed(2), em:Math.round(em)
+    ca:ca.toFixed(2), em:Math.round(em),
+    // Proteine digestible : ~72 % de la proteine brute pour un aliment compose
+    // (valeur d'usage ; a affiner par formule si tu as les coefficients reels).
+    protDig:(prot*0.72).toFixed(2),
+    manquants
   };
 }
 
@@ -135,6 +157,17 @@ function printRecu(vente){
 function printFicheTechnique(formule){
   const cfg=GP_CONFIG||{};
   const nutri=calcNutri(formule);
+  // GARDE-FOU : une etiquette porte le RCCM de l entreprise et part chez le client.
+  // Si un ingredient n a pas de valeurs nutritionnelles, on ne publie PAS un chiffre
+  // invente : on dit lequel manque. Mieux vaut pas d etiquette qu une etiquette fausse.
+  if(nutri.manquants && nutri.manquants.length){
+    alert(["Valeurs nutritionnelles manquantes : impossible d imprimer cette etiquette.", "",
+           ...nutri.manquants.map(m => "  - " + m), "",
+           "Renseigne-les dans Matieres Premieres (bouton nutrition sur la ligne), puis reessaie.",
+           "Sans elles, l etiquette annoncerait des valeurs fausses au client."]
+          .join(String.fromCharCode(10)));
+    return;
+  }
   const now=new Date();
   const dateProd=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const expDate=new Date(now);
@@ -250,6 +283,17 @@ function imprimerEtiquettesLot(formuleNom, numLot, qteProduite, dateLot){
 function printFicheTechniqueLot(formule, numLot, qteProduite, dateLot){
   const cfg = GP_CONFIG || {};
   const nutri = calcNutri(formule);
+  // GARDE-FOU : une etiquette porte le RCCM de l entreprise et part chez le client.
+  // Si un ingredient n a pas de valeurs nutritionnelles, on ne publie PAS un chiffre
+  // invente : on dit lequel manque. Mieux vaut pas d etiquette qu une etiquette fausse.
+  if(nutri.manquants && nutri.manquants.length){
+    alert(["Valeurs nutritionnelles manquantes : impossible d imprimer cette etiquette.", "",
+           ...nutri.manquants.map(m => "  - " + m), "",
+           "Renseigne-les dans Matieres Premieres (bouton nutrition sur la ligne), puis reessaie.",
+           "Sans elles, l etiquette annoncerait des valeurs fausses au client."]
+          .join(String.fromCharCode(10)));
+    return;
+  }
 
   // Date production depuis le lot
   const dProd = dateLot

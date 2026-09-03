@@ -3056,6 +3056,39 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 </div>
 
 <!-- DIRECTEUR MARKETING IA -->
+
+<!-- MODAL VALEURS NUTRITIONNELLES D'UNE MATIÈRE PREMIÈRE -->
+<div id="modal-nutri" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNutri()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px">🧪 Valeurs nutritionnelles</div>
+    <div id="nutri-titre" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px">—</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
+      Valeurs sur matière brute. Ce sont elles qui composent l'étiquette du sac : renseigne ce que dit
+      la fiche de ton fournisseur ou ta table de référence, jamais une estimation.
+    </div>
+    <input type="hidden" id="nutri-id">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        <div class="fr" style="margin:0"><label style="font-size:10px">Protéine brute (%)</label><input type="number" step="0.01" id="nutri-prot" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Matière grasse (%)</label><input type="number" step="0.01" id="nutri-mg" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Cellulose brute (%)</label><input type="number" step="0.01" id="nutri-cb" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Matière minérale (%)</label><input type="number" step="0.01" id="nutri-mm" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie digestible (kcal/kg)</label><input type="number" step="0.01" id="nutri-em" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Calcium (%)</label><input type="number" step="0.01" id="nutri-ca" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Lysine (%)</label><input type="number" step="0.01" id="nutri-lys" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Méthionine (%)</label><input type="number" step="0.01" id="nutri-met" placeholder="0"></div>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin-top:10px;line-height:1.5">
+      Repères : maïs 8,5 % de protéine et 3300 kcal · blé 11,5 % · drèche d'orge 25 % · leucena 22 % ·
+      concentré 35 à 40 % · tourteau de soja 44 % · huile 8800 kcal · coquilles 38 % de calcium.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" onclick="saveNutri()" style="flex:1;justify-content:center">💾 Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerNutri()" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+    <div class="a-err" id="nutri-err"></div>
+  </div>
+</div>
+
 <div class="page" id="page-emprunts">
   <div class="page-title">🏦 Emprunts</div>
   <div class="page-sub">Prêts bancaires et microfinance — capital dû, échéancier, remboursements</div>
@@ -3376,10 +3409,10 @@ try{
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
 <script src="js/config.js?v=2.27.0"></script>
-<script src="js/print.js?v=2.26.1"></script>
+<script src="js/print.js?v=2.28.1"></script>
 <script src="js/dashboard.js?v=2.26.1"></script>
 <script src="js/stock.js?v=2.26.1"></script>
-<script src="js/matieres.js?v=2.26.1"></script>
+<script src="js/matieres.js?v=2.28.1"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
 <script src="js/ventes.js?v=2.27.7"></script>
@@ -3424,6 +3457,7 @@ try{
 <script src="js/marketing.js?v=2.26.1"></script>
 <script src="js/commissions.js?v=2.27.0"></script>
 <script src="js/emprunts.js?v=2.28.0"></script>
+<script src="js/nutrition.js?v=2.28.1"></script>
 <script src="js/rh.js?v=2.26.1"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 

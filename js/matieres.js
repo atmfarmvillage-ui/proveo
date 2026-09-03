@@ -40,7 +40,9 @@ async function renderMatieresPremieresPage(){
   // Trier par nom
   const sorted=[...filtered].sort((a,b)=>a.nom.localeCompare(b.nom));
 
-  document.getElementById('mp-liste-page').innerHTML=`<table class="tbl" style="font-size:11px">
+  document.getElementById('mp-liste-page').innerHTML=
+    ((typeof nutriBandeau==='function') ? nutriBandeau() : '') +
+    `<table class="tbl" style="font-size:11px">
       <thead><tr>
         <th>Nom</th>
         <th class="num">Prix/kg (F)</th>
@@ -68,6 +70,9 @@ async function renderMatieresPremieresPage(){
               ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerNom('${i.id}')" id="mpp-nom-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Renommer">✏️</button>
               <button class="btn btn-g btn-sm" onclick="mppSauverNom('${i.id}')" id="mpp-nom-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
               ${inactif?'<span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}
+              ${(typeof nutriRenseignee==='function' && !nutriRenseignee(i))
+                ? `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Valeurs nutritionnelles manquantes — l'étiquette ne peut pas s'imprimer">🧪 à renseigner</button>`
+                : `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px" title="Valeurs nutritionnelles">🧪</button>`}
             </div>
           </td>
 
