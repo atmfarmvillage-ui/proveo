@@ -25,12 +25,14 @@ async function renderBilanJour(){
   if(dateEl && !dateEl.value) dateEl.value=today();
   const date=dateEl?.value||today();
 
-  // ── Caisses (physique) — scopées par PDV pour une secrétaire ──
+  // ── TOUTES les caisses du point de vente, pas seulement le tiroir ──
+  // Le filtre `type=physique` excluait la banque et le mobile money : FECECAV et
+  // MIX BY YAS n'apparaissaient JAMAIS dans le bilan journalier de Production.
   let{data:CA}=await SB.from('gp_caisses').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').order('nom');
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=CA||[];
   if(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE){
-    caisses=caisses.filter(c=>!c.point_vente||c.point_vente===GP_POINT_VENTE);
+    caisses=caisses.filter(c=>c.point_vente===GP_POINT_VENTE);
   }
 
   // Sélecteur de caisse
@@ -137,7 +139,9 @@ async function renderBilanJour(){
     <div style="background:var(--card2);border:2px solid var(--gold);border-radius:12px;padding:16px">
       <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:4px">🧮 Clôture de caisse — ${caisse?caisse.nom:'(aucune caisse)'} · ${pdvSel}</div>
       <div style="font-size:10px;color:var(--textm);margin-bottom:10px">Compte tout le cash présent dans le tiroir, puis valide. L'écart est enregistré.</div>
-      ${sansCaisse?'<div style="color:var(--red);font-size:12px">Aucune caisse physique pour ce point de vente.</div>':`
+      ${sansCaisse?'<div style="color:var(--red);font-size:12px">Aucune caisse pour ce point de vente.</div>':(caisse&&caisse.type!=='physique'?`
+      <div style="font-size:12px;color:var(--textm)">🏦 <b>${caisse.nom}</b> n'est pas un tiroir : on ne compte pas des billets sur un compte bancaire ou mobile money.<br>
+      Solde suivi : <b style="color:var(--g6)">${fmt(cashAttendu)} F</b>. Le rapprochement se fait avec le relevé de l'établissement, pas par comptage.</div>`:`
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end">
         <div><label style="font-size:11px;color:var(--textm);display:block;margin-bottom:4px">Solde théorique (tiroir)</label>
           <div style="font-size:18px;font-weight:700;color:var(--g6);padding:8px 10px;background:rgba(0,0,0,.15);border-radius:8px">${fmt(cashAttendu)} F</div></div>
@@ -148,7 +152,7 @@ async function renderBilanJour(){
       </div>
       <input type="text" id="bj-cloture-note" placeholder="Note (optionnel, ex: explication de l'écart)" style="width:100%;margin-top:10px;font-size:12px">
       <button class="btn btn-g" style="width:100%;justify-content:center;margin-top:10px" onclick="saveCloture()">✅ Valider la clôture du jour</button>
-      `}
+      `)}
     </div>
 
     ${Mday.length?`<div class="card-title" style="font-size:12px;color:var(--textm);margin-top:14px">📋 Mouvements de caisse du jour</div>

@@ -119,6 +119,7 @@ async function renderCaisse(){
         <button class="btn btn-out btn-sm" onclick="voirHistoriqueCaisse('${c.id}','${c.nom}')">📋 Historique</button>
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="ouvrirCorrectionEcart('${c.id}','${c.nom}')">⚠ Correction</button>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" style="border-color:rgba(232,197,71,.5);color:var(--gold)" onclick="ouvrirModifSoldeInit('${c.id}')" title="Mettre le solde à jour avec le comptage physique">📋 Mettre à jour</button>`:''}
+        ${GP_ROLE==='admin'?`<label class="btn btn-out btn-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer" title="Couleur de la caisse">🎨<input type="color" value="${couleur}" onchange="changerCouleurCaisse('${c.id}',this.value)" style="width:22px;height:20px;padding:0;border:none;background:none;cursor:pointer"></label>`:''}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerCaisse('${c.id}')">✕</button>`:''}
         ${!mine?`<span style="font-size:10px;color:var(--textm);align-self:center">👁 Lecture seule — caisse d'un autre point de vente</span>`:''}
       </div>
@@ -161,6 +162,18 @@ async function renderCaisse(){
 // - Membre PDV PRINCIPAL : sa propre caisse + la caisse Production PHYSIQUE, mais PAS
 //   les banques du siège (FECECAV réservée à la Production).
 // - Membre PDV SECONDAIRE : uniquement sa propre caisse.
+// 🎨 Couleur d'une caisse. Elle sert AUSSI a peindre le montant : une teinte pale
+// rend le solde illisible sur fond clair. Modifiable a tout moment, plus seulement
+// a la creation.
+async function changerCouleurCaisse(id, couleur){
+  if(GP_ROLE!=="admin"){ notify("Réservé à l'admin","r"); return; }
+  if(!/^#[0-9a-fA-F]{6}$/.test(String(couleur||''))) return;
+  const{error}=await SB.from('gp_caisses').update({couleur}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){ notify('Erreur : '+error.message,'r'); return; }
+  notify('Couleur mise à jour ✓','gold');
+  if(typeof renderCaisse==='function') await renderCaisse();
+}
+
 function estMaCaisse(c){
   if(!c) return false;
   if(GP_ROLE==='admin' || GP_EST_GERANT) return true;
