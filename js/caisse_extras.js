@@ -35,6 +35,25 @@ async function remplirSelectCaisses(selectId, optionVide){
   if(curId && !C.some(c=>c.id===curId)) sel.value = C[0]?.id || '';
 }
 
+// 🏦 Emprunts en cours, pour rattacher une dépense à celui qui la finance.
+// Le bloc reste masqué s'il n'y a aucun emprunt : pas de champ inutile a l'ecran.
+async function remplirSelectEmprunts(){
+  const wrap=document.getElementById('dep-emprunt-wrap');
+  const sel=document.getElementById('dep_emprunt_id');
+  if(!wrap||!sel) return;
+  try{
+    const{data}=await SB.from('gp_emprunts').select('id,preteur,montant')
+      .eq('admin_id',GP_ADMIN_ID).eq('statut','en_cours').order('date_debut',{ascending:false});
+    const E=data||[];
+    if(!E.length){ wrap.style.display='none'; return; }
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Non —</option>'
+      + E.map(e=>`<option value="${e.id}">${e.preteur} (${fmt(e.montant||0)} F)</option>`).join('');
+    if(cur && E.some(e=>e.id===cur)) sel.value=cur;
+    wrap.style.display='';
+  }catch(_){ wrap.style.display='none'; }
+}
+
 // ── PLAFOND DE CRÉDIT CLIENTS (config admin) ──
 function loadCreditPlafond(){
   const a=document.getElementById('cfg_credit_actif');
@@ -144,7 +163,8 @@ async function saveDep(){
       // Le point de vente doit être EXPLICITE. Laissé vide, il était lu « Production »
       // par le bilan et « PDV de l'utilisateur » par le débit de caisse : la dépense
       // s'affichait d'un côté et l'argent sortait de l'autre tiroir.
-      point_vente: _pvDep
+      point_vente: _pvDep,
+      emprunt_id: (document.getElementById('dep_emprunt_id')?.value || null)
     }).select().maybeSingle();
     if(error){ err.textContent = 'Erreur: '+error.message; return; }
 
@@ -374,6 +394,7 @@ async function saveModifSoldeInit(){
       if(r && typeof r.then==='function') await r;
       await remplirSelectCaisses('dep_caisse_id');
       await preselectCaissePDV('dep_caisse_id'); // caisse du PDV connecté par défaut
+      await remplirSelectEmprunts();
     };
   }
   // Hook page paiements MP idem

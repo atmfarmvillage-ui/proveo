@@ -61,6 +61,17 @@ async function renderEmprunts(){
   const parEmprunt = {};
   EC.forEach(e => { (parEmprunt[e.emprunt_id] = parEmprunt[e.emprunt_id] || []).push(e); });
 
+  // Emploi des fonds : a quoi l'argent emprunte a-t-il servi ? Sans ce lien, il se dilue
+  // dans le fonctionnement courant et l'utilisation devient injustifiable devant le preteur.
+  const usage = {};
+  if(E.length){
+    try{
+      const { data:dep } = await SB.from('gp_depenses').select('emprunt_id,date,description,montant,categorie')
+        .eq('admin_id', GP_ADMIN_ID).in('emprunt_id', E.map(x => x.id)).order('date', { ascending:false });
+      (dep || []).forEach(d => { (usage[d.emprunt_id] = usage[d.emprunt_id] || []).push(d); });
+    }catch(_){ /* colonne emprunt_id absente : on affiche l'emprunt sans l'emploi des fonds */ }
+  }
+
   // Reste à rembourser = capital des échéances NON payées. C'est le chiffre qui
   // doit être lu à côté de la trésorerie, jamais séparément.
   let resteTotal = 0, interetsRestants = 0, enRetard = 0;
@@ -92,6 +103,23 @@ async function renderEmprunts(){
         <div class="econo-box"><div class="econo-val">${paye.length} / ${lignes.length}</div><div class="econo-lbl">Échéances payées</div></div>
         ${prochaine ? `<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(prochaine.total||0)} F</div><div class="econo-lbl">Prochaine · ${prochaine.date_prevue||''}</div></div>` : ''}
       </div>
+      ${(() => {
+        const dep = usage[emp.id] || [];
+        if(!dep.length) return `<div style="font-size:11px;color:var(--textm);margin-bottom:8px">Aucune dépense rattachée à cet emprunt. Sur la page Dépenses, choisis « Financé par un emprunt » pour tracer l'emploi des fonds.</div>`;
+        const utilise = dep.reduce((s2,d) => s2 + Number(d.montant||0), 0);
+        const dispo = Math.max(0, Number(emp.montant||0) - utilise);
+        const usId = 'emp-us-' + emp.id.slice(0,8);
+        return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(utilise)} F</div><div class="econo-lbl">Déjà utilisé</div></div>
+          <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(dispo)} F</div><div class="econo-lbl">Encore disponible</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--textm);cursor:pointer" onclick="var e=document.getElementById('${usId}');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Voir l'emploi des fonds (${dep.length})</div>
+        <div id="${usId}" style="display:none;overflow-x:auto;margin:6px 0"><table class="tbl" style="font-size:11px"><thead><tr>
+          <th>Date</th><th>Catégorie</th><th>Description</th><th class="num">Montant</th></tr></thead><tbody>
+          ${dep.map(d => `<tr><td style="font-size:10px">${d.date||''}</td><td style="font-size:10px">${d.categorie||'—'}</td><td style="font-size:10px">${(d.description||'').replace(/</g,'&lt;')}</td><td class="num">${fmt(d.montant||0)} F</td></tr>`).join('')}
+          <tr style="font-weight:700;background:rgba(22,163,74,.08)"><td colspan="3">TOTAL utilisé</td><td class="num">${fmt(utilise)} F</td></tr>
+        </tbody></table></div>`;
+      })()}
       ${prochaine && admin ? `<button class="btn btn-g btn-sm" onclick="payerEcheance('${prochaine.id}')">💵 Payer l'échéance n°${prochaine.numero} — ${fmt(prochaine.total||0)} F</button>` : ''}
       <div style="font-size:11px;color:var(--textm);cursor:pointer;margin-top:8px" onclick="var e=document.getElementById('${detId}');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Voir l'échéancier</div>
       <div id="${detId}" style="display:none;overflow-x:auto;margin-top:6px"><table class="tbl" style="font-size:11px"><thead><tr>
