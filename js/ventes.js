@@ -1211,9 +1211,13 @@ async function saveVente(){
       if(cPdv) caisseTarget = cPdv;
     }
     if(!caisseTarget){
+      // Le siege s'ecrit 'Production' depuis que toutes les caisses ont un proprietaire.
+      // Ne chercher que `point_vente IS NULL` faisait tomber les ventes dans la premiere
+      // caisse orpheline venue : 379 456 F y ont ete encaisses a tort du 24/08 au 03/09.
       const{data:cSiege}=await SB.from('gp_caisses').select('id,nom')
-        .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
-        .eq('type','physique').is('point_vente',null).maybeSingle();
+        .eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique')
+        .or('point_vente.eq.Production,point_vente.is.null')
+        .order('point_vente',{nullsFirst:false}).limit(1).maybeSingle();
       if(cSiege) caisseTarget = cSiege;
     }
     if(!caisseTarget){
@@ -3190,7 +3194,7 @@ async function _crediterCaisseVenteDeficit(v){
   const pv=v.point_vente||null;
   let caisseId=null;
   if(pv){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('point_vente',pv).maybeSingle(); caisseId=c?.id||null; }
-  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle(); caisseId=c?.id||null; }
+  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').or('point_vente.eq.Production,point_vente.is.null').order('point_vente',{nullsFirst:false}).limit(1).maybeSingle(); caisseId=c?.id||null; }
   if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').limit(1).maybeSingle(); caisseId=c?.id||null; }
   if(!caisseId) throw new Error('Aucune caisse pour créditer la vente');
   const{error}=await SB.from('gp_mouvements_caisse').insert({
