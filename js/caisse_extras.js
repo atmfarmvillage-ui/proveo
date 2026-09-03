@@ -306,7 +306,16 @@ function onMsiMotifChange(){
 // physique (inventaire). On crée UN SEUL mouvement d'ajustement = écart entre
 // le réel compté et le solde calculé actuel. Le solde initial n'est PAS modifié
 // (sinon on compterait l'écart deux fois).
+let _savingSolde = false;   // verrou anti double-clic — un ajustement double fausse la caisse
 async function saveModifSoldeInit(){
+  // Le 31/08/2026, un double-clic a cree DEUX ajustements identiques de +3 365 910 F
+  // a 77 ms d'intervalle. Contrairement aux depenses, ce formulaire n'avait aucun verrou.
+  if(_savingSolde) return;
+  _savingSolde = true;
+  const _btnS = document.querySelector('button[onclick*="saveModifSoldeInit"]');
+  if(_btnS){ _btnS.disabled = true; _btnS.dataset._lbl = _btnS.textContent; _btnS.style.opacity='.6'; _btnS.textContent='⏳ Enregistrement…'; }
+  const _unlockS = ()=>{ _savingSolde=false; if(_btnS){ _btnS.disabled=false; _btnS.style.opacity=''; if(_btnS.dataset._lbl) _btnS.textContent=_btnS.dataset._lbl; } };
+  try{
   const caisseId = document.getElementById('msi-caisse-id').value;
   const nouveau = +document.getElementById('msi-nouveau').value;
   const motif = document.getElementById('msi-motif').value.trim();
@@ -351,6 +360,7 @@ async function saveModifSoldeInit(){
   fermerModalModifSoldeInit();
   notify(`✓ ${c.nom} mise à jour à ${fmt(nouveau)} F`,'gold');
   if(typeof renderCaisse === 'function') await renderCaisse();
+  } finally { _unlockS(); }
 }
 
 // ── HOOK : pré-remplir le select caisse à l'ouverture des formulaires concernés ──
