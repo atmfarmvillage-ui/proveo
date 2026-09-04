@@ -50,12 +50,22 @@ function normalise(s){
 // ingredients jamais renseignes. Renvoie null si l'ingredient est INCONNU : avant, on
 // renvoyait des zeros et l'etiquette s'imprimait quand meme — un aliment lapin sortait
 // a 901 kcal au lieu de 2527, sur un document remis au client.
-function findNutri(nom){
+// L'ENERGIE DEPEND DE L'ESPECE. Un lapin digere la cellulose bien mieux qu'une poule :
+// son de ble, tourteau de palmiste, epluchure de manioc lui apportent nettement plus.
+// Avec une seule valeur partagee, l'aliment lapin sortait a 1809 kcal au lieu de 2527.
+// La valeur specifique prime ; a defaut on retombe sur l'energie volaille (nutri_em).
+function _emEspece(ing, espece){
+  const k = { lapin:'nutri_em_lapin', porc:'nutri_em_porc', tilapia:'nutri_em_poisson' }[espece];
+  if(k && ing[k] != null) return +ing[k] || 0;
+  return +ing.nutri_em || 0;
+}
+
+function findNutri(nom, espece){
   const G = (typeof GP_INGREDIENTS !== 'undefined' && GP_INGREDIENTS) || [];
   const ing = G.find(i => normalise(i.nom || '') === normalise(nom || ''));
   if(ing && ing.nutri_prot != null){
     return { prot:+ing.nutri_prot||0, mg:+ing.nutri_mg||0, cb:+ing.nutri_cb||0, mm:+ing.nutri_mm||0,
-             em:+ing.nutri_em||0, ca:+ing.nutri_ca||0, lys:+ing.nutri_lys||0, met:+ing.nutri_met||0 };
+             em:_emEspece(ing, espece), ca:+ing.nutri_ca||0, lys:+ing.nutri_lys||0, met:+ing.nutri_met||0 };
   }
   // Les cles de NUTRI_DB contiennent des espaces (« son de ble ») : elles doivent
   // passer par la MEME normalisation, sinon plus aucune ne correspondrait.
@@ -71,7 +81,7 @@ function calcNutri(formule){
   const manquants=[];
   (formule.ingredients||[]).forEach(ing=>{
     const pct=ing.pct/100;
-    const v=findNutri(ing.nom);
+    const v=findNutri(ing.nom, formule.espece);
     if(!v){ manquants.push(ing.nom); return; }   // jamais de zero silencieux
     prot+=pct*v.prot; mg+=pct*v.mg; cb+=pct*v.cb; mm+=pct*v.mm;
     em+=pct*v.em; ca+=pct*v.ca; lys+=pct*v.lys; met+=pct*v.met;

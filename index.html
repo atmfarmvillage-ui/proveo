@@ -3072,14 +3072,20 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <div class="fr" style="margin:0"><label style="font-size:10px">Matière grasse (%)</label><input type="number" step="0.01" id="nutri-mg" placeholder="0"></div>
         <div class="fr" style="margin:0"><label style="font-size:10px">Cellulose brute (%)</label><input type="number" step="0.01" id="nutri-cb" placeholder="0"></div>
         <div class="fr" style="margin:0"><label style="font-size:10px">Matière minérale (%)</label><input type="number" step="0.01" id="nutri-mm" placeholder="0"></div>
-        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie digestible (kcal/kg)</label><input type="number" step="0.01" id="nutri-em" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie volaille (kcal/kg)</label><input type="number" step="1" id="nutri-em" placeholder="0"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie lapin (kcal/kg)</label><input type="number" step="1" id="nutri-em_lapin" placeholder="—"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie porc (kcal/kg)</label><input type="number" step="1" id="nutri-em_porc" placeholder="—"></div>
+        <div class="fr" style="margin:0"><label style="font-size:10px">Énergie poisson (kcal/kg)</label><input type="number" step="1" id="nutri-em_poisson" placeholder="—"></div>
         <div class="fr" style="margin:0"><label style="font-size:10px">Calcium (%)</label><input type="number" step="0.01" id="nutri-ca" placeholder="0"></div>
         <div class="fr" style="margin:0"><label style="font-size:10px">Lysine (%)</label><input type="number" step="0.01" id="nutri-lys" placeholder="0"></div>
         <div class="fr" style="margin:0"><label style="font-size:10px">Méthionine (%)</label><input type="number" step="0.01" id="nutri-met" placeholder="0"></div>
     </div>
     <div style="font-size:10px;color:var(--textm);margin-top:10px;line-height:1.5">
       Repères : maïs 8,5 % de protéine et 3300 kcal · blé 11,5 % · drèche d'orge 25 % · leucena 22 % ·
-      concentré 35 à 40 % · tourteau de soja 44 % · huile 8800 kcal · coquilles 38 % de calcium.
+      concentré 35 à 40 % · tourteau de soja 44 % · huile 8800 kcal · coquilles 38 % de calcium.<br>
+      <b>Énergie :</b> laisse vide une case espèce et c'est l'énergie volaille qui sert. Ne la remplis que pour
+      les matières <b>fibreuses</b> — son, tourteaux, épluchures, fourrages : le lapin en tire bien plus
+      d'énergie qu'une poule. Pour le maïs ou le soja, l'écart entre espèces est négligeable.
     </div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-g" onclick="saveNutri()" style="flex:1;justify-content:center">💾 Enregistrer</button>
@@ -3409,7 +3415,7 @@ try{
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
 <script src="js/config.js?v=2.27.0"></script>
-<script src="js/print.js?v=2.28.2"></script>
+<script src="js/print.js?v=2.29.0"></script>
 <script src="js/dashboard.js?v=2.26.1"></script>
 <script src="js/stock.js?v=2.26.1"></script>
 <script src="js/matieres.js?v=2.28.1"></script>
@@ -3457,7 +3463,7 @@ try{
 <script src="js/marketing.js?v=2.26.1"></script>
 <script src="js/commissions.js?v=2.27.0"></script>
 <script src="js/emprunts.js?v=2.28.0"></script>
-<script src="js/nutrition.js?v=2.28.1"></script>
+<script src="js/nutrition.js?v=2.29.0"></script>
 <script src="js/rh.js?v=2.26.1"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 
