@@ -18,11 +18,17 @@ const NUTRI_REPERES = {
   met:  'Méthionine % — maïs 0,18 · tourteau soja 0,62',
 };
 
+// L'energie est propre a chaque espece : le lapin valorise la cellulose, pas la poule.
+// `em` reste l'energie VOLAILLE (valeur par defaut si l'espece n'a pas la sienne).
 const NUTRI_CHAMPS = [
   ['prot','Protéine brute','%'], ['mg','Matière grasse','%'],
   ['cb','Cellulose brute','%'],  ['mm','Matière minérale','%'],
-  ['em','Énergie digestible','kcal/kg'], ['ca','Calcium','%'],
-  ['lys','Lysine','%'],          ['met','Méthionine','%'],
+  ['ca','Calcium','%'],          ['lys','Lysine','%'],
+  ['met','Méthionine','%'],
+  ['em','Énergie volaille','kcal/kg'],
+  ['em_lapin','Énergie lapin','kcal/kg'],
+  ['em_porc','Énergie porc','kcal/kg'],
+  ['em_poisson','Énergie poisson','kcal/kg'],
 ];
 
 // Une fiche est considérée renseignée dès que la protéine l'est : c'est la valeur
@@ -56,8 +62,9 @@ async function saveNutri(){
     const v = Number(String(brut).replace(',', '.'));
     if(isNaN(v) || v < 0){ err.textContent = `${lib} : valeur invalide.`; return; }
     // Un pourcentage au-dessus de 100 est une faute de frappe, pas une matière exotique.
-    if(k !== 'em' && v > 100){ err.textContent = `${lib} : ${v} % est impossible (maximum 100).`; return; }
-    if(k === 'em' && v > 9500){ err.textContent = `Énergie : ${v} kcal/kg dépasse celle d'une huile pure (8800).`; return; }
+    const estEnergie = k.startsWith('em');
+    if(!estEnergie && v > 100){ err.textContent = `${lib} : ${v} % est impossible (maximum 100).`; return; }
+    if(estEnergie && v > 9500){ err.textContent = `${lib} : ${v} kcal/kg dépasse celle d'une huile pure (8800).`; return; }
     maj['nutri_' + k] = v;
   }
   if(maj.nutri_prot == null){ err.textContent = 'La protéine brute est obligatoire : sans elle, la fiche reste incomplète et l\'étiquette refusera de s\'imprimer.'; return; }
