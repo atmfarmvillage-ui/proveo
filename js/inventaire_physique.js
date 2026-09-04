@@ -24,6 +24,14 @@ async function renderInventairePhysique(){
   }
 }
 
+// ⚠️ Un nom de MP peut contenir des GUILLEMETS (ex. Tourteau de soja 44 ("46 Profat" INRA 188)).
+// Sans échappement, l'attribut HTML est COUPÉ au premier guillemet : le nom lu ensuite dans
+// dataset.nom est tronqué (« Tourteau de soja 44 ( »), il est enregistré tel quel dans
+// l'inventaire, et le mouvement de stock ne retrouve plus sa fiche → stock scindé en deux.
+// Toujours passer par ces deux helpers pour un attribut ou un id.
+function _invpAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+function _invpCle(s){ return String(s==null?'':s).replace(/[^A-Za-z0-9]+/g,'-'); }
+
 // Matières premières RÉELLEMENT UTILISÉES = celles qui entrent dans au moins une formule.
 // Le reste (anciens lots, achats ponctuels, essais) encombre l'inventaire sans être consommé.
 function _mpUtilisees(){
@@ -69,20 +77,20 @@ async function creerNouvelInventaire(mois){
         <th class="num">Coût écart</th>
       </tr></thead>
       <tbody>
-      ${lignes.map((l,i)=>`${(i===0||lignes[i-1].utilisee!==l.utilisee) ? `<tr><td colspan="6" style="background:var(--card2);font-weight:700;font-size:11px;padding:7px 8px;border-top:2px solid var(--border)">${l.utilisee?'✅ Matières utilisées dans les formules ('+lignes.filter(x=>x.utilisee).length+')':'💤 Non utilisées dans aucune formule ('+lignes.filter(x=>!x.utilisee).length+')'}</td></tr>` : ''}<tr id="invp-row-${l.nom.replace(/\s/g,'-')}">
+      ${lignes.map((l,i)=>`${(i===0||lignes[i-1].utilisee!==l.utilisee) ? `<tr><td colspan="6" style="background:var(--card2);font-weight:700;font-size:11px;padding:7px 8px;border-top:2px solid var(--border)">${l.utilisee?'✅ Matières utilisées dans les formules ('+lignes.filter(x=>x.utilisee).length+')':'💤 Non utilisées dans aucune formule ('+lignes.filter(x=>!x.utilisee).length+')'}</td></tr>` : ''}<tr id="invp-row-${_invpCle(l.nom)}">
         <td style="font-weight:600">${l.nom}</td>
         <td class="num" style="color:var(--textm)">${fmtKg(l.qte_theorique)}</td>
         <td class="num">
-          <input type="number" class="invp-physique" data-nom="${l.nom}"
+          <input type="number" class="invp-physique" data-nom="${_invpAttr(l.nom)}"
             data-theorique="${l.qte_theorique}" data-prix="${l.prix}"
             value="" placeholder="${l.qte_theorique.toFixed(1)}" step="0.1"
             title="Laisse vide = garder le stock actuel · Saisis le vrai comptage pour corriger"
             style="width:100px;text-align:right;font-size:11px;padding:3px 6px"
             oninput="calcEcartLigne(this)">
         </td>
-        <td class="num" id="ecart-${l.nom.replace(/\s/g,'-')}">0</td>
+        <td class="num" id="ecart-${_invpCle(l.nom)}">0</td>
         <td class="num" style="color:var(--textm)">${fmt(l.prix)}</td>
-        <td class="num" id="cout-ecart-${l.nom.replace(/\s/g,'-')}" style="color:var(--textm)">0</td>
+        <td class="num" id="cout-ecart-${_invpCle(l.nom)}" style="color:var(--textm)">0</td>
       </tr>`).join('')}
       </tbody>
       <tfoot>
@@ -113,7 +121,7 @@ function calcEcartLigne(input){
   const physique=(String(input.value).trim()==='')?theorique:(parseFloat(input.value)||0);
   const ecart=physique-theorique;
   const coutEcart=Math.abs(ecart)*prix;
-  const key=nom.replace(/\s/g,'-');
+  const key=_invpCle(nom);
 
   const ecartEl=document.getElementById('ecart-'+key);
   const coutEl=document.getElementById('cout-ecart-'+key);
@@ -244,15 +252,25 @@ async function _appliquerAjustementStockInventaire(inv, lignes){
   const avecEcarts=(lignes||[]).filter(l=>Math.abs(l.ecart)>0.1);
   if(!avecEcarts.length) return {ok:true,inserted:0,skipped:0};
   const refBase='Inventaire physique '+inv.mois;
+  // Rattachement ROBUSTE à la fiche MP : sans ingredient_id le mouvement se détache de sa
+  // fiche et scinde le stock en deux (bug historique des noms tronqués au guillemet).
+  const _norm=(s)=>(typeof normalizeMpNom==='function')?normalizeMpNom(s):String(s||'').trim().toLowerCase();
+  const _fiche=(nom)=>{
+    const L=GP_INGREDIENTS||[];
+    const ex=L.find(i=>i.nom===nom); if(ex) return ex;
+    const n=_norm(nom);
+    const eq=L.find(i=>_norm(i.nom)===n); if(eq) return eq;
+    // Repli : nom TRONQUÉ par l'ancien bug d'échappement (« Tourteau de soja 44 ( »).
+    // On accepte le préfixe UNIQUEMENT s'il ne désigne qu'UNE seule fiche (sinon ambigu).
+    if(n.length>=6){ const pre=L.filter(i=>_norm(i.nom).startsWith(n)); if(pre.length===1) return pre[0]; }
+    return null;
+  };
   // Idempotence : quels ingrédients ont DÉJÀ un mouvement d'ajustement pour ce mois ?
+  // On résout AUSSI les noms déjà enregistrés vers leur fiche, sinon un ancien mouvement
+  // orphelin (nom tronqué) ne serait pas reconnu et on doublerait l'ajustement.
   const {data:deja}=await SB.from('gp_stock_mp').select('ingredient_nom,ref')
     .eq('admin_id',GP_ADMIN_ID).like('ref',refBase+'%');
-  const dejaSet=new Set((deja||[]).map(m=>m.ingredient_nom));
-  // Rattachement ROBUSTE à la fiche MP (nom exact, sinon nom normalisé) : sans ingredient_id
-  // le mouvement se détache de sa fiche et fausse les niveaux.
-  const _norm=(s)=>(typeof normalizeMpNom==='function')?normalizeMpNom(s):String(s||'').trim().toLowerCase();
-  const _fiche=(nom)=>(GP_INGREDIENTS||[]).find(i=>i.nom===nom)
-                  ||(GP_INGREDIENTS||[]).find(i=>_norm(i.nom)===_norm(nom))||null;
+  const dejaSet=new Set((deja||[]).map(m=>{ const f=_fiche(m.ingredient_nom); return f?.nom||m.ingredient_nom; }));
   let inserted=0, skipped=0; const erreurs=[];
   for(const l of avecEcarts){
     const fiche=_fiche(l.ingredient_nom);
