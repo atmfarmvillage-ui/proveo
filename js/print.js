@@ -280,34 +280,34 @@ function printFicheTechnique(formule){
     +'@page{size:A4;margin:8mm}'
     +'*{box-sizing:border-box;margin:0;padding:0}'
     +'body{font-family:Arial,sans-serif;font-size:10px;background:#fff;color:#000}'
-    // 6 etiquettes par page et non 8 : l'en-tete legal complet (RCCM, NIF, CNSS,
-    // coordonnees) ne tient pas dans un huitieme de A4 sans devenir illisible.
-    +'.page{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);gap:4mm;width:194mm;height:281mm}'
+    // 8 etiquettes par page : l'en-tete legal complet tient dans un huitieme d'A4
+    // au prix de corps de texte reduits. Ne pas remonter les tailles sans repasser a 6.
+    +'.page{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:4mm;width:194mm;height:281mm}'
     +'.label{border:1px solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff}'
-    +'.ident{padding:2mm 2mm 1mm;text-align:center;border-bottom:1px solid #000}'
-    +'.ident-top{display:flex;align-items:center;justify-content:center;gap:3mm}'
-    +'.ident-logo{width:11mm;flex-shrink:0}'
+    +'.ident{padding:1.2mm 1.5mm .8mm;text-align:center;border-bottom:1px solid #000}'
+    +'.ident-top{display:flex;align-items:center;justify-content:center;gap:2mm}'
+    +'.ident-logo{width:8mm;flex-shrink:0}'
     +'.ident-logo img{max-width:100%;height:auto}'
-    +'.ident-nom{font-size:11px;font-weight:bold;letter-spacing:.3px}'
-    +'.ident-act{font-size:6.2px;line-height:1.35;color:#000}'
-    +'.ident-leg{font-size:6.2px;line-height:1.4;margin-top:.5mm}'
-    +'.bandeau{text-align:center;font-size:12px;font-weight:bold;padding:1.2mm 0;border-bottom:1px solid #000}'
-    +'.nt{width:100%;border-collapse:collapse;flex:1;font-size:9px}'
-    +'.nt th{font-size:9px;font-weight:bold;padding:1mm 2mm;text-align:left;border-bottom:1px solid #000}'
+    +'.ident-nom{font-size:9px;font-weight:bold;letter-spacing:.2px}'
+    +'.ident-act{font-size:5.2px;line-height:1.25;color:#000}'
+    +'.ident-leg{font-size:5.2px;line-height:1.3;margin-top:.3mm}'
+    +'.bandeau{text-align:center;font-size:10px;font-weight:bold;padding:.7mm 0;border-bottom:1px solid #000}'
+    +'.nt{width:100%;border-collapse:collapse;flex:1;font-size:7.6px}'
+    +'.nt th{font-size:7.6px;font-weight:bold;padding:.6mm 1.5mm;text-align:left;border-bottom:1px solid #000}'
     +'.nt th:last-child{text-align:right}'
-    +'.nt td{padding:.9mm 2mm;border-bottom:.5px solid #999}'
+    +'.nt td{padding:.5mm 1.5mm;border-bottom:.4px solid #999}'
     +'.nt td:nth-child(2){font-weight:bold;text-align:right;white-space:nowrap}'
-    +'.nt td:nth-child(3){width:9mm;text-align:left;padding-left:1mm;color:#333}'
+    +'.nt td:nth-child(3){width:7mm;text-align:left;padding-left:.8mm;color:#333}'
     +'.nt tr.sep td{border-top:1px solid #000}'
-    +'.lieu{font-size:6px;text-align:center;color:#333;padding:.6mm 0}'
+    +'.lieu{font-size:5px;text-align:center;color:#333;padding:.4mm 0}'
     +'@media print{button{display:none!important}}'
     +'</style></head><body>'
     +'<div class="page">'
-    +lbl()+lbl()+lbl()
-    +lbl()+lbl()+lbl()
+    +lbl()+lbl()+lbl()+lbl()
+    +lbl()+lbl()+lbl()+lbl()
     +'</div>'
     +'<div style="text-align:center;margin-top:10px">'
-    +'<button onclick="window.print()" style="padding:8px 24px;font-size:13px;cursor:pointer;background:#1b5e20;color:#fff;border:none;border-radius:6px">Imprimer les 6 &eacute;tiquettes</button>'
+    +'<button onclick="window.print()" style="padding:8px 24px;font-size:13px;cursor:pointer;background:#1b5e20;color:#fff;border:none;border-radius:6px">Imprimer les 8 &eacute;tiquettes</button>'
     +'</div>'
     +'</body></html>';
 
