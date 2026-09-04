@@ -12,7 +12,17 @@ const ETAT_DEFAUTS = {
   etabli_par_nom: 'GALLEY Kossi Biaglo',
   etabli_par_fonction: 'Directeur Administratif et Financier',
   responsable_nom: 'ATCHOU A. Messan',
-  comptable_libelle: 'Comptable / Directeur de la CECAV SOLIDARITÉ'
+  comptable_libelle: 'Comptable / Directeur de la CECAV SOLIDARITÉ',
+  // Identité légale imprimée sur les ÉTIQUETTES DE SAC (reprise de l'étiquette papier).
+  // Éditable dans Paramètres → gp_config comme le reste : une seule source pour tous
+  // les documents, plutôt qu'un numéro recopié à la main sur chaque support.
+  nif: '1001874536',
+  cnss: '175659',
+  email_pro: 'Sadari_togo@gmail.com',
+  tel_pro: '+228 99 31 31 10 / 70 99 20 19',
+  activite1: 'Vente-expertise en production et nutrition animale, vente de produits vétérinaires',
+  activite2: 'Vente de matières premières et provende',
+  activite3: 'Vente de poules, lapin, canard, porc'
 };
 function _cfgEtat(k){ const v=(GP_CONFIG||{})[k]; return (v!=null && v!=='') ? v : ETAT_DEFAUTS[k]; }
 
