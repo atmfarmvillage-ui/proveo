@@ -248,23 +248,34 @@ async function _appliquerAjustementStockInventaire(inv, lignes){
   const {data:deja}=await SB.from('gp_stock_mp').select('ingredient_nom,ref')
     .eq('admin_id',GP_ADMIN_ID).like('ref',refBase+'%');
   const dejaSet=new Set((deja||[]).map(m=>m.ingredient_nom));
-  const ajustements=avecEcarts.map(l=>{
-    const fiche=(GP_INGREDIENTS||[]).find(i=>i.nom===l.ingredient_nom)||null;
-    return{
+  // Rattachement ROBUSTE à la fiche MP (nom exact, sinon nom normalisé) : sans ingredient_id
+  // le mouvement se détache de sa fiche et fausse les niveaux.
+  const _norm=(s)=>(typeof normalizeMpNom==='function')?normalizeMpNom(s):String(s||'').trim().toLowerCase();
+  const _fiche=(nom)=>(GP_INGREDIENTS||[]).find(i=>i.nom===nom)
+                  ||(GP_INGREDIENTS||[]).find(i=>_norm(i.nom)===_norm(nom))||null;
+  let inserted=0, skipped=0; const erreurs=[];
+  for(const l of avecEcarts){
+    const fiche=_fiche(l.ingredient_nom);
+    const nom=fiche?.nom||l.ingredient_nom;
+    if(dejaSet.has(nom)){ skipped++; continue; }
+    const row={
       admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
-      type:l.ecart>0?'entree':'sortie',date:today(),
+      // ⚠️ La base a une contrainte CHECK sur `type` : 'sortie' est REFUSÉ (l'app utilise
+      // 'entree' / 'sortie_production' / 'ajustement'). calcNiveaux ajoute 'entree' et
+      // retranche tout le reste → excédent='entree', manque='ajustement'.
+      type:l.ecart>0?'entree':'ajustement',date:today(),
       ingredient_id:fiche?.id||null,
-      ingredient_nom:fiche?.nom||l.ingredient_nom,
+      ingredient_nom:nom,
       quantite:Math.abs(l.ecart),
       prix_unit:l.prix_unitaire,
       ref:refBase+(l.ecart>0?' (excédent)':' (manque)')
     };
-  }).filter(a=>!dejaSet.has(a.ingredient_nom));
-  const skipped=avecEcarts.length-ajustements.length;
-  if(!ajustements.length) return {ok:true,inserted:0,skipped};
-  const {error}=await SB.from('gp_stock_mp').insert(ajustements);
-  if(error) return {ok:false,error,inserted:0,skipped};
-  return {ok:true,inserted:ajustements.length,skipped};
+    // Ligne par ligne : une MP problématique ne fait plus échouer les 14 autres.
+    const {error}=await SB.from('gp_stock_mp').insert(row);
+    if(error) erreurs.push(nom+' → '+(error.message||'erreur'));
+    else inserted++;
+  }
+  return {ok:erreurs.length===0,inserted,skipped,erreurs};
 }
 
 async function validerInventaire(invId){
@@ -282,7 +293,7 @@ async function validerInventaire(invId){
     // (fini l'inventaire marqué validé alors que le stock n'a pas bougé).
     const res=await _appliquerAjustementStockInventaire(inv,lignes);
     if(!res.ok){
-      notify('⚠️ Ajustement du stock ÉCHOUÉ ('+((res.error&&res.error.message)||'erreur inconnue')+') — inventaire NON validé. Réessaie.','r');
+      notify('⚠️ Ajustement du stock ÉCHOUÉ — inventaire NON validé. '+(res.erreurs[0]||''),'r');
       return;
     }
   }
@@ -303,10 +314,21 @@ async function reappliquerStockInventaire(invId){
   if(!inv)return;
   const{data:lignes}=await SB.from('gp_inventaires_lignes').select('*').eq('inventaire_id',invId);
   const res=await _appliquerAjustementStockInventaire(inv,lignes);
-  if(!res.ok){ notify('⚠️ Échec de l\'ajustement : '+((res.error&&res.error.message)||'erreur'),'r'); return; }
-  if(res.inserted===0) notify('Stock déjà à jour pour cet inventaire — rien à ré-appliquer.','gold');
-  else notify('Stock ajusté ✓ — '+res.inserted+' ligne(s) appliquée(s)'+(res.skipped?' ('+res.skipped+' déjà faite(s))':'')+'.','gold');
   await renderInventairePhysique();
+  // Bandeau PERSISTANT : le toast disparaît trop vite pour être lu (et pour diagnostiquer).
+  const box=document.getElementById('invp-content');
+  if(box){
+    const ok=res.ok&&res.inserted>0, rien=res.ok&&res.inserted===0;
+    const coul=ok?'22,163,74':rien?'232,197,71':'239,68,68';
+    const titre=ok?'✅ Stock ajusté':rien?'ℹ️ Rien à ré-appliquer':'⚠️ Ajustement incomplet';
+    box.insertAdjacentHTML('afterbegin',
+      '<div style="background:rgba('+coul+',.08);border:1px solid rgba('+coul+',.35);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">'
+      +'<b>'+titre+'</b> — '+res.inserted+' ligne(s) appliquée(s)'
+      +(res.skipped?' · '+res.skipped+' déjà faite(s)':'')
+      +(res.erreurs.length?'<br><b>Erreurs :</b><br>'+res.erreurs.slice(0,6).map(e=>'• '+e).join('<br>'):'')
+      +(ok?'<br><span style="color:var(--textm)">Vérifie dans <b>Stock → Mouvements</b> (réf. « '+('Inventaire physique '+inv.mois)+' »).</span>':'')
+      +'</div>');
+  }
 }
 
 async function refuserInventaire(invId){
