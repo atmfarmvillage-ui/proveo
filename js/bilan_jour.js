@@ -44,8 +44,14 @@ async function renderBilanJour(){
     else{
       // Par défaut : la caisse de MON point de vente, pas la première de la liste.
       // Sans ça la page s'ouvrait sur une caisse vide et laissait croire à une journée sans vente.
+      // ⚠️ Et dans MON périmètre, on ouvre sur le TIROIR (type 'physique'), jamais sur un compte
+      // bancaire / mobile money : la liste est triée par `type`, donc « banque » sortait en premier
+      // (FECECAV) et le bilan affichait +0 F alors que le cash de la journée était dans le tiroir.
       const mien=(typeof GP_POINT_VENTE!=='undefined' && GP_POINT_VENTE) ? GP_POINT_VENTE : null;
-      const def=(mien ? caisses.find(c=>c.point_vente===mien) : caisses.find(c=>!c.point_vente||c.point_vente==='Production'))||caisses[0];
+      const perim=caisses.filter(c=> mien ? c.point_vente===mien : (!c.point_vente||c.point_vente==='Production'));
+      const def = perim.find(c=>c.type==='physique')   // le tiroir d'abord
+               || perim.find(c=>c.type!=='banque')     // sinon mobile money
+               || perim[0] || caisses[0];
       if(def) selEl.value=def.id;
     }
   }
