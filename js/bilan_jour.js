@@ -31,7 +31,12 @@ async function renderBilanJour(){
   let{data:CA}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=CA||[];
-  if(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE){
+  // Cloisonnement STANDARD de l'app (admin/gérant → tout ; siège → sans PDV + « Production » ;
+  // PDV → le sien). ⚠️ L'ancien filtre ne s'appliquait QUE si GP_POINT_VENTE était renseigné :
+  // un compte SIÈGE (point_vente NULL) échappait au filtre et voyait les caisses de TOUS les PDV.
+  if(typeof appartientAuPDV==='function'){
+    caisses=caisses.filter(c=>appartientAuPDV(c.point_vente));
+  } else if(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE){
     caisses=caisses.filter(c=>c.point_vente===GP_POINT_VENTE);
   }
 
