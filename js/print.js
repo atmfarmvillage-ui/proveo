@@ -38,6 +38,13 @@ const NUTRI_DB = {
 // « Sel (NaCl) » coexistent dans les formules. On ne comparait ni les espaces ni la
 // ponctuation : la fiche etait remplie et l'etiquette repondait quand meme « valeur
 // manquante ». Meme regle que gp_norm_nom() cote SQL.
+// Equation de prediction de l'energie digestible LAPIN (Maertens et al., 1988).
+// Coefficients isoles ici pour qu'un nutritionniste puisse les auditer ou les remplacer
+// par ceux de sa propre reference sans toucher au reste du calcul.
+const MAERTENS = { a: 4253, b: 32.6, c: 144.4 };
+// Coefficient de digestibilite de la proteine, aliment compose lapin.
+const COEF_PROT_DIG = 0.72;
+
 function normalise(s){
   return String(s||'').toLowerCase()
     .replace(/[àáâä]/g,'a').replace(/[éèêë]/g,'e')
@@ -86,13 +93,27 @@ function calcNutri(formule){
     prot+=pct*v.prot; mg+=pct*v.mg; cb+=pct*v.cb; mm+=pct*v.mm;
     em+=pct*v.em; ca+=pct*v.ca; lys+=pct*v.lys; met+=pct*v.met;
   });
+  // ── ENERGIE : la methode depend de l'espece (pratique professionnelle) ──
+  // Volaille, porc, poisson : SOMME des energies tabulees des ingredients.
+  // LAPIN : EQUATION de prediction sur la composition finale.
+  //   Maertens et al. (1988) : ED (kcal/kg) = 4253 - 32,6 x CB(%) - 144,4 x cendres(%)
+  // Chez le lapin, la digestibilite de l'ensemble est gouvernee par la cellulose et les
+  // cendres : additionner des energies par ingredient donne un resultat systematiquement
+  // trop bas (2183 au lieu de 2527 sur LAPIN engraissement A).
+  let emFinal = em, emMethode = 'somme des ingrédients';
+  if(formule.espece === 'lapin'){
+    emFinal = Math.max(0, MAERTENS.a - MAERTENS.b * cb - MAERTENS.c * mm);
+    emMethode = 'équation Maertens (1988)';
+  }
   return{
     mm:mm.toFixed(2), prot:prot.toFixed(2), mg:mg.toFixed(2),
     cb:cb.toFixed(2), lys:lys.toFixed(2), met:met.toFixed(2),
-    ca:ca.toFixed(2), em:Math.round(em),
-    // Proteine digestible : ~72 % de la proteine brute pour un aliment compose
-    // (valeur d'usage ; a affiner par formule si tu as les coefficients reels).
-    protDig:(prot*0.72).toFixed(2),
+    ca:ca.toFixed(2), em:Math.round(emFinal), emMethode,
+    // Proteine digestible : coefficient de digestibilite applique a la proteine brute.
+    // 0,72 pour un aliment compose lapin — valeur retrouvee sur l'etiquette de reference
+    // (16,9 % brute -> 12,18 % digestible). Ne s'affiche que pour le lapin, ou elle est
+    // d'usage ; on n'invente pas une ligne pour les especes ou elle ne se declare pas.
+    protDig: (formule.espece === 'lapin') ? (prot * COEF_PROT_DIG).toFixed(2) : null,
     manquants
   };
 }
@@ -219,6 +240,7 @@ function printFicheTechnique(formule){
           +'<tr><td>Methionine</td><td>'+nutri.met+'</td><td>%</td></tr>'
           +'<tr><td>Calcium</td><td>'+nutri.ca+'</td><td>%</td></tr>'
           +'<tr><td>'+emLabel+'</td><td>'+nutri.em+'</td><td></td></tr>'
+          +(nutri.protDig ? '<tr><td>Prot. Digestible</td><td>'+nutri.protDig+'</td><td>%</td></tr>' : '')
         +'</tbody>'
       +'</table>'
       +'<div class="lbl-f">'
@@ -352,6 +374,7 @@ function printFicheTechniqueLot(formule, numLot, qteProduite, dateLot){
           +'<tr><td>Methionine</td><td>'+nutri.met+'</td><td>%</td></tr>'
           +'<tr><td>Calcium</td><td>'+nutri.ca+'</td><td>%</td></tr>'
           +'<tr><td>'+emLabel+'</td><td>'+nutri.em+'</td><td></td></tr>'
+          +(nutri.protDig ? '<tr><td>Prot. Digestible</td><td>'+nutri.protDig+'</td><td>%</td></tr>' : '')
         +'</tbody>'
       +'</table>'
       +'<div class="lbl-f">'
