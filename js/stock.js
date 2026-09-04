@@ -180,7 +180,7 @@ async function renderStockNiveaux(){
       const seuil=ingr?.seuil_alerte||200;
       const statut=n<=0?'❌ Épuisé':n<seuil*0.5?'🔴 Critique':n<seuil?'🟡 Bas':'🟢 OK';
       const cls=n<=0?'bad':n<seuil*0.5?'bad':n<seuil?'warn':'good';
-      return `<tr class="stock-row" data-nom="${nom.toLowerCase()}">
+      return `<tr class="stock-row" data-nom="${String(nom||'').toLowerCase().replace(/"/g,'&quot;')}">
         <td style="font-weight:600">${nom}</td>
         <td class="num ${cls}">${fmtKg(n)}</td>
         <td class="num">${fmt(prixActuel)} F</td>

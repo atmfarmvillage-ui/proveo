@@ -312,7 +312,10 @@ async function populateSelectMPDist(){
   sel.innerHTML = '<option value="">— Sélectionner une MP —</option>' +
     list.map(i => {
       const stock = niveaux[i.nom] || 0;
-      return `<option value="${i.id}" data-nom="${i.nom}" data-prix="${i.prix_actuel||0}">${i.nom} · ${fmtKg(stock)} kg dispo</option>`;
+      // ⚠️ Échapper le guillemet : un nom de MP peut en contenir (Tourteau de soja 44 ("46 Profat"…)).
+      // Sans ça l'attribut est coupé, dataset.nom renvoie un nom tronqué et il part tel quel
+      // dans gp_stock_mp.ingredient_nom → mouvement orphelin, stock scindé en deux.
+      return `<option value="${i.id}" data-nom="${(i.nom||'').replace(/"/g,'&quot;')}" data-prix="${i.prix_actuel||0}">${i.nom} · ${fmtKg(stock)} kg dispo</option>`;
     }).join('');
   sel.onchange = () => {
     const opt = sel.selectedOptions[0];
