@@ -4,16 +4,23 @@
 
 // ── CHARGER / CRÉER UN INVENTAIRE ────────────────
 async function renderInventairePhysique(){
+  const box=document.getElementById('invp-content');
   const mois=document.getElementById('invp-mois')?.value||thisMonth();
-
-  // Chercher inventaire existant pour ce mois
-  const{data:existing}=await SB.from('gp_inventaires').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).maybeSingle();
-
-  if(existing){
-    afficherInventaireExistant(existing,mois);
-  } else {
-    await creerNouvelInventaire(mois);
+  // Feedback immédiat : le bouton « Charger » réagit toujours (fini le « rien ne se passe »).
+  if(box) box.innerHTML='<div style="color:var(--textm);font-size:12px;padding:10px">⏳ Chargement de l\'inventaire de <strong>'+mois+'</strong>…</div>';
+  try{
+    // Chercher inventaire existant pour ce mois
+    const{data:existing,error}=await SB.from('gp_inventaires').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('mois',mois).maybeSingle();
+    if(error) throw error;
+    if(existing){
+      await afficherInventaireExistant(existing,mois);
+    } else {
+      await creerNouvelInventaire(mois);
+    }
+  }catch(e){
+    if(box) box.innerHTML='<div style="color:var(--red);font-size:12px;padding:10px">⚠️ Impossible de charger l\'inventaire : '+((e&&e.message)||e)+'<br><span style="color:var(--textm)">Réessaie, ou vérifie ta connexion.</span></div>';
+    if(typeof notify==='function') notify('Erreur chargement inventaire','r');
   }
 }
 
@@ -192,6 +199,7 @@ async function afficherInventaireExistant(inv,mois){
         ${peutValider?`
           <button class="btn btn-g btn-sm" onclick="validerInventaire('${inv.id}')">✅ Valider</button>
           <button class="btn btn-red btn-sm" onclick="refuserInventaire('${inv.id}')">✕ Refuser</button>`:''}
+        ${GP_ROLE==='admin'&&inv.statut==='valide'&&ecarts.length?`<button class="btn btn-out btn-sm" onclick="reappliquerStockInventaire('${inv.id}')" title="Corrige le stock si l'ajustement n'avait pas pris">🔄 Ré-appliquer au stock</button>`:''}
         <button class="btn btn-print btn-sm" onclick="imprimerFicheInventaire('${mois}')">🖨️ Imprimer</button>
         ${inv.statut!=='valide'&&inv.saisi_par===GP_USER.id?`<button class="btn btn-red btn-sm" onclick="supprimerInventaire('${inv.id}')">🗑️ Refaire</button>`:''}
       </div>
@@ -226,6 +234,39 @@ async function afficherInventaireExistant(inv,mois){
 }
 
 // ── VALIDATION PAR ADMIN DIFFÉRENT ───────────────
+// Applique au stock les écarts d'un inventaire — ROBUSTE + IDEMPOTENT.
+// - un seul champ `ref` (comme la réception qui marche) : plus de champ `note` hors-schéma qui
+//   faisait planter tout l'insert en silence ;
+// - le SENS (excédent/manque) est porté par le type ('entree'/'sortie') ET par la ref ;
+// - ne ré-insère PAS un ingrédient déjà ajusté pour ce mois (rattrapage sans double comptage) ;
+// - renvoie {ok, error, inserted, skipped} — l'appelant DÉCIDE (fini l'échec silencieux).
+async function _appliquerAjustementStockInventaire(inv, lignes){
+  const avecEcarts=(lignes||[]).filter(l=>Math.abs(l.ecart)>0.1);
+  if(!avecEcarts.length) return {ok:true,inserted:0,skipped:0};
+  const refBase='Inventaire physique '+inv.mois;
+  // Idempotence : quels ingrédients ont DÉJÀ un mouvement d'ajustement pour ce mois ?
+  const {data:deja}=await SB.from('gp_stock_mp').select('ingredient_nom,ref')
+    .eq('admin_id',GP_ADMIN_ID).like('ref',refBase+'%');
+  const dejaSet=new Set((deja||[]).map(m=>m.ingredient_nom));
+  const ajustements=avecEcarts.map(l=>{
+    const fiche=(GP_INGREDIENTS||[]).find(i=>i.nom===l.ingredient_nom)||null;
+    return{
+      admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
+      type:l.ecart>0?'entree':'sortie',date:today(),
+      ingredient_id:fiche?.id||null,
+      ingredient_nom:fiche?.nom||l.ingredient_nom,
+      quantite:Math.abs(l.ecart),
+      prix_unit:l.prix_unitaire,
+      ref:refBase+(l.ecart>0?' (excédent)':' (manque)')
+    };
+  }).filter(a=>!dejaSet.has(a.ingredient_nom));
+  const skipped=avecEcarts.length-ajustements.length;
+  if(!ajustements.length) return {ok:true,inserted:0,skipped};
+  const {error}=await SB.from('gp_stock_mp').insert(ajustements);
+  if(error) return {ok:false,error,inserted:0,skipped};
+  return {ok:true,inserted:ajustements.length,skipped};
+}
+
 async function validerInventaire(invId){
   const{data:inv}=await SB.from('gp_inventaires').select('*').eq('id',invId).maybeSingle();
   if(!inv)return;
@@ -233,44 +274,38 @@ async function validerInventaire(invId){
     notify('Vous ne pouvez pas valider votre propre inventaire','r');
     return;
   }
-
-  // Si écarts : mettre à jour le stock
   const{data:lignes}=await SB.from('gp_inventaires_lignes').select('*').eq('inventaire_id',invId);
   const avecEcarts=(lignes||[]).filter(l=>Math.abs(l.ecart)>0.1);
-
   if(avecEcarts.length){
-    const confirm2=confirm(`Cet inventaire a ${avecEcarts.length} écart(s).\nValider va ajuster le stock automatiquement.\n\nConfirmer ?`);
-    if(!confirm2)return;
-
-    // Créer des mouvements d'ajustement.
-    // Le type porte le SENS de l'écart : la quantité est stockée en valeur
-    // absolue et tout ce qui n'est pas 'entree' est décompté du stock partout
-    // dans l'app. Avec l'ancien type 'ajustement' unique, un EXCÉDENT était
-    // retranché comme une perte — l'écart était donc doublé au lieu d'être
-    // corrigé.
-    const ajustements=avecEcarts.map(l=>{
-      const fiche=(GP_INGREDIENTS||[]).find(i=>i.nom===l.ingredient_nom)||null;
-      return{
-        admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,
-        type:l.ecart>0?'entree':'sortie',date:today(),
-        ingredient_id:fiche?.id||null,
-        ingredient_nom:fiche?.nom||l.ingredient_nom,
-        quantite:Math.abs(l.ecart),
-        prix_unit:l.prix_unitaire,
-        ref:'Inventaire physique '+inv.mois,
-        note:l.ecart>0?'Excédent inventaire':'Manque inventaire'
-      };
-    });
-    await SB.from('gp_stock_mp').insert(ajustements);
+    if(!confirm(`Cet inventaire a ${avecEcarts.length} écart(s).\nValider va ajuster le stock automatiquement.\n\nConfirmer ?`))return;
+    // ATOMIQUE : si l'ajustement du stock échoue, on N'ENREGISTRE PAS « validé »
+    // (fini l'inventaire marqué validé alors que le stock n'a pas bougé).
+    const res=await _appliquerAjustementStockInventaire(inv,lignes);
+    if(!res.ok){
+      notify('⚠️ Ajustement du stock ÉCHOUÉ ('+((res.error&&res.error.message)||'erreur inconnue')+') — inventaire NON validé. Réessaie.','r');
+      return;
+    }
   }
-
   await SB.from('gp_inventaires').update({
     statut:'valide',
     valide_par:GP_USER.id,
     valide_par_nom:GP_USER.email?.split('@')[0]||'—'
   }).eq('id',invId);
-
   notify('Inventaire validé et stock ajusté ✓','gold');
+  await renderInventairePhysique();
+}
+
+// Rattrapage : ré-applique au stock un inventaire DÉJÀ validé dont l'ajustement n'a pas pris
+// (ex. échec silencieux d'avant le correctif). Idempotent : ne double jamais un ajustement déjà fait.
+async function reappliquerStockInventaire(invId){
+  if(GP_ROLE!=='admin'){ notify('Réservé à l\'administrateur','r'); return; }
+  const{data:inv}=await SB.from('gp_inventaires').select('*').eq('id',invId).maybeSingle();
+  if(!inv)return;
+  const{data:lignes}=await SB.from('gp_inventaires_lignes').select('*').eq('inventaire_id',invId);
+  const res=await _appliquerAjustementStockInventaire(inv,lignes);
+  if(!res.ok){ notify('⚠️ Échec de l\'ajustement : '+((res.error&&res.error.message)||'erreur'),'r'); return; }
+  if(res.inserted===0) notify('Stock déjà à jour pour cet inventaire — rien à ré-appliquer.','gold');
+  else notify('Stock ajusté ✓ — '+res.inserted+' ligne(s) appliquée(s)'+(res.skipped?' ('+res.skipped+' déjà faite(s))':'')+'.','gold');
   await renderInventairePhysique();
 }
 
