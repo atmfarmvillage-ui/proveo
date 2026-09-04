@@ -34,11 +34,16 @@ const NUTRI_DB = {
   'blend':      {prot:0.0,  mg:0.0,  cb:5.0,  mm:5.0,  em:0,    ca:0.00, lys:0.00, met:0.00},
 };
 
+// Deux ecritures du meme ingredient doivent se rejoindre : « Sel  (NaCl) » et
+// « Sel (NaCl) » coexistent dans les formules. On ne comparait ni les espaces ni la
+// ponctuation : la fiche etait remplie et l'etiquette repondait quand meme « valeur
+// manquante ». Meme regle que gp_norm_nom() cote SQL.
 function normalise(s){
-  return s.toLowerCase()
-    .replace(/[àáâ]/g,'a').replace(/[éèêë]/g,'e')
+  return String(s||'').toLowerCase()
+    .replace(/[àáâä]/g,'a').replace(/[éèêë]/g,'e')
     .replace(/[îï]/g,'i').replace(/[ôö]/g,'o').replace(/[ùûü]/g,'u')
-    .replace(/'/g,' ').replace(/-/g,' ');
+    .replace(/ç/g,'c')
+    .replace(/[^a-z0-9]/g,'');
 }
 
 // La FICHE de la matiere premiere fait foi. NUTRI_DB n'est qu'un secours pour les
@@ -52,9 +57,11 @@ function findNutri(nom){
     return { prot:+ing.nutri_prot||0, mg:+ing.nutri_mg||0, cb:+ing.nutri_cb||0, mm:+ing.nutri_mm||0,
              em:+ing.nutri_em||0, ca:+ing.nutri_ca||0, lys:+ing.nutri_lys||0, met:+ing.nutri_met||0 };
   }
+  // Les cles de NUTRI_DB contiennent des espaces (« son de ble ») : elles doivent
+  // passer par la MEME normalisation, sinon plus aucune ne correspondrait.
   const n = normalise(nom);
   for(const [key, val] of Object.entries(NUTRI_DB)){
-    if(n.includes(key)) return val;
+    if(n.includes(normalise(key))) return val;
   }
   return null;
 }
