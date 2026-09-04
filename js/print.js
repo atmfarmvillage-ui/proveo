@@ -219,35 +219,59 @@ function printFicheTechnique(formule){
     :['tilapia'].includes(formule.espece)?'ED Poisson (kcal/kg)'
     :'EM Volaille (kcal/kg)';
 
+  // Identite legale : lue dans gp_config via _cfgEtat (une seule source pour tous les
+  // documents), valeurs de l'etiquette papier en secours si la config est vide.
+  const E = (k, def) => { try { return (typeof _cfgEtat === 'function' && _cfgEtat(k)) || def; } catch(_) { return def; } };
+  const ident = {
+    nom:  cfg.nom_provenderie || 'PROVENDERIE SADARI',
+    a1:   E('activite1', 'Vente-expertise en production et nutrition animale, vente de produits vétérinaires'),
+    a2:   E('activite2', 'Vente de matières premières et provende'),
+    a3:   E('activite3', 'Vente de poules, lapin, canard, porc'),
+    rccm: E('rccm', ''), nif: E('nif', ''), cnss: E('cnss', ''),
+    mail: E('email_pro', ''), tel: cfg.telephone || E('tel_pro', ''),
+  };
+  const ligne = (lib, val, unite) =>
+    '<tr><td>' + lib + '</td><td>' + val + '</td><td>' + (unite || '') + '</td></tr>';
+
   function lbl(){
     return '<div class="label">'
-      +'<div class="lbl-h">'
-        +'<div class="lbl-logo">'+logoHtml+'</div>'
-        +'<div class="lbl-info">'
-          +'<div class="lbl-prov">'+(cfg.nom_provenderie||'PROVENDERIE SADARI')+'</div>'
-          +'<div class="lbl-nom">'+(formule.nom)+'</div>'
-          +'<div class="lbl-stade">'+(formule.stade||'')+'</div>'
+      +'<div class="ident">'
+        +'<div class="ident-top">'
+          +'<div class="ident-logo">'+logoHtml+'</div>'
+          +'<div class="ident-nom">'+ident.nom+'</div>'
+          +'<div class="ident-logo">'+logoHtml+'</div>'
+        +'</div>'
+        +'<div class="ident-act">'+ident.a1+'</div>'
+        +'<div class="ident-act">'+ident.a2+'</div>'
+        +'<div class="ident-act">'+ident.a3+'</div>'
+        +'<div class="ident-leg">'
+          +(ident.rccm?'N° RCCM : '+ident.rccm:'')
+          +(ident.nif?'&nbsp;&nbsp;·&nbsp;&nbsp;NIF : '+ident.nif:'')
+          +(ident.cnss?'&nbsp;&nbsp;·&nbsp;&nbsp;N° CNSS : '+ident.cnss:'')
+        +'</div>'
+        +'<div class="ident-leg">'
+          +(ident.mail?'E-mail : '+ident.mail:'')
+          +(ident.tel?'&nbsp;&nbsp;·&nbsp;&nbsp;Tél : '+ident.tel:'')
         +'</div>'
       +'</div>'
+      +'<div class="bandeau">'+formule.nom+'</div>'
       +'<table class="nt">'
-        +'<thead><tr><th>Composition</th><th>Apport</th><th></th></tr></thead>'
+        +'<thead><tr><th>Composition</th><th colspan="2">Apport</th></tr></thead>'
         +'<tbody>'
-          +'<tr><td>Matiere Minerale</td><td>'+nutri.mm+'</td><td>%</td></tr>'
-          +'<tr><td>Proteine brute</td><td>'+nutri.prot+'</td><td>%</td></tr>'
-          +'<tr><td>Matiere grasse</td><td>'+nutri.mg+'</td><td>%</td></tr>'
-          +'<tr><td>Cellulose Brute</td><td>'+nutri.cb+'</td><td>%</td></tr>'
-          +'<tr><td>Lysine</td><td>'+nutri.lys+'</td><td>%</td></tr>'
-          +'<tr><td>Methionine</td><td>'+nutri.met+'</td><td>%</td></tr>'
-          +'<tr><td>Calcium</td><td>'+nutri.ca+'</td><td>%</td></tr>'
-          +'<tr><td>'+emLabel+'</td><td>'+nutri.em+'</td><td></td></tr>'
-          +(nutri.protDig ? '<tr><td>Prot. Digestible</td><td>'+nutri.protDig+'</td><td>%</td></tr>' : '')
+          +ligne('Matière Minérale', nutri.mm, '%')
+          +ligne('Protéine brute',   nutri.prot, '%')
+          +ligne('Matière grasse',   nutri.mg, '%')
+          +ligne('Cellulose Brute',  nutri.cb, '%')
+          +ligne('Lysine',           nutri.lys, '%')
+          +ligne('Méthionine',       nutri.met, '%')
+          +ligne('Calcium',          nutri.ca, '%')
+          +ligne(emLabel,            nutri.em, 'kcal')
+          +(nutri.protDig ? ligne('Prot. Digestible', nutri.protDig, '%') : '')
+          +'<tr class="sep"><td>Date de production</td><td colspan="2">'+dateProd+'</td></tr>'
+          +'<tr><td>Date d&rsquo;expiration</td><td colspan="2">'+dateExp+'</td></tr>'
         +'</tbody>'
       +'</table>'
-      +'<div class="lbl-f">'
-        +'<div class="lbl-d"><span>Date de production</span><span>'+dateProd+'</span></div>'
-        +'<div class="lbl-d"><span>Date d expiration</span><span>'+dateExp+'</span></div>'
-        +(cfg.telephone?'<div class="lbl-c">'+cfg.telephone+(cfg.localisation?' | '+cfg.localisation:'')+'</div>':'')
-      +'</div>'
+      +(cfg.localisation?'<div class="lieu">'+cfg.localisation+'</div>':'')
     +'</div>';
   }
 
@@ -256,33 +280,34 @@ function printFicheTechnique(formule){
     +'@page{size:A4;margin:8mm}'
     +'*{box-sizing:border-box;margin:0;padding:0}'
     +'body{font-family:Arial,sans-serif;font-size:10px;background:#fff;color:#000}'
-    +'.page{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:4mm;width:194mm;height:281mm}'
-    +'.label{border:1.5px solid #1b5e20;border-radius:2mm;display:flex;flex-direction:column;overflow:hidden}'
-    +'.lbl-h{background:#1b5e20;color:#fff;padding:3px 6px;display:flex;align-items:center;gap:6px;flex-shrink:0}'
-    +'.lbl-logo{width:38px;text-align:center;flex-shrink:0}'
-    +'.lbl-prov{font-size:7px;text-transform:uppercase;letter-spacing:.8px;opacity:.85}'
-    +'.lbl-nom{font-size:9px;font-weight:bold;line-height:1.2;margin:1px 0}'
-    +'.lbl-stade{font-size:7px;opacity:.8;font-style:italic}'
+    // 6 etiquettes par page et non 8 : l'en-tete legal complet (RCCM, NIF, CNSS,
+    // coordonnees) ne tient pas dans un huitieme de A4 sans devenir illisible.
+    +'.page{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);gap:4mm;width:194mm;height:281mm}'
+    +'.label{border:1px solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff}'
+    +'.ident{padding:2mm 2mm 1mm;text-align:center;border-bottom:1px solid #000}'
+    +'.ident-top{display:flex;align-items:center;justify-content:center;gap:3mm}'
+    +'.ident-logo{width:11mm;flex-shrink:0}'
+    +'.ident-logo img{max-width:100%;height:auto}'
+    +'.ident-nom{font-size:11px;font-weight:bold;letter-spacing:.3px}'
+    +'.ident-act{font-size:6.2px;line-height:1.35;color:#000}'
+    +'.ident-leg{font-size:6.2px;line-height:1.4;margin-top:.5mm}'
+    +'.bandeau{text-align:center;font-size:12px;font-weight:bold;padding:1.2mm 0;border-bottom:1px solid #000}'
     +'.nt{width:100%;border-collapse:collapse;flex:1;font-size:9px}'
-    +'.nt thead tr{border-bottom:1px solid #1b5e20}'
-    +'.nt th{font-size:8px;font-weight:bold;padding:2px 4px;text-align:left;color:#1b5e20;background:#f1f8e9}'
-    +'.nt td{padding:2px 4px;border-bottom:.5px solid #e8f5e9}'
-    +'.nt td:nth-child(2){font-weight:bold;text-align:right;padding-right:2px;color:#1b5e20}'
-    +'.nt td:nth-child(3){width:20px;color:#555;font-size:8px}'
-    +'.nt tr:nth-child(even){background:#f9fbe7}'
-    +'.lbl-f{border-top:1px solid #c8e6c9;padding:3px 6px;font-size:8px;background:#f9fbe7;flex-shrink:0}'
-    +'.lbl-d{display:flex;justify-content:space-between;margin-bottom:1px}'
-    +'.lbl-d span:first-child{color:#555}'
-    +'.lbl-d span:last-child{font-weight:bold}'
-    +'.lbl-c{color:#777;font-size:7px;text-align:center;margin-top:2px}'
+    +'.nt th{font-size:9px;font-weight:bold;padding:1mm 2mm;text-align:left;border-bottom:1px solid #000}'
+    +'.nt th:last-child{text-align:right}'
+    +'.nt td{padding:.9mm 2mm;border-bottom:.5px solid #999}'
+    +'.nt td:nth-child(2){font-weight:bold;text-align:right;white-space:nowrap}'
+    +'.nt td:nth-child(3){width:9mm;text-align:left;padding-left:1mm;color:#333}'
+    +'.nt tr.sep td{border-top:1px solid #000}'
+    +'.lieu{font-size:6px;text-align:center;color:#333;padding:.6mm 0}'
     +'@media print{button{display:none!important}}'
     +'</style></head><body>'
     +'<div class="page">'
-    +lbl()+lbl()+lbl()+lbl()
-    +lbl()+lbl()+lbl()+lbl()
+    +lbl()+lbl()+lbl()
+    +lbl()+lbl()+lbl()
     +'</div>'
     +'<div style="text-align:center;margin-top:10px">'
-    +'<button onclick="window.print()" style="padding:8px 24px;font-size:13px;cursor:pointer;background:#1b5e20;color:#fff;border:none;border-radius:6px">Imprimer les 8 etiquettes</button>'
+    +'<button onclick="window.print()" style="padding:8px 24px;font-size:13px;cursor:pointer;background:#1b5e20;color:#fff;border:none;border-radius:6px">Imprimer les 6 &eacute;tiquettes</button>'
     +'</div>'
     +'</body></html>';
 
