@@ -208,6 +208,7 @@ async function afficherInventaireExistant(inv,mois){
           <button class="btn btn-g btn-sm" onclick="validerInventaire('${inv.id}')">✅ Valider</button>
           <button class="btn btn-red btn-sm" onclick="refuserInventaire('${inv.id}')">✕ Refuser</button>`:''}
         ${GP_ROLE==='admin'&&inv.statut==='valide'&&ecarts.length?`<button class="btn btn-out btn-sm" onclick="reappliquerStockInventaire('${inv.id}')" title="Corrige le stock si l'ajustement n'avait pas pris">🔄 Ré-appliquer au stock</button>`:''}
+        ${GP_ROLE==='admin'&&inv.statut==='valide'?`<button class="btn btn-red btn-sm" onclick="annulerEtRefaireInventaire('${inv.id}')" title="Erreur de comptage : retire les ajustements de ce mois et rouvre la saisie">↩️ Annuler et refaire</button>`:''}
         <button class="btn btn-print btn-sm" onclick="imprimerFicheInventaire('${mois}')">🖨️ Imprimer</button>
         ${inv.statut!=='valide'&&inv.saisi_par===GP_USER.id?`<button class="btn btn-red btn-sm" onclick="supprimerInventaire('${inv.id}')">🗑️ Refaire</button>`:''}
       </div>
@@ -347,6 +348,42 @@ async function reappliquerStockInventaire(invId){
       +(ok?'<br><span style="color:var(--textm)">Vérifie dans <b>Stock → Mouvements</b> (réf. « '+('Inventaire physique '+inv.mois)+' »).</span>':'')
       +'</div>');
   }
+}
+
+// ↩️ ANNULER un inventaire VALIDÉ pour le refaire (erreur de comptage).
+// Retire UNIQUEMENT les mouvements d'ajustement créés par CET inventaire (repérés par leur `ref`,
+// donc sans jamais toucher aux réceptions ni aux sorties de production), puis efface le comptage
+// pour rouvrir la saisie. ATOMIQUE : si le retrait échoue, on ne supprime rien.
+async function annulerEtRefaireInventaire(invId){
+  if(GP_ROLE!=='admin'){ notify(`Réservé à l'administrateur`,'r'); return; }
+  const{data:inv}=await SB.from('gp_inventaires').select('*').eq('id',invId).maybeSingle();
+  if(!inv) return;
+  const refBase='Inventaire physique '+inv.mois;
+  // On MONTRE ce qui va être retiré avant d'agir.
+  const{data:mvts}=await SB.from('gp_stock_mp').select('id,ingredient_nom,type,quantite')
+    .eq('admin_id',GP_ADMIN_ID).like('ref',refBase+'%');
+  const M=mvts||[];
+  const apercu=M.slice(0,6).map(m=>`• ${m.ingredient_nom} ${m.type==='entree'?'+':'−'}${m.quantite} kg`).join('\n');
+  if(!confirm(`ANNULER l'inventaire de ${inv.mois} pour le refaire ?\n\n`
+    +`${M.length} mouvement(s) d'ajustement seront RETIRÉS du stock :\n${apercu}${M.length>6?'\n…et '+(M.length-6)+' autre(s)':''}\n\n`
+    +`Le stock reviendra à son état d'AVANT la validation, et tu pourras recompter.`)) return;
+  if(!confirm(`Confirmer définitivement ? Le comptage de ${inv.mois} sera effacé.`)) return;
+  // 1) Retirer les ajustements (l'étape sensible → d'abord, et on s'arrête net si ça rate).
+  if(M.length){
+    const{error:eDel}=await SB.from('gp_stock_mp').delete()
+      .eq('admin_id',GP_ADMIN_ID).like('ref',refBase+'%');
+    if(eDel){ notify(`⚠️ Retrait des ajustements impossible (${eDel.message||'erreur'}) — RIEN n'a été supprimé.`,'r'); return; }
+  }
+  // 2) Effacer le comptage (lignes puis entête) pour rouvrir la saisie.
+  await SB.from('gp_inventaires_lignes').delete().eq('inventaire_id',invId);
+  const{error:eInv}=await SB.from('gp_inventaires').delete().eq('id',invId);
+  await renderInventairePhysique();
+  const box=document.getElementById('invp-content');
+  if(box) box.insertAdjacentHTML('afterbegin',
+    `<div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.35);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">`
+    +`<b>↩️ Inventaire de ${inv.mois} annulé</b> — ${M.length} ajustement(s) retiré(s) : le stock est revenu à son état d'avant validation.`
+    +(eInv?`<br><span style="color:var(--red)">⚠️ Mais le comptage n'a pas pu être effacé : ${eInv.message||''}</span>`:` Tu peux recompter ci-dessous.`)
+    +`</div>`);
 }
 
 async function refuserInventaire(invId){
