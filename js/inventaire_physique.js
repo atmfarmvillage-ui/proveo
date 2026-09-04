@@ -208,7 +208,7 @@ async function afficherInventaireExistant(inv,mois){
           <button class="btn btn-g btn-sm" onclick="validerInventaire('${inv.id}')">✅ Valider</button>
           <button class="btn btn-red btn-sm" onclick="refuserInventaire('${inv.id}')">✕ Refuser</button>`:''}
         ${GP_ROLE==='admin'&&inv.statut==='valide'&&ecarts.length?`<button class="btn btn-out btn-sm" onclick="reappliquerStockInventaire('${inv.id}')" title="Corrige le stock si l'ajustement n'avait pas pris">🔄 Ré-appliquer au stock</button>`:''}
-        ${GP_ROLE==='admin'&&inv.statut==='valide'?`<button class="btn btn-red btn-sm" onclick="annulerEtRefaireInventaire('${inv.id}')" title="Erreur de comptage : retire les ajustements de ce mois et rouvre la saisie">↩️ Annuler et refaire</button>`:''}
+        ${GP_ROLE==='admin'&&inv.statut==='valide'?`<button onclick="annulerEtRefaireInventaire('${inv.id}')" title="Erreur de comptage : retire les ajustements de ce mois et rouvre la saisie" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--textm);opacity:.65;cursor:pointer;align-self:center" onmouseover="this.style.opacity=1;this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.opacity=.65;this.style.color='var(--textm)';this.style.borderColor='var(--border)'">↩️ annuler et refaire</button>`:''}
         <button class="btn btn-print btn-sm" onclick="imprimerFicheInventaire('${mois}')">🖨️ Imprimer</button>
         ${inv.statut!=='valide'&&inv.saisi_par===GP_USER.id?`<button class="btn btn-red btn-sm" onclick="supprimerInventaire('${inv.id}')">🗑️ Refaire</button>`:''}
       </div>
