@@ -180,10 +180,12 @@ function estMaCaisse(c){
   // Le siege s'ecrit soit NULL, soit 'Production' depuis que toutes les caisses ont ete
   // rattachees a un proprietaire. Tester seulement NULL ne reconnaissait plus aucune caisse.
   const siege = !c.point_vente || c.point_vente==='Production';   // Caisse Production ou FECECAV
-  const principaux = (typeof GP_PDV_PRINCIPAUX!=='undefined' ? GP_PDV_PRINCIPAUX : []) || [];
-  const estPrincipal = !!c.point_vente && principaux.includes(c.point_vente);
-  // Siège / Production (sans PDV)
-  if(!GP_POINT_VENTE) return siege || estPrincipal;
+  // Siège / Production (sans PDV) — STRICT : uniquement les caisses du siège.
+  // ⚠️ Avant on ajoutait « || estPrincipal » : le siège voyait AUSSI le tiroir de tout PDV
+  // marqué « principal » (Lomé sanguera) et pouvait y puiser — exactement ce qu'interdit la
+  // règle du DG rappelée juste en dessous. Les transferts restent possibles : la liste des
+  // destinations (toutesCaisses) garde TOUTES les caisses.
+  if(!GP_POINT_VENTE) return siege;
   // PDV principal — PLUS d'exception sur la caisse du siege. Cette tolerance datait de
   // l'epoque ou le siege et le PDV principal partageaient le meme comptoir ; depuis que
   // Production est un point de vente a part entiere, elle permettrait a Lome Sanguera de
