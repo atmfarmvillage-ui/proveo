@@ -530,7 +530,12 @@ async function exporterHistoriqueCaisses(type){
   // Caisses (pour les noms). Un PDV secondaire ne voit/exporte que la sienne.
   let{data:C}=await SB.from('gp_caisses').select('*').eq('admin_id',GP_ADMIN_ID).order('nom');
   let caisses=C||[];
-  if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
+  // Ce qu'on EXPORTE doit correspondre a ce qu'on VOIT : meme regle que la page Caisse.
+  // Avant, seul un PDV « secondaire » etait filtre — un membre du SIEGE (ou d'un PDV principal)
+  // exportait donc l'historique des caisses de TOUS les points de vente.
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT && typeof estMaCaisse==='function'){
+    caisses = caisses.filter(c => estMaCaisse(c));
+  } else if(typeof GP_EST_SECONDAIRE!=='undefined' && GP_EST_SECONDAIRE){
     caisses = caisses.filter(c => c.point_vente === GP_POINT_VENTE);
   }
   const caisseMap={}; caisses.forEach(c=>caisseMap[c.id]=c.nom);
