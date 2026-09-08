@@ -505,7 +505,7 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
   .econo-val{font-size:13px}
 
   /* Tables — scroll horizontal */
-  .tbl{min-width:480px;font-size:11px}
+  .tbl{font-size:12.5px}   /* la largeur vient du contenu : .tbl-wrap defile */
   .tbl th,.tbl td{padding:6px 8px}
 
   /* Formulaires */
@@ -560,7 +560,8 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
   .g4{grid-template-columns:1fr 1fr!important}
 
   /* Overflow texte long */
-  .page-title,.tbl td{word-break:break-word}
+  /* Le titre peut se couper ; une cellule de tableau NON — elle defile. */
+  .page-title{word-break:break-word}
 
   /* Actions rapides en bas sur mobile */
   .mobile-fab-zone{
@@ -611,4 +612,60 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
   .page-title,.stat-val,.econo-val{color:#000!important;-webkit-text-fill-color:#000!important}
   .tbl th{background:#f0f0f0;color:#333}
   .tbl td{color:#000}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LISIBILITÉ TABLETTE & MOBILE
+   Constaté sur tablette : la première colonne d'un tableau de huit colonnes
+   se réduisait à trois caractères, le texte se cassant lettre par lettre.
+   Un tableau doit DÉFILER, jamais écraser ses colonnes.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Le conteneur défilant, posé automatiquement par js/lisibilite.js. */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.tbl-wrap>.tbl{width:auto;min-width:100%}
+
+@media(max-width:1024px){
+  /* ── PLANCHER DE LISIBILITÉ ──────────────────────────────────────────────
+     724 tailles sous 12 px sont écrites en dur dans le JS. On les relève ici
+     plutôt que d'éditer autant d'endroits. `!important` est nécessaire : rien
+     d'autre ne bat un style en ligne. */
+  [style*="font-size:8px"] {font-size:11px   !important}
+  [style*="font-size:9px"] {font-size:11.5px !important}
+  [style*="font-size:10px"]{font-size:12px   !important}
+  [style*="font-size:11px"]{font-size:12.5px !important}
+
+  /* ── TABLEAUX ────────────────────────────────────────────────────────────
+     Une cellule ne coupe plus ses mots : c'est le tableau qui défile. */
+  .tbl th,.tbl td{
+    word-break:normal;
+    overflow-wrap:normal;
+    white-space:nowrap;
+    padding:9px 11px
+  }
+  .tbl{font-size:12.5px}
+  .tbl th{font-size:11px;letter-spacing:.4px}
+
+  /* La colonne de libellé est celle qu'on lit : elle garde sa place et peut
+     revenir à la ligne entre les mots, jamais à l'intérieur. */
+  .tbl td:first-child,.tbl th:first-child{
+    white-space:normal;
+    word-break:normal;
+    overflow-wrap:break-word;
+    min-width:150px;
+    max-width:260px
+  }
+
+  /* Un tableau nu (rendu avant le passage de lisibilite.js) reste lisible. */
+  .card table.tbl{max-width:100%}
+
+  /* Cibles tactiles : un doigt n'est pas un curseur. */
+  .tbl button,.tbl .btn,.tbl a.btn{min-height:34px}
+}
+
+/* Tablette en portrait : au-delà de 768 px elle recevait la mise en page de
+   bureau, avec une barre latérale de 280 px prise sur la largeur utile. */
+@media(min-width:769px) and (max-width:1024px){
+  .g3,.g4{grid-template-columns:1fr 1fr!important}
+  .page{padding:14px}
 }
