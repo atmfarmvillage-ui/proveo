@@ -669,3 +669,55 @@ input::placeholder,textarea::placeholder{color:var(--textl)}
   .g3,.g4{grid-template-columns:1fr 1fr!important}
   .page{padding:14px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LISIBILITÉ — AU-DELÀ DES TABLEAUX
+   Ce que le JS écrit en dur et que le CSS ne pouvait pas atteindre : largeurs
+   fixes, min-width qui forcent le débordement, grilles en ligne.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media(max-width:1024px){
+  /* Une largeur fixe ne doit jamais dépasser l'écran. 50 sont écrites dans le
+     JS, dont une à 900 px. Le tableau est l'exception : c'est lui qui défile,
+     dans son conteneur. */
+  #main [style*="width:"]{max-width:100%}
+  .tbl-wrap>.tbl,.tbl-wrap [style*="width:"]{max-width:none}
+
+  /* Un min-width ne se laisse pas réduire par max-width : il faut l'annuler.
+     Trois valeurs dans le JS — 420, 520 et 540 px — débordent un téléphone. */
+  #main [style*="min-width:420px"],
+  #main [style*="min-width:520px"],
+  #main [style*="min-width:540px"]{min-width:0!important}
+
+  /* Les grilles écrites EN LIGNE échappent aux règles .g3/.g4 du bloc mobile.
+     Il y a un repeat(7,1fr) dans l'app : sept colonnes sur un téléphone. */
+  #main [style*="grid-template-columns:repeat(3,1fr)"],
+  #main [style*="grid-template-columns:repeat(4,1fr)"],
+  #main [style*="grid-template-columns:repeat(5,1fr)"],
+  #main [style*="grid-template-columns:repeat(6,1fr)"],
+  #main [style*="grid-template-columns:repeat(7,1fr)"]{
+    grid-template-columns:repeat(2,1fr)!important
+  }
+
+  /* Rien ne doit pousser la page latéralement : on le voit tout de suite quand
+     ça arrive, l'écran entier glisse et les colonnes se décalent. */
+  html,body{overflow-x:hidden}
+
+  /* Champs de saisie : sous 16 px, iOS zoome tout seul à la mise au point et
+     la page se retrouve décalée. */
+  input,select,textarea{font-size:16px}
+
+  /* Cibles tactiles : un doigt fait environ 9 mm, pas 2. */
+  button,.btn,.btn-primary,.btn-secondary,.btn-ghost,a.btn{min-height:38px}
+}
+
+/* Téléphone étroit : deux colonnes deviennent illisibles, on passe à une. */
+@media(max-width:520px){
+  #main [style*="grid-template-columns:repeat(3,1fr)"],
+  #main [style*="grid-template-columns:repeat(4,1fr)"],
+  #main [style*="grid-template-columns:repeat(5,1fr)"],
+  #main [style*="grid-template-columns:repeat(6,1fr)"],
+  #main [style*="grid-template-columns:repeat(7,1fr)"]{
+    grid-template-columns:1fr!important
+  }
+}
