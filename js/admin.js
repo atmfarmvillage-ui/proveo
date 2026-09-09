@@ -1333,9 +1333,6 @@ async function saveCoutsFormule(){
   });
 
   document.getElementById('prix-formules-liste').innerHTML=`
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      <button class="btn btn-g btn-sm" onclick="catalogueAliments()">📄 Catalogue Aliments (PDF)</button>
-    </div>
     ${Object.entries(groups).map(([esp,formules])=>`
       <div class="formule-groupe" style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
         <div onclick="toggleGroupe('grp-${esp}')"
