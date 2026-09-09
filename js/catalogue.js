@@ -50,7 +50,7 @@ function catPrix(v) {
 // doit refléter ce qui est enregistré, pas ce qu'un écran a chargé plus tôt.
 async function catChargerAliments() {
   const [rf, rp] = await Promise.all([
-    SB.from('gp_formules').select('nom,espece,stade,actif,poids_sac,ordre,mode_prix').eq('actif', true),
+    SB.from('gp_formules').select('nom,espece,stade,actif,prix_defaut,poids_sac,ordre,mode_prix').eq('actif', true),
     SB.from('gp_prix_formules').select('formule_nom,prix,prix_gros').eq('admin_id', GP_ADMIN_ID),
   ]);
   // On remonte les erreurs : une requête en échec renverrait une liste vide,
@@ -61,15 +61,28 @@ async function catChargerAliments() {
   const prix = {};
   (rp.data || []).forEach(p => { prix[p.formule_nom] = p; });
 
-  return (rf.data || []).map(f => ({
-    nom: f.nom,
-    espece: (f.espece || '').toLowerCase(),
-    poids: Number(f.poids_sac) || 50,
-    ordre: Number(f.ordre) || 100,
-    mode: f.mode_prix || 'gros_detail',
-    gros: (prix[f.nom] || {}).prix_gros || 0,
-    detail: (prix[f.nom] || {}).prix || 0,
-  }));
+  return (rf.data || []).map(f => {
+    const p = prix[f.nom] || {};
+    const poids = Number(f.poids_sac) || 50;
+    // ⚠️ LES PRIX SONT AU KILO. marge_aliment.js les multiplie par 1000 pour
+    // obtenir un prix à la tonne — la preuve. L'affiche, elle, annonce le prix
+    // du SAC : sans cette multiplication, on imprimerait 370F au lieu de
+    // 18 500F. Un catalogue faux d'un facteur 50, distribué en boutique.
+    const detailKg = Number(p.prix) || Number(f.prix_defaut) || 0;   // la table des
+    const grosKg = Number(p.prix_gros) || 0;                          // prix = exception
+    return {
+      nom: f.nom,
+      espece: (f.espece || '').toLowerCase(),
+      poids,
+      ordre: Number(f.ordre) || 100,
+      mode: f.mode_prix || 'gros_detail',
+      gros: grosKg * poids,
+      detail: detailKg * poids,
+      // Gardés pour l'avertissement : un prix de gros non saisi laisse une
+      // colonne vide sur le catalogue, et il vaut mieux le dire.
+      _grosKg: grosKg,
+    };
+  });
 }
 
 async function catChargerMP() {
@@ -188,6 +201,11 @@ async function catalogueAliments() {
       `<div class="grille">${blocs.join('')}</div>${catPied()}`);
 
     if (sansPrix) notify(`${sansPrix} formule(s) sans prix — non imprimée(s)`, 'gold', 5000);
+    // Le prix de gros n'a pas de valeur de base : s'il n'est saisi nulle part,
+    // toute la colonne sort en tirets. Mieux vaut le dire que laisser croire
+    // à un bug d'impression.
+    const sansGros = utiles.filter(l => !(l._grosKg > 0)).length;
+    if (sansGros) notify(`${sansGros} formule(s) sans prix de gros — colonne vide`, 'gold', 6000);
   } catch (e) {
     notify('Erreur : ' + (e.message || e), 'r', 5000);
   }
