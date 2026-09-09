@@ -125,8 +125,13 @@ function catBloc(titre, lignes) {
 
 function catStyles() {
   return `
-    *{box-sizing:border-box}
-    body{margin:0;padding:14px;font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a}
+    /* ⚠️ SANS CECI LE CATALOGUE SORT BLANC. Chrome n'imprime pas les fonds
+       colorés tant que l'utilisateur ne coche pas « Graphiques d'arrière-plan ».
+       Toute la mise en page repose sur des aplats verts : on force le rendu
+       plutôt que de compter sur une case à cocher. */
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{margin:0;padding:14px;font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
     .grille{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
     .bloc{break-inside:avoid;page-break-inside:avoid;margin-bottom:10px}
     .bandeau{background:${CAT_VERT};color:${CAT_JAUNE};font-weight:800;font-size:13px;
@@ -168,7 +173,12 @@ function catOuvrir(titre, corps) {
   if (!w) { notify("Le navigateur a bloqué la fenêtre d'impression.", 'r'); return; }
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
     <title>${catEsc(titre)}</title><style>${catStyles()}</style></head><body>
-    <div class="barre"><button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>
+    <div class="barre">
+      <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+      <div style="font-size:11px;color:#666;margin-top:6px">
+        Si le document sort sans couleurs, coche « Graphiques d'arrière-plan » dans la fenêtre d'impression.
+      </div>
+    </div>
     ${corps}</body></html>`);
   w.document.close();
   setTimeout(() => { try { w.print(); } catch (e) {} }, 600);
