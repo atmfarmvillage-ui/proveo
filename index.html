@@ -3418,7 +3418,7 @@ try{
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
 <script src="js/config.js?v=2.27.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
-  <script src="js/catalogue.js?v=1.1.0"></script>
+  <script src="js/catalogue.js?v=1.1.1"></script>
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.26.1"></script>
 <script src="js/stock.js?v=2.30.3"></script>
@@ -3427,7 +3427,7 @@ try{
 <script src="js/production.js?v=2.26.1"></script>
 <script src="js/ventes.js?v=2.27.7"></script>
 <script src="js/clients.js?v=2.27.0"></script>
-<script src="js/admin.js?v=2.28.0"></script>
+<script src="js/admin.js?v=2.29.0"></script>
 <script src="js/marge_aliment.js?v=2.26.1"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.30.7"></script>
@@ -3586,7 +3586,8 @@ function installPWA(){
              le catalogue les imprime alors en UNE ligne, à UN prix. -->
         <div class="fr" style="margin-bottom:8px">
           <label>Nom commercial <span style="font-weight:400;color:var(--textm)">— celui qui sera imprimé sur le catalogue client</span></label>
-          <input type="text" id="mf_commercial" placeholder="Ex: Lapin Repro — vide = on imprime le nom ci-dessus">
+          <input type="text" id="mf_commercial" list="mf_commercial_liste" placeholder="Ex: Lapin Repro — vide = on imprime le nom ci-dessus" autocomplete="off">
+          <datalist id="mf_commercial_liste"></datalist>
           <div style="font-size:10px;color:var(--textm);margin-top:3px">Deux formules qui portent le même nom commercial n'apparaissent qu'une fois sur l'affiche.</div>
         </div>
 

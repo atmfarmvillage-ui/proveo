@@ -157,6 +157,7 @@ function openNewFormule(){
   });
   document.getElementById('mf_err').textContent='';
   MF_INGREDIENTS = [];
+  _remplirNomsCommerciaux();
   _remplirSelectEspeceMF();
   const espSel = document.getElementById('mf_espece');
   if(espSel) espSel.value = (GP_CATEGORIES[0]?.espece) || '';
@@ -165,6 +166,38 @@ function openNewFormule(){
   _renderAnalyseNutritionnelle();
   document.getElementById('modal-formule').style.display='flex';
   setTimeout(()=>document.getElementById('mf_nom').focus(),100);
+}
+
+// Les noms commerciaux DEJA utilisés, proposés à la saisie.
+// Le regroupement du catalogue se fait sur le nom, à la casse et aux espaces
+// près : « Pondeuse Ponte » au lieu de « Pondeuse ponte » créerait une SECONDE
+// ligne sur l'affiche, et on ne le verrait qu'à l'impression. Proposer
+// l'existant supprime la faute de frappe à la source — sans interdire un nom
+// neuf, puisque c'est un champ libre.
+// Le nom de vente REELLEMENT enregistré.
+// La liste de suggestions aide, mais n'empêche pas d'écrire à la main. Si la
+// saisie correspond à un nom déjà utilisé aux espaces et à la casse près, on
+// retient l'orthographe existante : « Pondeuse Ponte » rejoint le groupe
+// « Pondeuse ponte » au lieu d'ouvrir une SECONDE ligne sur l'affiche, qu'on
+// ne découvrirait qu'à l'impression. Un nom vraiment nouveau passe intact.
+function _nomCommercialRetenu(saisi){
+  const v=(saisi||'').trim();
+  if(!v) return null;                       // vide -> on imprime le nom technique
+  const cle=t=>t.toLowerCase().split(' ').filter(Boolean).join(' ');
+  const connu=(FORMULES_SADARI||[])
+    .map(f=>(f.nom_commercial||'').trim())
+    .filter(Boolean)
+    .find(n=>cle(n)===cle(v));
+  return connu || v;
+}
+
+function _remplirNomsCommerciaux(){
+  const dl=document.getElementById('mf_commercial_liste');
+  if(!dl) return;
+  const noms=[...new Set((FORMULES_SADARI||[])
+    .map(f=>(f.nom_commercial||'').trim())
+    .filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  dl.innerHTML=noms.map(n=>`<option value="${String(n).replace(/"/g,'&quot;')}"></option>`).join('');
 }
 
 function fermerModalFormule(){
@@ -178,6 +211,7 @@ async function editerFormule(id){
   document.getElementById('mf_id').value=f.id;
   document.getElementById('mf_nom').value=f.nom;
   document.getElementById('mf_commercial').value=f.nom_commercial||'';
+  _remplirNomsCommerciaux();
   document.getElementById('mf_prix').value=f.prix_defaut||0;
   document.getElementById('mf_emb').value=f.cout_emballage_kg||0;
   document.getElementById('mf_mo').value=f.cout_mo_tonne||0;
@@ -935,7 +969,7 @@ async function saveFormule(){
     nom, espece, stade,
     // Vide -> null : une chaine vide serait un nom commercial « vide »
     // sous lequel toutes les formules non nommées se regrouperaient.
-    nom_commercial: (document.getElementById('mf_commercial')?.value || '').trim() || null,
+    nom_commercial: _nomCommercialRetenu(document.getElementById('mf_commercial')?.value),
     prix_defaut: prix,
     ingredients: composition,
     cout_emballage_kg: emb,
