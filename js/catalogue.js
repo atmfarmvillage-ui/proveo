@@ -99,7 +99,10 @@ async function catChargerAliments() {
 function catRegrouper(lignes) {
   const groupes = new Map();
   lignes.forEach(l => {
-    const cle = (l.nom || '').trim().toLowerCase();
+    // Même clé que l'enregistrement : casse ET espaces multiples ignorés.
+    // Plusieurs noms techniques portent de doubles espaces (« LAPIN  Repro A ») ;
+    // sans ça, deux écritures du même nom feraient deux lignes sur l'affiche.
+    const cle = (l.nom || '').toLowerCase().split(' ').filter(Boolean).join(' ');
     if (!groupes.has(cle)) groupes.set(cle, []);
     groupes.get(cle).push(l);
   });
