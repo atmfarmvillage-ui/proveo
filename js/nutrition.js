@@ -97,6 +97,15 @@ async function saveNutri(){
     const estEnergie = k.startsWith('em');
     if(!estEnergie && v > 100){ err.textContent = `${lib} : ${v} % est impossible (maximum 100).`; return; }
     if(estEnergie && v > 9500){ err.textContent = `${lib} : ${v} kcal/kg dépasse celle d'une huile pure (8800).`; return; }
+    // Le plafond était contrôlé, le plancher non. Une énergie de 1,9 kcal/kg
+    // existe pour de vrai dans la base : c'est 1 900 mal saisi. Elle diviserait
+    // par mille l'énergie annoncée sur l'étiquette. Zéro reste permis — un
+    // minéral pur n'apporte réellement aucune énergie — mais entre les deux,
+    // c'est une erreur d'unité ou de frappe, jamais une matière.
+    if(estEnergie && v > 0 && v < 200){
+      err.textContent = `${lib} : ${v} kcal/kg est impossible. La paille de riz, la matière la plus pauvre, en apporte 600. Voulais-tu écrire ${Math.round(v * 1000)} ? (0 est accepté pour un minéral pur.)`;
+      return;
+    }
     maj['nutri_' + k] = v;
   }
   if(maj.nutri_prot == null){ err.textContent = 'La protéine brute est obligatoire : sans elle, la fiche reste incomplète et l\'étiquette refusera de s\'imprimer.'; return; }
