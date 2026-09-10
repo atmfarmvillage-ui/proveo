@@ -1380,7 +1380,7 @@ async function saveCoutsFormule(){
         </div>
         <div id="grp-${esp}" style="display:none">
           <table class="tbl" style="font-size:11px">
-            <thead><tr><th>Formule</th><th class="num">Prix/kg</th><th class="num">Emballage/kg</th><th class="num">MO/tonne</th><th></th></tr></thead>
+            <thead><tr><th>Formule</th><th class="num">Détail F/kg</th><th class="num">Gros F/kg</th><th class="num">Emballage/kg</th><th class="num">MO/tonne</th><th></th></tr></thead>
             <tbody>
             ${formules.map(f=>`<tr>
               <td style="font-weight:600">${f.nom}<br><span style="font-size:10px;color:var(--textm)">${f.stade||''}</span></td>
