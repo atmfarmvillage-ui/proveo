@@ -35,6 +35,11 @@ const NUTRI_CHAMPS = [
 // qu'on ne peut pas ignorer, et elle sert de drapeau au calcul de l'étiquette.
 function nutriRenseignee(ing){ return !!ing && ing.nutri_prot != null; }
 
+// Anciennes colonnes reprises dans la fiche quand la nouvelle est vide.
+// `proteines` et `energie` sont saisies à la création de la MP et affichées
+// dans le tableau : les redemander alors qu'elles sont là n'a aucun sens.
+const NUTRI_REPRISE = { prot: 'proteines', em: 'energie' };
+
 function ouvrirNutri(id){
   const ing = (GP_INGREDIENTS || []).find(i => i.id === id);
   if(!ing){ notify('Matière première introuvable', 'r'); return; }
@@ -42,10 +47,37 @@ function ouvrirNutri(id){
   if(!m){ notify('Recharge la page (Ctrl+Shift+R)', 'r'); return; }
   document.getElementById('nutri-id').value = ing.id;
   document.getElementById('nutri-titre').textContent = ing.nom || '—';
-  NUTRI_CHAMPS.forEach(([k]) => {
+  // La MP porte peut-être déjà une protéine et une énergie, saisies à sa
+  // création (colonnes `proteines` / `energie`) : ce sont elles qu'affiche le
+  // tableau. Les ignorer ouvrait une fiche VIDE devant quelqu'un qui avait
+  // déjà renseigné la valeur — et le poussait à tout retaper.
+  // On les propose, et on DIT qu'on les propose : la règle du module est que
+  // la fiche du fournisseur fait foi, jamais une estimation. Une valeur
+  // pré-remplie qu'on ne signale pas serait prise pour une valeur vérifiée.
+  const repris = [];
+  NUTRI_CHAMPS.forEach(([k, lib]) => {
     const el = document.getElementById('nutri-' + k);
-    if(el) el.value = (ing['nutri_' + k] != null) ? ing['nutri_' + k] : '';
+    if(!el) return;
+    let v = ing['nutri_' + k];
+    if(v == null && NUTRI_REPRISE[k] != null){
+      const ancien = ing[NUTRI_REPRISE[k]];
+      if(ancien != null && Number(ancien) > 0){ v = ancien; repris.push(lib); }
+    }
+    el.value = (v != null) ? v : '';
   });
+  const bandeau = document.getElementById('nutri-repris');
+  if(bandeau){
+    bandeau.style.display = repris.length ? 'block' : 'none';
+    // On accorde sur « Valeur(s) » : les libellés mélangent féminin
+    // (protéine, énergie) et masculin (calcium), l'accord sur eux serait faux
+    // une fois sur deux.
+    bandeau.textContent = repris.length
+      ? (repris.length > 1 ? '⚠️ Valeurs reprises' : '⚠️ Valeur reprise')
+        + ` de la fiche existante de la matière : ${repris.join(', ')}.`
+        + ` Vérifie${repris.length > 1 ? '-les' : '-la'} contre la fiche du fournisseur avant d'enregistrer`
+        + ` — c'est elle qui imprimera l'étiquette du sac.`
+      : '';
+  }
   document.getElementById('nutri-err').textContent = '';
   m.style.display = 'flex';
 }
