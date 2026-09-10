@@ -397,7 +397,9 @@ async function saveTransfertAvecValidation(){
   const peutValiderDirect = GP_ROLE==='admin' || GP_ROLE==='daf' || GP_EST_GERANT || !GP_POINT_VENTE;
   const statut = peutValiderDirect ? 'valide' : 'en_attente';
 
-  await SB.from('gp_mouvements_caisse').insert({
+  // L'erreur était ignorée : un refus de la base (RLS, contrainte) passait
+  // pour un succès. On la lit et on la dit.
+  const{error:eIns}=await SB.from('gp_mouvements_caisse').insert({
     admin_id:GP_ADMIN_ID,caisse_id:source,caisse_dest_id:dest,
     type:'transfert',montant,description:desc,
     statut_transfert:statut,
@@ -405,9 +407,13 @@ async function saveTransfertAvecValidation(){
     enregistre_par:GP_USER.id,
     enregistre_par_nom:GP_USER.email?.split('@')[0]
   });
+  if(eIns){ err.textContent='Transfert refusé : '+eIns.message; return; }
 
+  // ⚠️ Ici se trouvait `getElementById('modal-transfert').style.display='none'`,
+  // sur un élément inexistant — donc une exception APRÈS l'insertion : l'argent
+  // était parti, mais ni notification, ni rafraîchissement, ni champ vidé. On
+  // croyait l'opération échouée et on recliquait : DOUBLE TRANSFERT.
   err.textContent='';
-  document.getElementById('modal-transfert').style.display='none';
   document.getElementById('transfert-montant').value='';
   document.getElementById('transfert-desc').value='';
 
@@ -494,35 +500,30 @@ async function saveMouvement(){
 async function saveTransfert(){ // gardé pour compatibilité
   return saveTransfertAvecValidation();
 }
-async function saveTransfertAvecValidation_OLD(){
-  const source=document.getElementById('transfert-source')?.value;
-  const dest=document.getElementById('transfert-dest')?.value;
-  const montant=+document.getElementById('transfert-montant')?.value||0;
-  const desc=document.getElementById('transfert-desc')?.value.trim()||null;
-  const err=document.getElementById('transfert-err');
-  if(!source||!dest){err.textContent='Sélectionnez les deux caisses.';return;}
-  if(source===dest){err.textContent='Source et destination doivent être différentes.';return;}
-  if(!montant){err.textContent='Montant requis.';return;}
-  await SB.from('gp_mouvements_caisse').insert({
-    admin_id:GP_ADMIN_ID,caisse_id:source,caisse_dest_id:dest,
-    type:'transfert',montant,description:desc,
-    date_mouvement:today(),
-    enregistre_par:GP_USER.id,
-    enregistre_par_nom:GP_USER.email?.split('@')[0]
-  });
-  err.textContent='';
-  document.getElementById('modal-transfert').style.display='none';
-  await renderCaisse();
-  notify('Transfert effectué ✓','gold');
-}
+// L'ancienne fonction de transfert vivait ici. Retirée : jamais appelée, elle
+// portait le même appel à `#modal-transfert` (inexistant) ET écrivait sans
+// `statut_transfert` — rebranchée un jour, un PDV aurait transféré sans l'accord
+// de l'admin. Deux chemins pour déplacer de l'argent, c'est un de trop.
 
 function ouvrirTransfert(caisseId,nom){
   if(!estMaCaisseId(caisseId)){ notify('Vous ne pouvez transférer que depuis votre propre caisse','r'); return; }
-  document.getElementById('modal-transfert').style.display='flex';
-  document.getElementById('transfert-source').value=caisseId;
+  // ⚠️ Le transfert n'est PAS une modale : c'est la carte « Transfert entre
+  // caisses » posée en HAUT de l'écran (index.html). Ce code visait
+  // `#modal-transfert`, qui n'existe nulle part dans la page :
+  // getElementById renvoyait null et la ligne levait une exception. Le bouton
+  // « ⇄ Transfert » de chaque carte ne faisait donc RIEN, sans un mot.
+  const src=document.getElementById('transfert-source');
+  const dst=document.getElementById('transfert-dest');
+  if(!src||!dst){ notify('Formulaire de transfert introuvable','r'); return; }
+  src.value=caisseId;
+  dst.value='';
   document.getElementById('transfert-montant').value='';
   document.getElementById('transfert-desc').value='';
   document.getElementById('transfert-err').textContent='';
+  // Le formulaire est tout en haut ; la carte sur laquelle on vient de cliquer
+  // est souvent bien plus bas. Sans cela, le clic semblerait encore sans effet.
+  (src.closest('.card')||src).scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(()=>{ try{ dst.focus({preventScroll:true}); }catch(_){ } },350);
 }
 
 async function voirHistoriqueCaisse(caisseId,nom){
