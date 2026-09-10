@@ -24,7 +24,20 @@ async function renderCaisse(){
   let{data:C}=await SB.from('gp_caisses').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('actif',true).order('type').order('nom');
   let caisses=C||[];
-  const toutesCaisses=(C||[]).slice();   // liste COMPLÈTE : destination possible d'un transfert
+  // ── DESTINATIONS DE TRANSFERT : LA LISTE DU GROUPE ENTIER ──
+  // On ne peut PAS la tirer d'une lecture directe de `gp_caisses` : la policy
+  // RESTRICTIVE `caisses_pdv_scope` la réduit au seul point de vente courant,
+  // AVANT que le JS ne la voie. C'est pour ça que le commit « garder la
+  // destination ouverte à tout le groupe » n'a jamais rien changé : il ouvrait
+  // une porte que la base avait déjà fermée en amont.
+  // Une fonction dédiée renvoie le strict nécessaire pour choisir une
+  // destination — nom, type, point de vente. AUCUN solde, AUCUN mouvement :
+  // on ne rouvre rien de ce que le cloisonnement protège.
+  let toutesCaisses=(C||[]).slice();   // repli : ce que la RLS nous laisse voir
+  try{
+    const rd=await SB.rpc('gp_caisses_destinations');
+    if(!rd.error && rd.data && rd.data.length) toutesCaisses=rd.data;
+  }catch(_){ /* la liste élargie ne doit jamais casser l'écran caisse */ }
   // VISIBILITÉ : on VOIT les caisses (nécessaire pour les transferts/reversements).
   // L'ACTION (entrée/sortie/transfert/paiement) est refusée sur une caisse qui n'est
   // pas la sienne, avec un message (voir estMaCaisse() + garde-fous). Un PDV SECONDAIRE
@@ -152,6 +165,13 @@ async function renderCaisse(){
 
   // Historique dédié des transferts entre caisses / PDV
   if(typeof renderTransfertsHistorique==='function') renderTransfertsHistorique(caisses, filtreActif);
+
+  // Les caisses ARCHIVÉES. La carte existait dans la page, la fonction existait
+  // dans ce fichier, le bouton « Réactiver » existait — mais RIEN ne l'appelait :
+  // la carte affichait le vide quoi qu'il arrive. Une caisse archivée sortait donc
+  // des cartes ET de la liste des destinations de transfert, sans aucun endroit
+  // pour la retrouver. Elle était perdue pour l'utilisateur.
+  if(typeof renderCaissesArchivees==='function') renderCaissesArchivees();
 }
 
 // ── DROIT D'AGIR SUR UNE CAISSE (transferts / paiements / entrées-sorties) ──
@@ -290,12 +310,18 @@ async function renderTransfertsHistorique(caisses, filtreId){
 // le Principal. Les restreindre pareil supprimerait le seul pont entre points de vente.
 function populateCaisseSelects(caisses,soldes,toutes){
   const dest=(toutes&&toutes.length)?toutes:caisses;
+  // Le solde n'est calculé que pour les caisses VISIBLES : les mouvements des
+  // autres points de vente ne nous sont pas accessibles. Une caisse de
+  // destination hors périmètre affichait donc « (0 F) » alors qu'elle a de
+  // l'argent — l'interface affirmait une somme fausse. On n'annonce un montant
+  // que lorsqu'on le connaît vraiment ; sinon on n'annonce rien.
+  const soldeConnu=id=>Object.prototype.hasOwnProperty.call(soldes||{},id);
   [['mvt-caisse',caisses],['transfert-source',caisses],['transfert-dest',dest]].forEach(([id,liste])=>{
     const el=document.getElementById(id);
     if(!el)return;
     const cur=el.value; // Garder la sélection actuelle
     el.innerHTML='<option value="">— Sélectionner —</option>'+
-      liste.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}${c.point_vente?' · '+c.point_vente:''} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
+      liste.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}${c.point_vente?' · '+c.point_vente:''}${soldeConnu(c.id)?` (${fmt(soldes[c.id])} F)`:''}</option>`).join('');
   });
 }
 
