@@ -129,7 +129,13 @@ function catRegrouper(lignes) {
 
 async function catChargerMP() {
   const r = await SB.from('gp_ingredients')
-    .select('nom,prix_actuel,unite,actif').eq('actif', true).order('nom');
+    .select('nom,prix_actuel,unite,actif')
+    // ⚠️ `gp_ingredients` porte un admin_id (admin.js:274 filtre dessus). Sans
+    // ce scope on s'en remettait à la RLS seule — et on vient de voir, avec les
+    // caisses, ce que vaut « la base filtrera bien » quand personne ne le
+    // vérifie. Un catalogue client se vérifie deux fois plutôt qu'une.
+    .eq('admin_id', GP_ADMIN_ID)
+    .eq('actif', true).order('nom');
   if (r.error) throw r.error;
   return (r.data || []).filter(i => Number(i.prix_actuel) > 0);
 }

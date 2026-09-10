@@ -783,7 +783,7 @@ function populateSelects(){
   // MP select
   const mpIngr=document.getElementById('mp_ingr');
   if(mpIngr)mpIngr.innerHTML='<option value="">— Sélectionner —</option>'+
-    GP_INGREDIENTS.map(i=>`<option value="${i.id}" data-prix="${i.prix_actuel}">${i.nom} (${fmt(i.prix_actuel)} F/kg)</option>`).join('');
+    GP_INGREDIENTS.map(i=>`<option value="${i.id}" data-prix="${i.prix_actuel}">${i.nom} (${fmt(i.prix_actuel)} F/${i.unite||'kg'})</option>`).join('');
 }
 // ── SYSTÈME DE LICENCE & TRIAL ────────────────────
 function verifierLicence(){
