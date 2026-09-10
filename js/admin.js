@@ -152,7 +152,7 @@ const NUTRIMENTS = [
 function openNewFormule(){
   document.getElementById('mf-titre').textContent='🧪 Nouvelle formule';
   document.getElementById('mf_id').value='';
-  ['mf_nom','mf_prix','mf_emb','mf_mo','mf_trans','mf_new_pct','mf_ingr_search','mf_new_ingr_id','mf_new_ingr'].forEach(id=>{
+  ['mf_nom','mf_commercial','mf_prix','mf_emb','mf_mo','mf_trans','mf_new_pct','mf_ingr_search','mf_new_ingr_id','mf_new_ingr'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('mf_err').textContent='';
@@ -177,6 +177,7 @@ async function editerFormule(id){
   document.getElementById('mf-titre').textContent='✏️ Modifier — '+f.nom;
   document.getElementById('mf_id').value=f.id;
   document.getElementById('mf_nom').value=f.nom;
+  document.getElementById('mf_commercial').value=f.nom_commercial||'';
   document.getElementById('mf_prix').value=f.prix_defaut||0;
   document.getElementById('mf_emb').value=f.cout_emballage_kg||0;
   document.getElementById('mf_mo').value=f.cout_mo_tonne||0;
@@ -932,6 +933,9 @@ async function saveFormule(){
   const payload = {
     admin_id: GP_ADMIN_ID,
     nom, espece, stade,
+    // Vide -> null : une chaine vide serait un nom commercial « vide »
+    // sous lequel toutes les formules non nommées se regrouperaient.
+    nom_commercial: (document.getElementById('mf_commercial')?.value || '').trim() || null,
     prix_defaut: prix,
     ingredients: composition,
     cout_emballage_kg: emb,

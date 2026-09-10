@@ -633,6 +633,8 @@ async function loadFormules(){
     FORMULES_SADARI.push({
       id:f.id,
       nom:f.nom,
+      // Nom de VENTE, facultatif. Vide = on vend sous le nom technique.
+      nom_commercial:f.nom_commercial||'',
       espece:f.espece||'autre',
       stade:f.stade||'',
       prix_defaut:Number(f.prix_defaut)||0,

@@ -50,7 +50,7 @@ function catPrix(v) {
 // doit refléter ce qui est enregistré, pas ce qu'un écran a chargé plus tôt.
 async function catChargerAliments() {
   const [rf, rp] = await Promise.all([
-    SB.from('gp_formules').select('nom,espece,stade,actif,prix_defaut,poids_sac,ordre,mode_prix').eq('actif', true),
+    SB.from('gp_formules').select('nom,nom_commercial,espece,stade,actif,prix_defaut,poids_sac,ordre,mode_prix').eq('actif', true),
     SB.from('gp_prix_formules').select('formule_nom,prix,prix_gros').eq('admin_id', GP_ADMIN_ID),
   ]);
   // On remonte les erreurs : une requête en échec renverrait une liste vide,
@@ -71,7 +71,11 @@ async function catChargerAliments() {
     const detailKg = Number(p.prix) || Number(f.prix_defaut) || 0;   // la table des
     const grosKg = Number(p.prix_gros) || 0;                          // prix = exception
     return {
-      nom: f.nom,
+      // Le nom IMPRIMÉ est le nom de vente quand il existe. Le nom technique
+      // est conservé à côté : c'est lui qu'on cite dans les avertissements,
+      // sinon on désignerait une ligne que personne ne retrouve dans l'app.
+      nom: (f.nom_commercial || '').trim() || f.nom,
+      _technique: f.nom,
       espece: (f.espece || '').toLowerCase(),
       poids,
       ordre: Number(f.ordre) || 100,
@@ -82,6 +86,41 @@ async function catChargerAliments() {
       // colonne vide sur le catalogue, et il vaut mieux le dire.
       _grosKg: grosKg,
     };
+  });
+}
+
+// ── Regroupement par NOM COMMERCIAL ──────────────────────────────
+// « LAPIN Repro A » et « LAPIN reproduction B » sont deux RECETTES : deux
+// compositions, deux coûts, deux marges. Mais un seul PRODUIT au comptoir —
+// le client demande de l'aliment lapin reproduction, pas une recette. Elles
+// se fondent donc en une ligne unique sur l'affiche.
+// Tant qu'aucun nom commercial n'est saisi, la clé reste le nom de la formule :
+// chaque formule garde sa ligne et rien ne change.
+function catRegrouper(lignes) {
+  const groupes = new Map();
+  lignes.forEach(l => {
+    const cle = (l.nom || '').trim().toLowerCase();
+    if (!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(l);
+  });
+  return [...groupes.values()].map(m => {
+    // La représentante est celle au plus petit `ordre` : c'est elle qui décide
+    // de la place de la ligne sur l'affiche, de son espèce et de son poids de
+    // sac. Prendre « la première venue » rendrait l'affiche instable d'une
+    // impression à l'autre, l'ordre d'une requête n'étant pas garanti.
+    const tri = m.slice().sort((a, b) => (a.ordre - b.ordre) || String(a._technique).localeCompare(String(b._technique), 'fr'));
+    const rep = tri[0];
+    const prix = k => tri.map(x => Number(x[k]) || 0).find(v => v > 0) || 0;
+    const distincts = k => new Set(m.map(x => Number(x[k]) || 0).filter(v => v > 0)).size;
+    return Object.assign({}, rep, {
+      gros: prix('gros'),
+      detail: prix('detail'),
+      _grosKg: m.some(x => x._grosKg > 0) ? 1 : 0,
+      _membres: tri.map(x => x._technique),
+      // Deux prix différents sous un même nom de vente, c'est une contradiction :
+      // on la signale au lieu d'en imprimer un au hasard.
+      _conflit: distincts('detail') > 1 || distincts('gros') > 1,
+    });
   });
 }
 
@@ -188,7 +227,7 @@ function catOuvrir(titre, corps) {
 async function catalogueAliments() {
   try {
     notify('Préparation du catalogue…', 'gold');
-    const lignes = await catChargerAliments();
+    const lignes = catRegrouper(await catChargerAliments());
     if (!lignes.length) { notify('Aucune formule active avec un prix.', 'r'); return; }
 
     // Une formule sans prix ne va PAS sur un catalogue client : mieux vaut une
@@ -216,6 +255,13 @@ async function catalogueAliments() {
     // à un bug d'impression.
     const sansGros = utiles.filter(l => !(l._grosKg > 0)).length;
     if (sansGros) notify(`${sansGros} formule(s) sans prix de gros — colonne vide`, 'gold', 6000);
+    // Un même nom de vente porté par deux formules à deux prix : l'affiche ne
+    // peut en montrer qu'un. On dit lequel et on dit lesquelles, sinon le
+    // prix retenu ressemblerait à une erreur d'impression.
+    const conflits = utiles.filter(l => l._conflit);
+    conflits.forEach(l => notify(
+      `« ${l.nom} » : ${(l._membres || []).join(' + ')} n'ont pas le même prix. `
+      + `${catPrix(l.detail)} imprimé.`, 'r', 9000));
   } catch (e) {
     notify('Erreur : ' + (e.message || e), 'r', 5000);
   }
