@@ -37,8 +37,29 @@ async function renderMatieresPremieresPage(){
     return;
   }
 
-  // Trier par nom
-  const sorted=[...filtered].sort((a,b)=>a.nom.localeCompare(b.nom));
+  // ── ORDRE : CE QU'ON UTILISE D'ABORD ──
+  // Une matière « en service » a du stock OU entre dans une formule active.
+  // Être épuisé ne suffit pas à descendre : une matière qu'on utilise et qui
+  // manque est justement celle qu'il faut voir en haut. Il faut les deux :
+  // aucun stock ET aucune formule.
+  const _mpNorm = n => String(n || '').trim().toLowerCase().split(' ').filter(Boolean).join(' ');
+  const _mpUtilisees = new Set();
+  (typeof FORMULES_SADARI !== 'undefined' ? FORMULES_SADARI : []).forEach(f => {
+    if(f && f.actif === false) return;
+    (f && f.ingredients || []).forEach(ing => { if(ing && ing.nom) _mpUtilisees.add(_mpNorm(ing.nom)); });
+  });
+  const _mpEnService = i => {
+    if(i.actif === false) return 0;                       // désactivée : tout en bas
+    if((niveaux[i.nom] || 0) > 0) return 2;               // en stock
+    if(_mpUtilisees.has(_mpNorm(i.nom))) return 2;        // dans une formule
+    return 1;                                             // dormante
+  };
+  const sorted=[...filtered].sort((a,b)=>
+    _mpEnService(b) - _mpEnService(a) || a.nom.localeCompare(b.nom));
+  // La frontière est marquée dans le tableau : sans cela, l'ordre paraîtrait
+  // arbitraire et on chercherait une matière à sa place alphabétique.
+  const _mpFrontiere = sorted.findIndex(i => _mpEnService(i) < 2);
+  const _mpDormantes = _mpFrontiere >= 0 ? sorted.length - _mpFrontiere : 0;
 
   document.getElementById('mp-liste-page').innerHTML=
     ((typeof nutriBandeau==='function') ? nutriBandeau() : '') +
@@ -54,13 +75,16 @@ async function renderMatieresPremieresPage(){
         <th></th>
       </tr></thead>
       <tbody>
-      ${sorted.map(i=>{
+      ${sorted.map((i,_rang)=>{
+        const _sep = (_rang === _mpFrontiere)
+          ? `<tr><td colspan="8" style="background:var(--card);color:var(--textm);font-size:10.5px;padding:7px 10px;font-style:italic">── ${_mpDormantes} matière(s) sans stock et dans aucune formule ── conservées pour l'historique</td></tr>`
+          : '';
         const qteStock=niveaux[i.nom]||0;
         const seuil=i.seuil_alerte||200;
         const statut=qteStock<=0?'❌ Épuisé':qteStock<seuil*0.5?'🔴 Critique':qteStock<seuil?'🟡 Bas':'🟢 OK';
         const cls=qteStock<=0?'bad':qteStock<seuil*0.5?'bad':qteStock<seuil?'warn':'good';
         const inactif=i.actif===false;
-        return `<tr style="${inactif?'opacity:.5':''}">
+        return _sep + `<tr style="${inactif?'opacity:.5':''}">
           <td style="font-weight:600">
             <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
               <span id="mpp-nom-val-${i.id}">${i.nom}</span>
