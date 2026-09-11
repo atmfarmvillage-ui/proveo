@@ -30,7 +30,7 @@ async function remplirSelectCaisses(selectId, optionVide){
   const soldes = await calcSoldesCaisses(C);
   sel.innerHTML =
     (optionVide ? `<option value="">${optionVide}</option>` : '') +
-    C.map(c => `<option value="${c.id}" ${c.id===curId?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
+    C.map(c => `<option value="${c.id}" ${c.id===curId?'selected':''}>${iconeCaisse(c.type)} ${c.nom} (${fmt(soldes[c.id]||0)} F)</option>`).join('');
   // Si curId n'existe plus, prendre la 1ère
   if(curId && !C.some(c=>c.id===curId)) sel.value = C[0]?.id || '';
 }

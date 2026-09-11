@@ -166,7 +166,7 @@ async function drillSoldeCaisse(){
   });
   const total = Object.values(soldes).reduce((s,v)=>s+v,0);
   const rows = caisses.map(c=>({
-    nom: (c.type==='banque'?'🏦 ':'💵 ')+c.nom,
+    nom: (c.type==='banque'?'🏦 ':c.type==='mobile_money'?'📱 ':'💵 ')+c.nom,
     pdv: c.point_vente||'Siège',
     solde_initial: fmt(c.solde_initial||0)+' F',
     solde_actuel: fmt(soldes[c.id]||0)+' F'

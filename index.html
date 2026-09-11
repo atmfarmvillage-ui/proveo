@@ -849,6 +849,26 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <input type="number" id="vt_paye" placeholder="0 si non payé" oninput="calcVente()" style="font-size:15px;font-weight:700">
           <div style="font-size:9px;color:var(--textm);margin-top:2px">Si le client donne plus que le total, la monnaie à rendre est calculée automatiquement.</div>
         </div>
+        <!-- MODE DE RÈGLEMENT — sans ce champ, la secrétaire n'avait aucun moyen de dire
+             « payé par YAS » : le code retombait sur la première caisse physique et
+             l'encaissement mobile money atterrissait dans le tiroir. Tiroir faux d'un côté,
+             relevé YAS muet de l'autre. -->
+        <div id="vt-mode-row" style="display:none;margin-bottom:6px">
+          <label style="font-size:11px;color:var(--textm);display:block;margin-bottom:4px">Mode de règlement *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button type="button" id="vt_mode_especes_btn" onclick="setModeVente('especes')"
+              style="padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;border:2px solid var(--g6);background:var(--g6);color:#fff">💵 Espèces</button>
+            <button type="button" id="vt_mode_yas_btn" onclick="setModeVente('mobile_money')"
+              style="padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;border:2px solid rgba(0,0,0,.15);background:var(--card2);color:var(--text)">📱 MIX BY YAS</button>
+          </div>
+          <input type="hidden" id="vt_mode" value="especes">
+          <div id="vt-caisse-label" style="font-size:10.5px;color:var(--textm);margin-top:4px"></div>
+          <div class="fr" id="vt-ref-row" style="display:none;margin-top:6px;margin-bottom:0">
+            <label>Référence de la transaction *</label>
+            <input type="text" id="vt_ref" placeholder="Le code reçu par SMS">
+            <div style="font-size:9px;color:var(--textm);margin-top:2px">C'est lui qui permet de retrouver l'opération sur le relevé YAS.</div>
+          </div>
+        </div>
         <div id="vt-reste-row" style="display:flex;justify-content:space-between;font-size:12px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,.08)">
           <span style="color:var(--textm)">Reste dû</span>
           <span id="vt-reste-du" style="font-weight:700;color:var(--red)">0 F</span>
@@ -2255,9 +2275,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <div class="fr"><label>Nom</label><input type="text" id="caisse_nom" placeholder="Caisse Bureau, Ecobank..."></div>
         <div class="fr"><label>Type</label>
           <select id="caisse_type">
-            <option value="physique">💵 Caisse physique</option>
+            <option value="physique">💵 Caisse physique (tiroir)</option>
+            <option value="mobile_money">📱 Mobile money (MIX BY YAS…)</option>
             <option value="banque">🏦 Banque</option>
           </select>
+          <div style="font-size:9px;color:var(--textm);margin-top:2px">Le type décide de la clôture : on compte des billets dans un tiroir, on rapproche un relevé pour le reste.</div>
         </div>
       </div>
       <div class="fg2">
@@ -3426,19 +3448,19 @@ try{
 <script src="js/matieres.js?v=2.28.1"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
-<script src="js/ventes.js?v=2.27.7"></script>
+<script src="js/ventes.js?v=2.28.0"></script>
 <script src="js/clients.js?v=2.27.0"></script>
 <script src="js/admin.js?v=2.30.0"></script>
 <script src="js/marge_aliment.js?v=2.26.1"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.30.7"></script>
-<script src="js/caisse_extras.js?v=2.28.0"></script>
+<script src="js/caisse_extras.js?v=2.28.1"></script>
 <script src="js/corbeille.js?v=2.26.1"></script>
-<script src="js/dashboard_drill.js?v=2.26.1"></script>
+<script src="js/dashboard_drill.js?v=2.26.2"></script>
 <script src="js/fournisseurs.js?v=2.26.1"></script>
 <script src="js/achats.js?v=2.26.1"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
-<script src="js/caisse.js?v=2.31.1"></script>
+<script src="js/caisse.js?v=2.32.0"></script>
 <script src="js/inventaire_physique.js?v=2.30.5"></script>
 <script src="js/distribution.js?v=2.30.3"></script>
 <script src="js/salaires.js?v=2.26.1"></script>
@@ -3901,12 +3923,15 @@ function installPWA(){
       <input type="number" id="pmv-montant" placeholder="0" style="font-size:16px;font-weight:700">
     </div>
     <div class="fr"><label>Mode de paiement</label>
-      <select id="pmv-mode">
-        <option value="especes">Espèces</option>
-        <option value="mobile_money">Mobile Money</option>
-        <option value="virement">Virement</option>
-        <option value="cheque">Chèque</option>
+      <select id="pmv-mode" onchange="onPmvModeChange()">
+        <option value="especes">💵 Espèces</option>
+        <option value="mobile_money">📱 MIX BY YAS</option>
       </select>
+      <div id="pmv-caisse-label" style="font-size:10.5px;color:var(--textm);margin-top:4px"></div>
+    </div>
+    <div class="fr" id="pmv-ref-row" style="display:none">
+      <label>Référence de la transaction *</label>
+      <input type="text" id="pmv-ref" placeholder="Le code reçu par SMS">
     </div>
     <div class="a-err" id="pmv-err"></div>
     <div style="display:flex;gap:8px;margin-top:10px">

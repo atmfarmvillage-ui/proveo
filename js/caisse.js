@@ -1,7 +1,19 @@
 // ══════════════════════════════════════════════════
 // PROVENDA — MODULE CAISSE
-// Caisse physique + Banques + Transferts
+// Caisse physique + Mobile money + Banques + Transferts
 // ══════════════════════════════════════════════════
+
+// Trois natures de caisse, une seule source de vérité pour l'icône et le libellé.
+// MIX BY YAS était typée « physique » : la clôture lui demandait de compter des
+// billets et son solde gonflait le total « Caisse physique ».
+function iconeCaisse(type){
+  return type==='banque' ? '🏦' : type==='mobile_money' ? '📱' : '💵';
+}
+function libelleCaisse(type){
+  return type==='banque' ? 'Banque'
+       : type==='mobile_money' ? 'Mobile money'
+       : 'Caisse physique';
+}
 
 // ── CHARGER LES CAISSES ───────────────────────────
 // Remplit le sélecteur « point de vente propriétaire » du formulaire de création.
@@ -91,7 +103,7 @@ async function renderCaisse(){
   const filtreVal=filtreEl?.value||'';
   if(filtreEl){
     filtreEl.innerHTML='<option value="">📊 Toutes les caisses</option>'+
-      caisses.map(c=>`<option value="${c.id}" ${c.id===filtreVal?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}</option>`).join('');
+      caisses.map(c=>`<option value="${c.id}" ${c.id===filtreVal?'selected':''}>${iconeCaisse(c.type)} ${c.nom}</option>`).join('');
     // Si la caisse sélectionnée a été supprimée, revenir à "Toutes"
     if(filtreVal && !caisses.some(c=>c.id===filtreVal)) filtreEl.value='';
   }
@@ -100,12 +112,16 @@ async function renderCaisse(){
   const caissesAff = filtreActif ? caisses.filter(c=>c.id===filtreActif) : caisses;
 
   const totalGeneral=caissesAff.reduce((s,c)=>s+(soldes[c.id]||0),0);
+  // Le mobile money a sa propre tuile : additionné au « physique », il faisait croire
+  // à du liquide en tiroir qui n'existe que sur un compte YAS.
   const physique=caissesAff.filter(c=>c.type==='physique').reduce((s,c)=>s+(soldes[c.id]||0),0);
+  const momo=caissesAff.filter(c=>c.type==='mobile_money').reduce((s,c)=>s+(soldes[c.id]||0),0);
   const banque=caissesAff.filter(c=>c.type==='banque').reduce((s,c)=>s+(soldes[c.id]||0),0);
 
   document.getElementById('caisse-kpis').innerHTML=`
     <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totalGeneral)}</div><div class="econo-lbl">${filtreActif?'Solde caisse (F)':'Total général (F)'}</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(physique)}</div><div class="econo-lbl">Caisse physique (F)</div></div>
+    <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(momo)}</div><div class="econo-lbl">📱 Mobile money (F)</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--g6)">${fmt(banque)}</div><div class="econo-lbl">En banque (F)</div></div>
     <div class="econo-box"><div class="econo-val">${caissesAff.length}</div><div class="econo-lbl">${filtreActif?'Caisse sélectionnée':'Comptes actifs'}</div></div>`;
 
@@ -117,7 +133,7 @@ async function renderCaisse(){
     return `<div style="background:var(--card2);border:1px solid var(--card2);border-left:4px solid ${couleur};border-radius:12px;padding:18px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
-          <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">${c.type==='banque'?'🏦 Banque':'💵 Caisse physique'}</div>
+          <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">${iconeCaisse(c.type)} ${libelleCaisse(c.type)}</div>
           <div style="font-weight:700;font-size:15px;margin-top:2px">${c.nom}</div>
         </div>
         <div style="text-align:right">
@@ -321,7 +337,7 @@ function populateCaisseSelects(caisses,soldes,toutes){
     if(!el)return;
     const cur=el.value; // Garder la sélection actuelle
     el.innerHTML='<option value="">— Sélectionner —</option>'+
-      liste.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${c.type==='banque'?'🏦':'💵'} ${c.nom}${c.point_vente?' · '+c.point_vente:''}${soldeConnu(c.id)?` (${fmt(soldes[c.id])} F)`:''}</option>`).join('');
+      liste.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${iconeCaisse(c.type)} ${c.nom}${c.point_vente?' · '+c.point_vente:''}${soldeConnu(c.id)?` (${fmt(soldes[c.id])} F)`:''}</option>`).join('');
   });
 }
 
@@ -341,7 +357,7 @@ async function renderCaissesArchivees(){
   container.innerHTML=arch.map(c=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;opacity:.7">
       <div>
-        <span style="font-weight:600">${c.type==='banque'?'🏦':'💵'} ${c.nom}</span>
+        <span style="font-weight:600">${iconeCaisse(c.type)} ${c.nom}</span>
         ${c.point_vente?`<span style="font-size:10px;color:var(--textm);margin-left:8px">📍 ${c.point_vente}</span>`:''}
       </div>
       <button class="btn btn-g btn-sm" onclick="reactiverCaisse('${c.id}')">🔄 Réactiver</button>
