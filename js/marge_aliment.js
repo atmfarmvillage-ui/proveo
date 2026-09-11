@@ -186,12 +186,21 @@ function coutLigneVente(l){
     return c ? { cout: c.kg * qte, sansPrix: c.sansPrix } : null;
   }
   if(tp === 'mp'){
+    // ⚠️ LE COÛT FIGÉ SUR LA LIGNE FAIT FOI.
+    // `gp_ingredients.prix_actuel` est réécrit à chaque réception : s'en servir
+    // pour une vente de mars donnerait la marge de mars calculée au prix d'août,
+    // sans que rien ne le signale. Depuis que la vente enregistre son coût,
+    // c'est lui qu'on lit.
+    const fige = Number(l.cout_unitaire || 0);
+    if(fige > 0) return { cout: fige * qte, sansPrix: [], estime: false };
+    // Repli pour les ventes ANTÉRIEURES à cet enregistrement : on prend le prix
+    // du jour, mais on le dit — `estime` remonte jusqu'au rapport.
     const L = (typeof GP_INGREDIENTS !== 'undefined' ? GP_INGREDIENTS : []) || [];
     const fiche = (l.ingredient_id && L.find(i => i.id === l.ingredient_id))
       || L.find(i => _maNormNom(i.nom) === _maNormNom(l.formule_nom));
     const prix = Number(fiche && fiche.prix_actuel || 0);
-    if(!fiche || prix <= 0) return { cout: 0, sansPrix: [(fiche && fiche.nom) || l.formule_nom] };
-    return { cout: prix * qte, sansPrix: [] };
+    if(!fiche || prix <= 0) return { cout: 0, sansPrix: [(fiche && fiche.nom) || l.formule_nom], estime: true };
+    return { cout: prix * qte, sansPrix: [], estime: true };
   }
   return null;   // ferme / prestation / véto : pas de coût de revient connu
 }
@@ -199,7 +208,7 @@ function coutLigneVente(l){
 // Marge d'un ensemble de lignes. exclues = lignes sans coût connu,
 // sansPrix = MP comptées à 0 F, qui rendent la marge trop belle.
 function margeLignesVente(lignes){
-  let ca = 0, cout = 0, exclues = 0, caExclu = 0;
+  let ca = 0, cout = 0, exclues = 0, caExclu = 0, estimees = 0;
   const sansPrix = new Set();
   (lignes || []).forEach(l => {
     const montant = Number((l.montant_ligne != null ? l.montant_ligne : 0)) || 0;
@@ -207,6 +216,7 @@ function margeLignesVente(lignes){
     if(!c){ exclues++; caExclu += montant; return; }
     ca += montant;
     cout += c.cout;
+    if(c.estime) estimees++;
     (c.sansPrix || []).forEach(x => sansPrix.add(x));
   });
   if(ca <= 0 && !exclues) return null;
@@ -214,6 +224,9 @@ function margeLignesVente(lignes){
     ca: ca, cout: cout, marge: ca - cout,
     taux: ca > 0 ? ((ca - cout) / ca) * 100 : 0,
     exclues: exclues, caExclu: caExclu,
+    // Nombre de lignes dont le coût n'est qu'une estimation au prix du jour :
+    // un total de marge qui en contient beaucoup se lit avec précaution.
+    estimees: estimees,
     sansPrix: [...sansPrix]
   };
 }

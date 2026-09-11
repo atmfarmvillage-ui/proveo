@@ -32,6 +32,7 @@ async function dashKpiDrill(type){
     case 'alertes_mp': await drillAlertesMP(); break;
     case 'stock_mp':   await drillValeurStockMP(); break;
     case 'marge_mois': await drillMargeMois(); break;
+    case 'marge_mp':   await drillMargeMP(); break;
     default: document.getElementById('kpi-drill-content').innerHTML = '<div>Type inconnu : '+type+'</div>';
   }
 }
@@ -53,7 +54,7 @@ async function drillMargeMois(){
   const lignes = [];
   for(let i=0;i<ids.length;i+=200){
     const { data } = await SB.from('gp_ventes_lignes')
-      .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id')
+      .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id,cout_unitaire')
       .in('vente_id', ids.slice(i,i+200));
     if(data) lignes.push(...data);
   }
@@ -105,6 +106,120 @@ async function drillMargeMois(){
     {label:'Marge/kg',align:'num',render:r=>fmt(Math.round(r.margeKg))},
     {label:'Taux',align:'num',render:r=>r.taux.toFixed(1)+' %'}
   ], rows, 'MARGE TOTALE ESTIMÉE', fmt(Math.round(totMarge))+' F');
+}
+
+// ── DRILL : MARGE SUR MATIÈRES PREMIÈRES ───────────
+// Deux lectures dans un seul écran : la marge PAR MATIÈRE (qu'est-ce qui
+// rapporte), puis VENTE PAR VENTE (qui a vendu quoi, à quel prix, avec quelle
+// marge). C'est la seconde qui permet de remonter à une vente précise.
+//
+// ⚠️ Le coût vient de `cout_unitaire`, figé sur la ligne au moment de vendre.
+// Les ventes antérieures à cet enregistrement n'en ont pas : leur coût est
+// repris au prix du jour et la ligne est marquée « ≈ ». Un total qui contient
+// beaucoup de « ≈ » se lit avec précaution — on le dit plutôt que de lisser.
+async function drillMargeMP(){
+  if(_drillReserveSiege()) return;
+  document.getElementById('kpi-drill-titre').textContent = '🌾 Marge sur matières premières — ce mois';
+
+  const mois  = new Date().toISOString().slice(0,7);
+  const debut = mois + '-01';
+  const fin   = (function(){ const [y,m]=mois.split('-').map(Number); return mois+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0'); })();
+
+  let q = SB.from('gp_ventes').select('id,date,client_nom,point_vente')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',debut).lte('date',fin);
+  q = (typeof _drillScopePV === 'function') ? _drillScopePV(q) : q;
+  const { data: V } = await q;
+  const ventes = {};
+  (V||[]).forEach(v => { ventes[v.id] = v; });
+  const ids = Object.keys(ventes);
+
+  const lignes = [];
+  for(let i=0;i<ids.length;i+=200){
+    const { data } = await SB.from('gp_ventes_lignes')
+      .select('vente_id,formule_nom,quantite,montant_ligne,type_produit,ingredient_id,cout_unitaire')
+      .in('vente_id', ids.slice(i,i+200)).eq('type_produit','mp');
+    if(data) lignes.push(...data);
+  }
+
+  if(!lignes.length){
+    document.getElementById('kpi-drill-content').innerHTML =
+      '<div style="color:var(--textm);font-size:12px">Aucune vente de matière première ce mois.</div>';
+    return;
+  }
+
+  // Une ligne par VENTE, enrichie de son coût et de sa marge.
+  const detail = lignes.map(l => {
+    const v = ventes[l.vente_id] || {};
+    const c = (typeof coutLigneVente === 'function') ? coutLigneVente(l) : null;
+    const qte = Number(l.quantite||0);
+    const ca  = Number(l.montant_ligne||0);
+    const cout = c ? c.cout : 0;
+    return {
+      date: v.date || '—',
+      client: v.client_nom || '—',
+      nom: l.formule_nom || '—',
+      qte, ca, cout,
+      marge: ca - cout,
+      pvKg: qte > 0 ? ca / qte : 0,
+      coutKg: qte > 0 ? cout / qte : 0,
+      estime: !!(c && c.estime),
+      sansCout: !c || !(c.cout > 0)
+    };
+  }).sort((a,b) => a.marge - b.marge);   // les pires d'abord : c'est ce qu'on veut voir
+
+  const totCA    = detail.reduce((s,r)=>s+r.ca,0);
+  const totCout  = detail.reduce((s,r)=>s+r.cout,0);
+  const totMarge = totCA - totCout;
+  const nbEstim  = detail.filter(r=>r.estime).length;
+  const perte    = detail.filter(r=>r.marge < 0);
+
+  // Résumé par matière — le « qu'est-ce qui rapporte ».
+  const par = {};
+  detail.forEach(r => {
+    if(!par[r.nom]) par[r.nom] = { nom:r.nom, kg:0, ca:0, cout:0, n:0 };
+    par[r.nom].kg += r.qte; par[r.nom].ca += r.ca; par[r.nom].cout += r.cout; par[r.nom].n++;
+  });
+  const parMat = Object.values(par)
+    .map(r => ({ nom:r.nom, kg:r.kg, ca:r.ca, cout:r.cout, n:r.n,
+                 marge: r.ca - r.cout, taux: r.ca>0 ? ((r.ca-r.cout)/r.ca)*100 : 0 }))
+    .sort((a,b) => a.marge - b.marge);
+
+  const avert = [];
+  if(perte.length) avert.push('<div style="font-size:11px;color:var(--red);margin-top:6px">🚨 '
+    + perte.length + ' vente(s) à perte : '
+    + [...new Set(perte.map(r=>r.nom))].join(', ') + '</div>');
+  if(nbEstim) avert.push('<div style="font-size:11px;color:var(--gold);margin-top:4px">≈ '
+    + nbEstim + ' ligne(s) antérieure(s) à l&rsquo;enregistrement du coût : coût repris au prix '
+    + 'd&rsquo;achat du JOUR, pas à celui de la vente.</div>');
+
+  document.getElementById('kpi-drill-summary').innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:'
+    + (totMarge>=0?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)') + ';border-radius:8px">'
+    + '<span>' + detail.length + ' vente(s) · ' + parMat.length + ' matière(s) · CA '
+    + fmt(Math.round(totCA)) + ' F</span>'
+    + '<b style="font-size:14px;color:' + (totMarge>=0?'var(--green)':'var(--red)') + '">'
+    + fmt(Math.round(totMarge)) + ' F · ' + (totCA>0?((totMarge/totCA)*100).toFixed(1):0) + ' %</b></div>'
+    + avert.join('')
+    + '<div style="font-size:11px;color:var(--textm);margin-top:8px;font-weight:700">Par matière</div>'
+    + '<div style="overflow-x:auto"><table class="tbl" style="font-size:10.5px;margin-top:4px">'
+    + '<thead><tr><th>Matière</th><th class="num">Ventes</th><th class="num">Kg</th>'
+    + '<th class="num">CA</th><th class="num">Marge</th><th class="num">Taux</th></tr></thead><tbody>'
+    + parMat.map(r => '<tr><td>' + r.nom + '</td><td class="num">' + r.n + '</td><td class="num">'
+        + fmt(Math.round(r.kg)) + '</td><td class="num">' + fmt(Math.round(r.ca)) + '</td>'
+        + '<td class="num" style="color:' + (r.marge>=0?'var(--green)':'var(--red)') + ';font-weight:700">'
+        + fmt(Math.round(r.marge)) + '</td><td class="num">' + r.taux.toFixed(1) + ' %</td></tr>').join('')
+    + '</tbody></table></div>';
+
+  _renderKpiTable([
+    {label:'Date',key:'date'},
+    {label:'Client',key:'client'},
+    {label:'Matière',render:r=>r.nom + (r.estime?' <span title="coût repris au prix du jour" style="color:var(--gold)">≈</span>':'')},
+    {label:'Kg',align:'num',render:r=>fmt(Math.round(r.qte))},
+    {label:'Vendu F/kg',align:'num',render:r=>fmt(Math.round(r.pvKg))},
+    {label:'Coût F/kg',align:'num',render:r=>r.sansCout?'<span style="color:var(--red)">?</span>':fmt(Math.round(r.coutKg))},
+    {label:'CA (F)',align:'num',render:r=>fmt(Math.round(r.ca))},
+    {label:'Marge (F)',align:'num',render:r=>'<span style="color:'+(r.marge>=0?'var(--green)':'var(--red)')+';font-weight:700">'+fmt(Math.round(r.marge))+'</span>'}
+  ], detail, 'MARGE TOTALE SUR MATIÈRES', fmt(Math.round(totMarge))+' F');
 }
 
 // ── DRILL : VALEUR DU STOCK MP ─────────────────────

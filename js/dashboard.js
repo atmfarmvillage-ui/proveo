@@ -267,7 +267,7 @@ async function renderDashboard(){
   // chiffre ne soit pas pris pour argent comptant.
   // Marge estimée du mois : CA des lignes de vente moins leur coût de revient
   // théorique. Cumulative par construction — elle grandit avec les ventes du mois.
-  let margeMois = null;
+  let margeMois = null, margeMPMois = null;
   try{
     if(GP_ROLE === 'admin' && typeof margeLignesVente === 'function'){
       const idsMois = (ventesMoisD || []).map(v => v.id).filter(Boolean);
@@ -275,11 +275,15 @@ async function renderDashboard(){
         const lignesMois = [];
         for(let i = 0; i < idsMois.length; i += 200){
           const { data: lm } = await SB.from('gp_ventes_lignes')
-            .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id')
+            .select('formule_nom,quantite,montant_ligne,type_produit,ingredient_id,cout_unitaire')
             .in('vente_id', idsMois.slice(i, i + 200));
           if(lm) lignesMois.push(...lm);
         }
         margeMois = margeLignesVente(lignesMois);
+        // La marge des MATIÈRES PREMIÈRES, à part : elles ne se fabriquent pas,
+        // leur coût est un prix d'achat, et c'est la seule marge qu'on puisse
+        // dire exacte plutôt qu'estimée.
+        margeMPMois = margeLignesVente(lignesMois.filter(l => l.type_produit === 'mp'));
       }
     }
   }catch(e){ margeMois = null; }
@@ -367,6 +371,8 @@ async function renderDashboard(){
       alertes.length>0?{type:'down',text:'à réapprovisionner'}:{type:'up',text:'tout est OK'},"dashKpiDrill('alertes_mp')")}
     ${margeMois?kpi('📈',margeMois.marge>=0?'green':'red','Marge estimée ce mois',fmt(Math.round(margeMois.marge)),
       {type:margeMois.marge>=0?'up':'down',text:margeMois.taux.toFixed(1)+' % du CA'},"dashKpiDrill('marge_mois')"):''}
+    ${margeMPMois?kpi('🌾',margeMPMois.marge>=0?'green':'red','Marge matières premières ce mois',fmt(Math.round(margeMPMois.marge)),
+      {type:margeMPMois.marge>=0?'up':'down',text:margeMPMois.taux.toFixed(1)+' % du CA matières'},"dashKpiDrill('marge_mp')"):''}
     ${kpi('🌾','green','Valeur stock MP',fmt(Math.round(valeurStockMP)),
       mpSansPrix>0?{type:'down',text:`${mpSansPrix} MP sans prix`}:{type:'flat',text:'au prix du jour'},"dashKpiDrill('stock_mp')")}
     `:`

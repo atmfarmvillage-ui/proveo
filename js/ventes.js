@@ -1105,16 +1105,27 @@ async function saveVente(){
     const demande = {};
     for(const l of VT_LIGNES){
       if(l.type_produit !== 'formule') continue;
-      demande[l.formule_nom] = (demande[l.formule_nom]||0) + Number(l.quantite||0);
+      const k = l.formule_nom;
+      if(!demande[k]) demande[k] = {qte:0, ps:0};
+      demande[k].qte += Number(l.quantite||0);
+      // Poids du sac : celui que porte la ligne, sinon celui connu de la formule.
+      const _ps = _poidsSacLigne(l);
+      if(_ps>0 && !demande[k].ps) demande[k].ps = _ps;
     }
-    for(const [formule, qte] of Object.entries(demande)){
+    for(const [formule, d] of Object.entries(demande)){
       const dispo = Number(GP_STOCK_VENTE[formule]||0);
-      if(qte > dispo + 0.001){
-        ruptures.push(`${formule} : demandé ${fmt(qte)} kg · dispo ${fmt(dispo)} kg`);
+      if(d.qte > dispo + 0.001){
+        // On annonce CE QUI MANQUE, en sacs : c'est le seul chiffre qui dit à la
+        // secrétaire quoi faire. « demandé 325 kg · dispo 250 kg » l'obligeait à
+        // soustraire puis diviser, devant le client.
+        const manque = d.qte - Math.max(0, dispo);
+        ruptures.push(dispo<=0
+          ? `aucun stock de « ${formule} » — demandé ${_sacsEtKg(d.qte, d.ps)}`
+          : `il manque ${_sacsEtKg(manque, d.ps)} de « ${formule} » — en stock ${_sacsEtKg(dispo, d.ps)}, demandé ${_sacsEtKg(d.qte, d.ps)}`);
       }
     }
     if(ruptures.length){
-      _showErr(`Stock insuffisant — vente bloquée :\n${ruptures.join('\n')}`);
+      _showErr(`🚫 Vente bloquée — ${ruptures.join(' · ')}`);
       return;
     }
   }
