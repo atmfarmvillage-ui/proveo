@@ -137,5 +137,8 @@ async function savePrixVente() {
   if (ing) { ing.prix_vente_kg = kg; ing.prix_vente_sac = sac; ing.poids_sac_kg = poids; }
   fermerPrixVente();
   notify('Prix de vente enregistré ✓', 'gold');
-  if (typeof renderMatieresPremieres === 'function') renderMatieresPremieres();
+  // ⚠️ La fonction s'appelle renderMatieresPremieres**Page**. Avec le mauvais
+  // nom, la garde `typeof` avalait l'erreur : le tableau ne se rafraîchissait
+  // pas et le badge rouge restait après la saisie.
+  if (typeof renderMatieresPremieresPage === 'function') renderMatieresPremieresPage();
 }
