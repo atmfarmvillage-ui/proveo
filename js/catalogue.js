@@ -193,7 +193,14 @@ function catStyles() {
     .pds{opacity:.75;font-weight:400;font-size:9px}
     .pied{margin-top:16px;background:${CAT_VERT};color:#fff;border-radius:4px;padding:10px 14px;
       display:flex;justify-content:space-between;gap:14px;font-size:11px;flex-wrap:wrap}
-    .slogan{text-align:center;font-style:italic;font-weight:700;font-size:15px;margin:14px 0 4px}
+    .slogan{text-align:center;font-style:italic;font-weight:700;font-size:15px;margin:14px 0 4px;flex:1}
+    .finale{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-top:6px}
+    .an{height:74px;width:auto;display:block}
+    /* Le porc chevauche la bande verte par le MILIEU, comme sur l'affiche : la
+       bande y est vide (téléphone à gauche, boutiques à droite). Hors du flux,
+       pour ne pousser aucun texte. */
+    .pied{position:relative}
+    .an-porc{position:absolute;left:50%;transform:translateX(-50%);bottom:0;height:60px}
     .maj{text-align:center;font-size:9px;color:#666;margin-top:6px}
     .barre{text-align:center;margin-bottom:12px}
     button{padding:8px 22px;font-size:13px;cursor:pointer;background:${CAT_VERT};color:#fff;
@@ -205,11 +212,22 @@ function catStyles() {
     }`;
 }
 
+// La fenêtre du catalogue s'ouvre sur `about:blank` : une adresse relative
+// n'y résout pas. On bâtit l'URL complète depuis l'origine de l'app.
+const CAT_IMG = location.origin + location.pathname.replace(/[^/]*$/, '') + 'img/';
+
 function catPied() {
   const d = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  // Les animaux sont disposés comme sur l'affiche d'origine : lapin à gauche,
+  // volaille à droite du slogan, porc dans la bande verte.
   return `
-    <div class="slogan">« La marque de l'Excellence »</div>
+    <div class="finale">
+      <img class="an" src="${CAT_IMG}lapin.png" alt="">
+      <div class="slogan">« La marque de l'Excellence »</div>
+      <img class="an" src="${CAT_IMG}volaille.png" alt="">
+    </div>
     <div class="pied">
+      <img class="an an-porc" src="${CAT_IMG}porc.png" alt="">
       <div><b>PASSEZ COMMANDE</b> &nbsp; (00228) 99 31 31 10 &nbsp;/&nbsp; 70 99 20 19</div>
       <div>Boutiques : Amousoukopé · Kara · Zanguera</div>
     </div>
@@ -229,7 +247,17 @@ function catOuvrir(titre, corps) {
     </div>
     ${corps}</body></html>`);
   w.document.close();
-  setTimeout(() => { try { w.print(); } catch (e) {} }, 600);
+  // ⏳ On attend que les images soient chargées. Avec un délai fixe, la boîte
+  // d'impression pouvait s'ouvrir avant elles et sortir des cadres vides —
+  // sur un document qu'on remet au client. Filet de sécurité à 4 s : une image
+  // qui ne répond jamais ne doit pas empêcher d'imprimer les prix.
+  const lancer = () => { try { w.print(); } catch (e) {} };
+  const imgs = Array.from(w.document.images || []);
+  let restant = imgs.length;
+  if (!restant) { setTimeout(lancer, 600); return; }
+  const fini = () => { if (restant > 0 && --restant === 0) setTimeout(lancer, 150); };
+  imgs.forEach(i => { if (i.complete) fini(); else { i.onload = fini; i.onerror = fini; } });
+  setTimeout(() => { if (restant > 0) { restant = 0; lancer(); } }, 4000);
 }
 
 // ── Catalogue ALIMENTS ────────────────────────────────────────────────────
