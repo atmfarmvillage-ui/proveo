@@ -427,6 +427,23 @@ async function onPdvVenteChange(){
   }
 }
 
+// ── EXPRIMER UN STOCK EN SACS ─────────────────────────────────────────
+// La secrétaire compte en sacs, pas en kilos. « Il manque 3 sacs » se comprend
+// immédiatement ; « il manque 75 kg » oblige à une division mentale au comptoir.
+// On garde les kg entre parenthèses : c'est eux qui font foi dans la base.
+function _poidsSacLigne(l){
+  const q = Number(l?.quantite||0), n = Number(l?.nb_sacs||0);
+  if(q>0 && n>0) return q/n;                              // ce que dit la vente
+  return Number(GP_POIDS_SAC_VENTE[l?.formule_nom]||0);   // sinon la formule
+}
+function _sacsEtKg(kg, poidsSac){
+  const k = Math.round(Number(kg||0)*10)/10;
+  if(!(poidsSac>0)) return `${fmtKg(k)} kg`;
+  const n = Math.round(k/poidsSac*10)/10;
+  const aff = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.',',');
+  return `${aff} sac${n>=2?'s':''} (${fmtKg(k)} kg)`;
+}
+
 // Affiche le stock dispo pour la formule sélectionnée (kg + sacs + PDV source)
 function afficherStockFormuleVente(formuleNom){
   const box = document.getElementById('vt-stock-info');
@@ -1199,12 +1216,31 @@ async function saveVente(){
       const dispo=(_st||[]).filter(s=>_norm(s.formule_nom)===_norm(l.formule_nom))
         .reduce((s,r)=>s+Number(r.qte_disponible||0),0);
       if(dispo < besoin - 0.01){
+        // Le chiffre utile n'est ni le stock ni la demande : c'est CE QUI MANQUE.
+        // Sans lui, la secrétaire doit soustraire de tête devant le client.
+        const ps     = _poidsSacLigne(l);
+        const manque = besoin - Math.max(0, dispo);
         const msg = dispo<=0
-          ? `🚫 Vous n'avez PAS de stock de « ${l.formule_nom} » à ${_pdv}.\n\nVente ANNULÉE. Faites une production ou une livraison d'abord.`
-          : `🚫 Stock insuffisant pour « ${l.formule_nom} » à ${_pdv} :\nil ne reste que ${fmtKg(dispo)} kg, vous voulez en vendre ${fmtKg(besoin)} kg.\n\nVente ANNULÉE.`;
+          ? `🚫 AUCUN STOCK — vente annulée\n\n`
+            + `« ${l.formule_nom} » à ${_pdv}\n\n`
+            + `   Demandé   : ${_sacsEtKg(besoin, ps)}\n`
+            + `   En stock  : rien\n\n`
+            + `Il faut une production ou une livraison avant de vendre.`
+          : `🚫 STOCK INSUFFISANT — vente annulée\n\n`
+            + `« ${l.formule_nom} » à ${_pdv}\n\n`
+            + `   En stock  : ${_sacsEtKg(dispo,  ps)}\n`
+            + `   Demandé   : ${_sacsEtKg(besoin, ps)}\n`
+            + `   ────────────────────────────\n`
+            + `   IL MANQUE : ${_sacsEtKg(manque, ps)}\n\n`
+            + `Réduis la quantité, ou fais une production ou une livraison.`;
         alert(msg);
-        if(typeof notify==='function') notify('🚫 Stock insuffisant — vente annulée','r');
-        _showErr(dispo<=0 ? `Aucun stock de « ${l.formule_nom} » à ${_pdv}` : `Stock insuffisant : ${fmtKg(dispo)} kg de « ${l.formule_nom} » à ${_pdv}`);
+        const court = dispo<=0
+          ? `aucun stock de « ${l.formule_nom} »`
+          : `il manque ${_sacsEtKg(manque, ps)} de « ${l.formule_nom} »`;
+        if(typeof notify==='function') notify(`🚫 Vente annulée — ${court}`,'r');
+        _showErr(dispo<=0
+          ? `Aucun stock de « ${l.formule_nom} » à ${_pdv}`
+          : `Stock insuffisant à ${_pdv} : ${_sacsEtKg(dispo, ps)} en stock, il manque ${_sacsEtKg(manque, ps)}`);
         return; // BLOQUE : aucune vente enregistrée
       }
     }
@@ -1286,6 +1322,7 @@ async function saveVente(){
       type_produit:l.type_produit||'formule',
       sous_type:l.sous_type||null,
       ingredient_id:l.ingredient_id||null,
+      cout_unitaire:l.cout_unitaire||null,
       veto_id:l.veto_id||null
     }))
   );
@@ -2447,6 +2484,71 @@ function filtrerIngrVente(){
   results.style.display = 'block';
 }
 
+// ══ PRIX DE VENTE FIXÉ D'UNE MATIÈRE PREMIÈRE ══════════════════════
+// Deux tarifs par matière : au kilo et au sac. Le sac n'est presque jamais au
+// même prix au kilo, et son poids varie (maïs 50 kg, prémix 25) : il vit sur
+// la fiche de la matière, pas dans le formulaire.
+function vtIngrCourante(){
+  const id = document.getElementById('vt_mp_id')?.value;
+  if(!id) return null;
+  return (GP_INGREDIENTS || []).find(i => i.id === id) || null;
+}
+
+// Applique le tarif au champ prix et l'annonce EN ROUGE.
+// `annoncer` : on ne sonne la notification qu'au choix de la matière, pas à
+// chaque changement de conditionnement — sinon le message devient du bruit.
+function vtAppliquerPrixMP(annoncer){
+  const info = document.getElementById('vt-mp-prix-info');
+  const ing = vtIngrCourante();
+  if(!ing){ if(info) info.innerHTML = ''; return; }
+  const cond = document.getElementById('vt_poids_sac')?.value || 'kg';
+  const parKg = (typeof pvPrixKg === 'function') ? pvPrixKg(ing, cond) : null;
+  const prixEl = document.getElementById('vt_prix');
+
+  if(parKg == null){
+    // Pas de tarif : on laisse le champ VIDE plutôt que d'y remettre le coût.
+    // Une saisie manuelle vaut mieux qu'une vente à perte silencieuse.
+    if(prixEl) prixEl.value = '';
+    if(info) info.innerHTML = `<span style="color:var(--red);font-weight:700">⚠️ Aucun prix de vente fixé pour cette matière.</span>
+      <span style="color:var(--textm)"> Saisissez-le à la main, ou faites-le fixer dans 🌾 Matières Premières.</span>`;
+    if(annoncer) notify('⚠ Aucun prix de vente fixé pour cette matière', 'r', 6000);
+    window._vtPrixFixeKg = null;
+    return;
+  }
+
+  if(prixEl) prixEl.value = Math.round(parKg * 100) / 100;
+  window._vtPrixFixeKg = parKg;
+
+  const poids = Number(ing.poids_sac_kg) || 0;
+  const auSac = cond !== 'kg' && poids > 0 && Number(cond) === poids && ing.prix_vente_sac != null;
+  const libelle = auSac
+    ? `<strong>${fmt(ing.prix_vente_sac)} F</strong> le sac de ${fmt(poids)} kg`
+    : `<strong>${fmt(Math.round(parKg))} F/kg</strong>`;
+  if(info) info.innerHTML =
+    `<span style="color:var(--red);font-weight:700">💰 PRIX DE VENTE FIXÉ — ${libelle}</span>`
+    + (auSac ? `<span style="color:var(--textm)"> (soit ${fmt(Math.round(parKg))} F/kg)</span>` : '');
+  if(annoncer){
+    const t = auSac ? `${fmt(ing.prix_vente_sac)} F le sac de ${fmt(poids)} kg`
+                    : `${fmt(Math.round(parKg))} F/kg`;
+    notify(`💰 Prix de vente fixé : ${t}`, 'gold', 6000);
+  }
+}
+
+// Le tarif « au sac » ne vaut que pour le sac ENTIER de la matière. Si son
+// poids n'est ni 25 ni 50, l'option n'existe pas dans la liste : on l'ajoute,
+// sinon ce tarif serait inatteignable.
+function vtOptionSacMatiere(ing){
+  const sel = document.getElementById('vt_poids_sac');
+  const poids = Number(ing && ing.poids_sac_kg) || 0;
+  if(!sel || !poids) return;
+  sel.querySelectorAll('option[data-mp="1"]').forEach(o => o.remove());
+  if(!Array.from(sel.options).some(o => Number(o.value) === poids)){
+    const o = document.createElement('option');
+    o.value = String(poids); o.textContent = `Sac ${poids} kg`; o.dataset.mp = '1';
+    sel.appendChild(o);
+  }
+}
+
 function selectionnerIngrVente(id, nom, prix, stock){
   document.getElementById('vt_mp_id').value = id;
   document.getElementById('vt_mp_search').value = nom;
@@ -2458,13 +2560,16 @@ function selectionnerIngrVente(id, nom, prix, stock){
     sel.style.alignItems = 'center';
     sel.innerHTML = `<span>✓ ${nom}</span><button onclick="effacerSelectionMPVente()" style="background:none;border:none;color:var(--textm);cursor:pointer;font-size:14px">✕</button>`;
   }
+  // Stock + coût d'achat, en gris : c'est une information de gestion.
   document.getElementById('vt-mp-stock-info').innerHTML =
     `📊 Stock : <strong>${fmtKg(stock)} kg</strong> · Prix d'achat : <strong>${fmt(prix)} F/kg</strong>`;
-  // Pré-remplir le prix de vente
-  const prixEl = document.getElementById('vt_prix');
-  if(prixEl && !prixEl.value) prixEl.value = prix;
   document.getElementById('vt-cout-info').textContent =
     prix ? `Coût : ${fmt(prix)} F/kg` : '';
+  vtOptionSacMatiere((GP_INGREDIENTS || []).find(i => i.id === id));
+  // ⚠️ LE PRIX PROPOSÉ EST LE PRIX DE VENTE, PLUS JAMAIS LE PRIX D'ACHAT.
+  // Ici, le champ était pré-rempli avec `prix` — le coût. La matière partait
+  // à prix coûtant dès que personne ne corrigeait, et rien ne le signalait.
+  vtAppliquerPrixMP(true);
   // Stock pour blocage à l'ajout
   window._vtMPStock = stock;
   document.getElementById('vt_qte')?.focus();
@@ -2562,6 +2667,21 @@ function ajouterLigneVente(){
   const prixUnit = +document.getElementById('vt_prix')?.value || 0;
   if(!prixUnit){ err.textContent = typeProduit==='ferme' ? 'Le prix/unité est requis.' : 'Le prix/kg est requis.'; return; }
 
+  // Vente sous le tarif fixé : on avertit, on ne bloque pas. Un client négocie,
+  // la boutique ne doit pas s'arrêter ; mais personne ne doit pouvoir dire
+  // qu'il ne savait pas. L'écart se retrouvera dans le rapport de marge.
+  if(typeProduit === 'mp' && window._vtPrixFixeKg != null && prixUnit < window._vtPrixFixeKg - 0.01){
+    const manque = Math.round((window._vtPrixFixeKg - prixUnit) * qte);
+    if(!confirm(`⚠ Vente SOUS LE TARIF
+
+Tarif fixé : ${fmt(Math.round(window._vtPrixFixeKg))} F/kg
+Prix saisi : ${fmt(prixUnit)} F/kg
+
+Manque à gagner sur cette ligne : ${fmt(manque)} F
+
+Continuer ?`)) return;
+  }
+
   // Remise de la ligne (selon le champ remise du formulaire), plafonnée au montant brut
   const montantBrut = Math.round(qte * prixUnit);
   const remiseLigne = Math.min(computeRemiseLigneVente(qte, nbSacs), montantBrut);
@@ -2580,6 +2700,12 @@ function ajouterLigneVente(){
       ? sousType
       : (typeProduit==='prestation' ? (document.getElementById('vt_prestation_detail')?.value.trim() || null) : null),
     ingredient_id: ingredientId,        // null si formule/ferme/prestation
+    // ⚠️ Le coût d'achat du JOUR, figé ici. `prix_actuel` est réécrit à chaque
+    // réception : sans cette copie, la marge d'une vente de mars serait
+    // recalculée des mois plus tard avec un coût qui n'a plus rien à voir.
+    cout_unitaire: (typeProduit === 'mp' && ingredientId)
+      ? (Number(((GP_INGREDIENTS || []).find(i => i.id === ingredientId) || {}).prix_actuel) || null)
+      : null,
     veto_id: vetoId,                    // uuid produit véto (en mémoire) — sert à déduire le stock à la vente
     type_prix: (typeProduit==='ferme'||typeProduit==='veto') ? 'unite' : 'detail',
   };
@@ -2844,6 +2970,9 @@ function onConditionnementChange(){
     if(remiseTypeEl)remiseTypeEl.value='sac'; // remise par sac en mode sacs
   }
   majLabelRemise();
+  // Le tarif suit le conditionnement : au sac ou au kilo, ce n'est pas le
+  // même prix, et c'est tout l'objet des deux champs de la fiche.
+  if(document.getElementById('vt_type_produit')?.value === 'mp') vtAppliquerPrixMP(false);
   calcVente();
 }
 

@@ -748,6 +748,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <input type="hidden" id="vt_mp_id">
         <div id="vt_mp_selected" style="display:none;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;color:var(--g6);margin-top:4px"></div>
         <div id="vt-mp-stock-info" style="font-size:10px;color:var(--textm);margin-top:4px"></div>
+        <!-- Le prix de vente fixe, en ROUGE : c'est la ligne que la secretaire
+             doit voir avant de saisir quoi que ce soit. -->
+        <div id="vt-mp-prix-info" style="font-size:11.5px;margin-top:4px;line-height:1.5"></div>
       </div>
 
       <!-- PRODUIT VÉTO -->
@@ -3082,7 +3085,42 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <!-- DIRECTEUR MARKETING IA -->
 
 <!-- MODAL VALEURS NUTRITIONNELLES D'UNE MATIÈRE PREMIÈRE -->
-<div id="modal-nutri" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNutri()">
+<!-- PRIX DE VENTE D'UNE MATIERE PREMIERE -->
+<div id="modal-prixvente" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerPrixVente()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;margin-top:40px">
+    <input type="hidden" id="pv-id">
+    <div style="font-weight:700;font-size:15px;margin-bottom:2px">💰 Prix de vente</div>
+    <div id="pv-titre" style="color:var(--gold);font-weight:700;margin-bottom:2px"></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:14px">
+      Prix d'achat actuel : <b id="pv-achat">—</b>. Il change à chaque réception de marchandise ;
+      le prix de vente, lui, ne bouge que si tu le changes.
+    </div>
+
+    <div class="fr"><label>Prix de vente AU KILO (F/kg)</label>
+      <input type="number" id="pv_kg" placeholder="Ex : 320" oninput="pvApercu()"></div>
+
+    <div class="fg2">
+      <div class="fr"><label>Poids du sac (kg)</label>
+        <input type="number" id="pv_poids" placeholder="50" oninput="pvApercu()"></div>
+      <div class="fr"><label>Prix de vente AU SAC (F)</label>
+        <input type="number" id="pv_sac" placeholder="Ex : 14000" oninput="pvApercu()"></div>
+    </div>
+    <div style="font-size:10px;color:var(--textm);margin:-4px 0 10px">
+      Le poids se saisit par matière : maïs en 50 kg, prémix en 25. Le tarif « au sac »
+      ne s'applique qu'au sac ENTIER.
+    </div>
+
+    <div id="pv-apercu" style="font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:10px"></div>
+    <div class="a-err" id="pv-err"></div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-g" style="flex:1;justify-content:center" onclick="savePrixVente()">💾 Enregistrer</button>
+      <button class="btn btn-out" style="flex:1;justify-content:center" onclick="fermerPrixVente()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-nutri style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNutri()">
   <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
     <div style="font-size:16px;font-weight:800;margin-bottom:2px">🧪 Valeurs nutritionnelles</div>
     <div id="nutri-titre" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px">—</div>
@@ -3445,10 +3483,10 @@ try{
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.26.1"></script>
 <script src="js/stock.js?v=2.30.3"></script>
-<script src="js/matieres.js?v=2.28.1"></script>
+<script src="js/matieres.js?v=2.29.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
-<script src="js/ventes.js?v=2.28.0"></script>
+<script src="js/ventes.js?v=2.29.0"></script>
 <script src="js/clients.js?v=2.27.0"></script>
 <script src="js/admin.js?v=2.30.0"></script>
 <script src="js/marge_aliment.js?v=2.26.1"></script>
@@ -3491,6 +3529,7 @@ try{
 <script src="js/commissions.js?v=2.27.0"></script>
 <script src="js/emprunts.js?v=2.28.0"></script>
 <script src="js/nutrition.js?v=2.31.0"></script>
+<script src="js/prixvente.js?v=1.0.0"></script>
 <script src="js/rh.js?v=2.30.0"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 
