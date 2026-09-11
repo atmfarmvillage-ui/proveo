@@ -1245,13 +1245,11 @@ async function saveVente(){
             + `   IL MANQUE : ${_sacsEtKg(manque, ps)}\n\n`
             + `Réduis la quantité, ou fais une production ou une livraison.`;
         alert(msg);
-        const court = dispo<=0
-          ? `aucun stock de « ${l.formule_nom} »`
-          : `il manque ${_sacsEtKg(manque, ps)} de « ${l.formule_nom} »`;
-        if(typeof notify==='function') notify(`🚫 Vente annulée — ${court}`,'r');
+        // _showErr() déclenche DÉJÀ un notify() : en ajouter un second ici
+        // affichait deux toasts identiques par-dessus l'alerte.
         _showErr(dispo<=0
           ? `Aucun stock de « ${l.formule_nom} » à ${_pdv}`
-          : `Stock insuffisant à ${_pdv} : ${_sacsEtKg(dispo, ps)} en stock, il manque ${_sacsEtKg(manque, ps)}`);
+          : `Il manque ${_sacsEtKg(manque, ps)} de « ${l.formule_nom} » à ${_pdv} — en stock ${_sacsEtKg(dispo, ps)}`);
         return; // BLOQUE : aucune vente enregistrée
       }
     }
@@ -1273,7 +1271,7 @@ async function saveVente(){
   const _modeVente = paye>0 ? (document.getElementById('vt_mode')?.value||'especes') : null;
   const _refVente  = document.getElementById('vt_ref')?.value.trim() || null;
   if(paye>0 && _modeVente==='mobile_money' && !_refVente){
-    notify('Saisis la référence de la transaction YAS','r');
+    _showErr('Saisis la référence de la transaction YAS (le code reçu par SMS).');
     document.getElementById('vt_ref')?.focus();
     return;
   }
@@ -1282,7 +1280,7 @@ async function saveVente(){
     // On ne bloque que si la liste est bien chargée : une liste vide peut venir
     // d'un souci réseau, et la vente ne doit jamais échouer pour ça.
     if(GP_CAISSES_VENTE.length && !caisseVentePour(_modeVente)){
-      notify(`Aucune caisse ${_modeVente==='mobile_money'?'mobile money':'physique'} sur ce point de vente — crée-la avant d'encaisser`,'r');
+      _showErr(`Aucune caisse ${_modeVente==='mobile_money'?'mobile money':'physique'} sur ce point de vente — crée-la avant d'encaisser.`);
       return;
     }
   }
