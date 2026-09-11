@@ -271,6 +271,77 @@ function pdvSourceVente(){
   return sel || hidden || 'Production';
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MODE DE RÈGLEMENT — deux modes seulement : espèces et MIX BY YAS.
+// Avant, le formulaire ne capturait AUCUN mode : saveVente() devinait la caisse
+// et retombait sur `type='physique'`, donc un paiement mobile money était
+// enregistré dans le tiroir. Le mode choisi ici détermine la caisse créditée.
+// ══════════════════════════════════════════════════════════════════
+var GP_CAISSES_VENTE = [];
+
+async function chargerCaissesVente(){
+  try{
+    GP_CAISSES_VENTE = (typeof caissesAccessibles==='function')
+      ? await caissesAccessibles() : [];
+  }catch(_){ GP_CAISSES_VENTE = []; }
+  majCaisseVente();
+}
+
+// Caisse cible du PDV courant pour le mode demandé.
+// On filtre d'abord sur le PDV : une caisse d'un autre point de vente ne doit
+// jamais encaisser ici (c'est ce qui avait fait payer 1 885 200 F au mauvais tiroir).
+function caisseVentePour(mode){
+  const pdv   = pdvSourceVente();
+  const duPdv = GP_CAISSES_VENTE.filter(c => (c.point_vente||'Production') === pdv);
+  const veut  = mode === 'mobile_money' ? 'mobile_money' : 'physique';
+  return duPdv.find(c => c.type === veut) || null;
+}
+
+function setModeVente(mode){
+  const el = document.getElementById('vt_mode');
+  if(el) el.value = mode;
+  const yas  = mode === 'mobile_money';
+  const base = 'padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;';
+  const on   = 'border:2px solid var(--g6);background:var(--g6);color:#fff';
+  const off  = 'border:2px solid rgba(0,0,0,.15);background:var(--card2);color:var(--text)';
+  const bE = document.getElementById('vt_mode_especes_btn');
+  const bY = document.getElementById('vt_mode_yas_btn');
+  if(bE) bE.style.cssText = base + (yas ? off : on);
+  if(bY) bY.style.cssText = base + (yas ? on  : off);
+  const refRow = document.getElementById('vt-ref-row');
+  if(refRow) refRow.style.display = yas ? '' : 'none';
+  majCaisseVente();
+  // Quitter les espèces est le geste à risque : on le dit à voix haute.
+  // L'argent ne sera pas dans le tiroir ce soir, et la clôture le reflétera.
+  if(yas && typeof notify==='function'){
+    const c = caisseVentePour('mobile_money');
+    notify(`📱 Encaissement sur ${c?c.nom:'MIX BY YAS'} — cet argent n'ira PAS dans le tiroir`,'gold');
+  }
+}
+
+// Dit à la secrétaire, AVANT de valider, où va l'argent.
+function majCaisseVente(){
+  const lbl = document.getElementById('vt-caisse-label');
+  if(!lbl) return;
+  const mode = document.getElementById('vt_mode')?.value || 'especes';
+  const c = caisseVentePour(mode);
+  if(!c){
+    lbl.style.cssText='font-size:10.5px;margin-top:4px;color:var(--red)';
+    lbl.innerHTML=`⚠ Aucune caisse ${mode==='mobile_money'?'mobile money':'physique'} pour ce point de vente — crée-la avant d'encaisser.`;
+    return;
+  }
+  if(mode==='mobile_money'){
+    // Encadré : c'est le cas où la secrétaire doit voir, sans effort, que le tiroir
+    // ne bougera pas. Une ligne grise passerait inaperçue.
+    lbl.style.cssText='font-size:11px;margin-top:6px;padding:7px 9px;border-radius:7px;'
+      +'background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.45);color:var(--text)';
+    lbl.innerHTML=`📱 Encaissé sur <b>${c.nom}</b> — <b>rien dans le tiroir</b>`;
+  } else {
+    lbl.style.cssText='font-size:10.5px;margin-top:4px;color:var(--textm)';
+    lbl.innerHTML=`→ Caisse créditée : <b style="color:var(--g6)">${c.nom}</b>`;
+  }
+}
+
 // Production (siège) produit tout → propose toutes les formules.
 // Un PDV principal/secondaire ne vend QUE ce qu'il a reçu en stock.
 function vtFiltrerStockActif(){
@@ -798,6 +869,20 @@ function calcVente(){
     badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border;badge.textContent=label;
   }
 
+  // Le choix du mode se pose dès qu'il y a de l'argent à encaisser, sur TOUS les points
+  // de vente — chacun aura sa caisse mobile money. Espèces reste pré-sélectionné :
+  // c'est le cas courant, et le geste à signaler est de le quitter.
+  // Si le PDV n'a pas encore sa caisse YAS, majCaisseVente() l'affiche en rouge et
+  // saveVente() bloque avec un message clair plutôt que de créditer le tiroir.
+  const modeRow=document.getElementById('vt-mode-row');
+  if(modeRow){
+    const afficher = paye>0;
+    modeRow.style.display = afficher ? '' : 'none';
+    if(afficher){
+      if(!GP_CAISSES_VENTE.length) chargerCaissesVente(); else majCaisseVente();
+    }
+  }
+
   // Stocker pour saveVente
   window._vtMonnaie = { total, remis, paye, monnaie, reste };
 }
@@ -1135,6 +1220,26 @@ async function saveVente(){
   const sansCaisse = retro && document.getElementById('vt_retro_caisse')?.checked;
   const sansComm   = retro && document.getElementById('vt_retro_comm')?.checked;
 
+  // Mode de règlement + référence — la référence est EXIGÉE en mobile money :
+  // c'est elle qui permet de retrouver l'opération sur le relevé YAS. Sans elle,
+  // le rapprochement se fait par différence de solde, donc jamais ligne à ligne.
+  const _modeVente = paye>0 ? (document.getElementById('vt_mode')?.value||'especes') : null;
+  const _refVente  = document.getElementById('vt_ref')?.value.trim() || null;
+  if(paye>0 && _modeVente==='mobile_money' && !_refVente){
+    notify('Saisis la référence de la transaction YAS','r');
+    document.getElementById('vt_ref')?.focus();
+    return;
+  }
+  if(paye>0 && !sansCaisse){
+    if(!GP_CAISSES_VENTE.length) await chargerCaissesVente();
+    // On ne bloque que si la liste est bien chargée : une liste vide peut venir
+    // d'un souci réseau, et la vente ne doit jamais échouer pour ça.
+    if(GP_CAISSES_VENTE.length && !caisseVentePour(_modeVente)){
+      notify(`Aucune caisse ${_modeVente==='mobile_money'?'mobile money':'physique'} sur ce point de vente — crée-la avant d'encaisser`,'r');
+      return;
+    }
+  }
+
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,
     client_id:clientId||null,
@@ -1149,6 +1254,10 @@ async function saveVente(){
     point_vente:pv,
     note:note||null,
     date:dateVente,
+    // Le mode est porté par la VENTE : c'est lui qui permet au rattrapage de
+    // recréditer la bonne caisse, au lieu de retomber sur le tiroir par défaut.
+    mode_paiement:_modeVente,
+    reference_paiement:_refVente,
     saisi_par:GP_USER?.id,
     formule_nom:VT_LIGNES.map(l=>l.formule_nom).join(', '),
     qte_vendue:VT_LIGNES.reduce((s,l)=>s+Number(l.quantite||0),0)||0,
@@ -1203,35 +1312,32 @@ async function saveVente(){
   // caisse physique (ou recollé par une clôture) — le recréditer le doublerait.
   let _caisseVenteOk = !(paye>0) || sansCaisse;
   if(paye>0 && !sansCaisse){
+    // La caisse vient du MODE choisi par la secrétaire, plus d'une devinette.
+    // L'ancienne cascade utilisait `.eq('point_vente',pv).maybeSingle()` — qui ÉCHOUE
+    // dès qu'un PDV a plusieurs caisses (Production en a trois) — puis retombait sur
+    // `type='physique'`. Résultat : tout atterrissait dans le tiroir, y compris le YAS.
     let caisseTarget = null;
-    if(pv){
-      const{data:cPdv}=await SB.from('gp_caisses').select('id,nom')
-        .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
-        .eq('point_vente',pv).maybeSingle();
-      if(cPdv) caisseTarget = cPdv;
+    if(_modeVente && Array.isArray(GP_CAISSES_VENTE) && GP_CAISSES_VENTE.length){
+      const c = caisseVentePour(_modeVente);
+      if(c) caisseTarget = {id:c.id, nom:c.nom};
     }
+    // Repli : liste non chargée (vente hors formulaire, import…) → on relit la base
+    // en ciblant le TYPE voulu, et on n'accepte qu'un résultat unique par PDV.
     if(!caisseTarget){
-      // Le siege s'ecrit 'Production' depuis que toutes les caisses ont un proprietaire.
-      // Ne chercher que `point_vente IS NULL` faisait tomber les ventes dans la premiere
-      // caisse orpheline venue : 379 456 F y ont ete encaisses a tort du 24/08 au 03/09.
-      const{data:cSiege}=await SB.from('gp_caisses').select('id,nom')
-        .eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique')
-        .or('point_vente.eq.Production,point_vente.is.null')
-        .order('point_vente',{nullsFirst:false}).limit(1).maybeSingle();
-      if(cSiege) caisseTarget = cSiege;
-    }
-    if(!caisseTarget){
-      const{data:cAny}=await SB.from('gp_caisses').select('id,nom')
+      const veut = _modeVente==='mobile_money' ? 'mobile_money' : 'physique';
+      const{data:cs}=await SB.from('gp_caisses').select('id,nom')
         .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
-        .eq('type','physique').limit(1).maybeSingle();
-      if(cAny) caisseTarget = cAny;
+        .eq('point_vente',pv||'Production').eq('type',veut).limit(1);
+      if(cs&&cs.length) caisseTarget = cs[0];
     }
     if(caisseTarget){
       const{error:eCa}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
         type:'entree', categorie:'vente',
         montant:paye, date_mouvement:dateVente,
-        description:'Vente '+vente.id.slice(0,8),
+        description:'Vente '+vente.id.slice(0,8)
+          + (_modeVente==='mobile_money' ? ' (MIX BY YAS)' : ''),
+        reference:_refVente,
         vente_id:vente.id,
         enregistre_par:GP_USER?.id,
         enregistre_par_nom:GP_USER?.email?.split('@')[0]
@@ -1452,6 +1558,11 @@ async function saveVente(){
   // elle créditerait la caisse d'une monnaie que le client suivant a bien reprise.
   const _chkML=document.getElementById('vt_monnaie_laissee'); if(_chkML) _chkML.checked=false;
   const _rowML=document.getElementById('vt-monnaie-laissee-row'); if(_rowML) _rowML.style.display='none';
+  // Le mode revient à « espèces » et la référence se vide : sans ça, la vente
+  // suivante hériterait du mode et de la référence YAS de la précédente.
+  const _refEl=document.getElementById('vt_ref'); if(_refEl) _refEl.value='';
+  const _modeRow=document.getElementById('vt-mode-row'); if(_modeRow) _modeRow.style.display='none';
+  if(typeof setModeVente==='function') setModeVente('especes');
   // La date repasse à aujourd'hui : une session de rattrapage ne doit pas
   // continuer à dater les ventes suivantes dans le passé sans qu'on le veuille.
   if(typeof vtResetDate==='function') vtResetDate();
@@ -2987,6 +3098,12 @@ async function ouvrirPaiementVente(id){
   document.getElementById('pmv-reste').textContent=fmt(Math.max(0,total-paye))+' F';
   document.getElementById('pmv-montant').value='';
   document.getElementById('pmv-err').textContent='';
+  // Le PDV de la vente pilote la caisse proposée, pas celui du membre connecté.
+  window._pmvPdv = v.point_vente || 'Production';
+  const _mSel=document.getElementById('pmv-mode'); if(_mSel) _mSel.value='especes';
+  const _rEl=document.getElementById('pmv-ref'); if(_rEl) _rEl.value='';
+  if(!GP_CAISSES_VENTE.length) await chargerCaissesVente();
+  onPmvModeChange();
   document.getElementById('modal-paiement-vente').style.display='flex';
 }
 
@@ -2994,13 +3111,46 @@ function fermerPaiementVente(){
   document.getElementById('modal-paiement-vente').style.display='none';
 }
 
+// Règlement de dette : la référence n'est demandée qu'en mobile money, et on
+// annonce la caisse créditée AVANT de valider.
+function onPmvModeChange(){
+  const mode=document.getElementById('pmv-mode')?.value||'especes';
+  const row=document.getElementById('pmv-ref-row');
+  if(row) row.style.display = mode==='mobile_money' ? '' : 'none';
+  const lbl=document.getElementById('pmv-caisse-label');
+  if(!lbl) return;
+  const pdv=window._pmvPdv||GP_POINT_VENTE||'Production';
+  const veut=mode==='mobile_money'?'mobile_money':'physique';
+  const c=(GP_CAISSES_VENTE||[]).find(x=>(x.point_vente||'Production')===pdv && x.type===veut);
+  if(!c){
+    lbl.style.cssText='font-size:10.5px;margin-top:4px;color:var(--red)';
+    lbl.innerHTML=`⚠ Aucune caisse ${mode==='mobile_money'?'mobile money':'physique'} sur ${pdv}`;
+    return;
+  }
+  if(mode==='mobile_money'){
+    lbl.style.cssText='font-size:11px;margin-top:6px;padding:7px 9px;border-radius:7px;'
+      +'background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.45);color:var(--text)';
+    lbl.innerHTML=`📱 Encaissé sur <b>${c.nom}</b> — <b>rien dans le tiroir</b>`;
+    if(typeof notify==='function') notify(`📱 Ce règlement ira sur ${c.nom}, pas dans le tiroir`,'gold');
+  } else {
+    lbl.style.cssText='font-size:10.5px;margin-top:4px;color:var(--textm)';
+    lbl.innerHTML=`→ Caisse créditée : <b style="color:var(--g6)">${c.nom}</b>`;
+  }
+}
+
 async function savePaiementVente(){
   const id=document.getElementById('pmv-vente-id').value;
   const montant=+document.getElementById('pmv-montant').value||0;
   const mode=document.getElementById('pmv-mode').value||'especes';
+  const ref=document.getElementById('pmv-ref')?.value.trim()||null;
   const err=document.getElementById('pmv-err');
   if(!id){err.textContent='Vente introuvable.';return;}
   if(montant<=0){err.textContent='Entrez le montant encaissé.';return;}
+  if(mode==='mobile_money' && !ref){
+    err.textContent='Saisis la référence de la transaction YAS.';
+    document.getElementById('pmv-ref')?.focus();
+    return;
+  }
   const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye,point_vente').eq('id',id).maybeSingle();
   if(!v){err.textContent='Vente introuvable.';return;}
   const total=Number(v.montant_total||0);
@@ -3009,22 +3159,39 @@ async function savePaiementVente(){
   const montantApplique=Math.min(montant,reste);
   const nouveauPaye=Number(v.montant_paye||0)+montantApplique;
   const statut=nouveauPaye>=total?'paye':'partiel';
+
+  // La caisse est résolue AVANT d'écrire la vente : si elle manque, on refuse tout.
+  // Sinon on aurait une vente marquée payée et un argent nulle part — ou pire,
+  // un encaissement YAS reversé dans le tiroir par un repli silencieux.
+  const veut = mode==='mobile_money' ? 'mobile_money' : 'physique';
+  const pvV  = v.point_vente || 'Production';
+  const{data:cs}=await SB.from('gp_caisses').select('id,nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true)
+    .eq('point_vente',pvV).eq('type',veut).limit(1);
+  const caisse = cs?.[0] || null;
+  if(!caisse){
+    err.textContent=`Aucune caisse ${veut==='mobile_money'?'mobile money':'physique'} sur ${pvV} — crée-la avant d'encaisser.`;
+    return;
+  }
+
   const{error}=await SB.from('gp_ventes').update({
     montant_paye:nouveauPaye,statut_paiement:statut
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){err.textContent='Erreur: '+error.message;return;}
-  // Mouvement de caisse (entrée) — le solde encaissé entre en caisse du PDV
+  // Mouvement de caisse (entrée) — la caisse vient du MODE, pas d'une devinette.
+  // Avant : `.eq('point_vente',pv).maybeSingle()` échouait dès qu'un PDV avait
+  // plusieurs caisses, le rattrapage refaisait la même requête, et l'argent
+  // finissait dans le tiroir de Production quel que soit le PDV réel.
   let _encOk=false;
   try{
-    const modeLabel={especes:'Espèces',mobile_money:'Mobile Money',virement:'Virement',cheque:'Chèque'}[mode]||mode;
-    const{data:caisse}=await SB.from('gp_caisses').select('id')
-      .eq('admin_id',GP_ADMIN_ID).eq('point_vente',v.point_vente||'').maybeSingle();
-    if(caisse){
+    const modeLabel={especes:'Espèces',mobile_money:'MIX BY YAS'}[mode]||mode;
+    {
       const{error:eE}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID,caisse_id:caisse.id,
         type:'entree',categorie:'vente',
         montant:montantApplique,date_mouvement:today(),
         description:'Solde vente '+id.slice(0,8)+' ('+modeLabel+')',
+        reference:ref,
         vente_id:id,
         enregistre_par:GP_USER?.id,
         enregistre_par_nom:GP_USER?.email?.split('@')[0]
@@ -3191,12 +3358,27 @@ async function _crediterCaisseVenteDeficit(v){
   const dejaCredit=(mvts||[]).reduce((s,m)=>s+Number(m.montant||0),0);
   const deficit = paye - dejaCredit;
   if(deficit<=0.01) return false; // déjà équilibré
-  const pv=v.point_vente||null;
-  let caisseId=null;
-  if(pv){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('point_vente',pv).maybeSingle(); caisseId=c?.id||null; }
-  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').or('point_vente.eq.Production,point_vente.is.null').order('point_vente',{nullsFirst:false}).limit(1).maybeSingle(); caisseId=c?.id||null; }
-  if(!caisseId){ const{data:c}=await SB.from('gp_caisses').select('id').eq('admin_id',v.admin_id).eq('actif',true).eq('type','physique').limit(1).maybeSingle(); caisseId=c?.id||null; }
-  if(!caisseId) throw new Error('Aucune caisse pour créditer la vente');
+  // La caisse se déduit du MODE enregistré sur la vente, pas du premier tiroir venu.
+  // L'ancienne cascade employait `.eq('point_vente',pv).maybeSingle()`, qui échoue dès
+  // qu'un PDV a plusieurs caisses, puis retombait sur `type='physique'` : un règlement
+  // encaissé par YAS à Lomé Sanguéra finissait crédité à Caisse Production.
+  const pv   = v.point_vente || 'Production';
+  const veut = v.mode_paiement === 'mobile_money' ? 'mobile_money' : 'physique';
+  let caisseId = null;
+  {
+    const{data:c}=await SB.from('gp_caisses').select('id')
+      .eq('admin_id',v.admin_id).eq('actif',true)
+      .eq('point_vente',pv).eq('type',veut).limit(1);
+    caisseId = c?.[0]?.id || null;
+  }
+  // Repli pour les ventes antérieures au champ `mode_paiement` : le tiroir du PDV.
+  if(!caisseId){
+    const{data:c}=await SB.from('gp_caisses').select('id')
+      .eq('admin_id',v.admin_id).eq('actif',true)
+      .eq('point_vente',pv).eq('type','physique').limit(1);
+    caisseId = c?.[0]?.id || null;
+  }
+  if(!caisseId) throw new Error('Aucune caisse '+veut+' pour le point de vente '+pv);
   const{error}=await SB.from('gp_mouvements_caisse').insert({
     admin_id:v.admin_id, caisse_id:caisseId, type:'entree', categorie:'vente',
     montant:deficit, date_mouvement:v.date||today(),
@@ -3214,7 +3396,7 @@ async function synchroniserCaisseVentes(){
   if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
   _syncCaisseVEnCours=true;
   try{
-    const{data:vs}=await SB.from('gp_ventes').select('id,admin_id,point_vente,montant_paye,date,saisi_par')
+    const{data:vs}=await SB.from('gp_ventes').select('id,admin_id,point_vente,montant_paye,date,saisi_par,mode_paiement')
       .eq('admin_id',GP_ADMIN_ID).eq('caisse_creditee',false).is('deleted_at',null)
       .gt('montant_paye',0).order('date',{ascending:true}).limit(100);
     if(!vs || !vs.length) return;
