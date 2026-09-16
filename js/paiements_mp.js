@@ -170,14 +170,29 @@ function fermerModalPaiement(){
   PROVENDA_WA_URL='';
 }
 
+// ⚠️ UN SEUL ENREGISTREMENT À LA FOIS.
+// Un double clic (ou Entrée + clic) lançait deux sauvegardes en parallèle :
+// deux paiements, deux sorties de caisse. Six achats payés en double ont été
+// trouvés ainsi le 16/09 (~1,9 M), tous invisibles sur leur carte. Le verrou
+// couvre tous les chemins de sortie de la sauvegarde, erreurs comprises.
+let _pmtEnCours = false;
 async function saveModalPaiement(){
+  if(_pmtEnCours) return;
+  _pmtEnCours = true;
+  // Le bouton n'a pas d'identifiant : on le retrouve par son action.
+  const btn = document.querySelector('[onclick="saveModalPaiement()"]');
+  if(btn) btn.disabled = true;
+  try { await _saveModalPaiement(); }
+  finally { _pmtEnCours = false; if(btn) btn.disabled = false; }
+}
+
+async function _saveModalPaiement(){
   if(typeof peutPayerMP==='function' && !(await peutPayerMP())){
     notify('Paiement réservé à la Production et au PDV principal.','r');
     return;
   }
   const achatId=document.getElementById('pmt-modal-achat-id').value;
   const montantTotal=+document.getElementById('pmt-modal-total').value;
-  const montantPaye=+document.getElementById('pmt-modal-paye').value;
   const montant=+document.getElementById('pmt-modal-montant').value||0;
   const mode=document.getElementById('pmt-modal-mode').value||'especes';
   const date=document.getElementById('pmt-modal-date').value||today();
@@ -185,7 +200,19 @@ async function saveModalPaiement(){
   const err=document.getElementById('pmt-modal-err');
 
   if(!montant||montant<=0){err.textContent='Entrez un montant valide.';return;}
-  if(montant>montantTotal-montantPaye){err.textContent='Montant supérieur au reste dû.';return;}
+  // ⚠️ Total et déjà-payé relus en BASE. Les valeurs de la fenêtre datent de
+  // son ouverture : un paiement enregistré entre-temps (autre poste, double
+  // clic) n'y figure pas, et le contrôle laissait passer un dépassement.
+  const{data:_ach,error:_eA}=await SB.from('gp_achats').select('montant_total').eq('id',achatId).maybeSingle();
+  const{data:_avant,error:_eP}=await SB.from('gp_achats_paiements').select('montant').eq('achat_id',achatId);
+  if(_eA||_eP){err.textContent='Erreur : '+(_eA||_eP).message;return;}
+  const totalBase = Number(_ach?.montant_total) || montantTotal;
+  const payeBase  = (_avant||[]).reduce((s,p)=>s+Number(p.montant||0),0);
+  // Tolérance d'un demi-franc : les montants portent des centimes.
+  if(montant > totalBase - payeBase + 0.5){
+    err.textContent=`Montant supérieur au reste dû (${fmt(Math.max(0,Math.round(totalBase-payeBase)))} F).`;
+    return;
+  }
 
   // Garde-fou : on ne peut payer que depuis SA propre caisse. On VOIT les autres caisses,
   // mais si on en sélectionne une qui n'est pas la sienne → refus + notification.
@@ -202,9 +229,6 @@ async function saveModalPaiement(){
     }
   }
 
-  const nouveauPaye=montantPaye+montant;
-  const reste=montantTotal-nouveauPaye;
-
   // Enregistrer paiement (on capture son id pour le rattrapage caisse)
   const{data:paie,error}=await SB.from('gp_achats_paiements').insert({
     achat_id:achatId,admin_id:GP_ADMIN_ID,
@@ -212,6 +236,13 @@ async function saveModalPaiement(){
     enregistre_par:GP_USER?.id,enregistre_par_nom:GP_USER?.email?.split('@')[0]
   }).select().maybeSingle();
   if(error){err.textContent='Erreur: '+error.message;return;}
+
+  // ⚠️ Le payé est la SOMME DES PAIEMENTS EN BASE, jamais « ancien + montant ».
+  // Avec l'ancien calcul, deux enregistrements écrivaient la même valeur : la
+  // carte affichait « Soldé 100 % » pendant que la base contenait le double.
+  const{data:_apres}=await SB.from('gp_achats_paiements').select('montant').eq('achat_id',achatId);
+  const nouveauPaye=Math.round((_apres||[]).reduce((s,p)=>s+Number(p.montant||0),0)*100)/100;
+  const reste=Math.round((totalBase-nouveauPaye)*100)/100;
 
   await SB.from('gp_achats').update({
     montant_paye:nouveauPaye,statut_paiement:reste<=0?'solde':'partiel'
@@ -376,9 +407,22 @@ async function synchroniserCaissePaiementsMP(){
   if(typeof GP_ADMIN_ID==='undefined' || !GP_ADMIN_ID) return;
   _syncPaieMPEnCours=true;
   try{
-    const{data:ps}=await SB.from('gp_achats_paiements').select('*')
-      .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false)
+    // ⚠️ On laisse deux minutes au paiement direct. Il crée la ligne « caisse
+    // non débitée » PUIS débite la caisse : sans ce délai, le rattrapage pouvait
+    // réserver la ligne entre les deux et débiter une seconde fois. Un débit
+    // réellement échoué reste rattrapé, simplement deux minutes plus tard.
+    const _seuil = new Date(Date.now() - 2*60*1000).toISOString();
+    let _r = await SB.from('gp_achats_paiements').select('*')
+      .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false).lt('created_at',_seuil)
       .order('date_paiement',{ascending:true}).limit(100);
+    // Si la colonne created_at n'existe pas sur cette base, la requête échoue :
+    // on retombe sur l'ancien filtre plutôt que de ne plus rien rattraper du tout.
+    if(_r.error){
+      _r = await SB.from('gp_achats_paiements').select('*')
+        .eq('admin_id',GP_ADMIN_ID).eq('caisse_debitee',false)
+        .order('date_paiement',{ascending:true}).limit(100);
+    }
+    const ps = _r.data;
     if(!ps || !ps.length) return;
     let n=0;
     for(const p of ps){
