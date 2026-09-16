@@ -349,27 +349,15 @@ async function reglerCommissions(pv){
   const p=_COMM_DETAIL[pv];
   if(!p || p.due<=0){ notify('Rien à régler pour ce PDV','r'); return; }
   const label = pv==='—'?'Production':pv;
-  if(!confirm(`Régler ${fmt(p.due)} F de commission à « ${label} » ?\n\nUn mouvement de caisse (sortie) sera créé, et les commissions concernées passeront en « réglée ».`)) return;
-
-  // 1) Sortie de caisse depuis une caisse du siège (Production) — le siège paie la commission.
-  try{
-    // Le siège s'appelle 'Production' : la recherche `point_vente IS NULL` ne trouvait
-    // jamais sa caisse, et chaque commission partait sans sortie de caisse.
-    const cSiege=await caisseDuPdv('Production','physique');
-    const caisseId=cSiege?.id;
-    if(caisseId){
-      const{error:eM}=await SB.from('gp_mouvements_caisse').insert({
-        admin_id:GP_ADMIN_ID, caisse_id:caisseId,
-        type:'sortie', categorie:'commission_pdv',
-        montant:p.due, date_mouvement:today(),
-        description:`Commission versée à ${label}`,
-        enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
-      });
-      if(eM) notify(`⚠ ${cSiege.nom} a refusé la sortie (${eM.message}) — commissions marquées réglées sans mouvement de caisse`,'r');
-    } else {
-      notify('⚠ Aucune caisse physique Production — commissions marquées réglées sans mouvement de caisse','r');
-    }
-  }catch(e){ notify('⚠ Caisse Production illisible — commissions marquées réglées sans mouvement de caisse','r'); }
+  // « Régler » ne touche AUCUNE caisse (règle confirmée par l'owner le 16/09/2026) : c'est le
+  // point de vente qui encaisse les ventes et garde sa commission sur ce qu'il reverse, et une
+  // personne (👤) est payée avec son salaire. Cet argent ne passe jamais par Caisse Production :
+  // une sortie de caisse ici le compterait une seconde fois. Régler = marquer réglé.
+  if(!confirm(`Régler ${fmt(p.due)} F de commission à « ${label} » ?\n\n`
+    + (p.personne
+        ? `Payée avec le salaire : aucun mouvement de caisse.`
+        : `Le point de vente garde sa commission sur son reversement : aucun mouvement de caisse.`)
+    + `\nLes commissions concernées passeront en « réglée ».`)) return;
 
   // 2) Marquer les commissions dues de ce PDV comme réglées
   const ids=(p.lignes||[]).filter(c=>c.statut!=='regle').map(c=>c.id);
@@ -378,7 +366,7 @@ async function reglerCommissions(pv){
       .in('id',ids).eq('admin_id',GP_ADMIN_ID);
     if(error){ notify('Erreur règlement : '+error.message,'r'); return; }
   }
-  notify(`✅ ${fmt(p.due)} F de commission réglés à ${label}`,'gold');
+  notify(`✅ ${fmt(p.due)} F de commission réglés à ${label}`+(p.personne?' — avec le salaire':' — gardés sur son reversement'),'gold');
   renderCommissions();
 }
 
