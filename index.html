@@ -3486,14 +3486,14 @@ try{
 <script src="js/matieres.js?v=2.30.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
-<script src="js/ventes.js?v=2.29.2"></script>
-<script src="js/clients.js?v=2.27.0"></script>
+<script src="js/ventes.js?v=2.29.3"></script>
+<script src="js/clients.js?v=2.27.2"></script>
 <script src="js/admin.js?v=2.30.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.30.7"></script>
-<script src="js/caisse_extras.js?v=2.28.1"></script>
-<script src="js/corbeille.js?v=2.26.1"></script>
+<script src="js/caisse_extras.js?v=2.28.2"></script>
+<script src="js/corbeille.js?v=2.26.2"></script>
 <script src="js/dashboard_drill.js?v=2.27.0"></script>
 <script src="js/fournisseurs.js?v=2.26.1"></script>
 <script src="js/achats.js?v=2.26.1"></script>
@@ -3508,7 +3508,7 @@ try{
 <script src="js/notifications.js?v=2.26.1"></script>
 <script src="js/qr_clients.js?v=2.26.1"></script>
 <script src="js/push.js?v=2.26.1"></script>
-<script src="js/reversements.js?v=2.26.1"></script>
+<script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.26.1"></script>
 <script src="js/stock_pf.js?v=2.26.1"></script>
 <script src="js/veto.js?v=2.26.1"></script>
@@ -3526,7 +3526,7 @@ try{
 <script src="js/reappro.js?v=2.26.1"></script>
 <script src="js/ia.js?v=2.26.1"></script>
 <script src="js/marketing.js?v=2.26.1"></script>
-<script src="js/commissions.js?v=2.27.0"></script>
+<script src="js/commissions.js?v=2.27.1"></script>
 <script src="js/emprunts.js?v=2.28.0"></script>
 <script src="js/nutrition.js?v=2.31.0"></script>
 <script src="js/prixvente.js?v=1.1.0"></script>
@@ -3910,25 +3910,6 @@ function installPWA(){
   </div>
 </div>
 
-<!-- MODAL PAYER DETTE CLIENT -->
-<div id="modal-payer-dette" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerPayerDette()">
-  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:400px;padding:24px">
-    <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;margin-bottom:4px">💳 Payer une dette</div>
-    <div style="font-size:14px;font-weight:600;color:var(--g6);margin-bottom:4px" id="dette-client-nom"></div>
-    <div style="font-size:12px;color:var(--red);margin-bottom:14px">Total dû : <strong id="dette-montant-du"></strong></div>
-    <input type="hidden" id="dette-client-id">
-    <input type="hidden" id="dette-montant-total">
-    <div class="fr"><label>Montant à payer (FCFA)</label>
-      <input type="number" id="dette-montant-input" placeholder="0" style="font-size:16px;font-weight:700">
-    </div>
-    <div class="a-err" id="dette-err"></div>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button onclick="savePayerDette()" class="btn btn-g" style="flex:1;justify-content:center;min-height:44px">✓ Confirmer le paiement</button>
-      <button onclick="fermerPayerDette()" class="btn btn-out" style="padding:0 16px">Annuler</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL MODIFIER VENTE -->
 <div id="modal-modifier-vente" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModifierVente()">
   <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px">
@@ -3939,6 +3920,7 @@ function installPWA(){
     <div class="fr"><label>Date</label><input type="date" id="mv-date"></div>
     <div class="fr"><label>Montant payé (FCFA)</label>
       <input type="number" id="mv-paye" placeholder="0" style="font-size:16px;font-weight:700">
+      <div style="font-size:9px;color:var(--textm);margin-top:2px">Augmenter ce montant ouvre l'encaissement, avec le choix de la caisse.</div>
     </div>
     <div class="fr"><label>Note</label><input type="text" id="mv-note" placeholder="Note..."></div>
     <div style="display:flex;gap:8px;margin-top:10px">

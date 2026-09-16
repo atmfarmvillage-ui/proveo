@@ -353,21 +353,23 @@ async function reglerCommissions(pv){
 
   // 1) Sortie de caisse depuis une caisse du siège (Production) — le siège paie la commission.
   try{
-    const{data:cSiege}=await SB.from('gp_caisses').select('id,nom')
-      .eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle();
+    // Le siège s'appelle 'Production' : la recherche `point_vente IS NULL` ne trouvait
+    // jamais sa caisse, et chaque commission partait sans sortie de caisse.
+    const cSiege=await caisseDuPdv('Production','physique');
     const caisseId=cSiege?.id;
     if(caisseId){
-      await SB.from('gp_mouvements_caisse').insert({
+      const{error:eM}=await SB.from('gp_mouvements_caisse').insert({
         admin_id:GP_ADMIN_ID, caisse_id:caisseId,
         type:'sortie', categorie:'commission_pdv',
         montant:p.due, date_mouvement:today(),
         description:`Commission versée à ${label}`,
         enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
       });
+      if(eM) notify(`⚠ ${cSiege.nom} a refusé la sortie (${eM.message}) — commissions marquées réglées sans mouvement de caisse`,'r');
     } else {
-      notify('⚠ Aucune caisse Production trouvée — commissions marquées réglées sans mouvement de caisse','gold');
+      notify('⚠ Aucune caisse physique Production — commissions marquées réglées sans mouvement de caisse','r');
     }
-  }catch(e){ /* le mouvement de caisse n'est pas bloquant pour le marquage */ }
+  }catch(e){ notify('⚠ Caisse Production illisible — commissions marquées réglées sans mouvement de caisse','r'); }
 
   // 2) Marquer les commissions dues de ce PDV comme réglées
   const ids=(p.lignes||[]).filter(c=>c.statut!=='regle').map(c=>c.id);
