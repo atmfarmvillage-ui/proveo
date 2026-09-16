@@ -176,9 +176,28 @@ async function saveFusion(){
   const dNom=GP_CLIENTS.find(c=>c.id===doublon)?.nom||'?';
   if(!confirm(`Fusionner « ${dNom} » dans « ${gNom} » ?\n\nToutes les ventes/relances du doublon iront sur la fiche gardée, le n° manquant sera récupéré, et le doublon sera supprimé.\nIrréversible.`)) return;
   err.textContent='Fusion…';
+  // La fonction de base fusionner_clients déplace les ventes mais PAS les paiements du
+  // relevé. À la suppression du doublon, la clé étrangère (ON DELETE SET NULL) les
+  // laissait sans client : ils sortaient du relevé de la fiche gardée (23 paiements,
+  // 906 039 F retrouvés le 16/09/2026). On les déplace donc AVANT, et on les remet si
+  // la fusion échoue.
+  const{data:regs,error:eL}=await SB.from('gp_reglements_clients').select('id')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',doublon);
+  if(eL){ err.textContent='Erreur (relevé) : '+eL.message+'. Rien n\'a été fusionné.'; return; }
+  const idsReg=(regs||[]).map(r=>r.id);
+  if(idsReg.length){
+    const{error:eM}=await SB.from('gp_reglements_clients').update({client_id:garde}).in('id',idsReg);
+    if(eM){ err.textContent='Erreur (relevé) : '+eM.message+'. Rien n\'a été fusionné.'; return; }
+  }
   const{data,error}=await SB.rpc('fusionner_clients',{p_garde:garde,p_doublon:doublon});
-  if(error){ err.textContent='Erreur: '+error.message; return; }
-  if(data&&data.error){ err.textContent='⚠ '+data.error; return; }
+  const echec = error ? 'Erreur: '+error.message : (data&&data.error ? '⚠ '+data.error : null);
+  if(echec){
+    if(idsReg.length){
+      const{error:eB}=await SB.from('gp_reglements_clients').update({client_id:doublon}).in('id',idsReg);
+      if(eB){ err.textContent=echec+' — et '+idsReg.length+' paiement(s) du relevé sont restés sur « '+gNom+' » : préviens l\'admin.'; return; }
+    }
+    err.textContent=echec; return;
+  }
   closeFusion();
   GP_CLIENT_STATS=null;
   await loadClients(); populateSelects(); renderClients();
