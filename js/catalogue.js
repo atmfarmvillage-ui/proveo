@@ -129,7 +129,10 @@ function catRegrouper(lignes) {
 
 async function catChargerMP() {
   const r = await SB.from('gp_ingredients')
-    .select('nom,prix_actuel,unite,actif')
+    // ⚠️ LES PRIX DE VENTE, PAS `prix_actuel`. Ce dernier est le prix
+    // d'ACHAT, réécrit à chaque réception de marchandise : l'imprimer sur un
+    // document client revient à afficher sa marge en boutique.
+    .select('nom,prix_vente_kg,prix_vente_sac,poids_sac_kg,unite,actif')
     // ⚠️ `gp_ingredients` porte un admin_id (admin.js:274 filtre dessus). Sans
     // ce scope on s'en remettait à la RLS seule — et on vient de voir, avec les
     // caisses, ce que vaut « la base filtrera bien » quand personne ne le
@@ -137,7 +140,14 @@ async function catChargerMP() {
     .eq('admin_id', GP_ADMIN_ID)
     .eq('actif', true).order('nom');
   if (r.error) throw r.error;
-  return (r.data || []).filter(i => Number(i.prix_actuel) > 0);
+  // Un prix au sac sans poids n'est pas interprétable : on ne saurait ni le
+  // ramener au kilo, ni dire à quel conditionnement il donne droit.
+  return (r.data || []).map(i => ({
+    nom: i.nom,
+    kg: Number(i.prix_vente_kg) || 0,
+    sac: Number(i.prix_vente_sac) || 0,
+    poids: Number(i.poids_sac_kg) || 0,
+  })).filter(i => i.kg > 0 || (i.sac > 0 && i.poids > 0));
 }
 
 // ── Rendu d'un bloc espèce ────────────────────────────────────────────────
@@ -305,30 +315,34 @@ async function catalogueAliments() {
 }
 
 // ── Catalogue MATIÈRES PREMIÈRES ──────────────────────────────────────────
-// Un seul prix ici (gp_ingredients.prix_actuel), pas deux : c'est le prix de
-// reprise, celui qu'on annonce au fournisseur.
+// Deux prix : au SAC et au KILO — les matières se vendent des deux façons.
+// Le poids du sac varie (maïs 50 kg, prémix 25) : il s'affiche sur la ligne,
+// jamais en en-tête, annoncer un poids unique serait faux.
 async function catalogueMP() {
   try {
     notify('Préparation du catalogue…', 'gold');
     const mp = await catChargerMP();
-    if (!mp.length) { notify('Aucune matière première avec un prix.', 'r'); return; }
+    if (!mp.length) {
+      notify("Aucune matière première n'a de prix de VENTE. Fixe-les avec le bouton 💰 dans 🌾 Matières Premières.", 'r', 8000);
+      return;
+    }
 
     const moitie = Math.ceil(mp.length / 2);
     const colonne = (liste) => `
       <div class="bloc">
         <table>
-          <tr class="ent"><td class="poids"></td><td class="col">PRIX</td><td class="col">UNITÉ</td></tr>
+          <tr class="ent"><td class="poids"></td><td class="col">LE SAC</td><td class="col">AU KILO</td></tr>
           ${liste.map(i => `
             <tr>
-              <td class="nom">${catEsc(i.nom)}</td>
-              <td class="val">${catPrix(i.prix_actuel)}</td>
-              <td class="val">${catEsc(i.unite || 'kg')}</td>
+              <td class="nom">${catEsc(i.nom)}${i.sac > 0 && i.poids > 0 ? ` <span class="pds">sac ${i.poids} kg</span>` : ''}</td>
+              <td class="val">${i.sac > 0 && i.poids > 0 ? catPrix(i.sac) : '-'}</td>
+              <td class="val">${catPrix(i.kg)}</td>
             </tr>`).join('')}
         </table>
       </div>`;
 
     catOuvrir('Catalogue des prix — Matières premières', `
-      <div class="bandeau" style="margin-bottom:10px">MATIÈRES PREMIÈRES — PRIX DE REPRISE</div>
+      <div class="bandeau" style="margin-bottom:10px">MATIÈRES PREMIÈRES — PRIX DE VENTE</div>
       <div class="grille">${colonne(mp.slice(0, moitie))}${colonne(mp.slice(moitie))}</div>
       ${catPied()}`);
   } catch (e) {
