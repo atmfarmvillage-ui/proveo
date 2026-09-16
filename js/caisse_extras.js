@@ -133,6 +133,55 @@ if(typeof window._saveDepOriginal === 'undefined' && typeof saveDep === 'functio
   window._saveDepOriginal = saveDep;
 }
 
+// ── UN MOUVEMENT D'ARGENT N'EST PAS UNE DÉPENSE ────────────────
+// Le 12/09/2026, le relevé du compte COFINA a été recopié en dépenses du tiroir de Lomé
+// Sanguéra : retraits, dépôt de garantie. 11,8 M comptés comme sortis alors que l'argent avait
+// seulement changé de place → tiroir à −9,3 M et bénéfice faussé d'autant.
+// Provéo ne peut pas deviner l'intention, mais il reconnaît les mots et prévient — sans
+// bloquer : les FRAIS d'un retrait, eux, sont une vraie dépense.
+function _depMouvementArgent(desc){
+  const t = String(desc||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  if(/\b(frais|agios?)\b/.test(t)) return null;
+  if(/\bcautions?\b/.test(t) || /\bdepots?\s+(de\s+)?garanties?\b/.test(t)) return 'garantie';
+  if(/\bretraits?\b/.test(t)) return 'retrait';
+  // « dépôt » désigne aussi un entrepôt (« loyer dépôt ») : on ne réagit que s'il s'agit d'argent.
+  if(/\b(depots?|versements?)\b/.test(t)
+     && /\b(banque|bancaire|cofina|fececav|compte|yas|mobile|especes|argent)\b/.test(t)) return 'depot';
+  return null;
+}
+
+const _DEP_ALERTES = {
+  retrait: {
+    titre: 'Un retrait n\'est pas une dépense',
+    texte: 'L\'argent passe d\'un compte au tiroir, il ne disparaît pas.',
+    faire: 'Si le compte est dans Provéo (FECECAV, MIX BY YAS…) : <b>⇄ Transfert</b> vers le tiroir. '
+         + 'Sinon : <b>➕ Entrée → « 💵 Retrait banque »</b> — et seulement si cet argent n\'a pas déjà été '
+         + 'enregistré (un prêt, par exemple).'
+  },
+  depot: {
+    titre: 'Un dépôt ou un versement sur un compte n\'est pas une dépense',
+    texte: 'L\'argent passe du tiroir au compte, il ne disparaît pas.',
+    faire: 'Si le compte est dans Provéo (FECECAV, MIX BY YAS…) : <b>⇄ Transfert</b> depuis le tiroir. '
+         + 'Sinon : <b>➖ Sortie → « 🏦 Dépôt banque »</b>.'
+  },
+  garantie: {
+    titre: 'Une caution ou un dépôt de garantie n\'est pas une dépense',
+    texte: 'C\'est de l\'argent bloqué, qui vous sera rendu : ce n\'est pas une charge.',
+    faire: 'S\'il sort du tiroir : <b>➖ Sortie</b> sur la caisse, catégorie « Autre ».'
+  }
+};
+
+// Alerte en direct sous la description, pendant la saisie.
+function onDepDescInput(){
+  const el = document.getElementById('dep-desc-alerte');
+  if(!el) return;
+  const a = _DEP_ALERTES[_depMouvementArgent(document.getElementById('dep_desc')?.value)];
+  if(!a){ el.style.display='none'; el.innerHTML=''; return; }
+  el.innerHTML = `⚠️ <b>${a.titre}.</b> ${a.texte}<br>${a.faire}<br>`
+    + `<span style="color:var(--textm)">Les frais prélevés, eux, sont bien une dépense.</span>`;
+  el.style.display = 'block';
+}
+
 let _savingDep = false;   // verrou anti double-clic / double-soumission
 async function saveDep(){
   if(_savingDep) return;   // une sauvegarde est déjà en cours → on ignore le second clic
@@ -146,6 +195,11 @@ async function saveDep(){
     const date = document.getElementById('dep_date')?.value;
     const err = document.getElementById('dep_err');
     if(!desc || !montant || !date){ err.textContent = 'Description, montant et date requis.'; if(typeof notify==='function') notify('⚠ Description, montant et date requis','r'); return; }
+    // Retrait, dépôt sur un compte, caution : de l'argent qui change de place, pas une dépense.
+    const _alerte = _DEP_ALERTES[_depMouvementArgent(desc)];
+    if(_alerte && !confirm(`⚠️ ${_alerte.titre}.\n\n${_alerte.texte}\n`
+        + _alerte.faire.replace(/<[^>]+>/g,'')
+        + `\n\nEnregistrer quand même « ${desc} » comme DÉPENSE ?`)) return;
     const caisseSel = document.getElementById('dep_caisse_id')?.value || null;
     // La dépense est imputée AU POINT DE VENTE DE LA CAISSE QUI PAIE. Les deux ne peuvent
     // plus diverger : c'est cette divergence qui a fait payer 1 885 200 F de dépenses
@@ -184,6 +238,7 @@ async function saveDep(){
 
     err.textContent = '';
     ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    onDepDescInput();   // efface l'alerte avec la description
 
     // 2. Débit caisse OBLIGATOIRE. Comme les ventes : si ça réussit → caisse_debitee=true.
     //    Si la connexion coupe → reste false → RATTRAPÉ auto au refresh (synchroniserCaisseDepenses).
