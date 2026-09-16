@@ -854,8 +854,16 @@ async function confirmerCadeauStock(clientId, recompenseId){
 
 async function deleteClient(id){
   if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
+  // Une fiche qui a des ventes (corbeille comprise) ne se supprime pas : ses ventes
+  // devenaient orphelines, leur dette sortait de la liste des clients et le relevé ne
+  // pouvait plus rien inscrire pour elles (vente « Kombate » du 18/06/2026).
+  const{count,error:eC}=await SB.from('gp_ventes').select('id',{count:'exact',head:true})
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',id);
+  if(eC){ notify('Vérification des ventes impossible : '+eC.message,'r'); return; }
+  if(count>0){ notify(`Ce client a ${count} vente(s) : il ne peut pas être supprimé. Pour un doublon, utilise « Fusionner ».`,'r'); return; }
   if(!confirm('Supprimer ce client ?'))return;
-  await SB.from('gp_clients').delete().eq('id',id);
+  const{error}=await SB.from('gp_clients').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){ notify('Suppression refusée : '+error.message,'r'); return; }
   await loadClients();populateSelects();renderClients();notify('Client supprimé','r');
 }
 

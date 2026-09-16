@@ -164,7 +164,10 @@ async function restaurerVente(id){
     }
   }
 
-  // 5. Unset deleted_at
+  // 5. Remettre au relevé client les paiements retirés AVEC cette vente (même horodatage),
+  //    puis unset deleted_at
+  await SB.from('gp_reglements_clients').update({deleted_at:null})
+    .eq('admin_id',GP_ADMIN_ID).eq('vente_id',id).eq('deleted_at',vente.deleted_at);
   await SB.from('gp_ventes').update({
     deleted_at: null, deleted_by: null, deleted_by_nom: null
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
