@@ -19,6 +19,20 @@ async function caissesAccessibles(){
   return C.filter(c => c.point_vente === GP_POINT_VENTE);
 }
 
+// ── LA CAISSE D'UN POINT DE VENTE ──────────────────────────────
+// Seule façon sûre de désigner une caisse : (PDV, type). Les anciennes recherches
+// `.eq('point_vente',pv).maybeSingle()` échouaient dès qu'un PDV avait deux caisses
+// (tiroir + MIX BY YAS), puis cherchaient `point_vente IS NULL` (aucune caisse n'est
+// ainsi) et finissaient sur « la première caisse physique venue ». L'argent partait
+// n'importe où, sans erreur. Le siège s'écrit NULL ou 'Production' : les deux valent.
+async function caisseDuPdv(pdv, type){
+  const{data,error}=await SB.from('gp_caisses').select('id,nom,type,point_vente')
+    .eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type',type).order('nom');
+  if(error) throw new Error('caisses illisibles : '+error.message);
+  const cible = pdv || 'Production';
+  return (data||[]).find(c => (c.point_vente||'Production') === cible) || null;
+}
+
 // Remplir un <select> avec les caisses accessibles
 async function remplirSelectCaisses(selectId, optionVide){
   const sel = document.getElementById(selectId);

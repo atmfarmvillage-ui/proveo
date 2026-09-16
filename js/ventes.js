@@ -3213,11 +3213,25 @@ async function saveModifierVente(){
   const paye=+document.getElementById('mv-paye').value||0;
   const note=document.getElementById('mv-note').value.trim()||null;
   const date=document.getElementById('mv-date').value;
-  const{data:v}=await SB.from('gp_ventes').select('montant_total').eq('id',id).maybeSingle();
-  const total=Number(v?.montant_total||0);
-  const statut=paye<=0?'impaye':paye>=total?'paye':'partiel';
+  const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye').eq('id',id).maybeSingle();
+  if(!v){notify('Vente introuvable','r');return;}
+  // Le montant payé ne s'écrit plus ici : ce champ changeait la dette du client sans
+  // toucher à aucune caisse. Un paiement passe par l'encaissement (choix de la caisse) ;
+  // une erreur d'encaissement se corrige en supprimant son mouvement dans la Caisse.
+  const avant=Number(v.montant_paye||0);
+  if(paye>avant){
+    fermerModifierVente();
+    await ouvrirPaiementVente(id);
+    const m=document.getElementById('pmv-montant'); if(m) m.value=paye-avant;
+    notify(`Pour enregistrer ${fmt(paye-avant)} F de plus, choisis la caisse puis encaisse.`,'gold');
+    return;
+  }
+  if(paye<avant){
+    notify("Le payé ne peut pas baisser ici. L'admin supprime l'encaissement dans la Caisse : la vente redevient impayée d'autant.",'r');
+    return;
+  }
   const{error}=await SB.from('gp_ventes').update({
-    montant_paye:paye,statut_paiement:statut,note,date
+    note,date
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){notify('Erreur: '+error.message,'r');return;}
   fermerModifierVente();renderVentes();

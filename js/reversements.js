@@ -72,26 +72,34 @@ async function saveReversement(){
   if(error){err.textContent='Erreur: '+error.message;return;}
 
   // Mouvement caisse : TRANSFERT de la caisse du PDV vers la caisse du siège (débite le PDV, crédite le siège)
-  const{data:cSrc}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').eq('point_vente',pdvNom).limit(1);
-  const{data:cDst}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').is('point_vente',null).limit(1);
-  const _src=cSrc?.[0]?.id, _dst=cDst?.[0]?.id;
+  // La caisse du siège s'appelle 'Production' : `point_vente IS NULL` ne la trouvait
+  // jamais, donc aucun reversement ne bougeait d'argent entre les caisses.
+  let _src=null, _dst=null;
+  try{
+    _src=(await caisseDuPdv(pdvNom,'physique'))?.id||null;
+    _dst=(await caisseDuPdv('Production','physique'))?.id||null;
+  }catch(_){}
+  let eM=null;
   if(_src && _dst){
-    await SB.from('gp_mouvements_caisse').insert({
+    ({error:eM}=await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID,caisse_id:_src,caisse_dest_id:_dst,
       type:'transfert',categorie:'reversement_depot',
       montant,date_mouvement:today(),
       description:`Reversement ${pdvNom} — ${mois}`,
       enregistre_par:GP_USER.id,enregistre_par_nom:GP_USER.email?.split('@')[0]
-    });
+    }));
   } else if(_dst){
-    await SB.from('gp_mouvements_caisse').insert({
+    ({error:eM}=await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID,caisse_id:_dst,
       type:'entree',categorie:'reversement_depot',
       montant,date_mouvement:today(),
       description:`Reversement ${pdvNom} — ${mois}`,
       enregistre_par:GP_USER.id,enregistre_par_nom:GP_USER.email?.split('@')[0]
-    });
+    }));
+  } else {
+    notify('⚠ Reversement enregistré, mais aucune caisse physique Production : aucun mouvement de caisse','r');
   }
+  if(eM) notify(`⚠ Reversement enregistré, mais la caisse a refusé le mouvement : ${eM.message}`,'r');
 
   err.textContent='';
   document.getElementById('rev_montant').value='';

@@ -121,31 +121,28 @@ async function restaurerVente(id){
     }
   }
 
-  // 3. Re-créer le mouvement caisse (avec fallback PDV → siège → any)
+  // 3. Re-créer le mouvement caisse — dans la caisse du MODE de la vente, sur SON PDV.
+  //    Avant : maybeSingle() échouait sur un PDV à deux caisses, puis repli sur « la
+  //    première caisse physique » : une vente YAS restaurée finissait dans un tiroir.
   if(Number(vente.montant_paye)>0){
-    let caisseId = null;
-    if(vente.point_vente){
-      const {data:c} = await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('point_vente',vente.point_vente).maybeSingle();
-      if(c) caisseId = c.id;
-    }
-    if(!caisseId){
-      const {data:c} = await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle();
-      if(c) caisseId = c.id;
-    }
-    if(!caisseId){
-      const {data:c} = await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').limit(1).maybeSingle();
-      if(c) caisseId = c.id;
-    }
-    if(caisseId){
-      await SB.from('gp_mouvements_caisse').insert({
-        admin_id: GP_ADMIN_ID, caisse_id: caisseId,
+    const veut = vente.mode_paiement==='mobile_money' ? 'mobile_money' : 'physique';
+    const pdvC = vente.point_vente || 'Production';
+    let caisse = null;
+    try{ caisse = await caisseDuPdv(pdvC, veut); }catch(_){}
+    if(caisse){
+      const {error:eM} = await SB.from('gp_mouvements_caisse').insert({
+        admin_id: GP_ADMIN_ID, caisse_id: caisse.id,
         type: 'entree', categorie: 'vente',
         montant: vente.montant_paye, date_mouvement: vente.date,
         description: 'Vente '+id.slice(0,8)+' (restaurée)',
+        reference: vente.reference_paiement || null,
         vente_id: id,
         enregistre_par: GP_USER?.id,
         enregistre_par_nom: GP_USER?.email?.split('@')[0]||'admin'
       });
+      if(eM) notify(`⚠ Vente restaurée, mais ${caisse.nom} a refusé les ${fmt(vente.montant_paye)} F : ${eM.message}`,'r');
+    } else {
+      notify(`⚠ Vente restaurée, mais aucune caisse ${veut==='mobile_money'?'MIX BY YAS':'physique'} sur ${pdvC} : ${fmt(vente.montant_paye)} F à reporter à la main`,'r');
     }
   }
 

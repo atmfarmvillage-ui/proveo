@@ -300,67 +300,163 @@ function closeClientDetail(){ document.getElementById('modal-client-detail').sty
 function _toggleMois(ym){ const d=document.getElementById('md-'+ym),i=document.getElementById('mi-'+ym); if(!d)return; const show=d.style.display==='none'; d.style.display=show?'table-row':'none'; if(i)i.textContent=show?'▾':'▸'; }
 
 // ── ENCAISSER UN RÈGLEMENT CLIENT (paiement daté) ──────────
+// Même règle que l'encaissement d'une vente : on choisit le MODE (espèces ou
+// MIX BY YAS), le mode désigne la caisse, et la caisse est annoncée AVANT de valider.
+// Ce bouton n'avait jamais reçu cette correction : il cherchait « la » caisse du PDV
+// avec maybeSingle(), qui échoue dès que le PDV a deux caisses, retombait sur une
+// caisse physique au hasard, et ne lisait aucune erreur d'écriture. Résultat : un
+// règlement réduisait la dette du client sans apparaître dans aucune caisse.
 let _REGL_IMPAYES=[];
+let _REGL_CAISSES=[];
+let _REGL_CTX={clientId:null,pdv:'Production',mode:'especes'};
+
+// L'admin et le gérant ne tiennent aucun tiroir : eux seuls choisissent où l'argent est reçu.
+function _reglChoixPdv(){ return GP_ROLE==='admin' || !!GP_EST_GERANT; }
+function _reglPdv(){ return document.getElementById('regl-pdv')?.value || _REGL_CTX.pdv || 'Production'; }
+
 async function encaisserReglement(clientId){
   const c=GP_CLIENTS.find(x=>x.id===clientId); if(!c)return;
   let _q=SB.from('gp_ventes').select('id,date,montant_total,montant_paye,statut_paiement').eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
   if(typeof scopeQueryPDV==='function') _q=scopeQueryPDV(_q);
   const{data:imp}=await _q.order('date',{ascending:true});
   _REGL_IMPAYES=imp||[];
+  try{ _REGL_CAISSES=(typeof caissesAccessibles==='function') ? await caissesAccessibles() : []; }catch(_){ _REGL_CAISSES=[]; }
+  const pdv=_reglChoixPdv() ? (c.point_vente||'Production') : (GP_POINT_VENTE||'Production');
+  _REGL_CTX={clientId, pdv, mode:'especes'};
   const dette=_REGL_IMPAYES.reduce((s,v)=>s+Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)),0);
   const today=new Date().toISOString().slice(0,10);
+  const champ='width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 10px';
+  const lbl='font-size:12px;font-weight:600;color:var(--text)';
+  let pdvHtml='';
+  if(_reglChoixPdv()){
+    const pdvs=[...new Set(_REGL_CAISSES.map(k=>k.point_vente||'Production'))].sort();
+    if(!pdvs.includes(pdv)) pdvs.unshift(pdv);
+    pdvHtml=`<label style="${lbl}">Encaissé à</label>
+    <select id="regl-pdv" onchange="_reglMajCaisse()" style="${champ}">${pdvs.map(p=>`<option value="${p}"${p===pdv?' selected':''}>${p}</option>`).join('')}</select>`;
+  }
   const ov=document.createElement('div'); ov.id='regl-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
   ov.innerHTML=`<div style="background:var(--card,#fff);border-radius:14px;padding:18px;max-width:360px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.3)">
     <div style="font-weight:800;font-size:15px;margin-bottom:2px;color:var(--text)">💰 Encaisser un règlement</div>
     <div style="font-size:12px;color:var(--textm);margin-bottom:12px">${c.nom} · dette actuelle : <b style="color:#c0392b">${fmt(dette)} F</b></div>
-    <label style="font-size:12px;font-weight:600;color:var(--text)">Montant reçu (F)</label>
-    <input id="regl-montant" type="number" min="1" step="100" value="${dette>0?Math.round(dette):''}" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 10px">
-    <label style="font-size:12px;font-weight:600;color:var(--text)">Date du paiement</label>
-    <input id="regl-date" type="date" value="${today}" max="${today}" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 10px">
-    <label style="font-size:12px;font-weight:600;color:var(--text)">Mode</label>
-    <select id="regl-mode" style="width:100%;padding:9px;border:1.5px solid var(--border,#ddd);border-radius:8px;margin:4px 0 14px">
-      <option value="espèces">Espèces</option><option value="mobile money">Mobile Money</option><option value="virement">Virement</option><option value="autre">Autre</option>
-    </select>
+    <label style="${lbl}">Montant reçu (F)</label>
+    <input id="regl-montant" type="number" min="1" step="100" value="${dette>0?Math.round(dette):''}" style="${champ}">
+    <label style="${lbl}">Date du paiement</label>
+    <input id="regl-date" type="date" value="${today}" max="${today}" style="${champ}">
+    ${pdvHtml}
+    <label style="${lbl}">Mode de règlement *</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 0">
+      <button type="button" id="regl-mode-especes" onclick="_reglSetMode('especes')">💵 Espèces</button>
+      <button type="button" id="regl-mode-yas" onclick="_reglSetMode('mobile_money')">📱 MIX BY YAS</button>
+    </div>
+    <div id="regl-caisse" style="font-size:10.5px;color:var(--textm);margin-top:4px"></div>
+    <div id="regl-ref-row" style="display:none;margin-top:8px">
+      <label style="${lbl}">Référence de la transaction *</label>
+      <input id="regl-ref" type="text" placeholder="Le code reçu par SMS" style="${champ};margin-bottom:0">
+    </div>
+    <div id="regl-err" style="color:var(--red,#c0392b);font-size:12px;font-weight:600;min-height:16px;margin:10px 0 8px"></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-out btn-sm" style="flex:1;justify-content:center" onclick="document.getElementById('regl-overlay').remove()">Annuler</button>
-      <button class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="confirmerReglement('${clientId}')">✅ Encaisser</button>
+      <button id="regl-ok" class="btn btn-g btn-sm" style="flex:1;justify-content:center" onclick="confirmerReglement('${clientId}')">✅ Encaisser</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
+  _reglSetMode('especes', true);
 }
+
+function _reglSetMode(mode, silencieux){
+  _REGL_CTX.mode = mode==='mobile_money' ? 'mobile_money' : 'especes';
+  const yas=_REGL_CTX.mode==='mobile_money';
+  const base='padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;';
+  const on='border:2px solid var(--g6);background:var(--g6);color:#fff';
+  const off='border:2px solid rgba(0,0,0,.15);background:var(--card2);color:var(--text)';
+  const bE=document.getElementById('regl-mode-especes'), bY=document.getElementById('regl-mode-yas');
+  if(bE) bE.style.cssText=base+(yas?off:on);
+  if(bY) bY.style.cssText=base+(yas?on:off);
+  const row=document.getElementById('regl-ref-row'); if(row) row.style.display=yas?'':'none';
+  const c=_reglMajCaisse();
+  if(yas && !silencieux && typeof notify==='function') notify(`📱 Ce règlement ira sur ${c?c.nom:'MIX BY YAS'}, pas dans le tiroir`,'gold');
+}
+
+// Annonce la caisse qui sera créditée ; rend cette caisse (ou null).
+function _reglMajCaisse(){
+  const yas=_REGL_CTX.mode==='mobile_money', pdv=_reglPdv();
+  const c=(_REGL_CAISSES||[]).find(k=>(k.point_vente||'Production')===pdv && k.type===(yas?'mobile_money':'physique'))||null;
+  const el=document.getElementById('regl-caisse');
+  if(!el) return c;
+  if(!c){
+    el.style.cssText='font-size:10.5px;margin-top:4px;color:var(--red)';
+    el.innerHTML=`⚠ Aucune caisse ${yas?'MIX BY YAS':'physique'} sur ${pdv} — crée-la avant d'encaisser.`;
+  } else if(yas){
+    el.style.cssText='font-size:11px;margin-top:6px;padding:7px 9px;border-radius:7px;'
+      +'background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.45);color:var(--text)';
+    el.innerHTML=`📱 Encaissé sur <b>${c.nom}</b> — <b>rien dans le tiroir</b>`;
+  } else {
+    el.style.cssText='font-size:10.5px;margin-top:4px;color:var(--textm)';
+    el.innerHTML=`→ Caisse créditée : <b style="color:var(--g6)">${c.nom}</b>`;
+  }
+  return c;
+}
+
 async function confirmerReglement(clientId){
+  const err=document.getElementById('regl-err'), btn=document.getElementById('regl-ok');
+  const dire=m=>{ if(err) err.textContent=m; };
+  if(btn && btn.disabled) return;                       // double clic = double encaissement
   const montant=Number(document.getElementById('regl-montant')?.value)||0;
   const date=document.getElementById('regl-date')?.value||new Date().toISOString().slice(0,10);
-  const mode=document.getElementById('regl-mode')?.value||'espèces';
-  if(montant<=0){ if(typeof notify==='function')notify('Montant invalide','r'); return; }
+  const yas=_REGL_CTX.mode==='mobile_money';
+  const ref=(document.getElementById('regl-ref')?.value||'').trim();
+  const pdv=_reglPdv();
+  if(montant<=0){ dire('Entre le montant reçu.'); return; }
+  if(yas && !ref){ dire('Saisis la référence de la transaction YAS.'); document.getElementById('regl-ref')?.focus(); return; }
   const c=GP_CLIENTS.find(x=>x.id===clientId);
-  const pv=(c&&c.point_vente)||(typeof GP_POINT_VENTE!=='undefined'&&GP_POINT_VENTE)||'Production';
+  const nomClient=(c&&c.nom)||'client';
+  const modeLabel=yas?'MIX BY YAS':'espèces';
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Encaissement…'; }
+  const rendre=()=>{ if(btn){ btn.disabled=false; btn.textContent='✅ Encaisser'; } };
   try{
-    await SB.from('gp_reglements_clients').insert({ admin_id:GP_ADMIN_ID, client_id:clientId, montant:montant, date_paiement:date, mode:mode, point_vente:pv, created_by:(typeof GP_USER!=='undefined'&&GP_USER)?GP_USER.id:null });
-    let reste=montant;
+    // 1. La caisse d'abord : si elle manque, on n'écrit RIEN.
+    const caisse=await caisseDuPdv(pdv, yas?'mobile_money':'physique');
+    if(!caisse){ dire(`Aucune caisse ${yas?'MIX BY YAS':'physique'} sur ${pdv}. Rien n'a été enregistré.`); rendre(); return; }
+    // 2. L'argent entre en caisse. C'est l'écriture qui compte le plus : si elle
+    //    échoue, on s'arrête avant de toucher à la dette du client.
+    const{error:eM}=await SB.from('gp_mouvements_caisse').insert({
+      admin_id:GP_ADMIN_ID, caisse_id:caisse.id, type:'entree', categorie:'reglement_client',
+      montant, date_mouvement:date, description:`Règlement ${nomClient} (${modeLabel})`,
+      reference: yas?ref:null,
+      enregistre_par:GP_USER?.id||null, enregistre_par_nom:GP_USER?.email?GP_USER.email.split('@')[0]:null
+    });
+    if(eM){ dire(`La caisse ${caisse.nom} a refusé l'écriture : ${eM.message}. Rien n'a été enregistré.`); rendre(); return; }
+    // À partir d'ici l'argent est en caisse : plus de bouton « réessayer »,
+    // un second clic doublerait l'encaissement.
+    const fermer=()=>document.getElementById('regl-overlay')?.remove();
+    // 3. Le règlement daté, qui alimente le relevé du client.
+    const{error:eR}=await SB.from('gp_reglements_clients').insert({
+      admin_id:GP_ADMIN_ID, client_id:clientId, montant, date_paiement:date, mode:modeLabel,
+      point_vente:pdv, note: yas?('Réf. YAS '+ref):null, created_by:GP_USER?.id||null
+    });
+    if(eR){
+      fermer();
+      notify(`⚠ ${fmt(montant)} F bien crédités sur ${caisse.nom}, mais le relevé de ${nomClient} n'a pas été mis à jour (${eR.message}). NE PAS ré-encaisser — préviens l'admin.`,'r');
+      return;
+    }
+    // 4. Imputation sur les ventes impayées, de la plus ancienne à la plus récente.
+    let reste=montant, echecs=0;
     for(const v of (_REGL_IMPAYES||[])){
       if(reste<=0)break;
       const du=Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)); if(du<=0)continue;
       const applique=Math.min(reste,du); const np=Number(v.montant_paye||0)+applique;
-      await SB.from('gp_ventes').update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'}).eq('id',v.id);
+      const{error:eV}=await SB.from('gp_ventes').update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'}).eq('id',v.id).eq('admin_id',GP_ADMIN_ID);
+      if(eV) echecs++;
       reste-=applique;
     }
-    // ── Crédit CAISSE : entrée d'argent (même cascade que la vente : PDV → siège → toute caisse active) ──
-    try{
-      let ct=null;
-      if(pv){ const{data:cP}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('point_vente',pv).maybeSingle(); if(cP)ct=cP; }
-      if(!ct){ const{data:cS}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').is('point_vente',null).maybeSingle(); if(cS)ct=cS; }
-      if(!ct){ const{data:cA}=await SB.from('gp_caisses').select('id,nom').eq('admin_id',GP_ADMIN_ID).eq('actif',true).eq('type','physique').limit(1).maybeSingle(); if(cA)ct=cA; }
-      if(ct){ await SB.from('gp_mouvements_caisse').insert({ admin_id:GP_ADMIN_ID, caisse_id:ct.id, type:'entree', categorie:'reglement_client', montant:montant, date_mouvement:date, description:'Règlement '+((c&&c.nom)||'client'), enregistre_par:(typeof GP_USER!=='undefined'&&GP_USER)?GP_USER.id:null, enregistre_par_nom:(typeof GP_USER!=='undefined'&&GP_USER&&GP_USER.email)?GP_USER.email.split('@')[0]:null }); }
-      else if(typeof notify==='function'){ notify('⚠ Règlement enregistré, mais aucune caisse active trouvée pour le crédit.','r'); }
-    }catch(_){}
-    document.getElementById('regl-overlay')?.remove();
-    if(typeof notify==='function')notify('✅ Règlement de '+fmt(montant)+' F encaissé'+(reste>0?' ('+fmt(reste)+' F en avance)':''),'g');
+    fermer();
+    if(echecs) notify(`⚠ ${fmt(montant)} F encaissés sur ${caisse.nom}, mais ${echecs} vente(s) n'ont pas pu être marquées payées. NE PAS ré-encaisser — préviens l'admin.`,'r');
+    else notify(`✅ ${fmt(montant)} F encaissés sur ${caisse.nom}`+(reste>0?` (${fmt(reste)} F d'avance)`:''),'g');
     if(typeof loadClients==='function'){ try{ await loadClients(); }catch(_){}}
     if(typeof loadClientStats==='function'){ try{ await loadClientStats(true); }catch(_){}}
     openClientDetail(clientId);
-  }catch(e){ if(typeof notify==='function')notify('Erreur : '+(e.message||e),'r'); }
+  }catch(e){ dire('Erreur : '+(e.message||e)+'. Vérifie la caisse avant de réessayer.'); rendre(); }
 }
 
 // Relance rédigée par l'IA (marketing) → ouvre la modale WhatsApp pré-remplie
@@ -496,7 +592,7 @@ async function renderClients(){
         </td>
         <td style="white-space:nowrap" onclick="event.stopPropagation()">
           ${montantDu>0?`
-            <button class="btn btn-g btn-sm" onclick="ouvrirPayerDette('${c.id}','${c.nom.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${montantDu})" title="Solder la dette">💳</button>
+            <button class="btn btn-g btn-sm" onclick="encaisserReglement('${c.id}')" title="Encaisser un règlement">💳</button>
             <button class="btn btn-out btn-sm" onclick="envoyerRappelDette('${c.id}')" title="Envoyer rappel WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3)">📲</button>
           `:''}
           <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')" title="Modifier le client">✏️</button>
@@ -1267,50 +1363,11 @@ function envoyerTop3Manuel(idx,msgEncoded){
 }
 
 // ── GESTION DETTES CLIENTS ────────────────────────
-function ouvrirPayerDette(clientId, nom, montantDu){
-  const modal=document.getElementById('modal-payer-dette');
-  if(!modal)return;
-  document.getElementById('dette-client-nom').textContent=nom;
-  document.getElementById('dette-montant-du').textContent=fmt(montantDu)+' F';
-  document.getElementById('dette-montant-input').value=montantDu;
-  document.getElementById('dette-client-id').value=clientId;
-  document.getElementById('dette-montant-total').value=montantDu;
-  modal.style.display='flex';
-}
-
-function fermerPayerDette(){
-  document.getElementById('modal-payer-dette').style.display='none';
-}
-
-async function savePayerDette(){
-  const clientId=document.getElementById('dette-client-id').value;
-  const montantTotal=+document.getElementById('dette-montant-total').value;
-  const montant=+document.getElementById('dette-montant-input').value||0;
-  const err=document.getElementById('dette-err');
-
-  if(!montant||montant<=0){err.textContent='Entrez un montant.';return;}
-
-  // Trouver les ventes impayées et partielles de ce client
-  const{data:ventes}=await SB.from('gp_ventes').select('id,montant_total,montant_paye')
-    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).eq('client_id',clientId)
-    .in('statut_paiement',['impaye','partiel']).order('date');
-
-  let restePayer=montant;
-  for(const v of(ventes||[])){
-    if(restePayer<=0)break;
-    const resteVente=Number(v.montant_total)-Number(v.montant_paye);
-    const aPayer=Math.min(restePayer,resteVente);
-    const nouveauPaye=Number(v.montant_paye)+aPayer;
-    const statut=nouveauPaye>=Number(v.montant_total)?'paye':'partiel';
-    await SB.from('gp_ventes').update({montant_paye:nouveauPaye,statut_paiement:statut}).eq('id',v.id);
-    restePayer-=aPayer;
-  }
-
-  notify(`Paiement de ${fmt(montant)} F enregistré ✓`,'gold');
-  fermerPayerDette();
-  await loadClients();
-  renderClients();
-}
+// L'ancienne fenêtre « Payer une dette » (bouton 💳 de la liste) marquait les ventes
+// payées SANS mouvement de caisse, SANS règlement daté et SANS choix de caisse :
+// l'argent reçu n'existait nulle part (règlement Fairfield de 200 000 F, 16/09/2026).
+// Tout encaissement client passe désormais par encaisserReglement().
+function ouvrirPayerDette(clientId){ return encaisserReglement(clientId); }
 
 async function envoyerRappelDette(clientId){
   const c=GP_CLIENTS.find(x=>x.id===clientId);
