@@ -1287,6 +1287,12 @@ async function saveVente(){
 
   const{data:vente,error}=await SB.from('gp_ventes').insert({
     admin_id:GP_ADMIN_ID,
+    // La vente naît « créditée » : c'est CET enregistrement qui écrit sa caisse, quelques
+    // lignes plus bas. Née à false, elle pouvait être prise par le rattrapage automatique
+    // pendant l'enregistrement (retour du réseau, autre appareil) : la caisse recevait
+    // l'argent deux fois (vente Inconnu 4 du 07/07/2026). Si l'écriture de caisse échoue,
+    // le drapeau repasse à false plus bas et le rattrapage prend le relais.
+    caisse_creditee:true,
     client_id:clientId||null,
     client_nom:client?.nom||'Client comptant',
     montant_total:total,
@@ -1317,7 +1323,10 @@ async function saveVente(){
 
   // Registre des règlements clients (paiement DATÉ) — trace le paiement immédiat de cette vente.
   if(clientId && Number(paye)>0){
-    try{ await SB.from('gp_reglements_clients').insert({ admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id, montant:Number(paye), date_paiement:dateVente, mode:null, point_vente:pv, note:'Paiement à la vente', created_by:GP_USER?.id }); }catch(_){}
+    let _regErr=null;
+    try{ const{error:eR}=await SB.from('gp_reglements_clients').insert({ admin_id:GP_ADMIN_ID, client_id:clientId, vente_id:vente.id, montant:Number(paye), date_paiement:dateVente, mode:null, point_vente:pv, note:'Paiement à la vente', created_by:GP_USER?.id }); _regErr=eR; }catch(e){ _regErr=e; }
+    // Sans cette ligne, la fiche client affiche comme due une vente déjà payée : on le dit.
+    if(_regErr) notify('⚠ Vente enregistrée, mais son paiement manque au relevé du client : '+(_regErr.message||_regErr),'r');
   }
 
   // Insérer les lignes
@@ -3000,6 +3009,7 @@ async function supprimerVente(id){
   const {data:caisseMvts} = await SB.from('gp_mouvements_caisse').select('*').eq('vente_id',id);
   const {data:fidMvts} = await SB.from('gp_fidelite_mouvements').select('*').eq('vente_id',id);
   let commMvts=[]; try{ const{data:_co}=await SB.from('gp_commissions').select('*').eq('vente_id',id).eq('statut','due'); commMvts=_co||[]; }catch(_){}
+  let regMvts=[]; try{ const{data:_rg}=await SB.from('gp_reglements_clients').select('montant').eq('admin_id',GP_ADMIN_ID).eq('vente_id',id).is('deleted_at',null); regMvts=_rg||[]; }catch(_){}
   const L = lignes||[]; const CM = caisseMvts||[]; const FM = fidMvts||[]; const CO = commMvts;
 
   // 2. Construire la liste des reverts à montrer dans la confirmation
@@ -3031,6 +3041,8 @@ async function supprimerVente(id){
   if(welcome) reverts.push(`Bon de bienvenue 1000 F retiré du filleul`);
   const commDue = CO.reduce((s,c)=>s+Number(c.montant||0),0);
   if(commDue > 0) reverts.push(`−${fmt(commDue)} F commission retirée (${CO[0]?.point_vente||'PDV'})`);
+  const regTot = regMvts.reduce((s,r)=>s+Number(r.montant||0),0);
+  if(regTot > 0) reverts.push(`−${fmt(regTot)} F retirés du relevé du client`);
 
   // 3. Modal de confirmation détaillée
   const detailHtml = reverts.length
@@ -3073,6 +3085,14 @@ async function supprimerVente(id){
 
   // 4c. Supprimer les mouvements caisse liés à la vente
   await SB.from('gp_mouvements_caisse').delete().eq('vente_id',id);
+
+  // 4c bis. Retirer ses paiements du relevé client. Ils portent l'horodatage EXACT de la
+  // suppression de la vente : la restauration remet ceux-là, et aucun autre.
+  const _suppr = new Date().toISOString();
+  if(regMvts.length){
+    await SB.from('gp_reglements_clients').update({deleted_at:_suppr})
+      .eq('admin_id',GP_ADMIN_ID).eq('vente_id',id).is('deleted_at',null);
+  }
 
   // 4d. Revert fidélité — TRAITER CHAQUE MOUVEMENT INDIVIDUELLEMENT
   for(const f of FM){
@@ -3125,7 +3145,7 @@ async function supprimerVente(id){
 
   // 4e. Soft-delete la vente
   await SB.from('gp_ventes').update({
-    deleted_at: new Date().toISOString(),
+    deleted_at: _suppr,
     deleted_by: GP_USER?.id,
     deleted_by_nom: GP_USER?.email?.split('@')[0] || 'admin'
   }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
@@ -3303,7 +3323,7 @@ async function savePaiementVente(){
     document.getElementById('pmv-ref')?.focus();
     return;
   }
-  const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye,point_vente').eq('id',id).maybeSingle();
+  const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye,point_vente,client_id').eq('id',id).maybeSingle();
   if(!v){err.textContent='Vente introuvable.';return;}
   const total=Number(v.montant_total||0);
   const reste=Math.max(0,total-Number(v.montant_paye||0));
@@ -3353,10 +3373,26 @@ async function savePaiementVente(){
   }catch(e){}
   // Si le crédit caisse n'a pas abouti → marquer la vente pour rattrapage (top-up au refresh)
   if(!_encOk){ try{ await SB.from('gp_ventes').update({caisse_creditee:false}).eq('id',id); }catch(_){} }
+  // Relevé du client : ce paiement allait en caisse mais n'était écrit nulle part ailleurs.
+  // La fiche client calcule « Total payé » et « Reste à payer » sur ce registre seul :
+  // chaque solde encaissé ici gonflait d'autant la dette affichée.
+  let _regOk=true;
+  if(v.client_id){
+    try{
+      const{error:eR}=await SB.from('gp_reglements_clients').insert({
+        admin_id:GP_ADMIN_ID, client_id:v.client_id, vente_id:id,
+        montant:montantApplique, date_paiement:today(),
+        mode: mode==='mobile_money'?'MIX BY YAS':'espèces', point_vente:pvV,
+        note: ref?('Réf. YAS '+ref):null, created_by:GP_USER?.id||null
+      });
+      _regOk=!eR;
+    }catch(_){ _regOk=false; }
+  }
   fermerPaiementVente();
   renderVentes();
   const monnaie=montant-montantApplique;
   notify(`Paiement de ${fmt(montantApplique)} F encaissé ✓`+(statut==='paye'?' — vente soldée 🎉':'')+(monnaie>0?` · Rendre ${fmt(monnaie)} F`:''),'gold');
+  if(!_regOk) notify(`⚠ ${fmt(montantApplique)} F bien encaissés, mais absents du relevé du client — préviens l'admin`,'r');
 }
 
 async function envoyerWAVente(id){

@@ -263,7 +263,10 @@ async function supprimerMouvementCaisse(id){
   else if(m.type==='transfert') extra='\n\n💰 L\'argent revient à la caisse source.';
   if(!confirm(`Supprimer ce mouvement de ${fmt(m.montant)} F ?${extra}\n\nAction irréversible.`)) return;
 
-  // Encaissement client → restaurer l'impayé sur la vente
+  const{error}=await SB.from('gp_mouvements_caisse').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
+  if(error){ notify('Erreur: '+error.message,'r'); return; }
+  // Encaissement client → restaurer l'impayé sur la vente. APRÈS la suppression : avant,
+  // un échec laissait la vente redevenue impayée alors que l'argent était encore en caisse.
   if(m.categorie==='vente' && m.vente_id){
     try{
       const{data:v}=await SB.from('gp_ventes').select('montant_total,montant_paye').eq('id',m.vente_id).maybeSingle();
@@ -272,10 +275,14 @@ async function supprimerMouvementCaisse(id){
         const st = np<=0 ? 'impaye' : (np>=Number(v.montant_total||0) ? 'paye' : 'partiel');
         await SB.from('gp_ventes').update({montant_paye:np, statut_paiement:st}).eq('id',m.vente_id);
       }
+      // Et retirer ce paiement du relevé client : un seul, du même montant, le plus récent.
+      const{data:rg}=await SB.from('gp_reglements_clients').select('id')
+        .eq('admin_id',GP_ADMIN_ID).eq('vente_id',m.vente_id).eq('montant',m.montant).is('deleted_at',null)
+        .order('date_paiement',{ascending:false}).limit(1);
+      if(rg?.[0]) await SB.from('gp_reglements_clients').update({deleted_at:new Date().toISOString()}).eq('id',rg[0].id);
+      else notify(`Relevé client inchangé : aucun paiement de ${fmt(m.montant)} F trouvé pour cette vente`,'gold');
     }catch(e){}
   }
-  const{error}=await SB.from('gp_mouvements_caisse').delete().eq('id',id).eq('admin_id',GP_ADMIN_ID);
-  if(error){ notify('Erreur: '+error.message,'r'); return; }
   notify('Mouvement supprimé — soldes ajustés ✓','gold');
   await renderCaisse();
 }
