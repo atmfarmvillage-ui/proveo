@@ -67,6 +67,48 @@ function fermerPrixVente() {
 
 // L'aperçu vivant : il traduit le prix du sac en prix au kilo et le compare au
 // coût. C'est là qu'une vente à perte se voit AVANT d'être enregistrée.
+// Sous ce taux, la marge ne couvre ni la manutention, ni le transport, ni les
+// pertes en magasin. Une seule constante : c'est un choix de gestion, il doit
+// se changer a un seul endroit.
+const PV_MARGE_MIN = 0.05;
+
+// ANALYSE PURE d'un jeu de prix : aucune lecture du DOM, aucune ecriture.
+// Partagee par l'apercu (qui colore) et par l'enregistrement (qui demande
+// confirmation) -- deux regles ecrites deux fois finissent toujours par diverger.
+//   perte     : vendu SOUS le prix d'achat
+//   nulle     : vendu AU prix d'achat (a 0,5 F pres, l'arrondi d'un sac)
+//   mince     : marge positive mais sous PV_MARGE_MIN du prix de vente
+//   inversion : le sac revient plus cher AU KILO que le vrac
+function pvAnalyser(achat, kg, poids, sac) {
+  const constats = [];
+  const parKgSac = (sac != null && poids > 0) ? sac / poids : null;
+  const r = x => fmt(Math.round(x));
+
+  const examiner = (prix, ou) => {
+    if (prix == null || !(achat > 0)) return;   // sans prix d'achat, marge inconnue
+    const marge = prix - achat;
+    if (marge < -0.5) {
+      constats.push({ niveau: 'perte',
+        texte: `Vente À PERTE ${ou} : ${r(prix)} F/kg pour un achat à ${r(achat)} F/kg.` });
+    } else if (Math.abs(marge) <= 0.5) {
+      constats.push({ niveau: 'nulle',
+        texte: `Marge NULLE ${ou} : vendu exactement au prix d'achat (${r(achat)} F/kg). Transport et manutention restent à ta charge.` });
+    } else if (prix > 0 && marge / prix < PV_MARGE_MIN) {
+      constats.push({ niveau: 'mince',
+        texte: `Marge très mince ${ou} : ${r(marge)} F/kg, soit ${(marge / prix * 100).toFixed(1)} % du prix.` });
+    }
+  };
+  examiner(kg, 'au kilo');
+  examiner(parKgSac, 'au sac');
+
+  // Independante du prix d'achat : c'est une incoherence entre les deux tarifs.
+  if (kg != null && kg > 0 && parKgSac != null && parKgSac > kg + 0.5) {
+    constats.push({ niveau: 'inversion',
+      texte: `Le sac revient PLUS CHER au kilo (${r(parKgSac)} F) que le vrac (${r(kg)} F) : un acheteur prendra toujours du vrac, et le tarif au sac ne servira jamais.` });
+  }
+  return constats;
+}
+
 function pvApercu() {
   const el = document.getElementById('pv-apercu');
   if (!el) return;
@@ -78,26 +120,25 @@ function pvApercu() {
   const sac = pvNum(document.getElementById('pv_sac')?.value);
 
   const bouts = [];
-  const perte = [];
-  if (kg != null) {
-    bouts.push(`Au kilo : <b>${fmt(kg)} F/kg</b>`);
-    if (achat > 0 && kg < achat) perte.push(`au kilo (${fmt(kg)} < ${fmt(achat)})`);
-  }
+  if (kg != null) bouts.push(`Au kilo : <b>${fmt(kg)} F/kg</b>`);
   if (sac != null && poids > 0) {
-    const parKg = sac / poids;
-    bouts.push(`Au sac : <b>${fmt(sac)} F</b> le sac de ${fmt(poids)} kg — soit <b>${fmt(Math.round(parKg))} F/kg</b>`);
-    if (achat > 0 && parKg < achat) perte.push(`au sac (${fmt(Math.round(parKg))} < ${fmt(achat)})`);
+    bouts.push(`Au sac : <b>${fmt(sac)} F</b> le sac de ${fmt(poids)} kg — soit <b>${fmt(Math.round(sac / poids))} F/kg</b>`);
   }
   if (!bouts.length) { el.innerHTML = ''; return; }
 
   let html = `<div>${bouts.join('<br>')}</div>`;
-  if (achat > 0 && kg != null && sac != null && poids > 0) {
-    const marge = kg - achat, margeSac = (sac / poids) - achat;
-    html += `<div style="margin-top:6px;opacity:.85">Marge : ${fmt(Math.round(marge))} F/kg au détail · ${fmt(Math.round(margeSac))} F/kg au sac</div>`;
+  if (achat > 0) {
+    const m = [];
+    if (kg != null) m.push(`${fmt(Math.round(kg - achat))} F/kg au détail`);
+    if (sac != null && poids > 0) m.push(`${fmt(Math.round(sac / poids - achat))} F/kg au sac`);
+    if (m.length) html += `<div style="margin-top:6px;opacity:.85">Marge : ${m.join(' · ')}</div>`;
   }
-  if (perte.length) {
-    html += `<div style="margin-top:6px;color:var(--red);font-weight:700">⚠️ Vente À PERTE ${perte.join(' et ')} — le prix d'achat est de ${fmt(achat)} F/kg.</div>`;
-  }
+  // Rouge pour ce qui fait perdre de l'argent ou n'en gagne pas ; or pour ce
+  // qui est seulement fragile.
+  pvAnalyser(achat, kg, poids, sac).forEach(c => {
+    const grave = c.niveau === 'perte' || c.niveau === 'nulle';
+    html += `<div style="margin-top:6px;color:${grave ? 'var(--red)' : 'var(--gold)'};font-weight:700">⚠️ ${c.texte}</div>`;
+  });
   el.innerHTML = html;
 }
 
@@ -126,6 +167,18 @@ async function savePrixVente() {
   if (kg == null && sac == null) {
     err.textContent = 'Renseignez au moins un des deux prix.';
     return;
+  }
+
+  // Perte, marge nulle ou sac plus cher que le vrac : on DEMANDE, on ne bloque
+  // pas. Un prix au coût peut être voulu (déstockage), mais il ne doit plus
+  // pouvoir passer par mégarde : le contrôle d'ensemble en a trouvé trois.
+  // La marge simplement mince reste un avertissement à l'écran.
+  const _ing = (GP_INGREDIENTS || []).find(i => i.id === id) || {};
+  const graves = pvAnalyser(pvNum(_ing.prix_actuel) || 0, kg, poids || 0, sac)
+    .filter(c => c.niveau !== 'mince');
+  if (graves.length) {
+    const msg = '⚠️ ' + graves.map(c => c.texte).join('\n\n⚠️ ') + '\n\nEnregistrer quand même ?';
+    if (!confirm(msg)) return;
   }
 
   const { error } = await SB.from('gp_ingredients')
