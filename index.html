@@ -441,6 +441,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-out btn-sm" onclick="analyserSeuilsDynamiques()">💡 Analyser seuils dynamiques</button>
     <button class="btn btn-g btn-sm" onclick="catalogueMP()">🌾 Catalogue des prix (PDF)</button>
+    <button class="btn btn-out btn-sm" onclick="partagerCatalogueMP()" title="Envoyer les prix du jour sur WhatsApp">📤 Partager sur WhatsApp</button>
   </div>
   <div class="g2" style="align-items:start">
 
@@ -1449,7 +1450,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <div class="page" id="page-formules">
   <div class="page-title">Formules & Prix</div>
   <div class="page-sub">Gérer les formules et les prix de vente</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn btn-g btn-sm" onclick="catalogueAliments()">📄 Catalogue Aliments (PDF)</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn btn-g btn-sm" onclick="catalogueAliments()">📄 Catalogue Aliments (PDF)</button><button class="btn btn-out btn-sm" onclick="partagerCatalogueAliments()" title="Envoyer les prix du jour sur WhatsApp">📤 Partager sur WhatsApp</button></div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
       <span style="font-weight:700;font-size:13px">📐 Marge par tonne d'aliment</span>
@@ -3482,7 +3483,7 @@ try{
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
 <script src="js/config.js?v=2.27.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
-  <script src="js/catalogue.js?v=1.4.0"></script>
+  <script src="js/catalogue.js?v=1.5.0"></script>
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.30.3"></script>
@@ -3491,7 +3492,7 @@ try{
 <script src="js/production.js?v=2.26.1"></script>
 <script src="js/ventes.js?v=2.29.4"></script>
 <script src="js/clients.js?v=2.27.4"></script>
-<script src="js/admin.js?v=2.30.0"></script>
+<script src="js/admin.js?v=2.31.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.30.7"></script>

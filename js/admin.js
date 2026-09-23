@@ -420,21 +420,87 @@ function _plafondMP(espece, ingrNom){
 }
 
 // ── CALCUL NUTRIMENTS LIVE + ANALYSE ──────────────────
+// ── ANALYSE NUTRITIONNELLE — MÊME MOTEUR QUE L'ÉTIQUETTE (js/print.js) ──
+// Avant, cet écran avait son propre calcul, et il donnait d'autres chiffres que
+// l'étiquette du sac pour la MÊME formule : LAPIN engraissement sortait à 11,4 %
+// de protéines et 1 681 kcal ici, 17,0 % et 2 556 kcal sur l'étiquette. Trois
+// causes, toutes corrigées ci-dessous.
+//   1. Il lisait les anciennes colonnes (proteines, energie…) et ignorait la
+//      FICHE de la matière première (nutri_*), celle qu'on remplit à la main.
+//   2. `Number(x) || 0` : une valeur absente comptait ZÉRO sans le dire. Une MP
+//      à 35 % sans valeurs faisait chuter la protéine de 5 points, en silence.
+//   3. Une seule énergie, celle de la volaille, même pour un lapin. Or le lapin
+//      digère la cellulose : son énergie se PRÉDIT sur la composition finale
+//      (Maertens 1988), comme le fait l'étiquette.
+// Ordre des sources, du plus sûr au moins sûr : fiche MP → ancienne colonne →
+// table de secours par nom (NUTRI_DB de print.js) → MANQUANT (jamais zéro).
+const NUTRI_FICHE = { proteines:'prot', lipides:'mg', fibres:'cb', calcium:'ca', lysine:'lys', methionine:'met' };
+// Ce que la fiche de la MP couvre, et qui décide de l'étiquette : c'est là-dessus
+// qu'on alerte. Thréonine, tryptophane, phosphore, sodium et chlore manquent
+// presque partout ; signaler chaque MP pour eux noierait l'alerte utile.
+const NUTRI_ESSENTIELS = ['proteines','energie','lipides','fibres','calcium','lysine','methionine'];
+
+function _valeurNutriment(data, secours, key){
+  const f = NUTRI_FICHE[key];
+  if(f && data['nutri_' + f] != null) return +data['nutri_' + f];
+  if(data[key] != null && data[key] !== '') return +data[key];
+  if(f && secours && secours[f] != null) return +secours[f];
+  return null;                                  // inconnu : on le DIT, on ne compte pas 0
+}
+
+// Énergie de l'ingrédient, selon l'espèce (volaille par défaut).
+function _energieIngredient(data, secours, espece){
+  const k = { lapin:'nutri_em_lapin', porc:'nutri_em_porc', tilapia:'nutri_em_poisson' }[espece];
+  if(k && data[k] != null) return +data[k];
+  if(data.nutri_em != null) return +data.nutri_em;
+  if(data.energie != null && data.energie !== '') return +data.energie;
+  if(secours && secours.em != null) return +secours.em;
+  return null;
+}
+
 function _calculerNutriments(){
-  const out = {};
-  for(const n of NUTRIMENTS) out[n.key] = 0;
-  let coutMP = 0;
+  const out = {}, couvert = {}, manquants = {};
+  for(const n of NUTRIMENTS){ out[n.key] = 0; couvert[n.key] = 0; manquants[n.key] = []; }
+  const espece = document.getElementById('mf_espece')?.value || '';
+  let coutMP = 0, cendres = 0, cendresCouv = 0;
+  const aCompleter = [];                        // MP dont la fiche est à remplir
+
   for(const ing of MF_INGREDIENTS){
     const data = (GP_INGREDIENTS||[]).find(x => x.id === ing.id);
     if(!data) continue;
     const pct = Number(ing.pct) || 0;
     coutMP += pct * 10 * (data.prix_actuel || 0);
+    // Table de secours par nom, partagée avec l'étiquette : un ingrédient jamais
+    // renseigné garde une valeur de référence plutôt que rien.
+    const secours = (typeof findNutri === 'function') ? findNutri(data.nom, espece) : null;
+    let incomplet = false;
+
     for(const n of NUTRIMENTS){
-      const v = Number(data[n.key]) || 0;
+      const v = (n.key === 'energie') ? _energieIngredient(data, secours, espece)
+                                      : _valeurNutriment(data, secours, n.key);
+      if(v == null){ manquants[n.key].push(data.nom); if(NUTRI_ESSENTIELS.includes(n.key)) incomplet = true; continue; }
       out[n.key] += (pct / 100) * v;
+      couvert[n.key] += pct;
     }
+    // Cendres : absentes des anciennes colonnes, elles ne viennent que de la fiche
+    // ou de la table de secours. L'équation lapin en a besoin.
+    const mm = (data.nutri_mm != null) ? +data.nutri_mm : (secours && secours.mm != null ? +secours.mm : null);
+    if(mm == null){ if(espece === 'lapin') incomplet = true; }
+    else { cendres += (pct / 100) * mm; cendresCouv += pct; }
+
+    if(incomplet && !aCompleter.some(m => m.id === data.id)) aCompleter.push({ id: data.id, nom: data.nom });
   }
-  return {nutriments: out, coutMP};
+
+  // LAPIN : l'énergie se prédit sur la composition finale, elle ne s'additionne pas.
+  // Additionner les énergies tabulées donne un résultat systématiquement trop bas.
+  let emMethode = 'somme des ingrédients';
+  if(espece === 'lapin' && typeof MAERTENS !== 'undefined'){
+    out.energie = Math.max(0, MAERTENS.a - MAERTENS.b * out.fibres - MAERTENS.c * cendres);
+    couvert.energie = Math.min(couvert.fibres, cendresCouv);
+    manquants.energie = manquants.fibres;
+    emMethode = 'équation Maertens (1988)';
+  }
+  return { nutriments: out, couvert, manquants, aCompleter, coutMP, emMethode, espece };
 }
 
 function _renderAnalyseNutritionnelle(){
@@ -445,9 +511,22 @@ function _renderAnalyseNutritionnelle(){
   const espece = document.getElementById('mf_espece')?.value;
   const categorie = document.getElementById('mf_categorie')?.value;
   const besoin = (GP_BESOINS||[]).find(b => b.espece === espece && b.categorie === categorie);
-  const {nutriments, coutMP} = _calculerNutriments();
+  const {nutriments, couvert, manquants, aCompleter, coutMP, emMethode} = _calculerNutriments();
+  const totalPct = MF_INGREDIENTS.reduce((s, i) => s + (Number(i.pct) || 0), 0);
 
-  el.innerHTML = `<table class="tbl" style="width:100%;font-size:13px"><thead>
+  // Le libellé de l'énergie dit de QUELLE énergie on parle : un lapin ne se juge
+  // pas à l'énergie volaille. Sans cette mention, la formule paraissait fausse.
+  const LIB_EM = { lapin:'Énergie lapin (ED)', porc:'Énergie porc (ED)', tilapia:'Énergie poisson' };
+
+  // Une MP sans valeurs fausse toute la colonne : on le dit, avec le bouton pour
+  // compléter sa fiche. C'est la règle du module nutrition — jamais de zéro muet.
+  const alerte = aCompleter.length ? `<div style="background:#fff4e5;border:1px solid #f0c68a;border-left:4px solid var(--gold);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;line-height:1.5">
+      <b>Analyse incomplète.</b> ${aCompleter.length === 1 ? 'Cette matière première n\'a pas toutes ses valeurs' : 'Ces matières premières n\'ont pas toutes leurs valeurs'} :
+      ${aCompleter.map(m => `<a href="#" onclick="ouvrirNutri('${m.id}');return false" style="color:var(--green);font-weight:700;text-decoration:underline">${typeof catEsc === 'function' ? catEsc(m.nom) : m.nom}</a>`).join(', ')}.
+      Les lignes grises sont calculées sur une partie de la formule seulement.
+    </div>` : '';
+
+  el.innerHTML = `${alerte}<table class="tbl" style="width:100%;font-size:13px"><thead>
     <tr>
       <th style="font-size:10px">Nutriment</th>
       <th class="num" style="font-size:10px">Calc.</th>
@@ -456,10 +535,17 @@ function _renderAnalyseNutritionnelle(){
     </tr>
   </thead><tbody>${NUTRIMENTS.map(n => {
     const v = nutriments[n.key];
+    const cov = couvert[n.key] || 0;
+    // « Complet » = toutes les matières premières posées ont fourni la valeur.
+    const complet = totalPct > 0 && cov >= totalPct - 0.01;
     const min = besoin?.[n.besoinMin];
     const max = besoin?.[n.besoinMax];
     let statut = '⚪', color = 'var(--text)';
-    if(min != null || max != null){
+    if(!complet){
+      // Pas de verdict vert ou rouge sur un calcul partiel : ce serait une fausse
+      // certitude, et c'est exactement ce qui a fait douter d'une formule juste.
+      statut = '⚠️'; color = 'var(--textm)';
+    } else if(min != null || max != null){
       if(min != null && v < Number(min) * 0.97){ statut = '🔴'; color = 'var(--red)'; }
       else if(max != null && v > Number(max) * 1.03){ statut = '🟠'; color = 'var(--gold)'; }
       else { statut = '🟢'; color = 'var(--green)'; }
@@ -468,28 +554,35 @@ function _renderAnalyseNutritionnelle(){
       ? `${Number(min).toFixed(n.decimals)} – ${Number(max).toFixed(n.decimals)}`
       : (min != null ? `≥ ${Number(min).toFixed(n.decimals)}`
          : (max != null ? `≤ ${Number(max).toFixed(n.decimals)}` : '—'));
+    const valeur = cov <= 0 ? '—' : v.toFixed(n.decimals);
+    const part = (!complet && cov > 0) ? `<div style="font-size:9.5px;color:var(--textm);font-weight:600">sur ${Math.round(cov)} % de la formule</div>` : '';
+    const lib = (n.key === 'energie' && LIB_EM[espece]) ? LIB_EM[espece] : n.label;
     return `<tr>
-      <td style="font-size:12px;font-weight:600;color:var(--text)">${n.label} <span style="color:var(--textm);font-size:10px;font-weight:500">${n.unite}</span></td>
-      <td class="num" style="color:${color};font-weight:800;font-size:14px">${v.toFixed(n.decimals)}</td>
+      <td style="font-size:12px;font-weight:600;color:var(--text)">${lib} <span style="color:var(--textm);font-size:10px;font-weight:500">${n.unite}</span></td>
+      <td class="num" style="color:${color};font-weight:800;font-size:14px">${valeur}${part}</td>
       <td class="num" style="color:var(--textm);font-size:11px">${cible}</td>
       <td style="text-align:center;font-size:14px">${statut}</td>
     </tr>`;
-  }).join('')}</tbody></table>`;
+  }).join('')}</tbody></table>
+  <div style="font-size:10px;color:var(--textm);margin-top:4px">Énergie : ${emMethode}. Mêmes valeurs que l'étiquette du sac.</div>`;
 
   if(coutEl){
     coutEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--textm);font-size:12px;font-weight:600">💰 Coût MP / tonne</span><strong style="color:var(--gold);font-size:16px;font-weight:800">${fmt(Math.round(coutMP))} F</strong></div>`;
   }
 
   // Suggestions d'ajustement (Phase 2)
-  _renderSuggestions(besoin, nutriments, espece);
+  _renderSuggestions(besoin, nutriments, espece, couvert, totalPct);
 }
 
 // ── PHASE 2 : SUGGESTIONS INTELLIGENTES D'AJUSTEMENT ──
-function _calculerSuggestions(besoin, nutriments, espece){
+function _calculerSuggestions(besoin, nutriments, espece, couvert, totalPct){
   if(!besoin || !espece) return [];
   const suggestions = [];
 
   for(const n of NUTRIMENTS){
+    // Un nutriment calculé sur une partie seulement de la formule ne peut pas
+    // fonder un conseil : on corrigerait une formule juste. La fiche MP d'abord.
+    if(couvert && totalPct && (couvert[n.key] || 0) < totalPct - 0.01) continue;
     const v = nutriments[n.key];
     const min = besoin[n.besoinMin];
     const max = besoin[n.besoinMax];
@@ -557,7 +650,7 @@ function _calculerSuggestions(besoin, nutriments, espece){
   return suggestions;
 }
 
-function _renderSuggestions(besoin, nutriments, espece){
+function _renderSuggestions(besoin, nutriments, espece, couvert, totalPct){
   // Insérer après le coût MP (créer le conteneur si absent)
   const coutEl = document.getElementById('mf-cout-mp');
   if(!coutEl) return;
@@ -574,7 +667,7 @@ function _renderSuggestions(besoin, nutriments, espece){
     return;
   }
 
-  const sugs = _calculerSuggestions(besoin, nutriments, espece);
+  const sugs = _calculerSuggestions(besoin, nutriments, espece, couvert, totalPct);
   if(!sugs.length){
     sugEl.innerHTML = '<div style="font-size:12px;font-weight:600;color:var(--green)">✓ Aucun ajustement majeur nécessaire</div>';
     return;
