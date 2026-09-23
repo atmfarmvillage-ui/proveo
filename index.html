@@ -3205,6 +3205,26 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   </div>
 </div>
 
+<div id="modal-note-mp" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNoteMP()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px">📋 Consigne de préparation</div>
+    <div id="note-mp-titre" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px">—</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
+      Tout ce qu'il faut savoir pour préparer et doser cette matière : recette, dose au sac,
+      dilution, conservation. Cette consigne s'affiche aussi à l'écran de production, dès que
+      la matière entre dans un lot.
+    </div>
+    <input type="hidden" id="note-mp-id">
+    <textarea id="note-mp-zone" rows="12" style="width:100%;font-size:12px;line-height:1.5;padding:10px;border-radius:8px"></textarea>
+    <div id="note-mp-lecture" style="display:none;font-size:12px;line-height:1.55;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"></div>
+    <div id="note-mp-actions" style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" onclick="saveNoteMP()" style="flex:1;justify-content:center">💾 Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerNoteMP()" style="flex:1;justify-content:center">Fermer</button>
+    </div>
+    <div class="a-err" id="note-mp-err"></div>
+  </div>
+</div>
+
 <div class="page" id="page-emprunts">
   <div class="page-title">🏦 Emprunts</div>
   <div class="page-sub">Prêts bancaires et microfinance — capital dû, échéancier, remboursements</div>
@@ -3530,10 +3550,11 @@ try{
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.30.4"></script>
-<script src="js/matieres.js?v=2.31.0"></script>
+<script src="js/matieres.js?v=2.32.0"></script>
 <script src="js/ajustements.js?v=1.0.0"></script>
+<script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
-<script src="js/production.js?v=2.26.1"></script>
+<script src="js/production.js?v=2.27.0"></script>
 <script src="js/ventes.js?v=2.29.4"></script>
 <script src="js/clients.js?v=2.27.4"></script>
 <script src="js/admin.js?v=2.31.0"></script>
