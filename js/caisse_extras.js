@@ -276,6 +276,10 @@ async function _debiterCaisseDepense(dep, preferredCaisseId){
   if(!caisseId) throw new Error('Aucune caisse disponible pour débiter la dépense');
   const{error}=await SB.from('gp_mouvements_caisse').insert({
     admin_id: dep.admin_id, caisse_id: caisseId,
+    // La dépense signe son mouvement : c'est lui qui dit PAR QUELLE CAISSE elle a
+    // été payée, donc si elle est sortie du tiroir ou du compte MIX BY YAS. Sans
+    // ce lien, le bilan du jour les empilait toutes dans un seul bloc.
+    depense_id: dep.id,
     type: 'sortie', categorie: 'depense',
     montant: dep.montant, date_mouvement: dep.date,
     description: `Dépense : ${dep.description}`,

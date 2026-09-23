@@ -20,6 +20,20 @@ function soldeCaisseCumul(caisse, mvts, dateMax){
   return s;
 }
 
+// Par quelle caisse une dépense est-elle sortie ? Le mouvement de sortie le dit.
+// On le retrouve par `depense_id` ; les dépenses antérieures à ce lien se
+// rattrapent par montant + libellé, qui suffisent dans une même journée.
+// Retourne 'especes' (tiroir), 'compte' (MIX BY YAS, banque) ou 'inconnu'.
+function modeDepense(dep, mvtsDepJour, typeParCaisse){
+  if(!dep) return 'inconnu';
+  const mvts=mvtsDepJour||[], types=typeParCaisse||{};
+  let mv=mvts.find(x=>x.depense_id && x.depense_id===dep.id);
+  if(!mv) mv=mvts.find(x=>Number(x.montant)===Number(dep.montant)
+                       && (x.description||'')===('Dépense : '+(dep.description||'')));
+  const t=mv?types[mv.caisse_id]:null;
+  return t==='physique' ? 'especes' : (t ? 'compte' : 'inconnu');
+}
+
 async function renderBilanJour(){
   const dateEl=document.getElementById('bj_date');
   if(dateEl && !dateEl.value) dateEl.value=today();
@@ -78,6 +92,15 @@ async function renderBilanJour(){
   // Mouvements du JOUR pour la caisse sélectionnée (flux du jour)
   const Mday=MALL.filter(m=>m.date_mouvement===date && (m.caisse_id===selectedId||m.caisse_dest_id===selectedId));
 
+  // Par quelle caisse chaque dépense est-elle sortie ? C'est le mouvement de sortie
+  // qui le dit. On le retrouve par `depense_id` ; les dépenses antérieures à ce lien
+  // se rattrapent par montant + libellé. Sans ça, espèces et MIX BY YAS tombaient
+  // dans le même bloc et on ne savait plus quelle trésorerie avait payé.
+  const _typeCaisse={}; (CA||[]).forEach(c=>{ _typeCaisse[c.id]=c.type; });
+  const _mvtsDep=MALL.filter(m=>m.categorie==='depense' && m.date_mouvement===date);
+  const _modeParDep={};
+  D.forEach(d=>{ _modeParDep[d.id]=modeDepense(d,_mvtsDep,_typeCaisse); });
+
   // ── KPIs ──
   const caTotal=V.reduce((s,v)=>s+Number(v.montant_total||0),0);
   const cashEncaisse=V.reduce((s,v)=>s+Number(v.montant_paye||0),0);
@@ -109,11 +132,23 @@ async function renderBilanJour(){
     : '<div style="color:var(--textm);font-size:12px">Aucune vente ce jour.</div>';
 
   // ── Dépenses du jour ──
+  const _GRP_DEP=[
+    {k:'especes', lbl:'💵 Espèces — tiroir'},
+    {k:'compte',  lbl:'📱 MIX BY YAS / compte'},
+    {k:'inconnu', lbl:'❔ Caisse non identifiée'}
+  ];
+  const _blocDep=(lignes,lbl)=>{
+    const tot=lignes.reduce((s,d)=>s+Number(d.montant||0),0);
+    return `<div style="font-size:11px;font-weight:700;color:var(--text);margin:10px 0 4px">${lbl} · ${fmt(tot)} F</div>
+    <table class="tbl" style="font-size:11px"><thead><tr><th>Catégorie</th><th>Description</th><th class="num">Montant</th></tr></thead><tbody>
+      ${lignes.map(d=>`<tr><td style="font-weight:600;font-size:11px">${d.categorie||'—'}</td><td style="font-size:10px">${d.description||''}</td><td class="num" style="color:var(--red)">${fmt(d.montant||0)} F</td></tr>`).join('')}
+      <tr style="font-weight:700;background:rgba(239,68,68,.08)"><td colspan="2">Sous-total — ${lignes.length} dépense(s)</td><td class="num" style="color:var(--red)">${fmt(tot)} F</td></tr>
+    </tbody></table>`;
+  };
   document.getElementById('bj-depenses').innerHTML=D.length
-    ? `<table class="tbl" style="font-size:11px"><thead><tr><th>Catégorie</th><th>Description</th><th class="num">Montant</th></tr></thead><tbody>
-      ${D.map(d=>`<tr><td style="font-weight:600;font-size:11px">${d.categorie||'—'}</td><td style="font-size:10px">${d.description||''}</td><td class="num" style="color:var(--red)">${fmt(d.montant||0)} F</td></tr>`).join('')}
-      <tr style="font-weight:700;background:rgba(239,68,68,.1)"><td colspan="2">TOTAL — ${D.length} dépenses</td><td class="num" style="color:var(--red)">${fmt(totDepenses)} F</td></tr>
-    </tbody></table>`
+    ? _GRP_DEP.map(g=>{ const l=D.filter(d=>_modeParDep[d.id]===g.k); return l.length?_blocDep(l,g.lbl):''; }).join('')
+      + `<div style="display:flex;justify-content:space-between;font-weight:800;margin-top:10px;padding:7px 9px;background:rgba(239,68,68,.12);border-radius:8px">
+          <span>TOTAL DÉPENSES — ${D.length}</span><span style="color:var(--red)">${fmt(totDepenses)} F</span></div>`
     : '<div style="color:var(--textm);font-size:12px">Aucune dépense ce jour.</div>';
 
   // ── Réconciliation : attendu = SOLDE CUMULÉ de la caisse ──
@@ -143,6 +178,15 @@ async function renderBilanJour(){
         <div><div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">Marge brute du jour</div>
         <div style="font-size:9px;color:var(--textm);margin-top:2px">CA ${fmt(caTotal)} − Dépenses ${fmt(totDepenses)}</div></div>
         <div style="font-size:22px;font-weight:800;color:${margeBrute>=0?'var(--green)':'var(--red)'}">${margeBrute>=0?'+':''}${fmt(margeBrute)} F</div>
+      </div>
+      <!-- La marge brute se calcule sur le CA GLOBAL, crédit compris : elle dit ce que
+           la journée a rapporté, pas ce qu'elle a laissé dans le tiroir. Retrancher les
+           dépenses d'un argent pas encore encaissé faisait croire à une trésorerie
+           qui n'existait pas. La ligne ci-dessous dit le vrai. -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed rgba(0,0,0,.15)">
+        <div><div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">Trésorerie du jour</div>
+        <div style="font-size:9px;color:var(--textm);margin-top:2px">Encaissé ${fmt(cashEncaisse)} − Dépenses ${fmt(totDepenses)}${creditAccorde>0?` · ${fmt(creditAccorde)} F restent à recouvrer`:''}</div></div>
+        <div style="font-size:22px;font-weight:800;color:${(cashEncaisse-totDepenses)>=0?'var(--g6)':'var(--red)'}">${(cashEncaisse-totDepenses)>=0?'+':''}${fmt(cashEncaisse-totDepenses)} F</div>
       </div>
     </div>
 
