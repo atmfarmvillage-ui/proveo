@@ -260,6 +260,7 @@ async function supprimerMouvementCaisse(id){
   }
   let extra='';
   if(m.categorie==='vente' && m.vente_id) extra='\n\n⚠ La vente redeviendra « impayée » de ce montant.';
+  else if(m.categorie==='reglement_client') extra='\n\n⚠ Le paiement sortira du relevé du client : sa dette remontera d\'autant.';
   else if(m.type==='transfert') extra='\n\n💰 L\'argent revient à la caisse source.';
   if(!confirm(`Supprimer ce mouvement de ${fmt(m.montant)} F ?${extra}\n\nAction irréversible.`)) return;
 
@@ -283,8 +284,55 @@ async function supprimerMouvementCaisse(id){
       else notify(`Relevé client inchangé : aucun paiement de ${fmt(m.montant)} F trouvé pour cette vente`,'gold');
     }catch(e){}
   }
+  // Encaissement saisi depuis la fiche client : il n'a AUCUNE vente rattachée, donc
+  // le bloc ci-dessus ne s'appliquait pas. Le tiroir était corrigé et le relevé du
+  // client continuait de créditer un argent rendu — 583 400 F fantômes sur FLECA 2C.
+  if(m.categorie==='reglement_client') await _annulerReglementClient(m);
   notify('Mouvement supprimé — soldes ajustés ✓','gold');
   await renderCaisse();
+}
+
+// Retire un encaissement client du relevé et rend sa dette au client.
+// L'imputation d'origine va de la vente la plus ANCIENNE à la plus récente :
+// on la défait dans l'autre sens, de la plus récente à la plus ancienne.
+async function _annulerReglementClient(m){
+  try{
+    let reg=null;
+    if(m.reglement_id){
+      const{data}=await SB.from('gp_reglements_clients')
+        .select('id,client_id,montant').eq('id',m.reglement_id).maybeSingle();
+      reg=data||null;
+    }
+    if(!reg){
+      // Mouvement antérieur au rattachement : on le retrouve par montant + date.
+      const{data}=await SB.from('gp_reglements_clients').select('id,client_id,montant')
+        .eq('admin_id',GP_ADMIN_ID).eq('montant',m.montant)
+        .eq('date_paiement',m.date_mouvement).is('deleted_at',null)
+        .order('created_at',{ascending:false}).limit(1);
+      reg=data?.[0]||null;
+    }
+    if(!reg){
+      notify(`Relevé client inchangé : aucun règlement de ${fmt(m.montant)} F trouvé au ${m.date_mouvement}. Corrige-le à la main.`,'r');
+      return;
+    }
+    await SB.from('gp_reglements_clients')
+      .update({deleted_at:new Date().toISOString()}).eq('id',reg.id);
+    let reste=Number(m.montant)||0;
+    const{data:ventes}=await SB.from('gp_ventes').select('id,montant_total,montant_paye')
+      .eq('admin_id',GP_ADMIN_ID).eq('client_id',reg.client_id).is('deleted_at',null)
+      .gt('montant_paye',0).order('date',{ascending:false});
+    for(const v of (ventes||[])){
+      if(reste<=0) break;
+      const retire=Math.min(reste, Number(v.montant_paye)||0);
+      const np=(Number(v.montant_paye)||0)-retire;
+      const st = np<=0 ? 'impaye' : (np>=Number(v.montant_total||0) ? 'paye' : 'partiel');
+      await SB.from('gp_ventes').update({montant_paye:np, statut_paiement:st}).eq('id',v.id);
+      reste-=retire;
+    }
+    notify('Paiement retiré du relevé — la dette du client est rétablie ✓','gold');
+  }catch(e){
+    notify('Mouvement supprimé, mais le relevé du client n\'a pas pu être corrigé : '+(e.message||e),'r');
+  }
 }
 
 // ── HISTORIQUE DES TRANSFERTS ENTRE CAISSES / PDV ──────────────────

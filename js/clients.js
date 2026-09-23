@@ -434,26 +434,43 @@ async function confirmerReglement(clientId){
   if(btn){ btn.disabled=true; btn.textContent='⏳ Encaissement…'; }
   const rendre=()=>{ if(btn){ btn.disabled=false; btn.textContent='✅ Encaisser'; } };
   try{
+    // 0. Anti-doublon. Les dépenses avaient ce garde-fou, pas les encaissements :
+    //    trois clics sur FLECA 2C ont fait entrer 583 400 F jamais reçus, et la
+    //    dette du client a disparu de l'écran.
+    try{
+      const{data:dej}=await SB.from('gp_reglements_clients').select('id')
+        .eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId).eq('date_paiement',date)
+        .eq('montant',montant).is('deleted_at',null).limit(1);
+      if(dej && dej.length && !confirm(
+        `⚠️ Un encaissement de ${fmt(montant)} F est DÉJÀ enregistré pour ${nomClient} le ${date}.\n\n`
+        +`C'est probablement un doublon : l'argent serait compté deux fois en caisse et la dette du client effacée à tort.\n\n`
+        +`Enregistrer quand même ?`)){ rendre(); return; }
+    }catch(_){ /* la vérification ne doit jamais bloquer un encaissement */ }
     // 1. La caisse d'abord : si elle manque, on n'écrit RIEN.
     const caisse=await caisseDuPdv(pdv, yas?'mobile_money':'physique');
     if(!caisse){ dire(`Aucune caisse ${yas?'MIX BY YAS':'physique'} sur ${pdv}. Rien n'a été enregistré.`); rendre(); return; }
     // 2. L'argent entre en caisse. C'est l'écriture qui compte le plus : si elle
     //    échoue, on s'arrête avant de toucher à la dette du client.
-    const{error:eM}=await SB.from('gp_mouvements_caisse').insert({
+    const{data:mvt,error:eM}=await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID, caisse_id:caisse.id, type:'entree', categorie:'reglement_client',
       montant, date_mouvement:date, description:`Règlement ${nomClient} (${modeLabel})`,
       reference: yas?ref:null,
       enregistre_par:GP_USER?.id||null, enregistre_par_nom:GP_USER?.email?GP_USER.email.split('@')[0]:null
-    });
+    }).select('id').maybeSingle();
     if(eM){ dire(`La caisse ${caisse.nom} a refusé l'écriture : ${eM.message}. Rien n'a été enregistré.`); rendre(); return; }
     // À partir d'ici l'argent est en caisse : plus de bouton « réessayer »,
     // un second clic doublerait l'encaissement.
     const fermer=()=>document.getElementById('regl-overlay')?.remove();
     // 3. Le règlement daté, qui alimente le relevé du client.
-    const{error:eR}=await SB.from('gp_reglements_clients').insert({
+    const{data:regRow,error:eR}=await SB.from('gp_reglements_clients').insert({
       admin_id:GP_ADMIN_ID, client_id:clientId, montant, date_paiement:date, mode:modeLabel,
       point_vente:pdv, note: yas?('Réf. YAS '+ref):null, created_by:GP_USER?.id||null
-    });
+    }).select('id').maybeSingle();
+    // Le mouvement porte désormais son règlement : supprimer l'un depuis la caisse
+    // corrige l'autre, au lieu de laisser le relevé créditer un argent rendu.
+    if(mvt?.id && regRow?.id){
+      try{ await SB.from('gp_mouvements_caisse').update({reglement_id:regRow.id}).eq('id',mvt.id); }catch(_){}
+    }
     if(eR){
       fermer();
       notify(`⚠ ${fmt(montant)} F bien crédités sur ${caisse.nom}, mais le relevé de ${nomClient} n'a pas été mis à jour (${eR.message}). NE PAS ré-encaisser — préviens l'admin.`,'r');
