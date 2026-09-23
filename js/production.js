@@ -142,7 +142,10 @@ function renderLotMP(){
       <button onclick="supprimerMPLot(${i})" title="Retirer" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:26px;height:26px;border-radius:6px;cursor:pointer">✕</button>
     </div>`;
   }).join('')+`<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--textm);padding:3px 7px 0">
-    <span>Total composition</span><span style="font-weight:700">${fmtKg(totalKg)} kg</span></div>`;
+    <span>Total composition</span><span style="font-weight:700">${fmtKg(totalKg)} kg</span></div>`
+    // Consignes des MP du lot (blend à diluer, prémix à peser) : elles servent
+    // ici, seau en main, pas seulement sur la fiche.
+    + ((typeof notesLotHtml==='function') ? notesLotHtml(LOT_COMPO) : '');
   if(rupt){
     if(nbOrphelines>0){
       rupt.style.display='block';
