@@ -184,7 +184,31 @@ async function sauvegarderInventairePhysique(mois){
     lignes.map(l=>({...l,inventaire_id:inv.id}))
   );
 
-  notify('Inventaire soumis — en attente de validation ✓','gold');
+  // ── LE COMPTAGE FAIT FOI : le stock bouge MAINTENANT ──
+  // Avant, il attendait la validation d'un autre admin : pendant des jours, le
+  // stock affiché était connu comme faux et personne ne pouvait le corriger.
+  // La validation reste, mais elle ACTE le comptage au lieu de le retarder.
+  // La fonction d'ajustement est idempotente (elle saute les mouvements déjà
+  // écrits pour ce mois) : la validation rattrape ce qui aurait échoué ici.
+  const ecarts=lignes.filter(l=>Math.abs(l.ecart)>0.1);
+  let applique={inserted:0};
+  if(ecarts.length){
+    applique=await _appliquerAjustementStockInventaire(inv,lignes);
+    if(!applique.ok) notify('⚠️ Stock partiellement ajusté : '+(applique.erreurs[0]||''),'r',8000);
+  }
+
+  notify(ecarts.length
+    ? `Inventaire enregistré — stock ajusté (${applique.inserted} écart(s)) ✓`
+    : 'Inventaire enregistré — aucun écart ✓','gold',6000);
+
+  // Les autres administrateurs sont prévenus tout de suite : ils confirment
+  // après coup, ils ne bloquent plus rien.
+  if(ecarts.length && typeof pushSendToTeam==='function'){
+    const manques=ecarts.filter(l=>l.ecart<0).length;
+    pushSendToTeam('📋 Inventaire '+mois+' enregistré',
+      `${GP_USER.email?.split('@')[0]||'Un admin'} : ${ecarts.length} écart(s), dont ${manques} manque(s). Stock déjà ajusté — à confirmer.`,
+      {excludeSelf:true, tag:'inventaire', url:'#stock'});
+  }
   await renderInventairePhysique();
 }
 
@@ -199,13 +223,13 @@ async function afficherInventaireExistant(inv,mois){
   document.getElementById('invp-content').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div>
-        <span class="badge ${inv.statut==='valide'?'bdg-g':inv.statut==='soumis'?'bdg-gold':'bdg-r'}" style="font-size:11px">${inv.statut.toUpperCase()}</span>
+        <span class="badge ${inv.statut==='valide'?'bdg-g':inv.statut==='soumis'?'bdg-gold':'bdg-r'}" style="font-size:11px">${inv.statut==='soumis'?'STOCK AJUSTÉ — À CONFIRMER':inv.statut.toUpperCase()}</span>
         <span style="font-size:11px;color:var(--textm);margin-left:8px">Saisi par ${inv.saisi_par_nom||'—'}</span>
         ${inv.valide_par_nom?`<span style="font-size:11px;color:var(--green);margin-left:8px">· Validé par ${inv.valide_par_nom}</span>`:''}
       </div>
       <div style="display:flex;gap:6px">
         ${peutValider?`
-          <button class="btn btn-g btn-sm" onclick="validerInventaire('${inv.id}')">✅ Valider</button>
+          <button class="btn btn-g btn-sm" onclick="validerInventaire('${inv.id}')" title="Le stock est déjà à jour : vous confirmez le comptage">✅ Confirmer le comptage</button>
           <button class="btn btn-red btn-sm" onclick="refuserInventaire('${inv.id}')">✕ Refuser</button>`:''}
         ${GP_ROLE==='admin'&&inv.statut==='valide'&&ecarts.length?`<button class="btn btn-out btn-sm" onclick="reappliquerStockInventaire('${inv.id}')" title="Corrige le stock si l'ajustement n'avait pas pris">🔄 Ré-appliquer au stock</button>`:''}
         ${GP_ROLE==='admin'&&inv.statut==='valide'?`<button onclick="annulerEtRefaireInventaire('${inv.id}')" title="Erreur de comptage : retire les ajustements de ce mois et rouvre la saisie" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--textm);opacity:.65;cursor:pointer;align-self:center" onmouseover="this.style.opacity=1;this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.opacity=.65;this.style.color='var(--textm)';this.style.borderColor='var(--border)'">↩️ annuler et refaire</button>`:''}
@@ -307,9 +331,10 @@ async function validerInventaire(invId){
   const{data:lignes}=await SB.from('gp_inventaires_lignes').select('*').eq('inventaire_id',invId);
   const avecEcarts=(lignes||[]).filter(l=>Math.abs(l.ecart)>0.1);
   if(avecEcarts.length){
-    if(!confirm(`Cet inventaire a ${avecEcarts.length} écart(s).\nValider va ajuster le stock automatiquement.\n\nConfirmer ?`))return;
-    // ATOMIQUE : si l'ajustement du stock échoue, on N'ENREGISTRE PAS « validé »
-    // (fini l'inventaire marqué validé alors que le stock n'a pas bougé).
+    if(!confirm(`Cet inventaire a ${avecEcarts.length} écart(s).\nLe stock a déjà été ajusté à la saisie — vous confirmez le comptage.\n\nConfirmer ?`))return;
+    // Filet : l'ajustement a normalement été appliqué à la saisie. La fonction
+    // est idempotente, donc ce second appel ne double rien ; il rattrape le cas
+    // où l'écriture du stock avait échoué (réseau coupé au mauvais moment).
     const res=await _appliquerAjustementStockInventaire(inv,lignes);
     if(!res.ok){
       notify('⚠️ Ajustement du stock ÉCHOUÉ — inventaire NON validé. '+(res.erreurs[0]||''),'r');
@@ -321,7 +346,12 @@ async function validerInventaire(invId){
     valide_par:GP_USER.id,
     valide_par_nom:GP_USER.email?.split('@')[0]||'—'
   }).eq('id',invId);
-  notify('Inventaire validé et stock ajusté ✓','gold');
+  notify('Comptage confirmé ✓','gold');
+  if(typeof pushSendToTeam==='function'){
+    pushSendToTeam('✅ Inventaire '+(inv.mois||'')+' confirmé',
+      `${GP_USER.email?.split('@')[0]||'Un admin'} a confirmé le comptage.`,
+      {excludeSelf:true, tag:'inventaire'});
+  }
   await renderInventairePhysique();
 }
 

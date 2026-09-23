@@ -190,6 +190,8 @@ async function renderStockNiveaux(){
 
   // File "Entrées MP à confirmer" (achats non encore crédités au stock)
   if(typeof renderEntreesMPAConfirmer==='function') renderEntreesMPAConfirmer();
+  // Ajustements déjà appliqués qui attendent le regard d'un second administrateur
+  if(typeof renderAjustementsRecents==='function') renderAjustementsRecents();
 }
 
 // ── FILE « ENTRÉES MP À CONFIRMER » ───────────────────────────────

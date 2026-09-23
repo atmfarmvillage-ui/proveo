@@ -338,6 +338,15 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="page-sub">Entrées MP · Sorties automatiques à la production · Niveaux en temps réel</div>
   <div class="g4" id="stock-kpis" style="margin-bottom:14px"></div>
   <div id="stock-mp-pending"></div>
+  <!-- Ajustements appliqués, en attente d'un second regard. Le stock a déjà bougé. -->
+  <div class="card admin-only" style="margin-bottom:14px">
+    <div class="card-title">
+      <div class="ct-left"><span>📦 Derniers ajustements</span></div>
+      <button class="btn btn-out btn-sm" onclick="renderAjustementsRecents()" title="Actualiser">🔄</button>
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Le stock est ajusté immédiatement et l'équipe est prévenue. En cas d'erreur, « Annuler » remet le stock comme avant.</div>
+    <div id="aj-liste"></div>
+  </div>
   <div class="g2" style="align-items:start">
     <div>
       <div class="card">
@@ -3124,7 +3133,41 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   </div>
 </div>
 
-<div id="modal-nutri style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNutri()">
+<!-- ══ AJUSTEMENT DE STOCK — le comptage fait foi, la validation vient après ══ -->
+<div id="modal-ajust" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerAjustement()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:460px;width:100%">
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px">📦 Ajuster le stock</div>
+    <div id="aj-nom" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:10px">—</div>
+    <input type="hidden" id="aj-id">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px">
+      Stock théorique : <b id="aj-theorique">0</b> <span id="aj-unite">kg</span>
+    </div>
+    <div class="fr"><label>Stock réellement compté *</label>
+      <input type="number" id="aj-compte" step="0.01" oninput="ajCalculerEcart()" placeholder="Ce que vous avez compté">
+    </div>
+    <div id="aj-ecart" style="font-size:12px;margin:-4px 0 10px"></div>
+    <div class="fr"><label>Motif *</label>
+      <select id="aj-motif">
+        <option value="comptage">Comptage physique — écart constaté</option>
+        <option value="casse">Casse ou sac éventré</option>
+        <option value="perte">Perte : humidité, rongeurs, moisissure</option>
+        <option value="vol">Vol suspecté</option>
+        <option value="saisie">Erreur de saisie à corriger</option>
+        <option value="preleve">Prélèvement interne non enregistré</option>
+      </select>
+    </div>
+    <div class="fr"><label>Note — obligatoire au-delà de 20 % d'écart</label>
+      <textarea id="aj-note" rows="2" placeholder="Ce qui s'est passé, en une phrase"></textarea>
+    </div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Le stock est modifié immédiatement. Les autres administrateurs sont prévenus et confirment ensuite.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-out btn-sm" onclick="fermerAjustement()">Annuler</button>
+      <button class="btn btn-g btn-sm" onclick="enregistrerAjustement()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-nutri" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerNutri()">
   <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
     <div style="font-size:16px;font-weight:800;margin-bottom:2px">🧪 Valeurs nutritionnelles</div>
     <div id="nutri-titre" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px">—</div>
@@ -3486,8 +3529,9 @@ try{
   <script src="js/catalogue.js?v=1.5.0"></script>
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
-<script src="js/stock.js?v=2.30.3"></script>
-<script src="js/matieres.js?v=2.30.0"></script>
+<script src="js/stock.js?v=2.30.4"></script>
+<script src="js/matieres.js?v=2.31.0"></script>
+<script src="js/ajustements.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.26.1"></script>
 <script src="js/ventes.js?v=2.29.4"></script>
@@ -3503,7 +3547,7 @@ try{
 <script src="js/achats.js?v=2.26.1"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
 <script src="js/caisse.js?v=2.32.1"></script>
-<script src="js/inventaire_physique.js?v=2.30.5"></script>
+<script src="js/inventaire_physique.js?v=2.31.0"></script>
 <script src="js/distribution.js?v=2.30.3"></script>
 <script src="js/salaires.js?v=2.26.1"></script>
 <script src="js/rapports.js?v=2.26.1"></script>
