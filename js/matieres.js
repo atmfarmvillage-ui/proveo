@@ -100,6 +100,7 @@ async function renderMatieresPremieresPage(){
               ${(typeof nutriRenseignee==='function' && !nutriRenseignee(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Valeurs nutritionnelles manquantes — l'étiquette ne peut pas s'imprimer">🧪 à renseigner</button>`
                 : `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px" title="Valeurs nutritionnelles">🧪</button>`}
+              ${(GP_ROLE==='admin'||GP_EST_GERANT)?`<button class="btn btn-out btn-sm" onclick="ouvrirAjustement('${i.id}')" style="padding:2px 5px;font-size:9px" title="Ajuster le stock après comptage">📦</button>`:''}
             </div>
           </td>
 

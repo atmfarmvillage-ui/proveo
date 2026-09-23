@@ -314,6 +314,106 @@ async function catalogueAliments() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PARTAGE WHATSAPP — le catalogue en TEXTE
+//
+// Le PDF est fait pour la boutique ; sur WhatsApp, c'est le texte qui circule.
+// Il se lit sans ouvrir de fichier, sur n'importe quel téléphone, se transfère
+// d'un éleveur à l'autre, et il sort de la base à chaque envoi : il ne peut pas
+// être périmé, contrairement à une photo d'affiche qui traîne depuis des mois.
+//
+// Deux chemins, dans cet ordre :
+//   · `navigator.share` — la feuille de partage du téléphone (WhatsApp, SMS…) ;
+//   · à défaut, `wa.me` — WhatsApp s'ouvre avec le texte déjà écrit.
+// Le presse-papier sert de dernier recours : le texte n'est jamais perdu.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function catPrixTxt(v) {
+  const n = Number(v || 0);
+  return n > 0 ? new Intl.NumberFormat('fr-FR').format(Math.round(n)).replace(/ | /g, ' ') + ' F' : null;
+}
+
+// En-tête et pied du message : l'entreprise du compte, jamais un nom en dur —
+// Provéo sert plusieurs provenderies.
+function catEntete(titre) {
+  const cfg = (typeof GP_CONFIG !== 'undefined' && GP_CONFIG) || {};
+  const d = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const l = [`*${(cfg.nom_provenderie || 'Nos prix').toUpperCase()} — ${titre.toUpperCase()}*`, `Prix du ${d}`];
+  if (cfg.slogan) l.push(`_${cfg.slogan}_`);
+  return l.join('\n');
+}
+function catPiedTxt() {
+  const cfg = (typeof GP_CONFIG !== 'undefined' && GP_CONFIG) || {};
+  const l = [];
+  const tel = [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ');
+  if (tel) l.push(`📞 ${tel}`);
+  if (cfg.localisation) l.push(`📍 ${cfg.localisation}`);
+  return l.join('\n');
+}
+
+function catPartager(titre, corps) {
+  const texte = [catEntete(titre), '', corps, '', catPiedTxt()].filter(x => x !== null).join('\n').trim();
+  // La feuille de partage native demande un clic direct de l'utilisateur : elle
+  // est appelée sans await préalable, sinon le navigateur la refuse.
+  if (navigator.share) {
+    navigator.share({ text: texte }).catch(() => {});
+    return;
+  }
+  const w = window.open('https://wa.me/?text=' + encodeURIComponent(texte), '_blank');
+  if (!w) {
+    if (navigator.clipboard) navigator.clipboard.writeText(texte).then(
+      () => notify('Catalogue copié : colle-le dans WhatsApp', 'gold', 6000),
+      () => notify('Autorise les fenêtres pour partager', 'r', 6000));
+    else notify('Autorise les fenêtres pour partager', 'r', 6000);
+  }
+}
+
+async function partagerCatalogueAliments() {
+  try {
+    const lignes = catRegrouper(await catChargerAliments())
+      .filter(l => Number(l.gros) > 0 || Number(l.detail) > 0);
+    if (!lignes.length) { notify('Aucune formule active avec un prix.', 'r'); return; }
+
+    const bloc = (titre, l) => {
+      if (!l.length) return '';
+      const premix = l.some(x => x.mode === 'premix');
+      const corps = l.sort((a, b) => (a.ordre - b.ordre) || a.nom.localeCompare(b.nom, 'fr')).map(x => {
+        // Le porc ne se vend pas en gros/détail mais avec ou sans prémix : garder
+        // les mots de l'affiche évite qu'un client compare deux choses différentes.
+        const a = catPrixTxt(x.gros), b = catPrixTxt(x.detail);
+        const prix = premix
+          ? [a ? `sans prémix ${a}` : null, b ? `avec prémix ${b}` : null]
+          : [b ? `détail ${b}` : null, a ? `gros ${a}` : null];
+        return `• ${x.nom} (sac ${x.poids} kg) : ${prix.filter(Boolean).join(' · ')}`;
+      }).join('\n');
+      return `*${titre}*\n${corps}`;
+    };
+
+    const connues = new Set(CAT_ESPECES.map(e => e.cle));
+    const blocs = CAT_ESPECES.map(e => bloc(e.titre, lignes.filter(x => x.espece === e.cle))).filter(Boolean);
+    const autres = lignes.filter(x => !connues.has(x.espece));
+    if (autres.length) blocs.push(bloc('AUTRES', autres));
+
+    catPartager('Prix des aliments', blocs.join('\n\n'));
+  } catch (e) {
+    notify('Erreur : ' + (e.message || e), 'r', 5000);
+  }
+}
+
+async function partagerCatalogueMP() {
+  try {
+    const mp = await catChargerMP();
+    if (!mp.length) { notify("Aucune matière première n'a de prix de VENTE.", 'r', 6000); return; }
+    const corps = mp.map(i => {
+      const kg = catPrixTxt(i.kg), sac = (i.sac > 0 && i.poids > 0) ? `${catPrixTxt(i.sac)} le sac de ${i.poids} kg` : null;
+      return `• ${i.nom} : ${[kg ? kg + '/kg' : null, sac].filter(Boolean).join(' · ')}`;
+    }).join('\n');
+    catPartager('Prix des matières premières', corps);
+  } catch (e) {
+    notify('Erreur : ' + (e.message || e), 'r', 5000);
+  }
+}
+
 // ── Catalogue MATIÈRES PREMIÈRES ──────────────────────────────────────────
 // Deux prix : au SAC et au KILO — les matières se vendent des deux façons.
 // Le poids du sac varie (maïs 50 kg, prémix 25) : il s'affiche sur la ligne,
