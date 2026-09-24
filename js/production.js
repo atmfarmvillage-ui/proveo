@@ -50,10 +50,23 @@ async function loadStockMPLot(){
   LOT_STOCK_MP = {};
   try{
     const data=await _fetchAllStockMp();
-    (data||[]).forEach(r=>{
-      if(!r.ingredient_id)return;
-      LOT_STOCK_MP[r.ingredient_id]=(LOT_STOCK_MP[r.ingredient_id]||0)+(r.type==='entree'?1:-1)*Number(r.quantite||0);
-    });
+    // MEME calcul que la page Stock, la page Matières et l'ajustement :
+    // `calcNiveaux` rattache chaque mouvement à sa fiche par id PUIS par nom
+    // normalisé. L'ancienne version ignorait purement et simplement les
+    // mouvements sans `ingredient_id` — il y en a des milliers, hérités des
+    // saisies par nom — et la production annonçait « Sel (NaCl) : -0,5 kg »
+    // là où le stock affichait 25 kg. Deux vérités pour le même sac.
+    const niveaux = (typeof calcNiveaux==='function') ? calcNiveaux(data||[]) : null;
+    if(niveaux){
+      (GP_INGREDIENTS||[]).forEach(i=>{
+        if(niveaux[i.nom] !== undefined) LOT_STOCK_MP[i.id] = Number(niveaux[i.nom])||0;
+      });
+    } else {
+      (data||[]).forEach(r=>{
+        if(!r.ingredient_id)return;
+        LOT_STOCK_MP[r.ingredient_id]=(LOT_STOCK_MP[r.ingredient_id]||0)+(r.type==='entree'?1:-1)*Number(r.quantite||0);
+      });
+    }
   }catch(e){}
 }
 
