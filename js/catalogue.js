@@ -406,6 +406,14 @@ function catSectionsAliments(lignes, especes) {
       titre,
       entetes: premix ? ['Formule', 'Sac', 'Sans prémix', 'Avec prémix']
                       : ['Formule', 'Sac', 'Détail', 'Gros'],
+      // Les PRIX en gras, le reste normal : c'est ce que le client cherche.
+      // Chaque tableau décrit ses colonnes, les deux catalogues n'ont pas les
+      // mêmes (ici la 2e est un poids, dans les matières c'est un prix).
+      // Largeurs FIXES : sans elles chaque espece dimensionnait ses colonnes
+      // selon son contenu, et les tableaux ne s'alignaient plus entre eux.
+      colonnes: [{ largeur: 74 }, { largeur: 36, halign: 'center' },
+                 { largeur: 36, halign: 'right', gras: true },
+                 { largeur: 36, halign: 'right', gras: true }],
       rows
     };
   };
@@ -422,7 +430,14 @@ function catSectionMP(mp) {
     (i.sac > 0 && i.poids > 0) ? i.poids + ' kg' : '—',
     catPdfPrix(i.kg)
   ]);
-  return rows.length ? [{ titre: null, entetes: ['Matière première', 'Le sac', 'Poids', 'Au kilo'], rows }] : [];
+  return rows.length ? [{
+    titre: null,
+    entetes: ['Matière première', 'Le sac', 'Poids', 'Au kilo'],
+    colonnes: [{ largeur: 74 }, { largeur: 36, halign: 'right', gras: true },
+               { largeur: 36, halign: 'center' },
+               { largeur: 36, halign: 'right', gras: true }],
+    rows
+  }] : [];
 }
 
 // Assemble le document. Les nombres passent par `catPrixTxt`, qui remplace
@@ -435,31 +450,54 @@ function catPdfDoc(titre, sections) {
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 14;
   const d = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(0);
-  doc.text(String(cfg.nom_provenderie || 'Nos prix').toUpperCase(), M, 20);
-  doc.setFontSize(13); doc.setTextColor.apply(doc, CAT_PDF_VERT);
-  doc.text(titre, M, 28);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
-  doc.text('Prix du ' + d, M, 34);
-  if (cfg.slogan) { doc.setFontSize(9); doc.text(String(cfg.slogan), M, 39); }
-  doc.setDrawColor(220); doc.line(M, 42, W - M, 42);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.setTextColor(0);
+  doc.text(String(cfg.nom_provenderie || 'Nos prix').toUpperCase(), M, 22);
+  doc.setFontSize(16); doc.setTextColor.apply(doc, CAT_PDF_VERT);
+  doc.text(titre, M, 32);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(80);
+  doc.text('Prix du ' + d, M, 39);
+  if (cfg.slogan) { doc.setFontSize(10); doc.text(String(cfg.slogan), M, 45); }
+  // Un filet vert épais : il sépare l'en-tête du tableau et donne son bord au document.
+  doc.setDrawColor.apply(doc, CAT_PDF_VERT); doc.setLineWidth(0.9);
+  doc.line(M, cfg.slogan ? 49 : 43, W - M, cfg.slogan ? 49 : 43);
+  doc.setLineWidth(0.2);
 
-  let y = 48;
+  let y = (cfg.slogan ? 49 : 43) + 10;
   sections.forEach(s => {
     if (s.titre) {
-      if (y > H - 40) { doc.addPage(); y = 20; }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      if (y > H - 45) { doc.addPage(); y = 22; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
       doc.setTextColor.apply(doc, CAT_PDF_VERT);
-      doc.text(s.titre, M, y); y += 2;
+      doc.text(s.titre, M, y); y += 3;
     }
+    // Chaque colonne prend l'alignement et la graisse décrits par sa section.
+    const cols = {};
+    (s.colonnes || []).forEach((c, i) => {
+      cols[i] = {};
+      if (c.halign) cols[i].halign = c.halign;
+      if (c.gras) cols[i].fontStyle = 'bold';
+      if (c.largeur) cols[i].cellWidth = c.largeur;
+    });
     doc.autoTable({
       startY: y + 2, head: [s.entetes], body: s.rows, margin: { left: M, right: M },
-      styles: { fontSize: 9.5, cellPadding: 2.2, textColor: 30 },
-      headStyles: { fillColor: CAT_PDF_VERT, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 247, 245] },
-      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+      theme: 'grid',
+      // 12 pt et un filet visible sur chaque case : le catalogue se lit sur un
+      // téléphone, souvent dehors. En dessous, les chiffres se confondent.
+      styles: {
+        fontSize: 12, cellPadding: 3.4, textColor: 25, valign: 'middle',
+        lineColor: [120, 140, 120], lineWidth: 0.25, overflow: 'linebreak'
+      },
+      headStyles: {
+        fillColor: CAT_PDF_VERT, textColor: 255, fontStyle: 'bold', fontSize: 12.5,
+        halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.25, cellPadding: 3.6
+      },
+      alternateRowStyles: { fillColor: [235, 244, 236] },
+      columnStyles: cols,
+      // L'en-tête se répète en haut de chaque page : sans lui, la 2e page est
+      // une colonne de chiffres dont on ne sait plus ce qu'ils désignent.
+      showHead: 'everyPage'
     });
-    y = doc.lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable.finalY + 10;
   });
 
   const tel = [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ');
@@ -467,9 +505,10 @@ function catPdfDoc(titre, sections) {
   const n = doc.internal.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
     doc.setPage(p);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120);
-    if (pied) doc.text(pied, M, H - 10);
-    doc.text(p + '/' + n, W - M, H - 10, { align: 'right' });
+    doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(M, H - 15, W - M, H - 15);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    if (pied) doc.text(pied, M, H - 9);
+    doc.text(p + '/' + n, W - M, H - 9, { align: 'right' });
   }
   return doc;
 }
