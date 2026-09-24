@@ -55,6 +55,9 @@ async function ouvrirAjustement(id){
   if(!ing){ notify('Matière première introuvable','r'); return; }
   const m = document.getElementById('modal-ajust');
   if(!m){ notify('Recharge la page (Ctrl+Shift+R)','r'); return; }
+  // La fenêtre garde la position de défilement du précédent affichage : sans ce
+  // retour en haut, le titre et le stock théorique restent hors de l'écran.
+  m.scrollTop = 0;
   const actuel = await ajStockActuel(ing.nom);
   document.getElementById('aj-id').value = ing.id;
   document.getElementById('aj-nom').textContent = ing.nom;
