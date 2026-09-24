@@ -552,7 +552,7 @@ async function saveModificationAchat(){
     // Ré-appliquer les prix des ingrédients
     for(const l of MODIF_LIGNES){
       if(l.ingredient_id){
-        await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+        await majPrixMP(l.ingredient_id, l.prix_unitaire);
       }
     }
   }
@@ -860,7 +860,7 @@ async function crediterStockDepuisAchat(achatId){
     if(stockEntrees.length){ const{error}=await SB.from('gp_stock_mp').insert(stockEntrees); if(error) throw error; }
     for(const l of L){
       if(l.ingredient_id){
-        await SB.from('gp_ingredients').update({prix_actuel:l.prix_unitaire}).eq('id',l.ingredient_id);
+        await majPrixMP(l.ingredient_id, l.prix_unitaire);
       }
     }
   }

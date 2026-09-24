@@ -338,7 +338,7 @@ async function saveMPEntree(){
   });
   if(error){err.textContent='Erreur: '+error.message;return;}
   // Update ingredient price
-  if(prix>0)await SB.from('gp_ingredients').update({prix_actuel:prix}).eq('id',ingrId);
+  if(prix>0)await majPrixMP(ingrId, prix);
   err.textContent='';
   ['mp_qte','mp_prix','mp_fourn','mp_ref'].forEach(id=>document.getElementById(id).value='');
   effacerSelectionMP();
@@ -408,7 +408,7 @@ async function saveStockInitial(){
   // Mettre à jour le prix actuel des ingrédients si modifié
   for(const r of rows){
     if(r.prix_unit > 0){
-      await SB.from('gp_ingredients').update({prix_actuel: r.prix_unit}).eq('id', r.ingredient_id);
+      await majPrixMP(r.ingredient_id, r.prix_unit);
       const idx = GP_INGREDIENTS.findIndex(i=>i.id===r.ingredient_id);
       if(idx>=0) GP_INGREDIENTS[idx].prix_actuel = r.prix_unit;
     }
