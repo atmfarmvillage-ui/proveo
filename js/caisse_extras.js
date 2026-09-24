@@ -301,7 +301,14 @@ async function _debiterCaisseDepense(dep, preferredCaisseId){
     // Se rabattre sur le PDV de l'utilisateur ferait sortir l'argent d'un autre tiroir que
     // celui où la dépense est affichée — c'est ce qui creusait le solde de Lomé Sanguéra.
     const pv = dep.point_vente || 'Production';
-    let cq = SB.from('gp_caisses').select('id').eq('admin_id',dep.admin_id).eq('type','physique');
+    // `actif` et un ORDRE sont indispensables. Sans eux, ce repli a envoyé
+    // 79 dépenses et 712 700 F dans une caisse DÉSACTIVÉE nommée « nom »,
+    // créée par erreur le 27/05 — elle sortait en premier, la base rendant
+    // les lignes dans l'ordre qui l'arrange. La plus ancienne caisse ACTIVE
+    // du point de vente est le seul choix défendable.
+    let cq = SB.from('gp_caisses').select('id')
+      .eq('admin_id',dep.admin_id).eq('type','physique').eq('actif',true)
+      .order('created_at',{ascending:true});
     // Une caisse du siège porte soit NULL, soit littéralement 'Production' : on accepte les deux.
     cq = (pv === 'Production')
        ? cq.or('point_vente.is.null,point_vente.eq.Production')
@@ -506,9 +513,19 @@ async function saveModifSoldeInit(){
 
 // ── HOOK : pré-remplir le select caisse à l'ouverture des formulaires concernés ──
 // Patche les fonctions existantes pour qu'elles peuplent les selects avant affichage
-(function(){
+// ⚠️ CES GREFFES DOIVENT ATTENDRE QUE TOUT SOIT CHARGÉ.
+// `PAGE_RENDERERS` est déclaré dans auth.js, qui est chargé APRÈS ce fichier :
+// exécutées tout de suite, les conditions ci-dessous étaient toutes fausses et
+// les greffes ne s'installaient jamais — en silence. Résultat : le menu
+// « Caisse à débiter » des Dépenses et celui des Paiements MP restaient
+// désespérément vides, et personne ne savait pourquoi.
+let _hooksCaissePoses = false;
+function _poserHooksCaisse(){
+  if(_hooksCaissePoses) return;
+  if(typeof PAGE_RENDERERS === 'undefined') return;
+  _hooksCaissePoses = true;
   // Hook page dépenses : à l'ouverture, peupler le select caisse
-  if(typeof PAGE_RENDERERS !== 'undefined' && PAGE_RENDERERS.depenses){
+  if(PAGE_RENDERERS.depenses){
     const _origDep = PAGE_RENDERERS.depenses;
     PAGE_RENDERERS.depenses = async function(){
       const r = _origDep();
@@ -523,7 +540,7 @@ async function saveModifSoldeInit(){
     };
   }
   // Hook page paiements MP idem
-  if(typeof PAGE_RENDERERS !== 'undefined' && PAGE_RENDERERS.paiements_mp){
+  if(PAGE_RENDERERS.paiements_mp){
     const _origPmt = PAGE_RENDERERS.paiements_mp;
     PAGE_RENDERERS.paiements_mp = async function(){
       const r = _origPmt();
@@ -531,7 +548,14 @@ async function saveModifSoldeInit(){
       await remplirSelectCaisses('pmt-caisse', '— Caisse par défaut —');
     };
   }
-})();
+}
+// Une fois maintenant au cas où l'ordre change un jour, une fois quand la page
+// est prête — c'est ce second passage qui pose réellement les greffes.
+_poserHooksCaisse();
+if(typeof document !== 'undefined'){
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _poserHooksCaisse);
+  else _poserHooksCaisse();
+}
 
 // Wrapper pour le paiement MP : ajoute le caisse_id sélectionné au mouvement
 // Override saveModalPaiement pour utiliser la caisse choisie
