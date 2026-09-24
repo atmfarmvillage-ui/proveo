@@ -7,6 +7,11 @@ async function renderMatieresPremieresPage(){
   const filtered = GP_INGREDIENTS.filter(i=>
     !search || normalizeSearch(i.nom).includes(search)
   );
+  // Prix d'achat, prix de vente et seuil : réservés à l'admin. Les crayons étaient
+  // affichés à tout le monde alors que l'enregistrement refusait — une secrétaire
+  // saisissait un prix, cliquait ✓ et recevait un refus. Un bouton qu'on ne peut
+  // pas utiliser ne doit pas s'afficher.
+  const _mpEditable = GP_ROLE==='admin';
 
   // KPIs
   const totalMP = GP_INGREDIENTS.length;
@@ -94,9 +99,9 @@ async function renderMatieresPremieresPage(){
               ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerNom('${i.id}')" id="mpp-nom-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Renommer">✏️</button>
               <button class="btn btn-g btn-sm" onclick="mppSauverNom('${i.id}')" id="mpp-nom-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
               ${inactif?'<span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}
-              ${(typeof pvRenseigne==='function' && !pvRenseigne(i))
+              ${!_mpEditable ? '' : ((typeof pvRenseigne==='function' && !pvRenseigne(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Aucun prix de vente fixé">💰 prix de vente ?</button>`
-                : `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px" title="Prix de vente">💰</button>`}
+                : `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px" title="Prix de vente">💰</button>`)}
               ${(typeof nutriRenseignee==='function' && !nutriRenseignee(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Valeurs nutritionnelles manquantes — l'étiquette ne peut pas s'imprimer">🧪 à renseigner</button>`
                 : `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px" title="Valeurs nutritionnelles">🧪</button>`}
@@ -112,8 +117,8 @@ async function renderMatieresPremieresPage(){
               <input type="number" id="mpp-prix-inp-${i.id}" value="${i.prix_actuel||0}"
                 style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
                 onkeydown="if(event.key==='Enter')mppSauverPrix('${i.id}');if(event.key==='Escape')mppAnnulerPrix('${i.id}')">
-              <button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Modifier le prix d'achat">✏️</button>
-              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>
+              ${_mpEditable?`<button class="btn btn-out btn-sm" onclick="mppEditerPrix('${i.id}')" id="mpp-prix-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Modifier le prix d'achat">✏️</button>
+              <button class="btn btn-g btn-sm" onclick="mppSauverPrix('${i.id}')" id="mpp-prix-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
             </div>
           </td>
 
@@ -124,8 +129,8 @@ async function renderMatieresPremieresPage(){
               <input type="number" id="mpp-seuil-inp-${i.id}" value="${seuil}"
                 style="width:70px;display:none;padding:2px 5px;font-size:11px;text-align:right"
                 onkeydown="if(event.key==='Enter')mppSauverSeuil('${i.id}');if(event.key==='Escape')mppAnnulerSeuil('${i.id}')">
-              <button class="btn btn-out btn-sm" onclick="mppEditerSeuil('${i.id}')" id="mpp-seuil-edit-${i.id}" style="padding:2px 4px;font-size:9px">✏️</button>
-              <button class="btn btn-g btn-sm" onclick="mppSauverSeuil('${i.id}')" id="mpp-seuil-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>
+              ${_mpEditable?`<button class="btn btn-out btn-sm" onclick="mppEditerSeuil('${i.id}')" id="mpp-seuil-edit-${i.id}" style="padding:2px 4px;font-size:9px">✏️</button>
+              <button class="btn btn-g btn-sm" onclick="mppSauverSeuil('${i.id}')" id="mpp-seuil-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
             </div>
           </td>
 
@@ -232,6 +237,7 @@ function mppAnnulerSeuil(id){
   document.getElementById('mpp-seuil-save-'+id).style.display='none';
 }
 async function mppSauverSeuil(id){
+  if(GP_ROLE!=='admin'){notify('Seul l\'admin modifie les seuils','r');return;}
   const val=+document.getElementById('mpp-seuil-inp-'+id).value||100;
   const{error}=await SB.from('gp_ingredients').update({seuil_alerte:val}).eq('id',id);
   if(error){notify('Erreur: '+error.message,'r');return;}

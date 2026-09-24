@@ -1,4 +1,4 @@
-const PROVENDA_VERSION = '3.9.0';
+const PROVENDA_VERSION = '3.9.1';
 
 // ══════════════════════════════════════════════════
 // PROVENDA — CONFIGURATION SUPABASE
