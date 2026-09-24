@@ -86,17 +86,44 @@ async function saveCreditPlafond(){
   notify(`Plafond de crédit ${actif?'activé ('+fmt(montant)+' F)':'désactivé'} ✓`,'gold');
 }
 
-// Pré-sélectionne, dans un select de caisse, la caisse du PDV connecté (ou siège pour l'admin)
+// Pré-sélectionne le TIROIR du point de vente connecté. Ne choisit QUE lorsque
+// c'est certain : une caisse devinée est pire qu'une caisse manquante, elle ne se
+// voit pas. Renvoie true si une caisse a été posée, false s'il faut demander.
+// Le siège s'écrit `NULL` OU 'Production' : chercher seulement NULL ne trouvait
+// plus rien depuis que toutes les caisses portent un point de vente, et le menu
+// restait sur sa première option — une banque, la liste étant triée par type.
 async function preselectCaissePDV(selectId){
   const sel=document.getElementById(selectId);
-  if(!sel) return;
+  if(!sel) return false;
   try{
     let cq=SB.from('gp_caisses').select('id,point_vente').eq('admin_id',GP_ADMIN_ID).eq('type','physique').eq('actif',true);
-    cq = GP_POINT_VENTE ? cq.eq('point_vente',GP_POINT_VENTE) : cq.is('point_vente',null);
+    cq = GP_POINT_VENTE
+       ? cq.eq('point_vente',GP_POINT_VENTE)
+       : cq.or('point_vente.is.null,point_vente.eq.Production');
     const{data}=await cq.limit(1);
     const id=data?.[0]?.id;
-    if(id && [...sel.options].some(o=>o.value===id)) sel.value=id;
+    if(id && [...sel.options].some(o=>o.value===id)){ sel.value=id; return true; }
   }catch(e){}
+  return false;
+}
+
+// Dit à l'écran Dépenses qu'aucune caisse n'a pu être désignée. On ne devine pas,
+// on demande — et l'enregistrement refusera tant que le choix n'est pas fait.
+function depAvertirCaisse(afficher){
+  const wrap=document.getElementById('dep-caisse-select-wrap');
+  if(!wrap) return;
+  let el=document.getElementById('dep-caisse-avert');
+  if(!afficher){ if(el) el.remove(); return; }
+  if(!el){
+    el=document.createElement('div');
+    el.id='dep-caisse-avert';
+    el.style.cssText='margin-top:6px;font-size:11px;padding:7px 9px;border-radius:7px;'
+      +'background:rgba(232,197,71,.14);border:1px solid rgba(232,197,71,.5);color:var(--text)';
+    wrap.appendChild(el);
+  }
+  el.innerHTML='⚠️ <b>Choisis la caisse qui paie.</b> Aucune caisse ne peut être désignée '
+    +'automatiquement pour ce compte — mieux vaut la demander que de faire sortir '
+    +'l\'argent du mauvais tiroir.';
 }
 
 // Calcule les soldes de toutes les caisses passées (même logique que renderCaisse)
@@ -201,6 +228,16 @@ async function saveDep(){
         + _alerte.faire.replace(/<[^>]+>/g,'')
         + `\n\nEnregistrer quand même « ${desc} » comme DÉPENSE ?`)) return;
     const caisseSel = document.getElementById('dep_caisse_id')?.value || null;
+    // Aucune caisse choisie = on ne devine pas. Une dépense qu'on refuse d'enregistrer
+    // est un problème qu'on voit ; une dépense sortie du mauvais tiroir est un problème
+    // qu'on découvre trois mois plus tard.
+    if(!caisseSel){
+      err.textContent = 'Choisis la caisse qui paie : l\'argent doit sortir d\'un tiroir précis.';
+      depAvertirCaisse(true);
+      document.getElementById('dep_caisse_id')?.focus();
+      if(typeof notify==='function') notify('⚠ Choisis la caisse qui paie cette dépense','r',6000);
+      return;
+    }
     // La dépense est imputée AU POINT DE VENTE DE LA CAISSE QUI PAIE. Les deux ne peuvent
     // plus diverger : c'est cette divergence qui a fait payer 1 885 200 F de dépenses
     // Production par le tiroir du Principal entre juillet et août 2026.
@@ -269,11 +306,13 @@ async function _debiterCaisseDepense(dep, preferredCaisseId){
     cq = (pv === 'Production')
        ? cq.or('point_vente.is.null,point_vente.eq.Production')
        : cq.eq('point_vente',pv);
-    let{data:cc}=await cq.limit(1);
-    if(!cc || !cc.length){ const r=await SB.from('gp_caisses').select('id').eq('admin_id',dep.admin_id).eq('type','physique').limit(1); cc=r.data; }
+    // PAS de dernier recours « la première caisse physique venue » : il prenait le
+    // tiroir d'un autre point de vente sans rien dire. La résolution par PDV
+    // ci-dessus est exacte ; si elle ne trouve rien, on le signale au lieu de deviner.
+    const{data:cc}=await cq.limit(1);
     caisseId = cc?.[0]?.id || null;
   }
-  if(!caisseId) throw new Error('Aucune caisse disponible pour débiter la dépense');
+  if(!caisseId) throw new Error(`Aucune caisse physique sur « ${dep.point_vente || 'Production'} » — affecte-la à la main`);
   const{error}=await SB.from('gp_mouvements_caisse').insert({
     admin_id: dep.admin_id, caisse_id: caisseId,
     // La dépense signe son mouvement : c'est lui qui dit PAR QUELLE CAISSE elle a
@@ -304,7 +343,7 @@ async function synchroniserCaisseDepenses(){
       .eq('admin_id',GP_ADMIN_ID).or('caisse_debitee.is.null,caisse_debitee.eq.false')
       .order('date',{ascending:true}).limit(100);
     if(!deps || !deps.length) return;
-    let n=0;
+    let n=0, sansCaisse=0;
     for(const d of deps){
       // Le claim doit accepter NULL pour la meme raison, sinon la depense est
       // lue puis jamais reservee : boucle a vide a chaque ouverture.
@@ -312,9 +351,18 @@ async function synchroniserCaisseDepenses(){
         .eq('id',d.id).or('caisse_debitee.is.null,caisse_debitee.eq.false').select('id');
       if(!claim || !claim.length) continue;
       try{ await _debiterCaisseDepense(d, null); n++; }
-      catch(e){ try{ await SB.from('gp_depenses').update({caisse_debitee:false}).eq('id',d.id); }catch(_){} }
+      catch(e){
+        // Plus de caisse devinée : celles qu'on ne sait pas rattacher restent en
+        // attente. Une dépense en attente est un problème qu'on voit ; une dépense
+        // sortie du mauvais tiroir est un problème qu'on découvre trois mois plus tard.
+        sansCaisse++;
+        try{ await SB.from('gp_depenses').update({caisse_debitee:false}).eq('id',d.id); }catch(_){}
+      }
     }
     if(n>0 && typeof notify==='function') notify(`🔄 ${n} dépense(s) synchronisée(s) — caisse à jour`,'gold');
+    if(sansCaisse>0 && typeof notify==='function')
+      notify(`⚠ ${sansCaisse} dépense(s) sans caisse — leur argent n'est sorti d'aucun tiroir. `
+           + `Ouvre 💸 Dépenses et choisis la caisse qui paie.`, 'r', 12000);
     if(n>0 && typeof renderCaisse==='function'){ try{ renderCaisse(); }catch(_){} }
   }catch(e){ /* silencieux : réessai au prochain refresh */ }
   finally{ _syncCaisseDepEnCours=false; }
@@ -465,8 +513,12 @@ async function saveModifSoldeInit(){
     PAGE_RENDERERS.depenses = async function(){
       const r = _origDep();
       if(r && typeof r.then==='function') await r;
-      await remplirSelectCaisses('dep_caisse_id');
-      await preselectCaissePDV('dep_caisse_id'); // caisse du PDV connecté par défaut
+      // Le menu s'ouvre VIDE : sans ça la première option gagnait par accident,
+      // et la liste étant triée par type, la première est une banque. L'admin
+      // saisissait une dépense et l'argent sortait de FECECAV au lieu du tiroir.
+      await remplirSelectCaisses('dep_caisse_id', '— Choisir la caisse —');
+      const _ok = await preselectCaissePDV('dep_caisse_id');
+      depAvertirCaisse(!_ok);
       await remplirSelectEmprunts();
     };
   }
