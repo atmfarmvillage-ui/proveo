@@ -100,14 +100,35 @@ async function doLogin(){
   err.textContent='';
   bootApp(data.user);
 }
-// PROVENDA est fermée : plus personne ne crée de provenderie depuis l'écran de
-// connexion. Le formulaire a été retiré ; la fonction reste pour qu'un ancien
-// lien ou un cache ne provoque pas une erreur silencieuse, et elle dit pourquoi.
+// PROVENDA est fermée, mais la porte n'est pas murée : un prospect qui vient de
+// voir la démonstration crée son accès et attend qu'on l'appelle. Le compte naît
+// SANS rien — ni provenderie, ni équipe, ni essai. C'est l'administrateur de la
+// plateforme qui l'active depuis « Comptes en attente ».
 async function doSignup(){
-  const err=document.getElementById('s_err');
-  if(err) err.textContent='La création de compte est fermée. Demandez un code d\'invitation à votre administrateur.';
-  if(typeof notify==='function') notify('Création de compte fermée — demandez un code d\'invitation','r',7000);
-  return;
+  if(!SB)return;
+  const nom=document.getElementById('s_nom').value.trim();
+  const email=document.getElementById('s_email').value.trim();
+  const pass=document.getElementById('s_pass').value;
+  const tel=document.getElementById('s_tel')?.value.trim()||null;
+  const prov=document.getElementById('s_prov')?.value.trim()||null;
+  const err=document.getElementById('s_err');const ok=document.getElementById('s_ok');
+  if(!nom||!email||!pass){err.textContent='Nom, email et mot de passe requis.';return;}
+  if(pass.length<6){err.textContent='Mot de passe min. 6 caractères.';return;}
+  err.textContent='Création...';
+  // Le nom, le téléphone et la provenderie souhaitée voyagent dans les métadonnées :
+  // ils survivent même si la confirmation par e-mail est exigée, et alimentent la
+  // salle d'attente à la première connexion.
+  const{data,error}=await SB.auth.signUp({email,password:pass,options:{data:{nom,telephone:tel,provenderie:prov}}});
+  if(error){err.textContent=error.message;return;}
+  err.textContent='';
+  ok.innerHTML='<div style="font-weight:600">✓ Votre accès est créé.</div>'
+    +'<div style="font-size:11px;margin-top:4px">Il doit être activé par l\'administrateur. '
+    +'Vous serez contacté — gardez votre mot de passe.</div>';
+  // Si une session existe déjà, on inscrit tout de suite en salle d'attente ;
+  // sinon `bootApp` le fera à la première connexion.
+  if(data?.user && typeof attInscrireEnAttente==='function'){
+    try{ await attInscrireEnAttente(data.user); }catch(_){}
+  }
 }
 
 async function _doSignupAncien(){
@@ -250,17 +271,21 @@ async function bootApp(user){
     // gp_membres. Tous les autres sont refusés et déconnectés.
     let _proprietaire=false;
     try{
-      const{data:cfg}=await SB.from('gp_config').select('plan')
+      const{data:cfg}=await SB.from('gp_config').select('plan,plateforme')
         .eq('user_id',user.id).maybeSingle();
       _proprietaire = !!cfg && String(cfg.plan||'').toUpperCase()==='OWNER';
+      GP_EST_PLATEFORME = !!(cfg && cfg.plateforme);
     }catch(e){ /* lecture impossible : on refuse, on n'ouvre pas par défaut */ }
     if(!_proprietaire){
+      // Salle d'attente : on garde la trace de qui frappe à la porte, AVANT de
+      // déconnecter — c'est le seul instant où la session permet d'écrire la ligne.
+      if(typeof attInscrireEnAttente==='function'){ try{ await attInscrireEnAttente(user); }catch(_){} }
       try{ await SB.auth.signOut(); }catch(_){}
       document.getElementById('authScreen').classList.remove('hidden');
       ['topbar','sidebar','main'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
       document.body.classList.remove('app-ready');
       const e=document.getElementById('a_err');
-      if(e)e.textContent='Ce compte n\'est rattaché à aucune provenderie. Demandez un code d\'invitation à votre administrateur.';
+      if(e)e.textContent='Votre accès existe, mais il n\'est pas encore activé. L\'administrateur doit vous ouvrir une provenderie — vous serez contacté.';
       return;
     }
     GP_ROLE='admin';
@@ -578,7 +603,7 @@ var PAGE_RENDERERS = {
     if(typeof showSalTab==='function')showSalTab('bulletins'); else renderSalaires();
   },
   dettes:        renderDettes,
-  equipe:        function(){renderPDV();initChat();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix(true);},
+  equipe:        function(){renderPDV();initChat();if(typeof renderComptesAttente==='function')renderComptesAttente();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix(true);},
   licence:       renderPageLicenceClient,
   config:        function(){ loadConfigForm(); if(typeof initPushUI==='function') initPushUI(); if(typeof renderServicesAdmin==='function') renderServicesAdmin(); if(typeof loadCreditPlafond==='function') loadCreditPlafond(); if(typeof loadReglesPaie==='function') loadReglesPaie(); if(typeof loadEtatEntete==='function') loadEtatEntete(); },
   directeur:     function(){
