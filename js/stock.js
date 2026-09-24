@@ -192,6 +192,10 @@ async function renderStockNiveaux(){
   if(typeof renderEntreesMPAConfirmer==='function') renderEntreesMPAConfirmer();
   // Ajustements déjà appliqués qui attendent le regard d'un second administrateur
   if(typeof renderAjustementsRecents==='function') renderAjustementsRecents();
+  // Le ➕ « nouvelle matière » ne s'affiche que pour l'admin : la base refuse
+  // la création aux autres, un bouton qui ne peut pas aboutir ne doit pas être là.
+  const _btnNmp=document.getElementById('btn-nouvelle-mp');
+  if(_btnNmp) _btnNmp.style.display = (GP_ROLE==='admin') ? '' : 'none';
 }
 
 // ── FILE « ENTRÉES MP À CONFIRMER » ───────────────────────────────
@@ -417,6 +421,13 @@ async function saveStockInitial(){
 
 // ── NOUVELLE MP DEPUIS PAGE STOCK ─────────────────
 function toggleNouvelleMP(){
+  // Créer une fiche est réservé à l'admin, comme la modifier. La base le refuse
+  // désormais aussi (policy `ingr_creation`) : sans ce message, la secrétaire
+  // remplirait le formulaire pour rien.
+  if(GP_ROLE!=='admin'){
+    notify('Créer une matière première est réservé à l\'admin — demande-lui de l\'ajouter','r',7000);
+    return;
+  }
   const form = document.getElementById('nouvelle-mp-form');
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
   if(form.style.display === 'block'){
