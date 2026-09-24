@@ -102,9 +102,9 @@ async function renderMatieresPremieresPage(){
               ${!_mpEditable ? '' : ((typeof pvRenseigne==='function' && !pvRenseigne(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Aucun prix de vente fixé">💰 prix de vente ?</button>`
                 : `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px" title="Prix de vente">💰</button>`)}
-              ${(typeof nutriRenseignee==='function' && !nutriRenseignee(i))
+              ${!_mpEditable ? '' : ((typeof nutriRenseignee==='function' && !nutriRenseignee(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Valeurs nutritionnelles manquantes — l'étiquette ne peut pas s'imprimer">🧪 à renseigner</button>`
-                : `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px" title="Valeurs nutritionnelles">🧪</button>`}
+                : `<button class="btn btn-out btn-sm" onclick="ouvrirNutri('${i.id}')" style="padding:2px 5px;font-size:9px" title="Valeurs nutritionnelles">🧪</button>`)}
               ${(GP_ROLE==='admin'||GP_EST_GERANT)?`<button class="btn btn-out btn-sm" onclick="ouvrirAjustement('${i.id}')" style="padding:2px 5px;font-size:9px" title="Ajuster le stock après comptage">📦</button>`:''}
               ${(typeof noteMpBouton==='function')?noteMpBouton(i):''}
             </div>
@@ -139,9 +139,9 @@ async function renderMatieresPremieresPage(){
           <td class="num" style="color:var(--textm)">${i.energie||'—'}</td>
           <td><span class="badge ${qteStock<=0?'bdg-r':qteStock<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${statut}</span></td>
           <td><div style="display:flex;gap:3px;justify-content:flex-end">
-            ${inactif
+            ${!_mpEditable ? '' : (inactif
               ? `<button class="btn btn-g btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',true)" title="Réactiver" style="padding:2px 6px;font-size:10px">♻️</button>`
-              : `<button class="btn btn-out btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',false)" title="Désactiver" style="padding:2px 6px;font-size:10px">🚫</button>`}
+              : `<button class="btn btn-out btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',false)" title="Désactiver" style="padding:2px 6px;font-size:10px">🚫</button>`)}
             ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMPPage('${i.id}','${i.nom.replace(/'/g,'')}')" title="Supprimer (admin)">✕</button>`:''}
           </div></td>
         </tr>`;
@@ -297,6 +297,7 @@ async function saveMPPage(){
 // disparaît des listes de saisie (achat, réception, formules) mais reste
 // visible ici, grisée, pour pouvoir la réactiver.
 async function toggleMPActif(id,nom,activer){
+  if(GP_ROLE!=='admin'){notify('Activer ou désactiver une matière est réservé à l\'admin','r');return;}
   if(!confirm(`${activer?'Réactiver':'Désactiver'} "${nom}" ?${activer?'':'\n\nElle n\'apparaîtra plus dans les listes de saisie.'}`))return;
   const{error}=await SB.from('gp_ingredients').update({actif:activer}).eq('id',id).eq('admin_id',GP_ADMIN_ID);
   if(error){notify('Erreur : '+error.message,'r');return;}
