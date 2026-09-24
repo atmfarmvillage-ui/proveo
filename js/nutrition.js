@@ -87,6 +87,9 @@ async function saveNutri(){
   const id = document.getElementById('nutri-id')?.value;
   const err = document.getElementById('nutri-err');
   if(!id) return;
+  // Ces valeurs partent sur l'étiquette remise au client : elles engagent
+  // l'entreprise, au même titre qu'un prix. Réservées à l'admin.
+  if(GP_ROLE !== 'admin'){ err.textContent = 'Seul l\'admin renseigne les valeurs nutritionnelles.'; return; }
   const maj = {};
   for(const [k, lib] of NUTRI_CHAMPS){
     const brut = document.getElementById('nutri-' + k)?.value;
