@@ -1,4 +1,4 @@
-const PROVENDA_VERSION = '3.9.3';
+const PROVENDA_VERSION = '3.10.0';
 
 // ══════════════════════════════════════════════════
 // PROVENDA — CONFIGURATION SUPABASE
@@ -23,6 +23,31 @@ let GP_STOCK_VENTE = {}; // {formule_nom: qte_disponible en kg} au PDV courant �
 let GP_CATEGORIES = []; // [{espece, espece_label, espece_icon, categorie, categorie_label, ordre}]
 let GP_BESOINS = [];    // [{espece, categorie, pb_min, pb_max, em_min, ..., source}]
 let GP_CONTRAINTES_MP = []; // [{espece, ingredient_pattern, pct_min, pct_max, note}]
+
+// ── PRIX D'ACHAT D'UNE MATIÈRE : la seule écriture de fiche ouverte aux membres ──
+// Depuis que l'écriture dans `gp_ingredients` est réservée à l'admin et aux gérants,
+// une secrétaire qui saisit un achat ne pouvait plus faire suivre le prix — et la RLS
+// refuse SANS erreur, donc l'écran aurait annoncé un prix à jour qui ne l'était pas.
+// La fonction `mp_maj_prix` (security definer) ne touche QUE `prix_actuel`, après
+// avoir vérifié que le demandeur appartient bien au compte propriétaire de la fiche.
+// Repli sur l'écriture directe tant que la fonction n'est pas déployée : l'admin, lui,
+// a toujours le droit d'écrire.
+async function majPrixMP(ingredientId, prix){
+  const p = Number(prix);
+  if(!ingredientId || !(p > 0)) return false;
+  const _cache = () => {
+    const i = (GP_INGREDIENTS||[]).find(x => x.id === ingredientId);
+    if(i) i.prix_actuel = p;
+  };
+  try{
+    const { data, error } = await SB.rpc('mp_maj_prix', { p_id: ingredientId, p_prix: p });
+    if(!error){ if(data === true) _cache(); return data === true; }
+  }catch(_){ /* fonction absente : on tente l'écriture directe */ }
+  const { error } = await SB.from('gp_ingredients').update({ prix_actuel: p }).eq('id', ingredientId);
+  if(error) return false;
+  _cache();
+  return true;
+}
 
 // Normalisation pour recherche insensible aux accents et à la casse
 // "Drèche d'Orge" → "dreche d orge" → matche "dreche", "orge", "dreche d orge", etc.
