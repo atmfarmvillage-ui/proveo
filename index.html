@@ -3566,7 +3566,7 @@ try{
 <script src="js/ajustements.js?v=1.1.0"></script>
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
-<script src="js/production.js?v=2.28.0"></script>
+<script src="js/production.js?v=2.29.0"></script>
 <script src="js/ventes.js?v=2.30.1"></script>
 <script src="js/clients.js?v=2.28.0"></script>
 <script src="js/admin.js?v=2.31.0"></script>
@@ -3896,18 +3896,32 @@ function installPWA(){
       <button onclick="fermerSacsObtenus()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
     </div>
     <div id="so-lot-info" style="font-size:11px;color:var(--textm);margin-bottom:14px"></div>
-    <div class="fg2">
-      <div class="fr"><label>Nombre de sacs obtenus</label><input type="number" id="so-nb-sacs" placeholder="38" oninput="majPerteSacsObtenus()"></div>
-      <div class="fr"><label>Poids / sac</label>
-        <select id="so-poids" onchange="majPerteSacsObtenus()">
-          <option value="15">Sac 15 kg</option>
-          <option value="25">Sac 25 kg</option>
-          <option value="50">Sac 50 kg</option>
-        </select>
+    <!-- Un lot sort rarement dans un seul format : on saisit les trois.
+         Avant, il fallait declarer un format et verser le reste en vrac, ce qui
+         faussait le stock de produits finis, tenu par poids de sac. -->
+    <label style="display:block;margin-bottom:4px">Sacs obtenus, par format</label>
+    <div id="so-formats" style="display:grid;gap:6px;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:90px 1fr 92px;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--textm)">Sac 15 kg</span>
+        <input type="number" id="so-nb-15" placeholder="0" min="0" oninput="majPerteSacsObtenus()">
+        <span id="so-kg-15" style="font-size:11px;color:var(--textm);text-align:right">0 kg</span>
+      </div>
+      <div style="display:grid;grid-template-columns:90px 1fr 92px;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--textm)">Sac 25 kg</span>
+        <input type="number" id="so-nb-25" placeholder="0" min="0" oninput="majPerteSacsObtenus()">
+        <span id="so-kg-25" style="font-size:11px;color:var(--textm);text-align:right">0 kg</span>
+      </div>
+      <div style="display:grid;grid-template-columns:90px 1fr 92px;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--textm)">Sac 50 kg</span>
+        <input type="number" id="so-nb-50" placeholder="0" min="0" oninput="majPerteSacsObtenus()">
+        <span id="so-kg-50" style="font-size:11px;color:var(--textm);text-align:right">0 kg</span>
       </div>
     </div>
     <div class="fr"><label>Complément en vrac (kg) <span style="font-size:9px;color:var(--textm)">optionnel · sac incomplet / reste</span></label>
       <input type="number" id="so-vrac-kg" placeholder="0" min="0" step="0.1" oninput="majPerteSacsObtenus()"></div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">
+      Total obtenu : <strong id="so-total">0 kg</strong>
+    </div>
     <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">
       Perte : <strong id="so-perte" style="color:var(--red)">—</strong>
     </div>
