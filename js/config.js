@@ -1,4 +1,4 @@
-const PROVENDA_VERSION = '3.11.0';
+const PROVENDA_VERSION = '3.12.0';
 
 // ══════════════════════════════════════════════════
 // PROVENDA — CONFIGURATION SUPABASE
@@ -12,6 +12,9 @@ let GP_EST_GERANT = false; // true si le membre est gérant (traité comme admin
 let GP_ADMIN_ID = null;
 let GP_CONFIG = {};
 let GP_INGREDIENTS = [];
+// Administrateur de la PLATEFORME (celui qui vend PROVENDA) : il voit la salle
+// d'attente et active les comptes. Distinct du propriétaire d'une provenderie cliente.
+let GP_EST_PLATEFORME = false;
 let GP_CLIENTS = [];
 let GP_PRIX = {};
 let GP_REMISE_MAX = 5;
