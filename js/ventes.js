@@ -931,6 +931,19 @@ async function onVenteFormuleChange(){
 
   const prixEl=document.getElementById('vt_prix');
   if(prixEl&&prix)prixEl.value=prix;
+
+  // LE CONDITIONNEMENT SUIT LA FORMULE. Une formule vendue en sac de 15 kg ne
+  // doit pas rester sur « Sac 25 kg » : le prix au sac sortirait faux d'un
+  // facteur 1,7, et le stock serait débité de 25 kg au lieu de 15.
+  const _ps = Number(
+    (typeof FORMULES_SADARI!=='undefined' ? (FORMULES_SADARI.find(f=>f&&f.nom===nom)?.poids_sac) : 0)
+    || GP_POIDS_SAC_VENTE[nom] || 0);
+  const _cond = document.getElementById('vt_poids_sac');
+  if(_ps>0 && _cond && Array.from(_cond.options).some(o=>o.value===String(_ps))
+     && _cond.value !== String(_ps)){
+    _cond.value = String(_ps);
+    if(typeof onConditionnementChange==='function') onConditionnementChange();
+  }
   syncPrixVente('kg'); // met à jour le prix/sac affiché
 
   calcVente();

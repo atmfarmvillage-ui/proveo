@@ -785,6 +785,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <label>Conditionnement</label>
         <select id="vt_poids_sac" onchange="onConditionnementChange()">
           <option value="kg">Au kg (vrac)</option>
+          <option value="15">Sac 15 kg</option>
           <option value="25">Sac 25 kg</option>
           <option value="50">Sac 50 kg</option>
         </select>
@@ -2447,7 +2448,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <div class="fg2">
         <div class="fr"><label id="dist-qte-label">Quantité (sacs)</label><input type="number" id="dist_qte" placeholder="30"></div>
         <div class="fr" id="dist-poids-wrap"><label>Poids du sac</label>
-          <select id="dist_poids"><option value="25">Sac 25 kg</option><option value="50">Sac 50 kg</option></select>
+          <select id="dist_poids"><option value="15">Sac 15 kg</option><option value="25">Sac 25 kg</option><option value="50">Sac 50 kg</option></select>
         </div>
       </div>
       <div class="fr"><label id="dist-prix-label">Prix gros/sac (F)</label><input type="number" id="dist_prix" placeholder="8500"></div>
@@ -3561,12 +3562,12 @@ try{
   <script src="js/print.js?v=2.30.2"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.32.0"></script>
-<script src="js/matieres.js?v=2.34.0"></script>
+<script src="js/matieres.js?v=2.35.0"></script>
 <script src="js/ajustements.js?v=1.0.0"></script>
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.27.0"></script>
-<script src="js/ventes.js?v=2.29.4"></script>
+<script src="js/ventes.js?v=2.30.0"></script>
 <script src="js/clients.js?v=2.28.0"></script>
 <script src="js/admin.js?v=2.31.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
@@ -3600,7 +3601,7 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.33.0"></script>
+<script src="js/auth.js?v=2.34.0"></script>
 <script src="js/comptes_attente.js?v=1.0.0"></script>
 <script src="js/reservations_admin.js?v=2.27.6"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
@@ -3899,6 +3900,7 @@ function installPWA(){
       <div class="fr"><label>Nombre de sacs obtenus</label><input type="number" id="so-nb-sacs" placeholder="38" oninput="majPerteSacsObtenus()"></div>
       <div class="fr"><label>Poids / sac</label>
         <select id="so-poids" onchange="majPerteSacsObtenus()">
+          <option value="15">Sac 15 kg</option>
           <option value="25">Sac 25 kg</option>
           <option value="50">Sac 50 kg</option>
         </select>
