@@ -2251,6 +2251,23 @@ async function renderDep(){
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
       <td>${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button>`:''}</td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
+
+  // LE MENU DES CAISSES SE REMPLIT ICI, depuis l'écran lui-même.
+  // Il dépendait d'une greffe posée ailleurs sur PAGE_RENDERERS, qui ne
+  // s'installait pas : le menu restait vide et aucune dépense ne pouvait plus
+  // être enregistrée. Un écran qui a besoin d'une donnée va la chercher, il
+  // n'attend pas qu'un autre fichier pense à la lui apporter.
+  try{
+    if(typeof remplirSelectCaisses==='function'){
+      await remplirSelectCaisses('dep_caisse_id', '— Choisir la caisse —');
+      const _ok = (typeof preselectCaissePDV==='function') ? await preselectCaissePDV('dep_caisse_id') : false;
+      if(typeof depAvertirCaisse==='function') depAvertirCaisse(!_ok);
+    }
+    if(typeof remplirSelectEmprunts==='function') await remplirSelectEmprunts();
+  }catch(e){
+    const err=document.getElementById('dep_err');
+    if(err) err.textContent='Les caisses n\'ont pas pu être chargées : '+(e.message||e);
+  }
 }
 
 async function saveDep(){

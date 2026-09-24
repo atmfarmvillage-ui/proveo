@@ -1,4 +1,4 @@
-const PROVENDA_VERSION = '3.13.1';
+const PROVENDA_VERSION = '3.13.2';
 
 // ══════════════════════════════════════════════════
 // PROVENDA — CONFIGURATION SUPABASE
@@ -15,6 +15,13 @@ let GP_INGREDIENTS = [];
 // Administrateur de la PLATEFORME (celui qui vend PROVENDA) : il voit la salle
 // d'attente et active les comptes. Distinct du propriétaire d'une provenderie cliente.
 let GP_EST_PLATEFORME = false;
+
+// Version affichée dans l'en-tête : sans elle, impossible de savoir si un écran
+// qui déraille tourne sur la dernière version ou sur une copie en cache.
+if(typeof document !== 'undefined'){
+  const _v = () => { const el = document.getElementById('tb-version'); if(el) el.textContent = 'v' + PROVENDA_VERSION; };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _v); else _v();
+}
 let GP_CLIENTS = [];
 let GP_PRIX = {};
 let GP_REMISE_MAX = 5;
