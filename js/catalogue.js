@@ -368,33 +368,152 @@ function catPartager(titre, corps) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PARTAGE EN PDF
+//
+// Le client reçoit un vrai document, qu'il garde, imprime et fait circuler.
+// Le message texte l'accompagne : sur WhatsApp, un fichier seul arrive nu.
+//
+// Trois chemins, dans cet ordre :
+//   · `navigator.share` AVEC le fichier — le téléphone ouvre sa feuille de
+//     partage, le PDF part dans la conversation ;
+//   · à défaut (ordinateur, navigateur sans partage de fichier), le PDF est
+//     téléchargé et le message copié : il ne reste qu'à le joindre ;
+//   · si l'utilisateur ferme la feuille de partage, on ne fait rien — annuler
+//     n'est pas une erreur.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CAT_PDF_VERT = [22, 163, 74];
+
+function catPdfPrix(v) { return catPrixTxt(v) || '—'; }
+
+// Sections du PDF des aliments : une par espèce, en-têtes adaptés au mode de
+// vente. Fonction pure — c'est elle qui porte les règles, donc elle se teste.
+function catSectionsAliments(lignes, especes) {
+  const liste = (lignes || []).slice();
+  const connues = new Set((especes || []).map(e => e.cle));
+  const section = (titre, l) => {
+    if (!l.length) return null;
+    // Le porc ne se vend pas en gros/détail mais avec ou sans prémix : garder
+    // les mots de l'affiche évite qu'un client compare deux choses différentes.
+    const premix = l.some(x => x.mode === 'premix');
+    const rows = l.slice()
+      .sort((a, b) => (a.ordre - b.ordre) || String(a.nom).localeCompare(String(b.nom), 'fr'))
+      .map(x => premix
+        ? [x.nom, x.poids ? x.poids + ' kg' : '—', catPdfPrix(x.gros), catPdfPrix(x.detail)]
+        : [x.nom, x.poids ? x.poids + ' kg' : '—', catPdfPrix(x.detail), catPdfPrix(x.gros)]);
+    return {
+      titre,
+      entetes: premix ? ['Formule', 'Sac', 'Sans prémix', 'Avec prémix']
+                      : ['Formule', 'Sac', 'Détail', 'Gros'],
+      rows
+    };
+  };
+  const out = (especes || []).map(e => section(e.titre, liste.filter(x => x.espece === e.cle)));
+  const autres = liste.filter(x => !connues.has(x.espece));
+  if (autres.length) out.push(section('AUTRES', autres));
+  return out.filter(Boolean);
+}
+
+function catSectionMP(mp) {
+  const rows = (mp || []).map(i => [
+    i.nom,
+    (i.sac > 0 && i.poids > 0) ? catPdfPrix(i.sac) : '—',
+    (i.sac > 0 && i.poids > 0) ? i.poids + ' kg' : '—',
+    catPdfPrix(i.kg)
+  ]);
+  return rows.length ? [{ titre: null, entetes: ['Matière première', 'Le sac', 'Poids', 'Au kilo'], rows }] : [];
+}
+
+// Assemble le document. Les nombres passent par `catPrixTxt`, qui remplace
+// l'espace insécable de `Intl` : jsPDF ne sait pas la dessiner et la ligne
+// sort tronquée.
+function catPdfDoc(titre, sections) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const cfg = (typeof GP_CONFIG !== 'undefined' && GP_CONFIG) || {};
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 14;
+  const d = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(0);
+  doc.text(String(cfg.nom_provenderie || 'Nos prix').toUpperCase(), M, 20);
+  doc.setFontSize(13); doc.setTextColor.apply(doc, CAT_PDF_VERT);
+  doc.text(titre, M, 28);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text('Prix du ' + d, M, 34);
+  if (cfg.slogan) { doc.setFontSize(9); doc.text(String(cfg.slogan), M, 39); }
+  doc.setDrawColor(220); doc.line(M, 42, W - M, 42);
+
+  let y = 48;
+  sections.forEach(s => {
+    if (s.titre) {
+      if (y > H - 40) { doc.addPage(); y = 20; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      doc.setTextColor.apply(doc, CAT_PDF_VERT);
+      doc.text(s.titre, M, y); y += 2;
+    }
+    doc.autoTable({
+      startY: y + 2, head: [s.entetes], body: s.rows, margin: { left: M, right: M },
+      styles: { fontSize: 9.5, cellPadding: 2.2, textColor: 30 },
+      headStyles: { fillColor: CAT_PDF_VERT, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 245] },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  });
+
+  const tel = [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ');
+  const pied = [tel ? 'Tel : ' + tel : null, cfg.localisation || null].filter(Boolean).join('   |   ');
+  const n = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120);
+    if (pied) doc.text(pied, M, H - 10);
+    doc.text(p + '/' + n, W - M, H - 10, { align: 'right' });
+  }
+  return doc;
+}
+
+async function catEnvoyerPdf(doc, fichier, texte) {
+  const blob = doc.output('blob');
+  if (typeof File === 'function' && navigator.canShare) {
+    const f = new File([blob], fichier, { type: 'application/pdf' });
+    if (navigator.canShare({ files: [f] })) {
+      try { await navigator.share({ files: [f], text: texte }); return; }
+      // Fermer la feuille de partage n'est pas un échec : ne rien télécharger.
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+  }
+  doc.save(fichier);
+  if (navigator.clipboard) { try { await navigator.clipboard.writeText(texte); } catch (_) {} }
+  notify('PDF téléchargé — joins-le dans WhatsApp, le message est déjà copié', 'gold', 9000);
+}
+
+function catNomFichier(base) {
+  const cfg = (typeof GP_CONFIG !== 'undefined' && GP_CONFIG) || {};
+  const prov = String(cfg.nom_provenderie || 'Prix').normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `${prov}-${base}-${new Date().toISOString().slice(0, 10)}.pdf`;
+}
+
+function catPdfPret() {
+  if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF !== 'function') {
+    notify('Lib PDF pas encore chargée — réessaie dans 2 s', 'r', 6000);
+    return false;
+  }
+  return true;
+}
+
 async function partagerCatalogueAliments() {
   try {
+    if (!catPdfPret()) return;
     const lignes = catRegrouper(await catChargerAliments())
       .filter(l => Number(l.gros) > 0 || Number(l.detail) > 0);
     if (!lignes.length) { notify('Aucune formule active avec un prix.', 'r'); return; }
-
-    const bloc = (titre, l) => {
-      if (!l.length) return '';
-      const premix = l.some(x => x.mode === 'premix');
-      const corps = l.sort((a, b) => (a.ordre - b.ordre) || a.nom.localeCompare(b.nom, 'fr')).map(x => {
-        // Le porc ne se vend pas en gros/détail mais avec ou sans prémix : garder
-        // les mots de l'affiche évite qu'un client compare deux choses différentes.
-        const a = catPrixTxt(x.gros), b = catPrixTxt(x.detail);
-        const prix = premix
-          ? [a ? `sans prémix ${a}` : null, b ? `avec prémix ${b}` : null]
-          : [b ? `détail ${b}` : null, a ? `gros ${a}` : null];
-        return `• ${x.nom} (sac ${x.poids} kg) : ${prix.filter(Boolean).join(' · ')}`;
-      }).join('\n');
-      return `*${titre}*\n${corps}`;
-    };
-
-    const connues = new Set(CAT_ESPECES.map(e => e.cle));
-    const blocs = CAT_ESPECES.map(e => bloc(e.titre, lignes.filter(x => x.espece === e.cle))).filter(Boolean);
-    const autres = lignes.filter(x => !connues.has(x.espece));
-    if (autres.length) blocs.push(bloc('AUTRES', autres));
-
-    catPartager('Prix des aliments', blocs.join('\n\n'));
+    const sections = catSectionsAliments(lignes, CAT_ESPECES);
+    const doc = catPdfDoc('Prix des aliments', sections);
+    await catEnvoyerPdf(doc, catNomFichier('aliments'),
+      [catEntete('Prix des aliments'), '', catPiedTxt()].filter(Boolean).join('\n').trim());
   } catch (e) {
     notify('Erreur : ' + (e.message || e), 'r', 5000);
   }
@@ -402,13 +521,12 @@ async function partagerCatalogueAliments() {
 
 async function partagerCatalogueMP() {
   try {
+    if (!catPdfPret()) return;
     const mp = await catChargerMP();
     if (!mp.length) { notify("Aucune matière première n'a de prix de VENTE.", 'r', 6000); return; }
-    const corps = mp.map(i => {
-      const kg = catPrixTxt(i.kg), sac = (i.sac > 0 && i.poids > 0) ? `${catPrixTxt(i.sac)} le sac de ${i.poids} kg` : null;
-      return `• ${i.nom} : ${[kg ? kg + '/kg' : null, sac].filter(Boolean).join(' · ')}`;
-    }).join('\n');
-    catPartager('Prix des matières premières', corps);
+    const doc = catPdfDoc('Prix des matières premières', catSectionMP(mp));
+    await catEnvoyerPdf(doc, catNomFichier('matieres-premieres'),
+      [catEntete('Prix des matières premières'), '', catPiedTxt()].filter(Boolean).join('\n').trim());
   } catch (e) {
     notify('Erreur : ' + (e.message || e), 'r', 5000);
   }
