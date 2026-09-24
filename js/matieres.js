@@ -61,10 +61,13 @@ async function renderMatieresPremieresPage(){
   };
   const sorted=[...filtered].sort((a,b)=>
     _mpEnService(b) - _mpEnService(a) || a.nom.localeCompare(b.nom));
-  // La frontière est marquée dans le tableau : sans cela, l'ordre paraîtrait
-  // arbitraire et on chercherait une matière à sa place alphabétique.
-  const _mpFrontiere = sorted.findIndex(i => _mpEnService(i) < 2);
-  const _mpDormantes = _mpFrontiere >= 0 ? sorted.length - _mpFrontiere : 0;
+  // Trois blocs, chacun annoncé par sa frontière : ce qu'on utilise, ce qui
+  // dort, ce qui est désactivé. Sans ces lignes, l'ordre paraîtrait arbitraire
+  // et on chercherait une matière à sa place alphabétique.
+  const _iDorm  = sorted.findIndex(i => _mpEnService(i) === 1);
+  const _iOff   = sorted.findIndex(i => _mpEnService(i) === 0);
+  const _nbDorm = sorted.filter(i => _mpEnService(i) === 1).length;
+  const _nbOff  = sorted.filter(i => _mpEnService(i) === 0).length;
 
   document.getElementById('mp-liste-page').innerHTML=
     ((typeof nutriBandeau==='function') ? nutriBandeau() : '') +
@@ -81,15 +84,21 @@ async function renderMatieresPremieresPage(){
       </tr></thead>
       <tbody>
       ${sorted.map((i,_rang)=>{
-        const _sep = (_rang === _mpFrontiere)
-          ? `<tr><td colspan="8" style="background:var(--card);color:var(--textm);font-size:10.5px;padding:7px 10px;font-style:italic">── ${_mpDormantes} matière(s) sans stock et dans aucune formule ── conservées pour l'historique</td></tr>`
-          : '';
+        const _bandeau = (txt) => `<tr><td colspan="8" style="background:var(--card);color:var(--textm);font-size:10.5px;padding:7px 10px;font-style:italic">${txt}</td></tr>`;
+        const _sep = (_rang === _iDorm && _nbDorm)
+            ? _bandeau(`── ${_nbDorm} matière(s) sans stock et dans aucune formule ── conservées pour l'historique`)
+          : (_rang === _iOff && _nbOff)
+            ? _bandeau(`── ${_nbOff} matière(s) DÉSACTIVÉE(S) ── elles n'apparaissent plus dans les listes de saisie`)
+            : '';
         const qteStock=niveaux[i.nom]||0;
         const seuil=i.seuil_alerte||200;
         const statut=qteStock<=0?'❌ Épuisé':qteStock<seuil*0.5?'🔴 Critique':qteStock<seuil?'🟡 Bas':'🟢 OK';
         const cls=qteStock<=0?'bad':qteStock<seuil*0.5?'bad':qteStock<seuil?'warn':'good';
         const inactif=i.actif===false;
-        return _sep + `<tr style="${inactif?'opacity:.5':''}">
+        const _sep2 = (_rang === _iOff && _nbOff && _rang !== _iDorm)
+          ? `<tr><td colspan="8" style="background:var(--card);color:var(--textm);font-size:10.5px;padding:7px 10px;font-style:italic">── ${_nbOff} matière(s) DÉSACTIVÉE(S) ── elles n'apparaissent plus dans les listes de saisie</td></tr>`
+          : '';
+        return _sep + (_sep.includes('DÉSACTIVÉE') ? '' : _sep2) + `<tr style="${inactif?'opacity:.5':''}">
           <td style="font-weight:600">
             <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
               <span id="mpp-nom-val-${i.id}">${i.nom}</span>
@@ -98,7 +107,11 @@ async function renderMatieresPremieresPage(){
                 onkeydown="if(event.key==='Enter')mppSauverNom('${i.id}');if(event.key==='Escape')mppAnnulerNom('${i.id}')">
               ${GP_ROLE==='admin'?`<button class="btn btn-out btn-sm" onclick="mppEditerNom('${i.id}')" id="mpp-nom-edit-${i.id}" style="padding:2px 4px;font-size:9px" title="Renommer">✏️</button>
               <button class="btn btn-g btn-sm" onclick="mppSauverNom('${i.id}')" id="mpp-nom-save-${i.id}" style="padding:2px 4px;font-size:9px;display:none">✓</button>`:''}
-              ${inactif?'<span class="badge bdg-r" style="font-size:9px">🚫 Désactivée</span>':''}
+              ${_mpEditable
+                ? `<button class="btn btn-sm ${inactif?'btn-red':'btn-out'}" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',${inactif?'true':'false'})"
+                     style="padding:2px 7px;font-size:9px${inactif?'':';border-color:var(--green);color:var(--green)'}"
+                     title="${inactif?'Réactiver : elle reviendra dans les listes de saisie':'Désactiver : elle disparaîtra des listes de saisie'}">${inactif?'⛔ Inactive':'✅ Active'}</button>`
+                : (inactif?'<span class="badge bdg-r" style="font-size:9px">⛔ Inactive</span>':'')}
               ${!_mpEditable ? '' : ((typeof pvRenseigne==='function' && !pvRenseigne(i))
                 ? `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px;border-color:var(--red);color:var(--red)" title="Aucun prix de vente fixé">💰 prix de vente ?</button>`
                 : `<button class="btn btn-out btn-sm" onclick="ouvrirPrixVente('${i.id}')" style="padding:2px 5px;font-size:9px" title="Prix de vente">💰</button>`)}
@@ -139,9 +152,6 @@ async function renderMatieresPremieresPage(){
           <td class="num" style="color:var(--textm)">${i.energie||'—'}</td>
           <td><span class="badge ${qteStock<=0?'bdg-r':qteStock<seuil?'bdg-gold':'bdg-g'}" style="font-size:9px">${statut}</span></td>
           <td><div style="display:flex;gap:3px;justify-content:flex-end">
-            ${!_mpEditable ? '' : (inactif
-              ? `<button class="btn btn-g btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',true)" title="Réactiver" style="padding:2px 6px;font-size:10px">♻️</button>`
-              : `<button class="btn btn-out btn-sm" onclick="toggleMPActif('${i.id}','${i.nom.replace(/'/g,'')}',false)" title="Désactiver" style="padding:2px 6px;font-size:10px">🚫</button>`)}
             ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteMPPage('${i.id}','${i.nom.replace(/'/g,'')}')" title="Supprimer (admin)">✕</button>`:''}
           </div></td>
         </tr>`;

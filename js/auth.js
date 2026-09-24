@@ -695,6 +695,8 @@ async function loadFormules(){
       espece:f.espece||'autre',
       stade:f.stade||'',
       prix_defaut:Number(f.prix_defaut)||0,
+      // Poids du sac : c'est lui qui impose le conditionnement a la vente.
+      poids_sac:Number(f.poids_sac)||0,
       ingredients:Array.isArray(f.ingredients)?f.ingredients:(f.ingredients?JSON.parse(f.ingredients):[]),
       cout_emballage_kg:Number(f.cout_emballage_kg)||0,
       cout_mo_tonne:Number(f.cout_mo_tonne)||0,
