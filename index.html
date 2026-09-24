@@ -90,25 +90,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       </div>
       <div class="a-err" id="a_err"></div>
       <button class="a-btn" onclick="doLogin()">Se connecter →</button>
-      <div class="a-link">Pas de compte ? <span onclick="showAuthForm('signup')">Créer un compte</span></div>
       <div class="a-link"><span onclick="showAuthForm('join')" style="color:var(--g6)" id="join-link-text">🔑 Rejoindre une provenderie</span></div>
       <div class="a-link"><span onclick="doForgot()">Mot de passe oublié ?</span></div>
     </div>
-    <div id="auth-signup-form" style="display:none">
-      <label class="a-label">Nom complet</label>
-      <input class="a-inp" id="s_nom" type="text" placeholder="Jean Adekou">
-      <label class="a-label">Email</label>
-      <input class="a-inp" id="s_email" type="email" placeholder="votre@email.com">
-      <label class="a-label">Mot de passe</label>
-      <div class="pw-wrap">
-        <input class="a-inp" id="s_pass" type="password" placeholder="Min. 6 caractères">
-        <button class="pw-eye" onclick="togglePw('s_pass',this)">👁</button>
-      </div>
-      <div class="a-err" id="s_err"></div>
-      <div class="a-ok" id="s_ok"></div>
-      <button class="a-btn" onclick="doSignup()">Créer mon compte →</button>
-      <div class="a-link">Déjà un compte ? <span onclick="showAuthForm('login')">Se connecter</span></div>
-    </div>
+    <!-- Formulaire « Créer un compte » RETIRÉ : PROVENDA est fermée, on entre
+         uniquement sur invitation (code à 6 chiffres) ou en tant que propriétaire. -->
     <div id="auth-join-form" style="display:none">
       <div class="a-title" id="join-form-title">Rejoindre une provenderie</div>
       <label class="a-label">Votre email</label>
@@ -3589,7 +3575,7 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.29.0"></script>
+<script src="js/auth.js?v=2.32.0"></script>
 <script src="js/reservations_admin.js?v=2.27.6"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
 <script src="js/reappro.js?v=2.26.1"></script>

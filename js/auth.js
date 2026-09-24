@@ -46,9 +46,11 @@ function togglePw(id,btn){
   btn.textContent=el.type==='password'?'👁':'🙈';
 }
 function showAuthForm(f){
-  document.getElementById('auth-login-form').style.display=f==='login'?'block':'none';
-  document.getElementById('auth-signup-form').style.display=f==='signup'?'block':'none';
-  const jf=document.getElementById('auth-join-form');if(jf)jf.style.display=f==='join'?'block':'none';
+  // Le formulaire d'inscription n'existe plus (PROVENDA fermée) : chaque bloc est
+  // testé avant d'être touché, sinon un élément absent casse aussi les autres.
+  const lf=document.getElementById('auth-login-form'); if(lf)lf.style.display=f==='login'?'block':'none';
+  const sf=document.getElementById('auth-signup-form'); if(sf)sf.style.display=f==='signup'?'block':'none';
+  const jf=document.getElementById('auth-join-form');  if(jf)jf.style.display=f==='join'?'block':'none';
 }
 
 function getAllFormules(){
@@ -98,7 +100,17 @@ async function doLogin(){
   err.textContent='';
   bootApp(data.user);
 }
+// PROVENDA est fermée : plus personne ne crée de provenderie depuis l'écran de
+// connexion. Le formulaire a été retiré ; la fonction reste pour qu'un ancien
+// lien ou un cache ne provoque pas une erreur silencieuse, et elle dit pourquoi.
 async function doSignup(){
+  const err=document.getElementById('s_err');
+  if(err) err.textContent='La création de compte est fermée. Demandez un code d\'invitation à votre administrateur.';
+  if(typeof notify==='function') notify('Création de compte fermée — demandez un code d\'invitation','r',7000);
+  return;
+}
+
+async function _doSignupAncien(){
   if(!SB)return;
   const nom=document.getElementById('s_nom').value.trim();
   const email=document.getElementById('s_email').value.trim();
@@ -231,6 +243,26 @@ async function bootApp(user){
       GP_PDV_PRINCIPAUX=(_pp||[]).map(p=>p.nom).filter(Boolean);
     }catch(e){}
   } else {
+    // PROVENDA est FERMÉE. Avant, un compte sans invitation devenait
+    // automatiquement admin de sa propre provenderie : n'importe qui pouvait
+    // s'inscrire et repartir avec un espace de travail. Désormais, seul un
+    // propriétaire déclaré (`gp_config.plan = 'OWNER'`) entre sans passer par
+    // gp_membres. Tous les autres sont refusés et déconnectés.
+    let _proprietaire=false;
+    try{
+      const{data:cfg}=await SB.from('gp_config').select('plan')
+        .eq('user_id',user.id).maybeSingle();
+      _proprietaire = !!cfg && String(cfg.plan||'').toUpperCase()==='OWNER';
+    }catch(e){ /* lecture impossible : on refuse, on n'ouvre pas par défaut */ }
+    if(!_proprietaire){
+      try{ await SB.auth.signOut(); }catch(_){}
+      document.getElementById('authScreen').classList.remove('hidden');
+      ['topbar','sidebar','main'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
+      document.body.classList.remove('app-ready');
+      const e=document.getElementById('a_err');
+      if(e)e.textContent='Ce compte n\'est rattaché à aucune provenderie. Demandez un code d\'invitation à votre administrateur.';
+      return;
+    }
     GP_ROLE='admin';
     GP_ADMIN_ID=user.id;
     GP_POINT_VENTE=null;
