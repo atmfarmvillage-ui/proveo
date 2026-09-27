@@ -3,14 +3,14 @@ async function saveClient(){
   const nom=document.getElementById('cl_nom').value.trim();
   const err=document.getElementById('cl_err');
   if(!nom){err.textContent='Nom requis.';return;}
-  const{error}=await SB.from('gp_clients').insert({
+  const{error}=await SB.from('gp_clients').insert(Object.assign({
     admin_id:GP_ADMIN_ID,nom,
     point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
     telephone:document.getElementById('cl_tel').value.trim()||null,
     localisation:document.getElementById('cl_loc').value.trim()||null,
     type_elevage:document.getElementById('cl_type').value,
     note:document.getElementById('cl_note').value.trim()||null
-  });
+  }, _apportParClient('cl_apporte_par')));
   if(error){err.textContent='Erreur: '+error.message;return;}
   ['cl_nom','cl_tel','cl_loc','cl_note'].forEach(id=>document.getElementById(id).value='');
   err.textContent='';
@@ -78,6 +78,50 @@ async function chargerEquipe(force){
   return GP_EQUIPE;
 }
 function _nomMembre(m){ return m.nom || String(m.email||'').split('@')[0] || '—'; }
+
+// ── « APPORTÉ PAR » À LA CRÉATION D'UN CLIENT ───────────────────────
+// Le badge d'attribution existait, mais il fallait rouvrir la fiche pour le
+// poser : personne ne le faisait, et la commerciale n'avait aucun client a son
+// nom. On le demande donc AU MOMENT de la creation, en un clic.
+// Règle : seul un commercial (rôle `directeur`) fait basculer le client en
+// « commerciale ». Tous les autres restent sur « point de vente », comme avant —
+// badger au nom de la secretaire changerait qui est paye sur chaque vente.
+function _estCommercial(m){ return m && String(m.role||'').toLowerCase()==='directeur'; }
+
+async function remplirApportePar(selectId, aideId){
+  const sel=document.getElementById(selectId); if(!sel) return;
+  const eq=await chargerEquipe();
+  const moi=(eq||[]).find(m=>m.id===GP_MEMBRE_ID) || null;
+  const opts=['<option value="">— Point de vente (aucun commercial) —</option>'];
+  (eq||[]).forEach(m=>{
+    opts.push(`<option value="${m.id}" data-nom="${_nomMembre(m).replace(/"/g,'&quot;')}" data-role="${m.role||''}">`
+      +`${_estCommercial(m)?'⭐ ':''}${_nomMembre(m)}${m.point_vente?' · '+m.point_vente:''}</option>`);
+  });
+  sel.innerHTML=opts.join('');
+  // Pré-sélection : moi-même si je suis commercial, sinon rien — la secrétaire
+  // choisit explicitement quand le client vient d'un commercial.
+  sel.value = (moi && _estCommercial(moi)) ? moi.id : '';
+  const aide=document.getElementById(aideId);
+  if(aide) aide.textContent = 'Laissez vide si le client vient de lui-même : la commission ira au point de vente.';
+}
+
+// Ce que la création doit écrire, selon la personne choisie.
+function _apportParClient(selectId){
+  const sel=document.getElementById(selectId);
+  const base={ cree_par: GP_USER?.id||null,
+               cree_par_nom: String(GP_USER?.email||'').split('@')[0]||null };
+  if(!sel || !sel.value) return base;
+  const opt=sel.options[sel.selectedIndex];
+  const estCom=String(opt?.getAttribute('data-role')||'').toLowerCase()==='directeur';
+  if(!estCom) return base;
+  return Object.assign(base, {
+    attribution:'commerciale',
+    responsable_id: sel.value,
+    responsable_nom: opt.getAttribute('data-nom')||null,
+    attribue_le: new Date().toISOString().slice(0,10),
+    attribue_par_nom: base.cree_par_nom
+  });
+}
 
 function majSuiviClient(){
   const a=document.getElementById('ecl_attribution'); if(!a) return;
