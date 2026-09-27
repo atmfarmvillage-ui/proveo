@@ -561,6 +561,7 @@ var PAGE_RENDERERS = {
     if(typeof setupVentePdvSelector === 'function') await setupVentePdvSelector();
     if(typeof loadStockVente === 'function') await loadStockVente();
     if(typeof loadFavorisFormules==='function') loadFavorisFormules();
+    if(typeof remplirApportePar==='function') await remplirApportePar('vt_cl_apporte_par');
     await renderVentes();
   },
   depenses:      renderDep,
@@ -576,6 +577,7 @@ var PAGE_RENDERERS = {
   remises:       renderRemises,
   clients: async function(){
     if(!GP_CLIENTS.length)await loadClients();
+    if(typeof remplirApportePar==='function') await remplirApportePar('cl_apporte_par','cl_apporte_aide');
     await renderClients();
   },
   suivi:         renderSuivi,

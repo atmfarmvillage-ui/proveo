@@ -394,8 +394,10 @@ async function setupVentePdvSelector(){
     if(hiddenEl) hiddenEl.value = GP_POINT_VENTE;
     return;
   }
-  // Si admin sans PDV → afficher le sélecteur avec tous les PDV (+ "Production" par défaut)
-  if(isAdmin && selectEl){
+  // Sans point de vente affecté, le sélecteur est OBLIGATOIRE — pas seulement pour
+  // l'admin. Un commercial n'a pas de comptoir : sans ce choix, sa vente partait
+  // en silence sur « Production », et sortait du stock d'un autre point de vente.
+  if(selectEl){
     if(staticEl) staticEl.style.display = 'none';
     selectEl.style.display = '';
     // Récupérer tous les PDV
@@ -1176,14 +1178,15 @@ async function saveVente(){
     if(clientId==='__nouveau__'){
       const parrainSel=document.getElementById('vt_cl_parrain')?.value||null;
       const parrainIdNv = parrainSel && parrainSel!=='' ? parrainSel : null;
-      const{data:nc,error:ncErr}=await SB.from('gp_clients').insert({
+      const{data:nc,error:ncErr}=await SB.from('gp_clients').insert(Object.assign({
         admin_id:GP_ADMIN_ID,
         point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
         nom:nomComplet,telephone:tel,
         type_client:typeNv,total_achats:0,
         nom_ferme:ferme,localite,
         parrain_id:parrainIdNv
-      }).select().maybeSingle();
+      }, (typeof _apportParClient==='function') ? _apportParClient('vt_cl_apporte_par') : {}
+      )).select().maybeSingle();
       if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
       clientId=nc?.id||null;
       await loadClients();
