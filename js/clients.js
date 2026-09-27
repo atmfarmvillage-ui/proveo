@@ -285,9 +285,27 @@ async function openClientDetail(id){
   const{data:V}=await _qDet.order('date',{ascending:false}).limit(2000);
   const rows=V||[];
   // Registre des paiements DATÉS (règlements clients) : la vraie date de chaque versement.
-  let _qReg=SB.from('gp_reglements_clients').select('date_paiement,montant,mode,note').eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
+  // Un relevé doit être OPPOSABLE : quand, combien, mais aussi où, par qui et sous
+  // quelle référence. Ces colonnes existaient ; on ne les lisait simplement pas.
+  let _qReg=SB.from('gp_reglements_clients')
+    .select('date_paiement,montant,mode,note,point_vente,created_by,vente_id')
+    .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
   const{data:REG}=await _qReg.order('date_paiement',{ascending:false}).limit(500);
   const regs=REG||[];
+  // `created_by` est un identifiant de compte : sans ce pont vers l'équipe, le
+  // relevé dit « par 8f3a-… », ce qui ne vaut rien devant un client.
+  let _nomsParUser={};
+  try{
+    const{data:_eq}=await SB.from('gp_membres').select('user_id,nom,email')
+      .eq('admin_id',GP_ADMIN_ID);
+    (_eq||[]).forEach(m=>{ if(m.user_id) _nomsParUser[m.user_id]= m.nom || String(m.email||'').split('@')[0]; });
+  }catch(e){}
+  const _quiEncaisse = r => _nomsParUser[r.created_by] || null;
+  const _refPaiement = r => {
+    const n=String(r.note||'').trim();
+    const m=/réf\.?\s*(?:yas\s*)?([A-Za-z0-9.\-]+)/i.exec(n);
+    return m ? m[1] : (n && n.length<=24 ? n : null);
+  };
   const totEncaisse=regs.reduce((s,r)=>s+(Number(r.montant)||0),0);
   const paiementsHtml=regs.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Mode</th><th class="num">Montant</th></tr></thead><tbody>${regs.map(r=>`<tr><td style="font-size:10px">${fmtDate?fmtDate(r.date_paiement):r.date_paiement}</td><td style="font-size:10px">${r.mode||r.note||'—'}</td><td class="num" style="color:#0a8a4f">${fmt(r.montant)} F</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement daté encore. Les prochains (à la vente, ou via « Encaisser ») s\'afficheront ici avec leur date.</div>';
   // Totaux + agrégat PAR MOIS (basé sur la date de VENTE : le paiement client n'a pas de date propre).
@@ -327,14 +345,29 @@ async function openClientDetail(id){
 
   // ── RELEVÉ DE COMPTE : achats (débit) + paiements DATÉS (crédit) + solde courant ──
   const evts=[];
-  rows.forEach(v=>evts.push({d:String(v.date||'').slice(0,10),t:'a',lib:v.formule_nom||'Achat',mt:Number(v.montant_total)||0}));
-  regs.forEach(r=>evts.push({d:String(r.date_paiement||'').slice(0,10),t:'p',lib:(r.mode||r.note||'Paiement'),mt:Number(r.montant)||0}));
+  // Chaque ligne porte de quoi la défendre devant le client : pour un achat le
+  // produit et la quantité, pour un versement le mode, la référence, le point de
+  // vente et la personne qui l'a encaissé.
+  rows.forEach(v=>evts.push({
+    d:String(v.date||'').slice(0,10), t:'a',
+    lib:v.formule_nom||'Achat', mt:Number(v.montant_total)||0,
+    det:[ v.qte_vendue?(fmtKg(v.qte_vendue)+' kg'):null, v.point_vente||null ].filter(Boolean).join(' · ')
+  }));
+  regs.forEach(r=>evts.push({
+    d:String(r.date_paiement||'').slice(0,10), t:'p',
+    lib:(r.mode||'Paiement'), mt:Number(r.montant)||0,
+    det:[ _refPaiement(r)?('réf. '+_refPaiement(r)):null,
+          r.point_vente||null,
+          _quiEncaisse(r)?('encaissé par '+_quiEncaisse(r)):null ].filter(Boolean).join(' · ')
+  }));
   evts.sort((a,b)=> a.d<b.d?-1:a.d>b.d?1:(a.t==='a'?-1:1));
   let _sld=0; evts.forEach(e=>{ _sld+=(e.t==='a'?e.mt:-e.mt); e.solde=_sld; });
   const byM={};
   evts.forEach(e=>{ const ym=e.d.slice(0,7); if(!ym)return; if(!byM[ym])byM[ym]={achete:0,paye:0,evts:[],soldeFin:0}; if(e.t==='a')byM[ym].achete+=e.mt; else byM[ym].paye+=e.mt; byM[ym].evts.push(e); byM[ym].soldeFin=e.solde; });
   const mKeys=Object.keys(byM).sort().reverse();
-  const releve=mKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Solde</th></tr></thead><tbody>${mKeys.map(ym=>{const m=byM[ym],mm=ym.split('-');const det=m.evts.slice().reverse().map(e=>`<tr style="background:var(--card2,#f5f5f9)"><td style="font-size:9px;padding-left:14px">${fmtDate?fmtDate(e.d):e.d}</td><td style="font-size:9px">${e.t==='a'?'🛒 ':'💰 '}${e.lib}</td><td class="num" style="font-size:9px;color:${e.t==='a'?'#c0392b':'#0a8a4f'}">${e.t==='a'?'+':'−'}${fmt(e.mt)}</td><td class="num" style="font-size:9px;color:${e.solde>0?'#c0392b':'var(--textm)'}">${fmt(e.solde)}</td></tr>`).join('');return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')"><td style="font-size:10px"><span id="mi-${ym}">▸</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td><td class="num">${fmt(m.achete)} F</td><td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td><td class="num" style="color:${m.soldeFin>0?'#c0392b':'var(--textm)'}">${fmt(m.soldeFin)} F</td></tr><tr id="md-${ym}" style="display:none"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><thead><tr><th style="font-size:8px">Date</th><th style="font-size:8px">Opération</th><th class="num" style="font-size:8px">Montant</th><th class="num" style="font-size:8px">Solde</th></tr></thead><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune transaction.</div>';
+  // Le mois en cours s'ouvre seul : c'est celui qu'on vient consulter.
+  const _moisCourantReleve = mKeys[0] || '';
+  const releve=mKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Solde</th></tr></thead><tbody>${mKeys.map(ym=>{const m=byM[ym],mm=ym.split('-');const det=m.evts.slice().reverse().map(e=>`<tr style="background:var(--card2,#f5f5f9)"><td style="font-size:9px;padding-left:14px">${fmtDate?fmtDate(e.d):e.d}</td><td style="font-size:9px">${e.t==='a'?'🛒 ':'💰 '}${e.lib}${e.det?`<div style="font-size:8.5px;color:var(--textm);margin-top:1px">${e.det}</div>`:''}</td><td class="num" style="font-size:9px;color:${e.t==='a'?'#c0392b':'#0a8a4f'}">${e.t==='a'?'+':'−'}${fmt(e.mt)}</td><td class="num" style="font-size:9px;color:${e.solde>0?'#c0392b':'var(--textm)'}">${fmt(e.solde)}</td></tr>`).join('');return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')"><td style="font-size:10px" title="Cliquer pour voir le détail daté"><span id="mi-${ym}">${ym===_moisCourantReleve?'▾':'▸'}</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td><td class="num">${fmt(m.achete)} F</td><td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td><td class="num" style="color:${m.soldeFin>0?'#c0392b':'var(--textm)'}">${fmt(m.soldeFin)} F</td></tr><tr id="md-${ym}" style="display:${ym===_moisCourantReleve?'table-row':'none'}"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><thead><tr><th style="font-size:8px">Date</th><th style="font-size:8px">Opération</th><th class="num" style="font-size:8px">Montant</th><th class="num" style="font-size:8px">Solde</th></tr></thead><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune transaction.</div>';
   const telClean=c.telephone?String(c.telephone).replace(/\s/g,''):'';
   document.getElementById('cd-content').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
