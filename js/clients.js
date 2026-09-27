@@ -86,7 +86,10 @@ function _nomMembre(m){ return m.nom || String(m.email||'').split('@')[0] || '�
 // Règle : seul un commercial (rôle `directeur`) fait basculer le client en
 // « commerciale ». Tous les autres restent sur « point de vente », comme avant —
 // badger au nom de la secretaire changerait qui est paye sur chaque vente.
-function _estCommercial(m){ return m && String(m.role||'').toLowerCase()==='directeur'; }
+// Deux rôles vendent et touchent une commission : le directeur commercial et le
+// commercial de terrain — ce dernier sans aucun accès aux écrans stratégiques.
+const CLI_ROLES_COMMERCIAUX = ['directeur','commercial'];
+function _estCommercial(m){ return !!m && CLI_ROLES_COMMERCIAUX.includes(String(m.role||'').toLowerCase()); }
 
 async function remplirApportePar(selectId, aideId){
   const sel=document.getElementById(selectId); if(!sel) return;
@@ -112,7 +115,7 @@ function _apportParClient(selectId){
                cree_par_nom: String(GP_USER?.email||'').split('@')[0]||null };
   if(!sel || !sel.value) return base;
   const opt=sel.options[sel.selectedIndex];
-  const estCom=String(opt?.getAttribute('data-role')||'').toLowerCase()==='directeur';
+  const estCom=CLI_ROLES_COMMERCIAUX.includes(String(opt?.getAttribute('data-role')||'').toLowerCase());
   if(!estCom) return base;
   return Object.assign(base, {
     attribution:'commerciale',

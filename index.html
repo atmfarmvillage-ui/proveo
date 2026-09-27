@@ -181,8 +181,8 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="nav-sect">💰 Ventes & Clients</div>
   <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
   <div class="nav-item" onclick="showGP('reservations')" data-page="reservations" data-roles="admin,secretaire,gerant"><span class="nav-icon">📋</span>Réservations <span id="nav-badge-resa" class="nav-badge" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf,directeur"><span class="nav-icon">👥</span>Clients</div>
-  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf,directeur"><span class="nav-icon">📞</span>Suivi & Appels</div>
+  <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf,directeur,commercial"><span class="nav-icon">👥</span>Clients</div>
+  <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf,directeur,commercial"><span class="nav-icon">📞</span>Suivi & Appels</div>
   <div class="nav-item" onclick="showGP('classement')" data-page="classement"><span class="nav-icon">🏆</span>Classement clients</div>
 
   <!-- ÉTAPE 1 : APPROVISIONNEMENT -->
@@ -1625,6 +1625,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <option value="technicien">Technicien nutritionniste (formules & production)</option>
           <option value="daf">DAF (validation financière)</option>
           <option value="gerant">Gérant (représentant de l'administration)</option>
+          <option value="commercial">Commercial(e) — terrain, sans accès stratégique</option>
           <option value="directeur">Directeur Stratégique Commercial</option>
           <option value="admin">Admin (accès complet)</option>
         </select>
@@ -1699,6 +1700,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <option value="technicien">Technicien nutritionniste (formules & production)</option>
           <option value="daf">DAF (validation financière)</option>
           <option value="gerant">Gérant (représentant de l'administration)</option>
+          <option value="commercial">Commercial(e) — terrain, sans accès stratégique</option>
           <option value="directeur">Directeur Stratégique Commercial</option>
           <option value="admin">Admin (accès complet)</option>
         </select>
@@ -3579,8 +3581,8 @@ try{
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.29.0"></script>
 <script src="js/ventes.js?v=2.31.0"></script>
-<script src="js/clients.js?v=2.29.0"></script>
-<script src="js/admin.js?v=2.31.0"></script>
+<script src="js/clients.js?v=2.30.0"></script>
+<script src="js/admin.js?v=2.32.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.31.0"></script>
