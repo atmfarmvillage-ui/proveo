@@ -1755,7 +1755,7 @@ async function saveEquipe(){
   const siteUrl=window.location.origin;
   const paysInfo=detecterPays(tel);
   const telClean=paysInfo.numero_whatsapp;
-  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':role==='gerant'?'Gérant':role==='technicien'?'Technicien nutritionniste':'Secrétaire';
+  const roleLabel=role==='admin'?'Administrateur':role==='daf'?'DAF':role==='logistique'?'Logistique':role==='directeur'?'Directeur Stratégique Commercial':role==='commercial'?'Commercial(e)':role==='gerant'?'Gérant':role==='technicien'?'Technicien nutritionniste':'Secrétaire';
   const msg=encodeURIComponent(
     `Bonjour ${nom},\n\n`+
     `Vous êtes invité(e) à rejoindre *${GP_CONFIG?.nom_provenderie||'PROVENDA'}* en tant que *${roleLabel}*`+
@@ -2070,6 +2070,7 @@ const PVO_MATRIX_ROLES = [
   {key:'admin',      lbl:'Admin',      ic:'🔑'},
   {key:'gerant',     lbl:'Gérant',     ic:'🎖️'},
   {key:'directeur',  lbl:'Directeur',  ic:'🎯'},
+  {key:'commercial', lbl:'Commercial', ic:'🤝'},
   {key:'daf',        lbl:'DAF',        ic:'💼'},
   {key:'logistique', lbl:'Logistique', ic:'🚚'},
   {key:'secretaire', lbl:'Secrétaire', ic:'📋'},
@@ -2282,7 +2283,7 @@ function membreCard(m){
       :'<span style="font-size:9px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.2);padding:2px 8px;border-radius:10px">⏳ En attente</span>';
 
   // Badge rôle
-  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='directeur'?'bdg-gold':m.role==='logistique'?'bdg-b':'bdg-g';
+  const roleColor=m.role==='admin'?'bdg-gold':m.role==='daf'?'bdg-gold':m.role==='directeur'?'bdg-gold':m.role==='commercial'?'bdg-g':m.role==='logistique'?'bdg-b':'bdg-g';
 
   return `<div style="padding:12px;background:var(--card2);border:1px solid ${estActif?'var(--border)':'rgba(239,68,68,.25)'};border-radius:10px;margin-bottom:8px;opacity:${estActif?1:.6}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
