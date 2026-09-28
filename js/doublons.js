@@ -69,15 +69,25 @@ function dblCarte(c, opts) {
 }
 
 // ── Le verdict, rendu au moment d'enregistrer ────────────────────────────────
-// { bloque:'…' }        → un numéro déjà pris : on n'écrit rien.
-// { confirmer:[…] }     → un nom déjà pris : à la personne de trancher.
-// { ok:true }           → rien de connu.
+// { bloque }        → le numéro est déjà pris : c'est le même client, on n'écrit rien.
+// { avertir:[…] }   → homonyme mais AUTRE numéro : on montre, on laisse passer.
+// { confirmer:[…] } → homonyme et aucun numéro saisi : impossible de trancher.
+// { ok:true }       → rien de connu.
+//
+// Un homonyme qui porte un autre numéro EST un autre client : deux éleveurs
+// peuvent vraiment s'appeler Koffi. Le nom seul ne bloque donc jamais — c'est le
+// numéro qui identifie une personne, et en base l'index (nom + numéro) ferme le
+// seul cas où les deux coïncident.
 async function dblVerdict(nom, tel) {
   const trouves = await dblChercher(nom, tel);
   const parTel = dblParTel(trouves);
   if (parTel) return { bloque: parTel, trouves };
   const parNom = trouves.filter(c => c.motif === 'nom');
-  if (parNom.length) return { confirmer: parNom, trouves };
+  if (parNom.length) {
+    return dblTel(tel).length >= 6
+      ? { avertir: parNom, trouves }
+      : { confirmer: parNom, trouves };
+  }
   return { ok: true, trouves };
 }
 
@@ -111,16 +121,6 @@ function dblMessageForcerTel(c) {
     + `Elle sera marquee « doublon » et le point de vente concerne en sera informe.`;
 }
 
-// Pour l'equipe, un nom deja pris est un refus, pas une case a cocher. C'est le
-// durcissement demande le 28/09 : la moitie des doublons de SADARI sont nes
-// d'une variante de nom (M. Samuel / Mr Samuel / Pasteur samuel). S'il s'agit
-// vraiment d'un autre Koffi, le patron tranche.
-function dblMessageNomBloque(liste) {
-  const l = liste.map(c => c.nom + (c.point_vente ? ' (' + c.point_vente + ')' : '')).join(', ');
-  return `Ce nom existe deja : ${l}. Si c'est bien le meme client, ouvre sa fiche.`
-    + ` Si c'est vraiment quelqu'un d'autre, seul l'administrateur peut creer la fiche.`;
-}
-
 function dblMessageConfirmer(liste) {
   const l = liste.map(c => {
     const qui = c.responsable_nom ? ' — suivi par ' + c.responsable_nom
@@ -128,9 +128,9 @@ function dblMessageConfirmer(liste) {
     return '• ' + c.nom + (c.telephone ? ' (' + c.telephone + ')' : '') + qui;
   }).join('\n');
   return `Ce nom existe déjà dans la provenderie :\n\n${l}\n\n`
-    + `Si c'est la même personne, annule et ouvre sa fiche.\n`
-    + `Si c'est vraiment quelqu'un d'autre, confirme : l'administrateur`
-    + ` et le point de vente concerné en seront informés.`;
+    + `Aucun numéro n'a été saisi : impossible de savoir si c'est la même personne.\n\n`
+    + `Si c'est le même client, annule et ouvre sa fiche.\n`
+    + `Si c'est quelqu'un d'autre, confirme — et note son numéro.`;
 }
 
 // Ce que la création doit écrire quand quelqu'un force malgré l'alerte : la
@@ -213,7 +213,6 @@ if (typeof window !== 'undefined') {
   window.dblNotifierForce = dblNotifierForce;
   window.dblMessageBloque = dblMessageBloque;
   window.dblPeutForcer = dblPeutForcer;
-  window.dblMessageNomBloque = dblMessageNomBloque;
   window.dblMessageForcerTel = dblMessageForcerTel;
   window.dblMessageConfirmer = dblMessageConfirmer;
 }

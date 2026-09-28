@@ -1178,8 +1178,10 @@ async function saveVente(){
           return;
         }
       }
+      // Un homonyme au numéro différent est un autre client : on le laisse passer.
+      // Sans numéro saisi on ne peut pas trancher — mais la vente exige déjà un
+      // téléphone, donc ce cas ne se produit qu'en théorie ici.
       if(v.confirmer){
-        if(!dblPeutForcer()){ _showErr(dblMessageNomBloque(v.confirmer)); return; }
         if(!confirm(dblMessageConfirmer(v.confirmer))){ _showErr(''); return; }
         _dblForce=v.confirmer[0];
       }

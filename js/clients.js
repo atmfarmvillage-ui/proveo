@@ -31,18 +31,18 @@ async function saveClient(){
         return;
       }
     }
-    if(v.confirmer){
-      // Un nom deja pris : refus pour l'equipe, arbitrage pour le patron.
-      if(!dblPeutForcer()){
-        err.textContent=dblMessageNomBloque(v.confirmer);
-        const zn=document.getElementById('cl-doublons');
-        if(zn){
-          zn.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⛔ Ce nom est déjà enregistré</div>'
-            +v.confirmer.map(c=>dblCarte(c,{bloquant:true,onOuvrir:'openClientDetail'})).join('');
-          zn.style.display='block';
-        }
-        return;
+    // Homonyme avec un AUTRE numéro : c'est un autre client, ça passe. On laisse
+    // seulement la fiche existante à l'écran, au cas où la personne se ravise.
+    if(v.avertir){
+      const za=document.getElementById('cl-doublons');
+      if(za){
+        za.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">⚠️ Un client porte déjà ce nom (numéro différent)</div>'
+          +v.avertir.map(c=>dblCarte(c,{onOuvrir:'openClientDetail'})).join('');
+        za.style.display='block';
       }
+    }
+    // Homonyme SANS numéro saisi : rien ne permet de trancher, on demande.
+    if(v.confirmer){
       if(!confirm(dblMessageConfirmer(v.confirmer))){ err.textContent=''; return; }
       force=v.confirmer[0];
     }
