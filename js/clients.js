@@ -18,7 +18,7 @@ async function saveClient(){
     if(v.bloque){
       // Refus net pour l'équipe. Le patron, lui, peut trancher : un numéro se
       // partage vraiment (le gérant et le propriétaire d'une même ferme).
-      if(dblPeutForcerTel() && confirm(dblMessageForcerTel(v.bloque))){
+      if(dblPeutForcer() && confirm(dblMessageForcerTel(v.bloque))){
         force=v.bloque;
       } else {
         err.textContent=dblMessageBloque(v.bloque);
@@ -32,6 +32,17 @@ async function saveClient(){
       }
     }
     if(v.confirmer){
+      // Un nom deja pris : refus pour l'equipe, arbitrage pour le patron.
+      if(!dblPeutForcer()){
+        err.textContent=dblMessageNomBloque(v.confirmer);
+        const zn=document.getElementById('cl-doublons');
+        if(zn){
+          zn.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⛔ Ce nom est déjà enregistré</div>'
+            +v.confirmer.map(c=>dblCarte(c,{bloquant:true,onOuvrir:'openClientDetail'})).join('');
+          zn.style.display='block';
+        }
+        return;
+      }
       if(!confirm(dblMessageConfirmer(v.confirmer))){ err.textContent=''; return; }
       force=v.confirmer[0];
     }

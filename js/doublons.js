@@ -93,7 +93,7 @@ function dblMessageBloque(c) {
 // Ousmane, Golden farm et Mr moualou). Interdire absolument, c'est promettre
 // qu'un jour un vrai client ne pourra pas etre enregistre. Alors on refuse a
 // tout le monde — et on laisse le patron trancher, en le tracant.
-function dblPeutForcerTel() {
+function dblPeutForcer() {
   return typeof GP_ROLE !== 'undefined' && GP_ROLE === 'admin';
 }
 
@@ -109,6 +109,16 @@ function dblMessageForcerTel(c) {
     + `Creer quand meme une SECONDE fiche sur ce numero ?
 `
     + `Elle sera marquee « doublon » et le point de vente concerne en sera informe.`;
+}
+
+// Pour l'equipe, un nom deja pris est un refus, pas une case a cocher. C'est le
+// durcissement demande le 28/09 : la moitie des doublons de SADARI sont nes
+// d'une variante de nom (M. Samuel / Mr Samuel / Pasteur samuel). S'il s'agit
+// vraiment d'un autre Koffi, le patron tranche.
+function dblMessageNomBloque(liste) {
+  const l = liste.map(c => c.nom + (c.point_vente ? ' (' + c.point_vente + ')' : '')).join(', ');
+  return `Ce nom existe deja : ${l}. Si c'est bien le meme client, ouvre sa fiche.`
+    + ` Si c'est vraiment quelqu'un d'autre, seul l'administrateur peut creer la fiche.`;
 }
 
 function dblMessageConfirmer(liste) {
@@ -202,7 +212,8 @@ if (typeof window !== 'undefined') {
   window.dblMarqueForce = dblMarqueForce;
   window.dblNotifierForce = dblNotifierForce;
   window.dblMessageBloque = dblMessageBloque;
-  window.dblPeutForcerTel = dblPeutForcerTel;
+  window.dblPeutForcer = dblPeutForcer;
+  window.dblMessageNomBloque = dblMessageNomBloque;
   window.dblMessageForcerTel = dblMessageForcerTel;
   window.dblMessageConfirmer = dblMessageConfirmer;
 }
