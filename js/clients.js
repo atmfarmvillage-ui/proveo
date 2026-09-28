@@ -16,14 +16,20 @@ async function saveClient(){
     err.textContent='Vérification…';
     const v=await dblVerdict(nom, tel);
     if(v.bloque){
-      err.textContent=dblMessageBloque(v.bloque);
-      const zone=document.getElementById('cl-doublons');
-      if(zone){
-        zone.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⛔ Ce numéro est déjà enregistré</div>'
-          +dblCarte(v.bloque,{bloquant:true,onOuvrir:'openClientDetail'});
-        zone.style.display='block';
+      // Refus net pour l'équipe. Le patron, lui, peut trancher : un numéro se
+      // partage vraiment (le gérant et le propriétaire d'une même ferme).
+      if(dblPeutForcerTel() && confirm(dblMessageForcerTel(v.bloque))){
+        force=v.bloque;
+      } else {
+        err.textContent=dblMessageBloque(v.bloque);
+        const zone=document.getElementById('cl-doublons');
+        if(zone){
+          zone.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⛔ Ce numéro est déjà enregistré</div>'
+            +dblCarte(v.bloque,{bloquant:true,onOuvrir:'openClientDetail'});
+          zone.style.display='block';
+        }
+        return;
       }
-      return;
     }
     if(v.confirmer){
       if(!confirm(dblMessageConfirmer(v.confirmer))){ err.textContent=''; return; }
@@ -50,6 +56,7 @@ async function saveClient(){
     return;
   }
   if(force && typeof dblNotifierForce==='function') dblNotifierForce(force);
+  GP_ANNUAIRE=null;   // un client de plus : l'annuaire doit le connaître
   ['cl_nom','cl_tel','cl_loc','cl_note'].forEach(id=>document.getElementById(id).value='');
   const zone=document.getElementById('cl-doublons');
   if(zone){ zone.style.display='none'; zone.innerHTML=''; }
@@ -329,7 +336,7 @@ async function saveFusion(){
     err.textContent=echec; return;
   }
   closeFusion();
-  GP_CLIENT_STATS=null;
+  GP_CLIENT_STATS=null; GP_ANNUAIRE=null;
   await loadClients(); populateSelects(); renderClients();
   notify('Fusion effectuée ✓');
 }
@@ -727,6 +734,35 @@ async function redigerMsgWAIA(tier){
   }catch(e){ ta.value=before; notify('Échec IA : '+(e.message||e),'r'); }
 }
 
+// ── ANNUAIRE DE LA PROVENDERIE ────────────────────────────────────────────
+// Chacun doit VOIR que le client existe et à qui il appartient — sinon il en
+// recrée une deuxième fiche, faute d'avoir le droit de lire la première. Mais
+// l'identité n'est pas le chiffre d'affaires : la RPC ne renvoie ni CA, ni
+// dette, ni points de fidélité. Ouvrir la RLS de `gp_clients` les aurait tous
+// exposés par l'API, écran ou pas (même raisonnement que gp_caisses_destinations).
+var GP_ANNUAIRE = null;
+async function chargerAnnuaire(force){
+  if(GP_ANNUAIRE && !force) return GP_ANNUAIRE;
+  try{
+    const{data,error}=await SB.rpc('gp_clients_annuaire');
+    if(error) throw error;
+    GP_ANNUAIRE=data||[];
+  }catch(e){
+    // Migration pas encore passée : on retombe sur l'ancien comportement.
+    console.warn('annuaire clients indisponible', e);
+    GP_ANNUAIRE=[];
+  }
+  return GP_ANNUAIRE;
+}
+
+// Le badge « à qui appartient ce client », toujours visible depuis qu'on les
+// voit tous : sans lui, la liste devient un tas de noms sans propriétaire.
+function cliBadgePdv(pv){
+  return pv
+    ? `<span class="badge bdg-b" style="font-size:8px">📍 ${pv}</span>`
+    : `<span class="badge bdg-b" style="font-size:8px">🏭 Siège</span>`;
+}
+
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
@@ -735,6 +771,13 @@ async function renderClients(){
   if(typeof appartientAuPoleClients==='function'){
     filtered=filtered.filter(c=> appartientAuPoleClients(c.point_vente));
   }
+
+  // Les clients des autres points de vente : visibles, badgés, sans chiffres.
+  const _vus=new Set(filtered.map(c=>c.id));
+  const autres=(await chargerAnnuaire())
+    .filter(c=>!_vus.has(c.id))
+    .filter(c=>(c.nom||'').toLowerCase().includes(search)||(c.telephone||'').includes(search))
+    .filter(_cliPasseFiltreSuivi);
 
   // Charger les ventes impayées/partielles pour calculer les dettes (scopées au PDV)
   const mois=new Date().toISOString().slice(0,7);
@@ -759,11 +802,11 @@ async function renderClients(){
   const _bandeauFiltre = CLI_FILTRE_SUIVI ? `
     <div style="display:flex;align-items:center;gap:8px;background:rgba(232,197,71,.12);
                 border:1px solid rgba(232,197,71,.45);border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:11px">
-      <span>Filtré sur <b>${_cliLibelleFiltre()}</b> — ${filtered.length} client(s)</span>
+      <span>Filtré sur <b>${_cliLibelleFiltre()}</b> — ${filtered.length+autres.length} client(s)</span>
       <button class="btn btn-out btn-sm" style="margin-left:auto;font-size:10px" onclick="cliFiltrerSuivi(null)">✕ Tout afficher</button>
     </div>` : '';
 
-  document.getElementById('clients-liste').innerHTML=_bandeauFiltre+(filtered.length?`
+  document.getElementById('clients-liste').innerHTML=_bandeauFiltre+((filtered.length||autres.length)?`
     <table class="tbl"><thead><tr>
       <th>Nom & Contact</th><th>Type</th>
       <th class="num">CA total</th>
@@ -782,7 +825,7 @@ async function renderClients(){
             <span style="font-weight:700">${c.nom}</span>
             <span style="font-size:9px;font-weight:700;color:${st.color}">${st.emoji} ${st.label}</span>
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
-            ${c.point_vente && (GP_ROLE==='admin'||GP_EST_PRINCIPAL||c.point_vente!==GP_POINT_VENTE)?`<span class="badge bdg-b" style="font-size:8px">📍 ${c.point_vente}</span>`:''}
+            ${cliBadgePdv(c.point_vente)}
             ${cliBadgeSuivi(c, true)}
             ${typeof dblBadge==='function'?dblBadge(c):''}
           </div>
@@ -813,6 +856,27 @@ async function renderClients(){
         </td>
       </tr>`;
     }).join('')}
+    ${autres.length?`<tr><td colspan="5" style="padding:9px 6px;background:rgba(0,0,0,.05)">
+      <span style="font-size:10.5px;color:var(--textm)">
+        <b>${autres.length} client(s) des autres points de vente</b> — affichés pour ne pas les
+        enregistrer une deuxième fois. Leurs chiffres restent à leur point de vente.
+      </span></td></tr>`:''}
+    ${autres.map(c=>`<tr style="opacity:.68">
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-weight:700">${c.nom}</span>
+          ${cliBadgePdv(c.point_vente)}
+          ${cliBadgeSuivi(c, true)}
+        </div>
+        <div style="font-size:10px;color:var(--textm)">
+          ${c.telephone?'📞 '+c.telephone:''}${c.localite?' · 📍 '+c.localite:''}
+        </div>
+      </td>
+      <td><span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span></td>
+      <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
+      <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
+      <td></td>
+    </tr>`).join('')}
     </tbody></table>`
   :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>');
 }

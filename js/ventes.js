@@ -1169,9 +1169,14 @@ async function saveVente(){
       if(v.bloque){
         // Le numéro est déjà pris : on n'écrit rien, on bascule sur la fiche
         // existante — c'est presque toujours ce que la personne voulait.
-        _showErr(dblMessageBloque(v.bloque));
-        if(typeof selectionnerClientVente==='function'){ selectionnerClientVente(v.bloque.id); }
-        return;
+        // Seul le patron peut créer une seconde fiche sur un numéro partagé.
+        if(dblPeutForcerTel() && confirm(dblMessageForcerTel(v.bloque))){
+          _dblForce=v.bloque;
+        } else {
+          _showErr(dblMessageBloque(v.bloque));
+          if(typeof selectionnerClientVente==='function'){ selectionnerClientVente(v.bloque.id); }
+          return;
+        }
       }
       if(v.confirmer){
         if(!confirm(dblMessageConfirmer(v.confirmer))){ _showErr(''); return; }

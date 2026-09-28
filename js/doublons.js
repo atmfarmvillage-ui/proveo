@@ -88,6 +88,29 @@ function dblMessageBloque(c) {
   return `Ce numéro est déjà celui de ${c.nom}${qui}. Ouvre sa fiche plutôt que d'en créer une seconde.`;
 }
 
+// Un telephone se partage : le gerant et le proprietaire, deux freres, un
+// voisin. La liste des doublons de SADARI le montre noir sur blanc (KOMLAN et
+// Ousmane, Golden farm et Mr moualou). Interdire absolument, c'est promettre
+// qu'un jour un vrai client ne pourra pas etre enregistre. Alors on refuse a
+// tout le monde — et on laisse le patron trancher, en le tracant.
+function dblPeutForcerTel() {
+  return typeof GP_ROLE !== 'undefined' && GP_ROLE === 'admin';
+}
+
+function dblMessageForcerTel(c) {
+  return `${c.nom} porte deja ce numero`
+    + (c.point_vente ? ` (${c.point_vente})` : '') + `.
+
+`
+    + `Un telephone se partage parfois : le gerant et le proprietaire, deux membres`
+    + ` d'une meme famille.
+
+`
+    + `Creer quand meme une SECONDE fiche sur ce numero ?
+`
+    + `Elle sera marquee « doublon » et le point de vente concerne en sera informe.`;
+}
+
 function dblMessageConfirmer(liste) {
   const l = liste.map(c => {
     const qui = c.responsable_nom ? ' — suivi par ' + c.responsable_nom
@@ -179,5 +202,7 @@ if (typeof window !== 'undefined') {
   window.dblMarqueForce = dblMarqueForce;
   window.dblNotifierForce = dblNotifierForce;
   window.dblMessageBloque = dblMessageBloque;
+  window.dblPeutForcerTel = dblPeutForcerTel;
+  window.dblMessageForcerTel = dblMessageForcerTel;
   window.dblMessageConfirmer = dblMessageConfirmer;
 }
