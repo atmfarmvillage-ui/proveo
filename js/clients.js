@@ -89,6 +89,49 @@ function _nomMembre(m){ return m.nom || String(m.email||'').split('@')[0] || '�
 // Deux rôles vendent et touchent une commission : le directeur commercial et le
 // commercial de terrain — ce dernier sans aucun accès aux écrans stratégiques.
 const CLI_ROLES_COMMERCIAUX = ['directeur','commercial'];
+// ── BADGE « QUI SUIT CE CLIENT » ───────────────────────────────
+// L'attribution décide de la commission depuis le 29/08, mais elle ne s'affichait
+// NULLE PART : il fallait ouvrir la fiche et cliquer « Modifier » pour la voir.
+// Le badge est cliquable : il filtre la liste sur la personne, ce qui répond à
+// « montre-moi les clients de la commerciale » sans ajouter d'écran.
+var CLI_FILTRE_SUIVI = null;   // null = tout ; sinon 'groupe' | 'pdv' | id du responsable
+
+function cliBadgeSuivi(c, cliquable){
+  const a=String(c.attribution||'pdv').toLowerCase();
+  const nom=(c.responsable_nom||'').trim();
+  let cle=a, ic='📍', lbl='Point de vente', cls='bdg-b';
+  if(a==='groupe'){ cle='groupe'; ic='🏛️'; lbl='Groupe'; cls='bdg-gold'; }
+  else if(a==='commerciale'||a==='secretaire'){
+    cle=c.responsable_id||a; ic=(a==='commerciale')?'🤝':'📋';
+    lbl=nom||(a==='commerciale'?'Commercial':'Secrétaire'); cls='bdg-g';
+  } else { cle='pdv'; }
+  const clic=cliquable?` style="cursor:pointer" title="Voir tous les clients suivis par : ${lbl}" onclick="event.stopPropagation();cliFiltrerSuivi('${cle}')"`:'';
+  return `<span class="badge ${cls}"${clic ? clic : ''} style="font-size:8px">${ic} ${lbl}</span>`;
+}
+
+// Le libellé du filtre courant, lu sur le premier client qui y répond.
+function _cliLibelleFiltre(){
+  if(!CLI_FILTRE_SUIVI) return '';
+  if(CLI_FILTRE_SUIVI==='groupe') return 'Groupe';
+  if(CLI_FILTRE_SUIVI==='pdv')    return 'Point de vente';
+  const c=(GP_CLIENTS||[]).find(x=>String(x.responsable_id||'')===CLI_FILTRE_SUIVI);
+  return (c && (c.responsable_nom||'').trim()) || 'cette personne';
+}
+
+function cliFiltrerSuivi(cle){
+  CLI_FILTRE_SUIVI = (CLI_FILTRE_SUIVI===cle) ? null : cle;   // re-cliquer enlève le filtre
+  renderClients();
+}
+
+// Un client entre dans le filtre courant ?
+function _cliPasseFiltreSuivi(c){
+  if(!CLI_FILTRE_SUIVI) return true;
+  const a=String(c.attribution||'pdv').toLowerCase();
+  if(CLI_FILTRE_SUIVI==='groupe') return a==='groupe';
+  if(CLI_FILTRE_SUIVI==='pdv')    return a!=='groupe' && a!=='commerciale' && a!=='secretaire';
+  return String(c.responsable_id||'')===CLI_FILTRE_SUIVI;
+}
+
 function _estCommercial(m){ return !!m && CLI_ROLES_COMMERCIAUX.includes(String(m.role||'').toLowerCase()); }
 
 async function remplirApportePar(selectId, aideId){
@@ -372,7 +415,7 @@ async function openClientDetail(id){
   document.getElementById('cd-content').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
       <div style="min-width:0">
-        <div style="font-weight:800;font-size:16px">${c.nom} <span style="font-size:11px;color:${st.color}">${st.emoji} ${st.label}</span></div>
+        <div style="font-weight:800;font-size:16px">${c.nom} <span style="font-size:11px;color:${st.color}">${st.emoji} ${st.label}</span> ${cliBadgeSuivi(c,false)}</div>
         <div style="font-size:11px;color:var(--textm);margin-top:3px">📞 ${c.telephone||'—'}${(c.localisation||c.localite)?' · 📍 '+(c.localisation||c.localite):''}</div>
       </div>
       <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')">✏️ Modifier</button>
@@ -647,6 +690,7 @@ async function redigerMsgWAIA(tier){
 async function renderClients(){
   const search=document.getElementById('cl-search')?.value.toLowerCase()||'';
   let filtered=GP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(search)||(c.telephone||'').includes(search));
+  filtered=filtered.filter(_cliPasseFiltreSuivi);
   // Cloisonnement : pôle central (Production+Principal) partage ses clients ; secondaire isolé.
   if(typeof appartientAuPoleClients==='function'){
     filtered=filtered.filter(c=> appartientAuPoleClients(c.point_vente));
@@ -671,7 +715,15 @@ async function renderClients(){
 
   await loadClientStats(true);
 
-  document.getElementById('clients-liste').innerHTML=filtered.length?`
+  // Une liste qui raccourcit sans rien dire passe pour un bug : on annonce le filtre.
+  const _bandeauFiltre = CLI_FILTRE_SUIVI ? `
+    <div style="display:flex;align-items:center;gap:8px;background:rgba(232,197,71,.12);
+                border:1px solid rgba(232,197,71,.45);border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:11px">
+      <span>Filtré sur <b>${_cliLibelleFiltre()}</b> — ${filtered.length} client(s)</span>
+      <button class="btn btn-out btn-sm" style="margin-left:auto;font-size:10px" onclick="cliFiltrerSuivi(null)">✕ Tout afficher</button>
+    </div>` : '';
+
+  document.getElementById('clients-liste').innerHTML=_bandeauFiltre+(filtered.length?`
     <table class="tbl"><thead><tr>
       <th>Nom & Contact</th><th>Type</th>
       <th class="num">CA total</th>
@@ -691,6 +743,7 @@ async function renderClients(){
             <span style="font-size:9px;font-weight:700;color:${st.color}">${st.emoji} ${st.label}</span>
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
             ${c.point_vente && (GP_ROLE==='admin'||GP_EST_PRINCIPAL||c.point_vente!==GP_POINT_VENTE)?`<span class="badge bdg-b" style="font-size:8px">📍 ${c.point_vente}</span>`:''}
+            ${cliBadgeSuivi(c, true)}
           </div>
           <div style="font-size:10px;color:var(--textm)">
             ${c.telephone?'📞 '+c.telephone:''}
@@ -720,7 +773,7 @@ async function renderClients(){
       </tr>`;
     }).join('')}
     </tbody></table>`
-  :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>';
+  :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>');
 }
 // ══════════════════════════════════════════════════
 // FIDÉLITÉ — Catalogue de récompenses + échange de points
