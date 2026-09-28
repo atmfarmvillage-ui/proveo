@@ -1,21 +1,61 @@
 ﻿// ── CLIENTS ────────────────────────────────────────
 async function saveClient(){
   const nom=document.getElementById('cl_nom').value.trim();
+  const tel=document.getElementById('cl_tel').value.trim();
   const err=document.getElementById('cl_err');
   if(!nom){err.textContent='Nom requis.';return;}
+
+  // ── ANTI-DOUBLON ──
+  // Le numéro ferme la porte : deux personnes ne partagent pas un téléphone.
+  // Le nom se discute : deux éleveurs peuvent vraiment s'appeler Koffi.
+  // La recherche passe par la base, car un commercial ne VOIT pas les clients
+  // des autres points de vente (policy restrictive) — il créerait le doublon
+  // d'une fiche qu'il n'a jamais pu lire.
+  let force=null;
+  if(typeof dblVerdict==='function'){
+    err.textContent='Vérification…';
+    const v=await dblVerdict(nom, tel);
+    if(v.bloque){
+      err.textContent=dblMessageBloque(v.bloque);
+      const zone=document.getElementById('cl-doublons');
+      if(zone){
+        zone.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⛔ Ce numéro est déjà enregistré</div>'
+          +dblCarte(v.bloque,{bloquant:true,onOuvrir:'openClientDetail'});
+        zone.style.display='block';
+      }
+      return;
+    }
+    if(v.confirmer){
+      if(!confirm(dblMessageConfirmer(v.confirmer))){ err.textContent=''; return; }
+      force=v.confirmer[0];
+    }
+    err.textContent='';
+  }
+
   const{error}=await SB.from('gp_clients').insert(Object.assign({
     admin_id:GP_ADMIN_ID,nom,
     point_vente:(GP_ROLE==='admin' ? null : (GP_POINT_VENTE||'Production')),
-    telephone:document.getElementById('cl_tel').value.trim()||null,
+    telephone:tel||null,
     localisation:document.getElementById('cl_loc').value.trim()||null,
     type_elevage:document.getElementById('cl_type').value,
     note:document.getElementById('cl_note').value.trim()||null
-  }, _apportParClient('cl_apporte_par')));
-  if(error){err.textContent='Erreur: '+error.message;return;}
+  }, _apportParClient('cl_apporte_par'),
+     (typeof dblMarqueForce==='function')?dblMarqueForce(force):{}));
+  if(error){
+    // 23505 = l'index unique a refusé le numéro. Ça n'arrive que si la fiche
+    // jumelle est hors de portée de la RPC ; on le dit en clair.
+    err.textContent=/23505|duplicate key|unique/i.test(error.message||'')
+      ? 'Ce numéro de téléphone appartient déjà à un client de la provenderie.'
+      : 'Erreur: '+error.message;
+    return;
+  }
+  if(force && typeof dblNotifierForce==='function') dblNotifierForce(force);
   ['cl_nom','cl_tel','cl_loc','cl_note'].forEach(id=>document.getElementById(id).value='');
+  const zone=document.getElementById('cl-doublons');
+  if(zone){ zone.style.display='none'; zone.innerHTML=''; }
   err.textContent='';
   await loadClients();populateSelects();renderClients();
-  notify('Client ajouté ✓');
+  notify(force?'Client ajouté — doublon signalé à l\'administrateur':'Client ajouté ✓', force?'gold':'');
 }
 
 // ── RÉGULARITÉ CLIENT (calculée depuis l'historique des ventes) ──
@@ -71,7 +111,7 @@ var GP_EQUIPE = null;
 async function chargerEquipe(force){
   if(GP_EQUIPE && !force) return GP_EQUIPE;
   try{
-    const{data}=await SB.from('gp_membres').select('id,nom,email,role,point_vente,actif')
+    const{data}=await SB.from('gp_membres').select('id,user_id,nom,email,role,point_vente,actif')
       .eq('admin_id',GP_ADMIN_ID).order('nom');
     GP_EQUIPE=(data||[]).filter(m=>m.actif!==false);
   }catch(e){ GP_EQUIPE=[]; }
@@ -744,6 +784,7 @@ async function renderClients(){
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
             ${c.point_vente && (GP_ROLE==='admin'||GP_EST_PRINCIPAL||c.point_vente!==GP_POINT_VENTE)?`<span class="badge bdg-b" style="font-size:8px">📍 ${c.point_vente}</span>`:''}
             ${cliBadgeSuivi(c, true)}
+            ${typeof dblBadge==='function'?dblBadge(c):''}
           </div>
           <div style="font-size:10px;color:var(--textm)">
             ${c.telephone?'📞 '+c.telephone:''}

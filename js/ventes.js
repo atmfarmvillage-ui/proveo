@@ -1160,19 +1160,35 @@ async function saveVente(){
     if(!tel){_showErr('Le numéro de téléphone est obligatoire pour un nouveau client.');return;}
     if(!localite){_showErr('La localité est obligatoire pour un nouveau client.');return;}
     // ── ANTI-DOUBLON : vérif finale avant INSERT ──
-    const similaires=chercherClientsSimilaires(nomComplet, tel);
-    if(similaires.length>0){
-      const liste=similaires.map(c=>`• ${c.nom}${c.telephone?' ('+c.telephone+')':''}`).join('\n');
-      const choix=confirm(
-        `⚠ ${similaires.length} client(s) existent déjà avec un nom/téléphone similaire :\n\n${liste}\n\n`+
-        `Cliquez "OK" pour utiliser le premier de la liste, ou "Annuler" pour créer quand même un nouveau client.`
-      );
-      if(choix){
-        // Utiliser le premier match — pas d'INSERT, on remplace clientId
-        clientId=similaires[0].id;
-        notify('Client existant utilisé : '+similaires[0].nom,'gold');
-      } else {
-        // L'utilisateur force la création — on continue
+    // Le contrôle autoritaire passe par la base (elle voit TOUS les points de
+    // vente, pas seulement ceux que ce compte a le droit de lire). La recherche
+    // locale ci-dessous ne reste qu'en secours, pour les fiches déjà à l'écran.
+    let _dblForce=null;
+    if(typeof dblVerdict==='function'){
+      const v=await dblVerdict(nomComplet, tel);
+      if(v.bloque){
+        // Le numéro est déjà pris : on n'écrit rien, on bascule sur la fiche
+        // existante — c'est presque toujours ce que la personne voulait.
+        _showErr(dblMessageBloque(v.bloque));
+        if(typeof selectionnerClientVente==='function'){ selectionnerClientVente(v.bloque.id); }
+        return;
+      }
+      if(v.confirmer){
+        if(!confirm(dblMessageConfirmer(v.confirmer))){ _showErr(''); return; }
+        _dblForce=v.confirmer[0];
+      }
+    } else {
+      const similaires=chercherClientsSimilaires(nomComplet, tel);
+      if(similaires.length>0){
+        const liste=similaires.map(c=>`• ${c.nom}${c.telephone?' ('+c.telephone+')':''}`).join('\n');
+        const choix=confirm(
+          `⚠ ${similaires.length} client(s) existent déjà avec un nom/téléphone similaire :\n\n${liste}\n\n`+
+          `Cliquez "OK" pour utiliser le premier de la liste, ou "Annuler" pour créer quand même un nouveau client.`
+        );
+        if(choix){
+          clientId=similaires[0].id;
+          notify('Client existant utilisé : '+similaires[0].nom,'gold');
+        }
       }
     }
     if(clientId==='__nouveau__'){
@@ -1185,13 +1201,22 @@ async function saveVente(){
         type_client:typeNv,total_achats:0,
         nom_ferme:ferme,localite,
         parrain_id:parrainIdNv
-      }, (typeof _apportParClient==='function') ? _apportParClient('vt_cl_apporte_par') : {}
+      }, (typeof _apportParClient==='function') ? _apportParClient('vt_cl_apporte_par') : {},
+         (typeof dblMarqueForce==='function') ? dblMarqueForce(_dblForce) : {}
       )).select().maybeSingle();
-      if(ncErr){err.textContent='Erreur client: '+ncErr.message;return;}
+      if(ncErr){
+        err.textContent=/23505|duplicate key|unique/i.test(ncErr.message||'')
+          ? 'Ce numéro de téléphone appartient déjà à un client de la provenderie.'
+          : 'Erreur client: '+ncErr.message;
+        return;
+      }
       clientId=nc?.id||null;
+      if(_dblForce && typeof dblNotifierForce==='function') dblNotifierForce(_dblForce);
       await loadClients();
       populateSelects();
-      notify(nomComplet+' enregistré comme client ✓','gold');
+      notify(_dblForce
+        ? nomComplet+' enregistré — doublon signalé à l\'administrateur'
+        : nomComplet+' enregistré comme client ✓','gold');
     }
   }
 
