@@ -1195,8 +1195,8 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>➕ Nouveau client</span></div></div>
       <div class="fg2">
-        <div class="fr"><label>Nom</label><input type="text" id="cl_nom" placeholder="Ferme Adekou"></div>
-        <div class="fr"><label>Téléphone</label><input type="tel" id="cl_tel" placeholder="+228 90 00 00 00"></div>
+        <div class="fr"><label>Nom</label><input type="text" id="cl_nom" placeholder="Ferme Adekou" oninput="if(typeof dblSurveiller==='function')dblSurveiller('cl_nom','cl_tel','cl-doublons','openClientDetail')"></div>
+        <div class="fr"><label>Téléphone</label><input type="tel" id="cl_tel" placeholder="+228 90 00 00 00" oninput="if(typeof dblSurveiller==='function')dblSurveiller('cl_nom','cl_tel','cl-doublons','openClientDetail')"></div>
       </div>
       <div class="fg2">
         <div class="fr"><label>Localisation</label><input type="text" id="cl_loc" placeholder="Lomé, Agoè..."></div>
@@ -1219,6 +1219,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
         <select id="cl_apporte_par"></select>
         <div style="font-size:10px;color:var(--textm);margin-top:4px" id="cl_apporte_aide"></div>
       </div>
+      <!-- Prévenir pendant la saisie vaut mieux que refuser après : la personne
+           n'a pas encore rempli les autres champs. -->
+      <div id="cl-doublons" style="display:none;margin-bottom:10px"></div>
       <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveClient()">➕ Ajouter</button>
       <div class="a-err" id="cl_err"></div>
     </div>
@@ -3638,8 +3641,9 @@ try{
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.29.0"></script>
-<script src="js/ventes.js?v=2.31.0"></script>
-<script src="js/clients.js?v=2.32.0"></script>
+<script src="js/ventes.js?v=2.33.0"></script>
+<script src="js/doublons.js?v=1.1.0"></script>
+<script src="js/clients.js?v=2.34.0"></script>
 <script src="js/badges.js?v=1.0.0"></script>
 <script src="js/admin.js?v=2.33.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
