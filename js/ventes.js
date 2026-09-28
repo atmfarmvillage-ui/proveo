@@ -1170,7 +1170,7 @@ async function saveVente(){
         // Le numéro est déjà pris : on n'écrit rien, on bascule sur la fiche
         // existante — c'est presque toujours ce que la personne voulait.
         // Seul le patron peut créer une seconde fiche sur un numéro partagé.
-        if(dblPeutForcerTel() && confirm(dblMessageForcerTel(v.bloque))){
+        if(dblPeutForcer() && confirm(dblMessageForcerTel(v.bloque))){
           _dblForce=v.bloque;
         } else {
           _showErr(dblMessageBloque(v.bloque));
@@ -1179,6 +1179,7 @@ async function saveVente(){
         }
       }
       if(v.confirmer){
+        if(!dblPeutForcer()){ _showErr(dblMessageNomBloque(v.confirmer)); return; }
         if(!confirm(dblMessageConfirmer(v.confirmer))){ _showErr(''); return; }
         _dblForce=v.confirmer[0];
       }
