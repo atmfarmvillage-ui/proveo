@@ -3250,6 +3250,64 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   </div>
 </div>
 
+<!-- BADGE DE TERRAIN — aperçu et PDF au format carte -->
+<div id="modal-badge" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerBadge()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:780px;width:100%;max-height:92vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px">🪪 Badge de terrain</div>
+    <div id="bdg-titre" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px">—</div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:12px">
+      Ce que tu vois ici est exactement ce qui s'imprime. Le PDF sort au format carte bancaire
+      (54 × 85,6 mm, 300 dpi) : page 1 le recto, page 2 le verso.
+    </div>
+    <div id="bdg-avert" style="display:none;font-size:11.5px;line-height:1.5;color:var(--red);background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 10px;margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+      <div style="display:flex;gap:10px">
+        <canvas id="bdg-recto" style="width:176px;height:auto;border-radius:8px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)"></canvas>
+        <canvas id="bdg-verso" style="width:176px;height:auto;border-radius:8px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)"></canvas>
+      </div>
+
+      <div style="flex:1;min-width:260px">
+        <div class="fr"><label>Photo du porteur</label>
+          <input type="file" id="bdg_photo" accept="image/*" onchange="badgePhotoChoisie(this)">
+        </div>
+        <div class="fr"><label>Cadrage du visage (haut ↔ bas)</label>
+          <input type="range" id="bdg_cadrage" min="0" max="100" value="45" oninput="badgeRendre()" style="width:100%">
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>NOM *</label><input type="text" id="bdg_nom" oninput="badgeRendre()" placeholder="ADAKO"></div>
+          <div class="fr"><label>Prénoms</label><input type="text" id="bdg_prenoms" oninput="badgeRendre()" placeholder="Kodjo Joël"></div>
+        </div>
+        <div class="fr"><label>Poste imprimé sur le badge</label>
+          <input type="text" id="bdg_poste" oninput="badgeRendre()" placeholder="Responsable Commercial">
+        </div>
+        <div class="fr"><label>Son numéro</label>
+          <input type="tel" id="bdg_tel" oninput="badgeRendre()" placeholder="+228 90 00 00 00">
+        </div>
+        <div class="fg2">
+          <div class="fr"><label>N° de badge</label><input type="text" id="bdg_num" oninput="badgeRendre()"></div>
+          <div class="fr"><label>Valable jusqu'au</label><input type="date" id="bdg_valide" oninput="badgeRendre()"></div>
+        </div>
+        <div class="fr"><label>Numéro officiel (au verso)</label>
+          <input type="tel" id="bdg_tel_officiel" oninput="badgeRendre()" placeholder="+228 00 00 00 00">
+        </div>
+        <div style="font-size:10.5px;color:var(--textm);line-height:1.5">
+          Le numéro officiel est celui de la provenderie, pas du porteur : il est enregistré
+          dans les Paramètres et sert à tous les documents.
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-g" onclick="badgePartager()" style="flex:1;min-width:150px;justify-content:center">📤 Partager le PDF</button>
+      <button class="btn btn-out" onclick="badgeTelecharger()" style="flex:1;min-width:130px;justify-content:center">⬇️ Télécharger</button>
+      <button class="btn btn-out" onclick="badgeSauver()" style="flex:1;min-width:120px;justify-content:center">💾 Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerBadge()" style="flex:1;min-width:90px;justify-content:center">Fermer</button>
+    </div>
+    <div class="a-err" id="bdg-err"></div>
+  </div>
+</div>
+
 <div class="page" id="page-emprunts">
   <div class="page-title">🏦 Emprunts</div>
   <div class="page-sub">Prêts bancaires et microfinance — capital dû, échéancier, remboursements</div>
@@ -3582,7 +3640,8 @@ try{
 <script src="js/production.js?v=2.29.0"></script>
 <script src="js/ventes.js?v=2.31.0"></script>
 <script src="js/clients.js?v=2.32.0"></script>
-<script src="js/admin.js?v=2.32.0"></script>
+<script src="js/badges.js?v=1.0.0"></script>
+<script src="js/admin.js?v=2.33.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.31.0"></script>
