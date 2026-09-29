@@ -1062,7 +1062,12 @@ async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
   pdvStock = pdvStock || 'Production';
   for(const l of (lignes||[])){
     const tp = l.type_produit || 'formule';
-    if(tp==='ferme' || tp==='prestation') continue;
+    if(tp==='ferme'){
+      if(typeof deduireStockFerme==='function' && l.ferme_produit_id)
+        await deduireStockFerme(l.ferme_produit_id, l.quantite, refVente);
+      continue;
+    }
+    if(tp==='prestation') continue;
     if(tp==='veto'){
       if(typeof deduireStockVeto==='function' && l.veto_id) await deduireStockVeto(pdvStock, l.veto_id, l.quantite);
       continue;
@@ -1465,7 +1470,8 @@ async function saveVente(){
       sous_type:l.sous_type||null,
       ingredient_id:l.ingredient_id||null,
       cout_unitaire:l.cout_unitaire||null,
-      veto_id:l.veto_id||null
+      veto_id:l.veto_id||null,
+      ferme_produit_id:l.ferme_produit_id||null
     }))
   );
 
@@ -2467,6 +2473,9 @@ function basculerTypeProduitVente(type){
   wrapF.style.display  = type==='formule' ? 'block' : 'none';
   wrapM.style.display  = type==='mp' ? 'block' : 'none';
   wrapFE.style.display = type==='ferme' ? 'block' : 'none';
+  // Le catalogue et son disponible se rechargent à chaque passage en mode ferme :
+  // une vente faite ailleurs entre-temps doit se voir.
+  if(type==='ferme' && typeof remplirSelectFerme==='function') remplirSelectFerme();
   if(wrapP) wrapP.style.display = type==='prestation' ? 'block' : 'none';
   if(wrapV) wrapV.style.display = type==='veto' ? 'block' : 'none';
   // Cacher le conditionnement (sac kg) pour ferme et véto (vendus à l'unité)
@@ -2773,7 +2782,7 @@ function ajouterLigneVente(){
   const sousType = document.getElementById('vt_sous_type')?.value || null;
 
   // Récupérer le produit selon le type
-  let produitNom, ingredientId = null, vetoId = null;
+  let produitNom, ingredientId = null, vetoId = null, fermeProduitId = null;
   if(typeProduit === 'mp'){
     ingredientId = document.getElementById('vt_mp_id')?.value;
     if(!ingredientId){ err.textContent = 'Sélectionnez une matière première.'; return; }
@@ -2793,10 +2802,22 @@ function ajouterLigneVente(){
       }
     }
   } else if(typeProduit === 'ferme'){
-    if(!sousType){ err.textContent = 'Choisissez le sous-type ferme (lapin / œuf / poulet / autre).'; return; }
+    // Produit du catalogue : c'est lui qui porte le stock. Le texte libre reste
+    // possible pour ce qui n'est pas suivi — un fumier, un lot exceptionnel.
+    fermeProduitId = document.getElementById('vt_ferme_produit')?.value || null;
     const desc = document.getElementById('vt_ferme_desc')?.value.trim();
-    const labels = {lapin_vivant:'🐰 Lapin vivant', oeuf:'🥚 Œuf', poulet:'🐔 Poulet', autre_ferme:'📦 Produit ferme'};
-    produitNom = labels[sousType] + (desc ? ` — ${desc}` : '');
+    if(fermeProduitId){
+      const opt = document.querySelector('#vt_ferme_produit option[value="'+fermeProduitId+'"]');
+      produitNom = ((opt && opt.dataset.nom) || 'Produit ferme') + (desc ? ' — '+desc : '');
+      const reste = Number((opt && opt.dataset.stock) || 0);
+      const veut = +document.getElementById('vt_qte')?.value || 0;
+      if(veut > reste && !confirm('⚠ Il ne reste que '+fmt(reste)+' en stock, tu veux en vendre '+fmt(veut)
+        +'.\nContinuer quand même ? Le stock passera en négatif.')) return;
+    } else {
+      if(!sousType){ err.textContent = 'Choisis un produit du catalogue, ou un sous-type ferme.'; return; }
+      const labels = {lapin_vivant:'🐰 Lapin vivant', oeuf:'🥚 Œuf', poulet:'🐔 Poulet', autre_ferme:'📦 Produit ferme'};
+      produitNom = labels[sousType] + (desc ? ' — '+desc : '');
+    }
   } else if(typeProduit === 'prestation'){
     const svcId = document.getElementById('vt_service')?.value;
     const svc = GP_SERVICES.find(x=>x.id===svcId);
@@ -2868,6 +2889,7 @@ Continuer ?`)) return;
       ? (Number(((GP_INGREDIENTS || []).find(i => i.id === ingredientId) || {}).prix_actuel) || null)
       : null,
     veto_id: vetoId,                    // uuid produit véto (en mémoire) — sert à déduire le stock à la vente
+    ferme_produit_id: fermeProduitId,   // uuid produit ferme — sert à sortir le stock à la vente
     type_prix: (typeProduit==='ferme'||typeProduit==='veto') ? 'unite' : 'detail',
   };
 
@@ -3215,6 +3237,9 @@ async function supprimerVente(id){
         });
       }
     } else if(l.type_produit === 'veto'){
+      if(typeof recrediterStockFerme==='function' && l.ferme_produit_id){
+        await recrediterStockFerme(l.ferme_produit_id, l.quantite, id, l.formule_nom);
+      }
       if(typeof recrediterStockVeto==='function' && l.veto_id){
         await recrediterStockVeto(pdvStock, l.veto_id, l.quantite, l.formule_nom);
       }
