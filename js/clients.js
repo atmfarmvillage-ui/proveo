@@ -632,12 +632,24 @@ async function confirmerReglement(clientId){
     if(!caisse){ dire(`Aucune caisse ${yas?'MIX BY YAS':'physique'} sur ${pdv}. Rien n'a été enregistré.`); rendre(); return; }
     // 2. L'argent entre en caisse. C'est l'écriture qui compte le plus : si elle
     //    échoue, on s'arrête avant de toucher à la dette du client.
-    const{data:mvt,error:eM}=await SB.from('gp_mouvements_caisse').insert({
+    // L'écriture porte la clé de CETTE saisie : si le même encaissement repart
+    // une seconde fois — doigt, navigateur ou réseau — la base le refuse et
+    // l'argent n'entre qu'une fois.
+    const _envoi = await idemInserer('gp_mouvements_caisse', {
       admin_id:GP_ADMIN_ID, caisse_id:caisse.id, type:'entree', categorie:'reglement_client',
       montant, date_mouvement:date, description:`Règlement ${nomClient} (${modeLabel})`,
       reference: yas?ref:null,
       enregistre_par:GP_USER?.id||null, enregistre_par_nom:GP_USER?.email?GP_USER.email.split('@')[0]:null
-    }).select('id').maybeSingle();
+    }, 'encaissement');
+    if(_envoi.doublon){
+      // Déjà encaissé par le premier passage : surtout ne pas écrire le relevé
+      // une seconde fois, il créditerait le client deux fois.
+      document.getElementById('regl-overlay')?.remove();
+      notify('Ce règlement est déjà enregistré — rien n\'a été ajouté ✓','gold');
+      idemTerminee('encaissement');
+      return;
+    }
+    const mvt=_envoi.data, eM=_envoi.error;
     if(eM){ dire(`La caisse ${caisse.nom} a refusé l'écriture : ${eM.message}. Rien n'a été enregistré.`); rendre(); return; }
     // À partir d'ici l'argent est en caisse : plus de bouton « réessayer »,
     // un second clic doublerait l'encaissement.
@@ -668,6 +680,8 @@ async function confirmerReglement(clientId){
       reste-=applique;
     }
     fermer();
+    // L'encaissement a abouti : le prochain aura sa propre clé.
+    idemTerminee('encaissement');
     if(echecs) notify(`⚠ ${fmt(montant)} F encaissés sur ${caisse.nom}, mais ${echecs} vente(s) n'ont pas pu être marquées payées. NE PAS ré-encaisser — préviens l'admin.`,'r');
     else notify(`✅ ${fmt(montant)} F encaissés sur ${caisse.nom}`+(reste>0?` (${fmt(reste)} F d'avance)`:''),'g');
     if(typeof loadClients==='function'){ try{ await loadClients(); }catch(_){}}

@@ -260,8 +260,11 @@ async function saveDep(){
       }
     }catch(_){}
 
-    // 1. Insert dépense
-    const{data:dep, error}=await SB.from('gp_depenses').insert({
+    // 1. Insert dépense — sous clé de saisie. La vérification ci-dessus demande
+    //    confirmation sur une dépense qui SE RESSEMBLE ; celle-ci refuse la même
+    //    dépense renvoyée deux fois, ce qui n'est pas la même chose et ne se
+    //    voit pas à l'œil.
+    const _envoiDep = await idemInserer('gp_depenses', {
       admin_id: GP_ADMIN_ID, saisi_par: GP_USER?.id, date,
       categorie, description: desc, montant,
       beneficiaire: document.getElementById('dep_benef').value.trim() || null,
@@ -270,8 +273,17 @@ async function saveDep(){
       // s'affichait d'un côté et l'argent sortait de l'autre tiroir.
       point_vente: _pvDep,
       emprunt_id: (document.getElementById('dep_emprunt_id')?.value || null)
-    }).select().maybeSingle();
+    }, 'depense', '*');
+    if(_envoiDep.doublon){
+      err.textContent = '';
+      ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      notify('Cette dépense est déjà enregistrée — rien n\'a été ajouté ✓','gold');
+      idemTerminee('depense');
+      return;
+    }
+    const dep=_envoiDep.data, error=_envoiDep.error;
     if(error){ err.textContent = 'Erreur: '+error.message; return; }
+    idemTerminee('depense');
 
     err.textContent = '';
     ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
