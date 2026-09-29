@@ -81,7 +81,16 @@ async function saveSalaire(){
     point_vente:null, // salaires = site de production uniquement
     paye:false
   };
-  const{data:sal,error}=await SB.from('gp_salaires').insert(row).select().maybeSingle();
+  // `_savingSal` empêche déjà le double clic ; la clé couvre ce qu'il ne voit
+  // pas : la requête renvoyée par le navigateur après une coupure réseau.
+  const _envoiSal = await idemInserer('gp_salaires', row, 'salaire', '*');
+  if(_envoiSal.doublon){
+    err.textContent='';
+    notify('Ce salaire est déjà enregistré — rien n\'a été ajouté ✓','gold');
+    idemTerminee('salaire');
+    return;
+  }
+  const sal=_envoiSal.data; const error=_envoiSal.error;
   if(error){
     // Fallback si colonnes récentes absentes : insertion minimale
     if(String(error.message||'').includes('Could not find')){
@@ -96,6 +105,7 @@ async function saveSalaire(){
     err.textContent='Erreur: '+error.message;return;
   }
   err.textContent='';
+  idemTerminee('salaire');
   await _finaliserSaveSalaire(sal,nom);
   } finally {
     _savingSal=false;

@@ -254,7 +254,10 @@ async function saveAchat(){
   const total=ACHAT_LIGNES.reduce((s,l)=>s+l.montant_ligne,0);
   const ref='BC-'+Date.now().toString().slice(-6);
 
-  const{data:achat,error}=await SB.from('gp_achats').insert({
+  // Sous clé de saisie : un bon de commande renvoyé deux fois créerait deux
+  // commandes chez le même fournisseur, avec deux fois les lignes — et le
+  // stock entrerait en double à la réception.
+  const _envoiAchat = await idemInserer('gp_achats', {
     admin_id:GP_ADMIN_ID,fournisseur_id:fournId,fournisseur_nom:fournNom,
     ref,date_commande:date,date_livraison_prev:dateLiv,
     condition_paiement:condition,note_logistique:note,
@@ -262,9 +265,18 @@ async function saveAchat(){
     statut:'brouillon',cree_par:GP_USER.id,
     cree_par_nom:GP_USER.email,
     point_vente:GP_POINT_VENTE||'Production'
-  }).select().maybeSingle();
+  }, 'achat', '*');
+  if(_envoiAchat.doublon){
+    err.textContent='';
+    notify('Cette commande est déjà enregistrée — rien n\'a été ajouté ✓','gold');
+    idemTerminee('achat');
+    if(typeof renderAchats==='function') renderAchats();
+    return;
+  }
+  const achat=_envoiAchat.data, error=_envoiAchat.error;
 
   if(error){err.textContent='Erreur: '+error.message;return;}
+  idemTerminee('achat');
 
   // Insérer les lignes
   await SB.from('gp_achats_lignes').insert(
