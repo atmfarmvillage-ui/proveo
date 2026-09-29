@@ -450,7 +450,9 @@ async function saveLot(){
   const prixVente=getPrix(nom);
   const espece=FORMULES_SADARI.find(x=>x.nom===nom)?.espece||'';
   // Insert lot
-  const{data:lot,error}=await SB.from('gp_lots').insert({
+  // Sous clé de saisie : un lot enregistré deux fois sortirait DEUX FOIS les
+  // matières premières du stock — le magasin se viderait sur le papier.
+  const _envoiLot = await idemInserer('gp_lots', {
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
     qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
     cout_total:coutTotal,prix_vente_kg:prixVente,observations:obs,stock_mis_a_jour:false,
@@ -458,8 +460,17 @@ async function saveLot(){
     nb_sacs:0,        // saisi après production (bouton 📦 dans la liste)
     kg_pertes:0,      // calculé à la saisie des sacs obtenus
     pdv_production:document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||null
-  }).select().maybeSingle();
+  }, 'lot', '*');
+  if(_envoiLot.doublon){
+    err.textContent='';
+    notify('Ce lot est déjà enregistré — les matières n\'ont été sorties qu\'une fois ✓','gold');
+    idemTerminee('lot');
+    if(typeof renderLots==='function') renderLots();
+    return;
+  }
+  const lot=_envoiLot.data, error=_envoiLot.error;
   if(error){err.textContent='Erreur: '+error.message;return;}
+  idemTerminee('lot');
   // Auto-create stock sorties (consommation MP). Si un insert échoue → drapeau false → rattrapé au refresh.
   let _mpOk=true; const _mpDetails=[];
   for(const s of mpSorties){
