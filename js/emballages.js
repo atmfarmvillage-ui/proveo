@@ -226,8 +226,13 @@ async function renderEmballages(){
     const reste = embSolde(e.id), seuil = embSeuil(e);
     const coul = reste <= 0 ? 'var(--red)' : reste < seuil ? 'var(--gold)' : 'var(--green)';
     const esp = (EMB_ESPECES.find(x=>x.cle===e.espece)||{}).libelle;
+    let liste = e.formules;
+    if(typeof liste === 'string'){ try{ liste = JSON.parse(liste); }catch(_){ liste = null; } }
+    const pour = Array.isArray(liste) && liste.length
+      ? (liste.length === 1 ? liste[0] : liste.length + ' aliments')
+      : (esp || 'tous aliments');
     const conso = Number(e.format_kg) > 0
-      ? `1 par sac de ${e.format_kg} kg` + (esp ? ' · ' + esp : ' · tous aliments')
+      ? `1 par sac de ${e.format_kg} kg · ${pour}`
       : e.par_sac ? '1 par sac, tous formats' : 'à la main';
     return `<tr>
       <td>
@@ -307,20 +312,29 @@ function ouvrirNouvelEmballage(){
         <option value="manuel">À la main uniquement</option>
       </select></div>
     <div id="eb_fmt_wrap">
-      <div class="fg2">
-        <div class="fr"><label>Format du sac (kg)</label>
-          <select id="eb_format"><option value="50">50 kg</option><option value="25" selected>25 kg</option>
-            <option value="15">15 kg</option><option value="10">10 kg</option><option value="5">5 kg</option></select></div>
-        <div class="fr"><label>Pour quel aliment ?</label>
-          <select id="eb_espece">
-            <option value="">Tous (sac neutre)</option>
-            ${EMB_ESPECES.map(e=>`<option value="${e.cle}">${e.libelle}</option>`).join('')}
-          </select></div>
-      </div>
-      <div style="font-size:10.5px;color:var(--textm);margin-bottom:8px">
-        Choisir une espèce couvre <b>toutes ses formules</b> : un sac « Lapin » sert
-        au Repro comme à l'Engraissement, et à celles que tu créeras plus tard.
-      </div>
+      <div class="fr"><label>Format du sac (kg)</label>
+        <select id="eb_format"><option value="50">50 kg</option><option value="25" selected>25 kg</option>
+          <option value="15">15 kg</option><option value="10">10 kg</option><option value="5">5 kg</option></select></div>
+      <div class="fr"><label>Ce sac sert à…</label>
+        <select id="eb_portee" onchange="onEmbPorteeChange()">
+          <option value="tous">Tous les aliments (sac neutre)</option>
+          <option value="espece">Toute une espèce</option>
+          <option value="precis">Des aliments précis</option>
+        </select></div>
+      <div class="fr" id="eb_espece_wrap" style="display:none"><label>Espèce</label>
+        <select id="eb_espece">
+          ${EMB_ESPECES.map(e=>`<option value="${e.cle}">${e.libelle}</option>`).join('')}
+        </select>
+        <div style="font-size:10.5px;color:var(--textm);margin-top:4px">
+          Couvre <b>toutes ses formules</b>, y compris celles que tu créeras plus tard.
+        </div></div>
+      <div class="fr" id="eb_form_wrap" style="display:none"><label>Aliments concernés</label>
+        <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+          ${_embListeFormules()}
+        </div>
+        <div style="font-size:10.5px;color:var(--textm);margin-top:4px">
+          Coche un seul aliment, ou plusieurs. Un aliment coché passe avant toute règle d'espèce.
+        </div></div>
     </div>
     <div class="fg2">
       <div class="fr"><label>Unité</label><select id="eb_unite">
@@ -339,15 +353,47 @@ function onEmbModeChange(){
   if(w) w.style.display = mode === 'format' ? 'block' : 'none';
 }
 
+// Les aliments réellement en catalogue, groupés par espèce : on ne coche pas
+// dans une liste inventée, on coche dans les formules qui existent.
+function _embListeFormules(){
+  const F = (typeof getAllFormules === 'function' ? getAllFormules() : []) || [];
+  if(!F.length) return '<div style="font-size:11px;color:var(--textm)">Aucune formule au catalogue.</div>';
+  const parEspece = {};
+  F.forEach(f => { const e = String(f.espece||'autre').toLowerCase(); (parEspece[e] = parEspece[e] || []).push(f.nom); });
+  return Object.keys(parEspece).sort().map(e => {
+    const lib = (EMB_ESPECES.find(x=>x.cle===e)||{}).libelle || e;
+    return `<div style="font-size:10px;font-weight:700;color:var(--gold);margin:6px 0 3px">${lib}</div>`
+      + parEspece[e].sort().map(n =>
+          `<label style="display:flex;align-items:center;gap:7px;font-size:11.5px;padding:2px 0">
+             <input type="checkbox" class="eb-form-chk" value="${_embEsc(n)}"> ${_embEsc(n)}</label>`
+        ).join('');
+  }).join('');
+}
+
+function onEmbPorteeChange(){
+  const p = document.getElementById('eb_portee')?.value;
+  const e = document.getElementById('eb_espece_wrap');
+  const f = document.getElementById('eb_form_wrap');
+  if(e) e.style.display = p === 'espece' ? 'block' : 'none';
+  if(f) f.style.display = p === 'precis' ? 'block' : 'none';
+}
+
 async function saveEmballage(){
   const err = document.getElementById('emb-modal-err');
   const nom = (document.getElementById('eb_nom')?.value||'').trim();
   if(!nom){ err.textContent = 'Donne un nom à l\'article.'; return; }
   const mode = document.getElementById('eb_mode')?.value || 'manuel';
+  const portee = document.getElementById('eb_portee')?.value || 'tous';
+  const choisies = [...document.querySelectorAll('.eb-form-chk')].filter(c=>c.checked).map(c=>c.value);
+  if(mode === 'format' && portee === 'precis' && !choisies.length){
+    err.textContent = 'Coche au moins un aliment, ou choisis « tous ».'; return;
+  }
   const {error} = await SB.from('gp_emballages').insert({
     admin_id: GP_ADMIN_ID, nom,
     format_kg: mode === 'format' ? (+document.getElementById('eb_format')?.value || null) : null,
-    espece: mode === 'format' ? (document.getElementById('eb_espece')?.value || null) : null,
+    espece: (mode === 'format' && portee === 'espece')
+      ? (document.getElementById('eb_espece')?.value || null) : null,
+    formules: (mode === 'format' && portee === 'precis' && choisies.length) ? choisies : null,
     par_sac: mode === 'par_sac',
     unite: document.getElementById('eb_unite')?.value || 'unité',
     seuil_alerte: +document.getElementById('eb_seuil')?.value || EMB_SEUIL_DEFAUT,
@@ -507,6 +553,7 @@ if (typeof window !== 'undefined') {
   window.verifierAlerteEmballage = verifierAlerteEmballage;
   window.ouvrirNouvelEmballage = ouvrirNouvelEmballage;
   window.onEmbModeChange = onEmbModeChange;
+  window.onEmbPorteeChange = onEmbPorteeChange;
   window.saveEmballage = saveEmballage;
   window.supprimerEmballage = supprimerEmballage;
   window.ouvrirSeuilEmb = ouvrirSeuilEmb;
