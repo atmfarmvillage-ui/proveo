@@ -470,15 +470,29 @@ async function saveTransfertAvecValidation(){
 
   // L'erreur était ignorée : un refus de la base (RLS, contrainte) passait
   // pour un succès. On la lit et on la dit.
-  const{error:eIns}=await SB.from('gp_mouvements_caisse').insert({
+  // Sous clé de saisie : le double transfert décrit plus bas s'est vraiment
+  // produit. Le bug d'affichage est corrigé, mais un réseau qui renvoie la
+  // requête produirait le même dégât — la base tranche désormais.
+  const _envoiTr = await idemInserer('gp_mouvements_caisse', {
     admin_id:GP_ADMIN_ID,caisse_id:source,caisse_dest_id:dest,
     type:'transfert',montant,description:desc,
     statut_transfert:statut,
     date_mouvement:today(),
     enregistre_par:GP_USER.id,
     enregistre_par_nom:GP_USER.email?.split('@')[0]
-  });
+  }, 'transfert');
+  if(_envoiTr.doublon){
+    err.textContent='';
+    document.getElementById('transfert-montant').value='';
+    document.getElementById('transfert-desc').value='';
+    notify('Ce transfert est déjà enregistré — l\'argent n\'a bougé qu\'une fois ✓','gold');
+    idemTerminee('transfert');
+    renderCaisse();
+    return;
+  }
+  const eIns=_envoiTr.error;
   if(eIns){ err.textContent='Transfert refusé : '+eIns.message; return; }
+  idemTerminee('transfert');
 
   // ⚠️ Ici se trouvait `getElementById('modal-transfert').style.display='none'`,
   // sur un élément inexistant — donc une exception APRÈS l'insertion : l'argent
