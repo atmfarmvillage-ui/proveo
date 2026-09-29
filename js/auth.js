@@ -588,6 +588,7 @@ var PAGE_RENDERERS = {
   distribution:  function(){ renderDistribution(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
   veto:          function(){ if(typeof renderVeto==='function') renderVeto(); },
   ferme:         function(){ if(typeof renderProduitsFerme==='function') renderProduitsFerme(); },
+  emballages:    function(){ if(typeof renderEmballages==='function') renderEmballages(); },
   comparatif:    function(){ if(typeof renderComparatifPDV==='function') renderComparatifPDV(); },
   alertes:       function(){ if(typeof renderAlertes==='function') renderAlertes(); },
   reversements:  renderReversements,

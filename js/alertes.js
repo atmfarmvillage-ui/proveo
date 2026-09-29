@@ -14,6 +14,9 @@ async function renderAlertes(){
   const estCentral = GP_ROLE==='admin' || !GP_POINT_VENTE; // admin + Production voient le MP central
 
   if(typeof loadVetoCatalogue==='function'){ try{ await loadVetoCatalogue(); }catch(e){} }
+  // Les emballages : « des fois ça finit sans qu'on ne sache ». Ici on le sait.
+  let embBas=[];
+  if(typeof embAlertesBasses==='function'){ try{ embBas=await embAlertesBasses(); }catch(e){} }
 
   const safe=async(q)=>{try{return await q;}catch(e){return {data:[]};}};
   const[{data:liv},{data:vetoLots},{data:stockPF},{data:ventesImp},{data:stockMP}]=await Promise.all([
@@ -90,6 +93,8 @@ async function renderAlertes(){
       vetoBas.map(v=>({l:`${v.nom} · ${v.pdv}`,r:`${fmt(v.qte)} ${v.unite||''}`})),'✓ Stock véto OK.')}
     ${estCentral?section('🌾 Stock MP bas','bdg-r',
       mpBas.map(m=>({l:m.nom,r:`${fmtKg(m.q)} kg`})),'✓ Stock MP OK.'):''}
+    ${section('📦 Emballages bas','bdg-r',
+      embBas.map(e=>({l:e.nom,r:`${fmt(e.reste)} ${e.unite} (seuil ${fmt(e.seuil)})`})),'✓ Emballages OK.')}
     ${section('💰 Impayés clients','bdg-r',
       impayes.map(i=>({l:`${i.nom}${i.pdv?' · '+i.pdv:''}`,r:`${fmt(i.total)} F dû`,btn:i.id?`<button class="btn btn-out btn-sm" style="padding:3px 8px;color:#25D366;border-color:rgba(37,211,102,.3)" onclick="envoyerRappelDette('${i.id}')">📲 Relancer</button>`:''})),'✓ Aucun impayé.')}
     ${totalImpaye>0?`<div style="font-size:11px;color:var(--textm);text-align:right">Total impayés : <b style="color:var(--red)">${fmt(totalImpaye)} F</b></div>`:''}
