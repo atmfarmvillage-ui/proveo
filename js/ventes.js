@@ -4,6 +4,36 @@
 
 let VT_LIGNES=[];
 
+// ── IDEMPOTENCE DE LA VENTE ────────────────────────────────────────────────
+// Le 28/09/2026, une vente de 100 960 F est arrivée QUATRE fois. Les deux
+// premières à deux MICROSECONDES d'écart : ce n'est pas un doigt, c'est la même
+// requête partie deux fois sous l'interface — un navigateur qui renvoie un POST
+// après une coupure réseau. Aucun verrou de bouton ne peut voir ça. Les deux
+// autres, à +30 s et +34 s, sont la secrétaire qui recommence parce que rien
+// ne bougeait à l'écran.
+//
+// Le seul endroit capable de refuser le doublon, c'est la base. On fabrique un
+// numéro unique par SAISIE — pas par clic : les deux envois d'un même geste
+// portent le même numéro, et l'index unique rejette le second. Le numéro change
+// seulement quand une vente a réellement abouti.
+let VT_CLE = null;
+function vtNouvelleCle(){
+  VT_CLE = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+  return VT_CLE;
+}
+function vtCle(){ return VT_CLE || vtNouvelleCle(); }
+// Une base sans la colonne renverrait « column does not exist » sur CHAQUE
+// vente : tant que la migration n'est pas passée, on laisse passer sans clé.
+function vtSansIdempotence(e){
+  return /idempotence/i.test((e && e.message) || '') && /column|schema cache/i.test((e && e.message) || '');
+}
+function vtEstDoublon(e){
+  const m = (e && (e.message || e.details)) || '';
+  return (e && e.code === '23505') || /duplicate key|ventes_idempotence/i.test(m);
+}
+
 function rechercherClientTel(){
   const q=document.getElementById('vt_tel_search')?.value.toLowerCase().trim()||'';
   const results=document.getElementById('vt_client_results');
@@ -765,9 +795,29 @@ document.addEventListener('keydown',(e)=>{
 // ── ENREGISTREMENT RAPIDE (vente unique) ──
 // Si aucun produit n'est dans VT_LIGNES mais le formulaire contient un produit complet,
 // ajoute la ligne automatiquement puis enregistre. Sinon, enregistre directement.
+// Le bouton devient inerte tant que la requête n'est pas revenue, et il le DIT.
+// Le 28/09, il est resté vert et muet pendant qu'une vente partait : la
+// secrétaire a réappuyé deux fois, à trente secondes d'intervalle. Le vrai
+// verrou est en base (l'idempotence), mais personne ne devrait avoir à vivre ça.
+let VT_EN_COURS = false;
 async function enregistrerVenteRapide(){
+  if(VT_EN_COURS) return;
   const err=document.getElementById('vt_err');
   if(err) err.textContent='';
+  const btn=document.querySelector('#page-ventes button[onclick*="enregistrerVenteRapide"]');
+  const libelle=btn?btn.innerHTML:null;
+  VT_EN_COURS=true;
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; btn.innerHTML='⏳ Enregistrement…'; }
+  try{
+    await _enregistrerVenteRapide();
+  } finally {
+    VT_EN_COURS=false;
+    if(btn){ btn.disabled=false; btn.style.opacity=''; if(libelle!=null) btn.innerHTML=libelle; }
+  }
+}
+
+async function _enregistrerVenteRapide(){
+  const err=document.getElementById('vt_err');
   // Si la liste est vide, on tente d'ajouter le produit en cours
   if(VT_LIGNES.length===0){
     const formuleChoisie=document.getElementById('vt_formule')?.value
@@ -1334,8 +1384,11 @@ async function saveVente(){
     }
   }
 
-  const{data:vente,error}=await SB.from('gp_ventes').insert({
+  const _cle = vtCle();
+  const _payloadVente = {
     admin_id:GP_ADMIN_ID,
+    // Le même geste porte toujours le même numéro : la base refusera le second.
+    idempotence:_cle,
     // La vente naît « créditée » : c'est CET enregistrement qui écrit sa caisse, quelques
     // lignes plus bas. Née à false, elle pouvait être prise par le rattrapage automatique
     // pendant l'enregistrement (retour du réseau, autre appareil) : la caisse recevait
@@ -1366,7 +1419,29 @@ async function saveVente(){
     remise_motif:document.getElementById('vt_remise_motif')?.value.trim()||null,
     remise_validee:remiseValidee,
     remise_validee_par:remiseValidee?(document.getElementById('vt_remise_par')?.value.trim()||null):null
-  }).select().maybeSingle();
+  };
+  let{data:vente,error}=await SB.from('gp_ventes').insert(_payloadVente).select().maybeSingle();
+
+  // La base a refusé la clé : cette vente est DÉJÀ enregistrée, c'est un second
+  // envoi du même geste. On ne rejoue surtout pas la suite — caisse, relevé,
+  // fidélité, stock ont déjà été écrits par le premier passage.
+  if(error && vtEstDoublon(error)){
+    if(_waPopup){ try{ _waPopup.close(); }catch(e){} _waPopup=null; }
+    const e0=document.getElementById('vt_err'); if(e0) e0.textContent='';
+    notify('Cette vente est déjà enregistrée — rien n\'a été ajouté ✓','gold');
+    vtNouvelleCle();
+    if(typeof renderVentes==='function') renderVentes();
+    return;
+  }
+  // Migration pas encore passée : on réessaie sans la clé plutôt que de bloquer
+  // toutes les ventes de la journée.
+  if(error && vtSansIdempotence(error)){
+    console.warn('gp_ventes.idempotence absente — vente enregistrée sans protection');
+    const _sansCle = Object.assign({}, _payloadVente);
+    delete _sansCle.idempotence;
+    const _retry = await SB.from('gp_ventes').insert(_sansCle).select().maybeSingle();
+    vente=_retry.data; error=_retry.error;
+  }
 
   if(error){_showErr('Erreur enregistrement vente : '+error.message);return;}
 
@@ -1651,6 +1726,8 @@ async function saveVente(){
 
   const lignes_a_insert=VT_LIGNES.slice();
   VT_LIGNES=[];renderLignesVente();
+  // La vente a abouti : la saisie suivante mérite son propre numéro.
+  vtNouvelleCle();
   // Nettoyer TOUS les champs du formulaire pour repartir d'une page vierge
   [
     'vt_note','vt_paye','vt_remise_valeur','vt_remise_motif',
