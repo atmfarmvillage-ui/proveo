@@ -324,12 +324,22 @@ async function saveSacsObtenus(){
   }
   // 3. Stock PF, FORMAT PAR FORMAT : c'est la seule facon de savoir combien de
   //    sacs de 15 kg il reste en magasin. Le vrac n'y figure pas.
-  if(typeof upsertStockPF==='function'){
+  const _deltaFormats={};
+  {
     const formats=new Set([...Object.keys(S.det), ...Object.keys(ancienDet)]);
     for(const p of formats){
       const d=Number(S.det[p]||0)-Number(ancienDet[p]||0);
-      if(d!==0) await upsertStockPF(pdvProd, _sacsLot.formule_nom, Number(p), d);
+      if(d===0) continue;
+      _deltaFormats[p]=d;
+      if(typeof upsertStockPF==='function') await upsertStockPF(pdvProd, _sacsLot.formule_nom, Number(p), d);
     }
+  }
+  // 3 bis. Les emballages consommés, déduits de ces mêmes sacs. On travaille sur
+  // la DIFFÉRENCE : corriger les sacs obtenus ne doit pas décompter deux fois.
+  // C'est ce qui rend ce stock tenable — personne n'a rien à saisir de plus.
+  if(typeof consommerEmballagesProduction==='function' && Object.keys(_deltaFormats).length){
+    try{ await consommerEmballagesProduction(_deltaFormats, _sacsLot.id, _sacsLot.date); }
+    catch(e){ console.warn('emballages : consommation non enregistrée', e); }
   }
   const resume=Object.keys(S.det).sort((a,b)=>a-b).map(p=>`${S.det[p]}×${p} kg`).join(' + ')||'0 sac';
   notify(`✓ ${resume}${S.vrac>0?` + ${fmt(S.vrac)} kg vrac`:''} · stock ${deltaKg>=0?'+':''}${fmt(deltaKg)} kg${perte>0?' · perte '+fmt(perte)+' kg':''}`,'gold');
