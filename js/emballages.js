@@ -10,10 +10,17 @@
 // décompter deux fois. Un stock qu'il faut nourrir à la main à chaque
 // production est abandonné en un mois ; celui-ci se tient à jour tout seul.
 //
-// Deux façons de consommer, déclarées par l'article :
-//   • format_kg = 50  → un sac de 50 kg consomme un « Sac 50 kg »
-//   • par_sac         → une étiquette, un bout de fil : un par sac, quel que
-//                        soit le format
+// Trois façons de consommer, déclarées par l'article :
+//   • espece + format_kg → « Sac Lapin 25 kg » : toutes les formules lapin
+//                          produites en sacs de 25 kg. C'est la bonne maille :
+//                          Lapin Repro et Lapin Engraissement partagent le même
+//                          sac imprimé, et une troisième formule lapin le
+//                          prendra sans qu'on touche à rien.
+//   • format_kg seul     → sac neutre, non imprimé : n'importe quelle formule.
+//   • par_sac            → une étiquette, un bout de fil : un par sac, quel que
+//                          soit le format et l'espèce.
+// `formules` (liste de noms) passe avant tout : pour l'aliment qui aurait, un
+// jour, son sac bien à lui.
 // ══════════════════════════════════════════════════
 
 let GP_EMBALLAGES = [];
@@ -31,6 +38,13 @@ const EMB_MOTIFS_ENTREE = [
   { cle: 'autre',  libelle: '📦 Autre entrée' },
 ];
 const EMB_SEUIL_DEFAUT = 200;
+// Mêmes clés que les formules : c'est `gp_lots.espece` qui sert à retrouver le sac.
+const EMB_ESPECES = [
+  { cle:'pondeuse', libelle:'🥚 Pondeuse' }, { cle:'chair',   libelle:'🍗 Poulet de chair' },
+  { cle:'goliath',  libelle:'🐔 Goliath' },  { cle:'lapin',   libelle:'🐰 Lapin' },
+  { cle:'porc',     libelle:'🐖 Porc' },     { cle:'tilapia', libelle:'🐟 Poisson' },
+  { cle:'canard',   libelle:'🦆 Canard' },   { cle:'betail',  libelle:'🐄 Bétail' },
+];
 
 function _embEsc(s){
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -100,8 +114,10 @@ async function _embMouvement(embId, type, qte, motif, opts){
 // `delta` = { "25": +10, "15": -2, … } : ce qui a été produit EN PLUS (ou EN
 // MOINS) depuis la dernière saisie des sacs obtenus. Un delta négatif rend les
 // emballages au magasin : corriger une erreur ne doit pas les faire disparaître.
-async function consommerEmballagesProduction(delta, lotId, date){
+async function consommerEmballagesProduction(delta, lotId, date, ctx){
   if(!delta || typeof delta !== 'object') return { sorties: 0 };
+  const formule = (ctx && ctx.formule_nom) || null;
+  const espece  = String((ctx && ctx.espece) || '').toLowerCase() || null;
   await loadEmballages();
   if(!GP_EMBALLAGES.length) return { sorties: 0 };
 
@@ -111,9 +127,11 @@ async function consommerEmballagesProduction(delta, lotId, date){
     const n = Number(delta[format]) || 0;
     if(!n) continue;
     totalSacs += n;
-    // Le sac de CE format, s'il est suivi. Sinon on ne bloque rien : on ne peut
-    // pas exiger que chaque format ait sa fiche pour que la production passe.
-    const art = GP_EMBALLAGES.find(e => e.actif !== false && Number(e.format_kg) === Number(format));
+    // Le sac de CE format pour CETTE production. Ordre de préférence : celui
+    // qui nomme la formule, puis celui de l'espèce, puis le sac neutre.
+    // Si rien ne correspond, on ne bloque pas : on ne peut pas exiger que tout
+    // soit catalogué pour qu'un lot passe.
+    const art = _embSacPour(format, formule, espece);
     if(!art) continue;
     await _embMouvement(art.id, n > 0 ? 'sortie' : 'entree', Math.abs(n), 'production',
       { lot_id: lotId, date, note: (n > 0 ? 'Production ' : 'Correction ') + format + ' kg' });
@@ -132,6 +150,30 @@ async function consommerEmballagesProduction(delta, lotId, date){
     for(const id of [...new Set(touches)]) await verifierAlerteEmballage(id);
   }
   return { sorties: touches.length };
+}
+
+// Quel sac pour ce format, cette formule, cette espèce ? L'ordre compte : une
+// fiche qui nomme explicitement la formule l'emporte sur la fiche d'espèce, qui
+// l'emporte sur le sac neutre.
+function _embSacPour(format, formule, espece){
+  const f = Number(format);
+  const actifs = (GP_EMBALLAGES||[]).filter(e => e.actif !== false && Number(e.format_kg) === f);
+  const listeDe = e => {
+    const l = e.formules;
+    if(Array.isArray(l)) return l;
+    if(typeof l === 'string'){ try{ const j=JSON.parse(l); return Array.isArray(j)?j:[]; }catch(_){ return []; } }
+    return [];
+  };
+  const norm = x => String(x||'').trim().toLowerCase();
+  if(formule){
+    const nomme = actifs.find(e => listeDe(e).some(n => norm(n) === norm(formule)));
+    if(nomme) return nomme;
+  }
+  if(espece){
+    const parEspece = actifs.find(e => norm(e.espece) === norm(espece));
+    if(parEspece) return parEspece;
+  }
+  return actifs.find(e => !e.espece && !listeDe(e).length) || null;
 }
 
 // ── L'alerte, qui est le cœur de la demande ─────────────────────────────────
@@ -183,7 +225,14 @@ async function renderEmballages(){
   const lignes = actifs.map(e=>{
     const reste = embSolde(e.id), seuil = embSeuil(e);
     const coul = reste <= 0 ? 'var(--red)' : reste < seuil ? 'var(--gold)' : 'var(--green)';
-    const conso = Number(e.format_kg) > 0 ? `1 par sac de ${e.format_kg} kg`
+    const esp = (EMB_ESPECES.find(x=>x.cle===e.espece)||{}).libelle;
+    let liste = e.formules;
+    if(typeof liste === 'string'){ try{ liste = JSON.parse(liste); }catch(_){ liste = null; } }
+    const pour = Array.isArray(liste) && liste.length
+      ? (liste.length === 1 ? liste[0] : liste.length + ' aliments')
+      : (esp || 'tous aliments');
+    const conso = Number(e.format_kg) > 0
+      ? `1 par sac de ${e.format_kg} kg · ${pour}`
       : e.par_sac ? '1 par sac, tous formats' : 'à la main';
     return `<tr>
       <td>
@@ -262,9 +311,31 @@ function ouvrirNouvelEmballage(){
         <option value="par_sac">Un par sac, quel que soit le format</option>
         <option value="manuel">À la main uniquement</option>
       </select></div>
-    <div class="fr" id="eb_fmt_wrap"><label>Format du sac (kg)</label>
-      <select id="eb_format"><option value="50">50 kg</option><option value="25" selected>25 kg</option>
-        <option value="15">15 kg</option><option value="10">10 kg</option><option value="5">5 kg</option></select></div>
+    <div id="eb_fmt_wrap">
+      <div class="fr"><label>Format du sac (kg)</label>
+        <select id="eb_format"><option value="50">50 kg</option><option value="25" selected>25 kg</option>
+          <option value="15">15 kg</option><option value="10">10 kg</option><option value="5">5 kg</option></select></div>
+      <div class="fr"><label>Ce sac sert à…</label>
+        <select id="eb_portee" onchange="onEmbPorteeChange()">
+          <option value="tous">Tous les aliments (sac neutre)</option>
+          <option value="espece">Toute une espèce</option>
+          <option value="precis">Des aliments précis</option>
+        </select></div>
+      <div class="fr" id="eb_espece_wrap" style="display:none"><label>Espèce</label>
+        <select id="eb_espece">
+          ${EMB_ESPECES.map(e=>`<option value="${e.cle}">${e.libelle}</option>`).join('')}
+        </select>
+        <div style="font-size:10.5px;color:var(--textm);margin-top:4px">
+          Couvre <b>toutes ses formules</b>, y compris celles que tu créeras plus tard.
+        </div></div>
+      <div class="fr" id="eb_form_wrap" style="display:none"><label>Aliments concernés</label>
+        <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+          ${_embListeFormules()}
+        </div>
+        <div style="font-size:10.5px;color:var(--textm);margin-top:4px">
+          Coche un seul aliment, ou plusieurs. Un aliment coché passe avant toute règle d'espèce.
+        </div></div>
+    </div>
     <div class="fg2">
       <div class="fr"><label>Unité</label><select id="eb_unite">
         ${EMB_UNITES.map(u=>`<option value="${u}">${u}</option>`).join('')}</select></div>
@@ -282,14 +353,47 @@ function onEmbModeChange(){
   if(w) w.style.display = mode === 'format' ? 'block' : 'none';
 }
 
+// Les aliments réellement en catalogue, groupés par espèce : on ne coche pas
+// dans une liste inventée, on coche dans les formules qui existent.
+function _embListeFormules(){
+  const F = (typeof getAllFormules === 'function' ? getAllFormules() : []) || [];
+  if(!F.length) return '<div style="font-size:11px;color:var(--textm)">Aucune formule au catalogue.</div>';
+  const parEspece = {};
+  F.forEach(f => { const e = String(f.espece||'autre').toLowerCase(); (parEspece[e] = parEspece[e] || []).push(f.nom); });
+  return Object.keys(parEspece).sort().map(e => {
+    const lib = (EMB_ESPECES.find(x=>x.cle===e)||{}).libelle || e;
+    return `<div style="font-size:10px;font-weight:700;color:var(--gold);margin:6px 0 3px">${lib}</div>`
+      + parEspece[e].sort().map(n =>
+          `<label style="display:flex;align-items:center;gap:7px;font-size:11.5px;padding:2px 0">
+             <input type="checkbox" class="eb-form-chk" value="${_embEsc(n)}"> ${_embEsc(n)}</label>`
+        ).join('');
+  }).join('');
+}
+
+function onEmbPorteeChange(){
+  const p = document.getElementById('eb_portee')?.value;
+  const e = document.getElementById('eb_espece_wrap');
+  const f = document.getElementById('eb_form_wrap');
+  if(e) e.style.display = p === 'espece' ? 'block' : 'none';
+  if(f) f.style.display = p === 'precis' ? 'block' : 'none';
+}
+
 async function saveEmballage(){
   const err = document.getElementById('emb-modal-err');
   const nom = (document.getElementById('eb_nom')?.value||'').trim();
   if(!nom){ err.textContent = 'Donne un nom à l\'article.'; return; }
   const mode = document.getElementById('eb_mode')?.value || 'manuel';
+  const portee = document.getElementById('eb_portee')?.value || 'tous';
+  const choisies = [...document.querySelectorAll('.eb-form-chk')].filter(c=>c.checked).map(c=>c.value);
+  if(mode === 'format' && portee === 'precis' && !choisies.length){
+    err.textContent = 'Coche au moins un aliment, ou choisis « tous ».'; return;
+  }
   const {error} = await SB.from('gp_emballages').insert({
     admin_id: GP_ADMIN_ID, nom,
     format_kg: mode === 'format' ? (+document.getElementById('eb_format')?.value || null) : null,
+    espece: (mode === 'format' && portee === 'espece')
+      ? (document.getElementById('eb_espece')?.value || null) : null,
+    formules: (mode === 'format' && portee === 'precis' && choisies.length) ? choisies : null,
     par_sac: mode === 'par_sac',
     unite: document.getElementById('eb_unite')?.value || 'unité',
     seuil_alerte: +document.getElementById('eb_seuil')?.value || EMB_SEUIL_DEFAUT,
@@ -445,9 +549,11 @@ if (typeof window !== 'undefined') {
   window.embSolde = embSolde;
   window.embAlertesBasses = embAlertesBasses;
   window.consommerEmballagesProduction = consommerEmballagesProduction;
+  window._embSacPour = _embSacPour;
   window.verifierAlerteEmballage = verifierAlerteEmballage;
   window.ouvrirNouvelEmballage = ouvrirNouvelEmballage;
   window.onEmbModeChange = onEmbModeChange;
+  window.onEmbPorteeChange = onEmbPorteeChange;
   window.saveEmballage = saveEmballage;
   window.supprimerEmballage = supprimerEmballage;
   window.ouvrirSeuilEmb = ouvrirSeuilEmb;
