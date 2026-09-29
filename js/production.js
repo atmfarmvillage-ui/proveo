@@ -524,6 +524,11 @@ function afficherBoutonImpressionLot(formuleNom, numLot, qteProduite, dateLot){
         🖨️ Imprimer les étiquettes du lot ${numLot}
       </button>
       <div style="font-size:10px;color:var(--textm);text-align:center;margin-top:6px">8 étiquettes par page A4 · Numéro de lot inclus</div>
+      <button class="btn btn-out" style="width:100%;justify-content:center;font-size:13px;padding:10px;margin-top:8px"
+        onclick="imprimerFicheRouleau('${formuleNom}','${numLot}','${dateLot}')">
+        🏷️ Imprimer sur rouleau — 80 × 50 mm
+      </button>
+      <div style="font-size:10px;color:var(--textm);text-align:center;margin-top:6px">Une étiquette par vignette · tu choisis la quantité</div>
     </div>`;
 }
 async function renderLots(){

@@ -316,6 +316,124 @@ function printFicheTechnique(formule){
   w.document.close();
 }
 
+// ── ÉTIQUETTE ROULEAU 80 × 50 mm ───────────────────
+// Second modèle, à côté de l'A4 : celui-ci sort d'une imprimante à rouleau.
+// On ne RÉDUIT pas l'A4 — ses textes sont déjà à 5 points, les ramener à 3,7
+// donnerait une bouillie grise sur une tête thermique (203 dpi = 8 points par
+// millimètre, rien n'est lisible sous 6-7 points). On enlève donc du contenu :
+// le bloc légal complet (activités, RCCM, NIF, CNSS, e-mail) se réduit à une
+// ligne, et l'analyse passe sur DEUX colonnes — c'est ce qui libère le plus de
+// hauteur, 5 lignes au lieu de 10.
+// Noir et blanc strict : un aplat de couleur sort gris sale sur du thermique et
+// use la tête pour rien.
+function printEtiquetteRouleau(formule, opts){
+  opts = opts || {};
+  const cfg = GP_CONFIG || {};
+  const nutri = calcNutri(formule);
+  // Même garde-fou que l'A4 : une étiquette fausse est pire que pas d'étiquette.
+  if(nutri.manquants && nutri.manquants.length){
+    alert(["Valeurs nutritionnelles manquantes : impossible d imprimer cette etiquette.", "",
+           ...nutri.manquants.map(m => "  - " + m), "",
+           "Renseigne-les dans Matieres Premieres (bouton nutrition sur la ligne), puis reessaie.",
+           "Sans elles, l etiquette annoncerait des valeurs fausses au client."]
+          .join(String.fromCharCode(10)));
+    return;
+  }
+  const base = opts.date ? new Date(opts.date) : new Date();
+  const fr = d => d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const dProd = fr(base);
+  const exp = new Date(base); exp.setDate(exp.getDate()+90);
+  const dExp = fr(exp);
+  const emLabel = ['lapin'].includes(formule.espece) ? 'ED Lapin'
+    : ['porc'].includes(formule.espece) ? 'ED Porc'
+    : ['tilapia'].includes(formule.espece) ? 'ED Poisson'
+    : 'EM Volaille';
+  const E = (k, def) => { try { return (typeof _cfgEtat === 'function' && _cfgEtat(k)) || def; } catch(_) { return def; } };
+  const nomProv = cfg.nom_provenderie || 'PROVENDERIE SADARI';
+  const tel = cfg.telephone || E('tel_pro','');
+  const lieu = cfg.localisation || E('siege','');
+
+  // Deux colonnes de valeurs : la gauche puis la droite, ligne par ligne.
+  const vals = [
+    ['Mat. minérale', nutri.mm, '%'],
+    ['Protéine brute', nutri.prot, '%'],
+    ['Mat. grasse', nutri.mg, '%'],
+    ['Cellulose brute', nutri.cb, '%'],
+    ['Lysine', nutri.lys, '%'],
+    ['Méthionine', nutri.met, '%'],
+    ['Calcium', nutri.ca, '%'],
+    [emLabel, nutri.em, 'kcal/kg'],
+  ];
+  if(nutri.protDig) vals.push(['Prot. digestible', nutri.protDig, '%']);
+  const moitie = Math.ceil(vals.length/2);
+  const cell = v => v ? '<td class="l">'+v[0]+'</td><td class="v">'+v[1]+'</td><td class="u">'+v[2]+'</td>' : '<td colspan="3"></td>';
+  const rangs = [];
+  for(let i=0;i<moitie;i++){
+    rangs.push('<tr>'+cell(vals[i])+'<td class="gap"></td>'+cell(vals[i+moitie])+'</tr>');
+  }
+
+  const etiquette = ''
+    +'<div class="et">'
+      +'<div class="tete">'
+        +'<div class="prov">'+nomProv+'</div>'
+        +'<div class="prod">'+formule.nom+'</div>'
+      +'</div>'
+      +'<table class="nt"><tbody>'+rangs.join('')+'</tbody></table>'
+      +'<div class="bas">'
+        +'<div class="dates"><span>Production : <b>'+dProd+'</b></span>'
+          +'<span>Expiration : <b>'+dExp+'</b></span></div>'
+        +(opts.lot?'<div class="lot">Lot '+opts.lot+'</div>':'')
+        +'<div class="pied">'+[tel,lieu].filter(Boolean).join(' · ')+'</div>'
+      +'</div>'
+    +'</div>';
+
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Etiquette rouleau -- '+formule.nom+'</title><style>'
+    // Une étiquette par page, au format exact du rouleau : l'imprimante avance
+    // d'une vignette à chaque page, sans marge à retrancher.
+    +'@page{size:80mm 50mm;margin:0}'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000}'
+    +'.et{width:80mm;height:50mm;padding:2mm 2.5mm;display:flex;flex-direction:column;'
+      +'page-break-after:always;break-after:page;overflow:hidden}'
+    +'.et:last-of-type{page-break-after:auto;break-after:auto}'
+    +'.tete{text-align:center;border-bottom:.6mm solid #000;padding-bottom:.6mm;flex-shrink:0}'
+    +'.prov{font-size:7pt;font-weight:bold;letter-spacing:.4px;text-transform:uppercase}'
+    +'.prod{font-size:10pt;font-weight:bold;line-height:1.15;margin-top:.3mm}'
+    +'.nt{width:100%;border-collapse:collapse;font-size:7pt;flex:1;margin-top:.8mm}'
+    +'.nt td{padding:.25mm 0;line-height:1.2;vertical-align:baseline}'
+    +'.nt .l{white-space:nowrap}'
+    +'.nt .v{font-weight:bold;text-align:right;padding-right:.5mm;white-space:nowrap}'
+    +'.nt .u{font-size:6pt;white-space:nowrap}'
+    +'.nt .gap{width:3mm}'
+    +'.bas{flex-shrink:0;border-top:.3mm solid #000;padding-top:.6mm}'
+    +'.dates{display:flex;justify-content:space-between;font-size:7pt;line-height:1.25}'
+    +'.lot{font-size:7pt;font-weight:bold;line-height:1.25}'
+    +'.pied{font-size:6pt;text-align:center;line-height:1.2;margin-top:.3mm}'
+    +'.barre{padding:10px;text-align:center;font-family:Arial,sans-serif}'
+    +'@media print{.barre{display:none!important}}'
+    +'</style></head><body>'
+    +'<div class="barre">'
+      +'<label style="font-size:13px">Nombre d\'étiquettes : '
+      +'<input id="nb" type="number" min="1" max="500" value="'+(opts.nb||1)+'" style="width:70px;padding:4px;font-size:13px"></label> '
+      +'<button onclick="refaire()" style="padding:6px 14px;font-size:13px;cursor:pointer">Préparer</button> '
+      +'<button onclick="window.print()" style="padding:6px 18px;font-size:13px;cursor:pointer;background:#1b5e20;color:#fff;border:none;border-radius:6px">Imprimer</button>'
+      +'<div style="font-size:11px;color:#555;margin-top:6px">Format 80 × 50 mm — choisis ce format dans les options d\'impression.</div>'
+    +'</div>'
+    +'<div id="zone"></div>'
+    +'<script>'
+    +'var MODELE=' + JSON.stringify(etiquette) + ';'
+    +'function refaire(){var n=Math.max(1,Math.min(500,parseInt(document.getElementById("nb").value,10)||1));'
+    +'document.getElementById("zone").innerHTML=new Array(n+1).join(MODELE);}'
+    +'refaire();'
+    +'<\/script>'
+    +'</body></html>';
+
+  const w = window.open('','_blank','width=520,height=640');
+  w.document.write(html);
+  w.document.close();
+}
+
 // ── FONCTIONS APPELÉES DEPUIS L'UI ─────────────────
 function imprimerVente(venteJson){
   const vente=JSON.parse(decodeURIComponent(venteJson));
@@ -325,6 +443,14 @@ function imprimerVente(venteJson){
 function imprimerFiche(formuleNom){
   const f=getAllFormules().find(function(x){return x.nom===formuleNom;});
   if(f) printFicheTechnique(f);
+  else notify('Formule introuvable','r');
+}
+
+// Le même contenu, mais pour une imprimante à rouleau. `lot` et `date` sont
+// facultatifs : la page Production les fournit, la page Formules non.
+function imprimerFicheRouleau(formuleNom, lot, date){
+  const f=getAllFormules().find(function(x){return x.nom===formuleNom;});
+  if(f) printEtiquetteRouleau(f, {lot:lot||null, date:date||null});
   else notify('Formule introuvable','r');
 }
 

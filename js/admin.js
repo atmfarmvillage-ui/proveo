@@ -1502,7 +1502,8 @@ async function saveCoutsFormule(){
               <td>
                 <div style="display:flex;gap:3px">
                   <button class="btn btn-out btn-sm" onclick="editerCoutsFormule('${f.nom}')" title="Coûts de production">⚙️</button>
-                  <button class="btn btn-print btn-sm" onclick="imprimerFiche('${f.nom}')" title="Fiche technique">🖨️</button>
+                  <button class="btn btn-print btn-sm" onclick="imprimerFiche('${f.nom}')" title="Étiquettes A4 — 8 par page">🖨️</button>
+                  <button class="btn btn-out btn-sm" onclick="imprimerFicheRouleau('${f.nom}')" title="Étiquettes rouleau — 80 × 50 mm">🏷️</button>
                 </div>
               </td>
             </tr>`).join('')}
