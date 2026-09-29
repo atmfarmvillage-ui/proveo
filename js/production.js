@@ -338,7 +338,8 @@ async function saveSacsObtenus(){
   // la DIFFÉRENCE : corriger les sacs obtenus ne doit pas décompter deux fois.
   // C'est ce qui rend ce stock tenable — personne n'a rien à saisir de plus.
   if(typeof consommerEmballagesProduction==='function' && Object.keys(_deltaFormats).length){
-    try{ await consommerEmballagesProduction(_deltaFormats, _sacsLot.id, _sacsLot.date); }
+    try{ await consommerEmballagesProduction(_deltaFormats, _sacsLot.id, _sacsLot.date,
+           { formule_nom:_sacsLot.formule_nom, espece:_sacsLot.espece }); }
     catch(e){ console.warn('emballages : consommation non enregistrée', e); }
   }
   const resume=Object.keys(S.det).sort((a,b)=>a-b).map(p=>`${S.det[p]}×${p} kg`).join(' + ')||'0 sac';
