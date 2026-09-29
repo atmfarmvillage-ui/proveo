@@ -209,6 +209,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="nav-item" onclick="showGP('distribution')" data-page="distribution" data-roles="admin,secretaire"><span class="nav-icon">🚚</span>Distribution PDV</div>
   <div class="nav-item" onclick="showGP('stock_central')" data-page="stock_central" data-roles="admin,secretaire"><span class="nav-icon">🏭</span>Stock central &amp; réappro</div>
   <div class="nav-item" onclick="showGP('veto')" data-page="veto" data-roles="admin,secretaire"><span class="nav-icon">💊</span>Produits Véto</div>
+  <div class="nav-item" onclick="showGP('ferme')" data-page="ferme" data-roles="admin,secretaire,gerant"><span class="nav-icon">🐔</span>Produits Ferme</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
 
   <!-- ÉTAPE 6 : FINANCES & TRÉSORERIE -->
@@ -744,6 +745,10 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <button type="button" class="vt-ferme-btn" data-type="poulet" onclick="choisirSousTypeFerme('poulet')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">🐔 Poulet</button>
           <button type="button" class="vt-ferme-btn" data-type="autre_ferme" onclick="choisirSousTypeFerme('autre_ferme')" style="flex:1;min-width:80px;padding:7px;border-radius:7px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;background:rgba(30,51,32,.4);border:1px solid var(--border);color:var(--textm)">📦 Autre</button>
         </div>
+        <label style="font-size:10px;color:var(--textm)">Produit suivi en stock</label>
+        <select id="vt_ferme_produit" onchange="onFermeProduitChange()" style="font-size:12px;margin-bottom:6px">
+          <option value="">— Hors catalogue (pas de stock) —</option>
+        </select>
         <label style="font-size:10px;color:var(--textm)">Description (race, taille, lot…)</label>
         <input type="text" id="vt_ferme_desc" placeholder="Ex: Race rex 2kg, Lot pondeuses…" style="font-size:12px">
       </div>
@@ -2602,6 +2607,25 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 </div>
 
 <!-- PRODUITS VÉTO -->
+<div class="page" id="page-ferme">
+  <div class="page-title">Produits de la ferme</div>
+  <div class="page-sub">Lapins, œufs, poulets… · Entrées, sorties et comptage · La vente sort le stock toute seule</div>
+  <div id="ferme-content"><div style="color:var(--textm);font-size:12px">Chargement…</div></div>
+</div>
+
+<!-- Entrée / sortie / comptage / nouveau produit : une seule fenêtre, remplie par le module -->
+<div id="modal-ferme" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerModalFerme()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto">
+    <div id="ferme-modal-titre" style="font-size:15px;font-weight:800;margin-bottom:14px">—</div>
+    <div id="ferme-modal-corps"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" id="ferme-modal-ok" onclick="" style="flex:1;justify-content:center">💾 Enregistrer</button>
+      <button class="btn btn-out" onclick="fermerModalFerme()" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+    <div class="a-err" id="ferme-modal-err"></div>
+  </div>
+</div>
+
 <div class="page" id="page-veto">
   <div class="page-title">Produits Véto</div>
   <div class="page-sub">Catalogue · Stock par point de vente · Péremption · Vente (via l'écran Ventes)</div>
@@ -3641,8 +3665,9 @@ try{
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.31.0"></script>
-<script src="js/ventes.js?v=2.36.0"></script>
+<script src="js/ventes.js?v=2.37.0"></script>
 <script src="js/idempotence.js?v=1.0.0"></script>
+<script src="js/produits_ferme.js?v=1.0.0"></script>
 <script src="js/doublons.js?v=1.3.0"></script>
 <script src="js/clients.js?v=2.37.0"></script>
 <script src="js/badges.js?v=1.0.0"></script>
@@ -3678,7 +3703,7 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.35.0"></script>
+<script src="js/auth.js?v=2.36.0"></script>
 <script src="js/comptes_attente.js?v=1.0.0"></script>
 <script src="js/reservations_admin.js?v=2.27.6"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
