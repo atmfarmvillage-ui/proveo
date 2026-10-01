@@ -538,7 +538,12 @@ var PAGE_RENDERERS = {
     if(el&&!el.value)el.value=thisMonth();
     renderInventairePhysique();
   },
-  production:    function(){ renderLots(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules(); },
+  production:    function(){ renderLots(); if(typeof ensureFavorisFormules==='function') ensureFavorisFormules();
+                   // Le taux reel de main-d'oeuvre est mesure une fois par ouverture de page,
+                   // puis re-applique a chaque apercu de lot sans nouvelle requete.
+                   if(typeof coutMoReelParKg==='function') coutMoReelParKg(true).then(()=>{ if(typeof previewLot==='function') previewLot(); });
+                   if(typeof loadEmballages==='function') loadEmballages();
+                 },
   rapport:       renderRapport,
   formules:      function(){
     if(typeof populateFournisseurSelect==='function') populateFournisseurSelect();

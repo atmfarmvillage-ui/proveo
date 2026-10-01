@@ -364,6 +364,51 @@ async function saveSacsObtenus(){
   renderLots();
 }
 
+// ── COUT REEL DE LA MAIN-D'OEUVRE ───────────────────────────────────────────
+// Ce que l'equipe de production a reellement coute le mois dernier, rapporte a
+// ce qui a reellement ete produit. Pas un parametre saisi une fois puis oublie :
+// un chiffre qui se refait tout seul, et qu'on peut verifier a la main.
+//
+// Seuls les ouvriers marques « equipe production » comptent — la case existe
+// deja sur leur fiche. Le salaire d'une secretaire n'a rien a faire dans le
+// prix de revient d'une tonne d'aliment.
+//
+// On prend le mois CLOS, pas le mois en cours : un mois entame donne des
+// salaires complets face a une production partielle, donc un cout delirant.
+let _moTaux = null;   // { parKg, mois, masse, kg, source }
+
+async function coutMoReelParKg(force){
+  if(_moTaux && !force) return _moTaux;
+  const d = new Date();
+  d.setDate(1); d.setMonth(d.getMonth() - 1);
+  const mois = d.toISOString().slice(0, 7);
+  const debut = mois + '-01';
+  const fin = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const vide = { parKg: 0, mois, masse: 0, kg: 0, source: 'aucune' };
+  try{
+    const [rOuv, rSal, rLots] = await Promise.all([
+      SB.from('gp_ouvriers').select('id,equipe_production').eq('admin_id', GP_ADMIN_ID),
+      SB.from('gp_salaires').select('ouvrier_id,montant,net_a_payer,mois').eq('admin_id', GP_ADMIN_ID).eq('mois', mois),
+      SB.from('gp_lots').select('qte_produite,date').eq('admin_id', GP_ADMIN_ID).gte('date', debut).lte('date', fin),
+    ]);
+    const prod = new Set((rOuv.data || []).filter(o => o.equipe_production).map(o => o.id));
+    if(!prod.size){ _moTaux = Object.assign({}, vide, { source: 'aucun ouvrier marque production' }); return _moTaux; }
+    const masse = (rSal.data || [])
+      .filter(x => x.ouvrier_id && prod.has(x.ouvrier_id))
+      .reduce((t, x) => t + Number(x.net_a_payer || x.montant || 0), 0);
+    const kg = (rLots.data || []).reduce((t, l) => t + Number(l.qte_produite || 0), 0);
+    if(!(masse > 0) || !(kg > 0)){
+      _moTaux = Object.assign({}, vide, { masse, kg, source: masse > 0 ? 'aucune production le mois dernier' : 'aucun salaire le mois dernier' });
+      return _moTaux;
+    }
+    _moTaux = { parKg: masse / kg, mois, masse, kg, source: 'reel' };
+  }catch(e){
+    console.warn('cout MO reel indisponible', e);
+    _moTaux = Object.assign({}, vide, { source: 'illisible' });
+  }
+  return _moTaux;
+}
+
 function previewLot(){
   const nom=document.getElementById('lot_formule')?.value;
   const qte=+document.getElementById('lot_qte')?.value||0;
@@ -401,7 +446,12 @@ function previewLot(){
   const avecMO=document.getElementById('lot_avec_mo')?.checked!==false;
 
   // Coûts : depuis la formule si disponible, sinon depuis les champs manuels
-  const coutMoParTonne=_formuleCoûts.mo||f?.cout_mo_tonne||0;
+  // Le taux REEL du mois clos l'emporte sur le parametre saisi a la main : il
+  // est mesure, pas estime. Le parametre reste le repli des premiers mois,
+  // quand il n'y a encore ni salaire ni production a comparer.
+  const coutMoParTonne = (_moTaux && _moTaux.parKg > 0)
+    ? _moTaux.parKg * 1000
+    : (_formuleCoûts.mo || f?.cout_mo_tonne || 0);
   const coutEmbParKg=_formuleCoûts.emb||f?.cout_emballage_kg||0;
   const coutTransPort=_formuleCoûts.trans||f?.cout_transport_lot||0;
 
@@ -413,7 +463,17 @@ function previewLot(){
   const moLabel=document.getElementById('lot_mo_label');
   const embLabel=document.getElementById('lot_emb_label');
   const transLabel=document.getElementById('lot_trans_label');
-  if(moLabel)moLabel.textContent=fmt(moVal)+' F';
+  if(moLabel){
+    moLabel.textContent=fmt(moVal)+' F';
+    // Un cout qui sort de nulle part est un cout auquel personne ne croit.
+    const aide = document.getElementById('lot_mo_source');
+    if(aide){
+      aide.textContent = (_moTaux && _moTaux.parKg > 0)
+        ? 'Taux reel de ' + _moTaux.mois + ' : ' + fmt(Math.round(_moTaux.masse)) + ' F de salaires pour '
+          + fmt(Math.round(_moTaux.kg)) + ' kg produits, soit ' + (Math.round(_moTaux.parKg * 100) / 100) + ' F/kg'
+        : (_moTaux ? 'Taux saisi a la main (' + _moTaux.source + ')' : '');
+    }
+  }
   if(embLabel)embLabel.textContent=fmt(embVal)+' F';
   if(transLabel)transLabel.textContent=fmt(transVal)+' F';
   if(document.getElementById('lot_mo'))document.getElementById('lot_mo').value=moVal;
