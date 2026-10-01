@@ -342,6 +342,22 @@ async function saveSacsObtenus(){
            { formule_nom:_sacsLot.formule_nom, espece:_sacsLot.espece }); }
     catch(e){ console.warn('emballages : consommation non enregistrée', e); }
   }
+  // 3 ter. Le coût RÉEL des emballages entre dans le prix de revient du lot : les
+  // sacs effectivement sortis, au prix auquel ils ont été achetés. Sans ça, la
+  // marge affichée ne compte que la matière première — donc elle est trop belle.
+  // On recalcule depuis le TOTAL des sacs, pas depuis le delta : corriger une
+  // saisie doit donner le bon coût, pas l'ajouter deux fois.
+  if(typeof coutEmballagesLot==='function'){
+    try{
+      const embReel = coutEmballagesLot(S.det, _sacsLot.formule_nom, _sacsLot.espece);
+      const ancien  = Number(_sacsLot.cout_emballage||0);
+      if(embReel !== ancien){
+        const total = Math.max(0, Number(_sacsLot.cout_total||0) - ancien + embReel);
+        await SB.from('gp_lots').update({cout_emballage:embReel, cout_total:total}).eq('id',_sacsLot.id);
+        _sacsLot.cout_emballage = embReel; _sacsLot.cout_total = total;
+      }
+    }catch(e){ console.warn('emballages : coût du lot non mis à jour', e); }
+  }
   const resume=Object.keys(S.det).sort((a,b)=>a-b).map(p=>`${S.det[p]}×${p} kg`).join(' + ')||'0 sac';
   notify(`✓ ${resume}${S.vrac>0?` + ${fmt(S.vrac)} kg vrac`:''} · stock ${deltaKg>=0?'+':''}${fmt(deltaKg)} kg${perte>0?' · perte '+fmt(perte)+' kg':''}`,'gold');
   fermerSacsObtenus();

@@ -97,6 +97,7 @@ async function _embMouvement(embId, type, qte, motif, opts){
     qte: Math.abs(Number(qte)||0),
     date: opts.date || (typeof today === 'function' ? today() : new Date().toISOString().slice(0,10)),
     lot_id: opts.lot_id || null,
+    depense_id: opts.depense_id || null,
     note: opts.note || null,
     saisi_par: (typeof GP_USER !== 'undefined' && GP_USER) ? GP_USER.id : null,
     saisi_par_nom: (typeof GP_USER !== 'undefined' && GP_USER && GP_USER.email)
@@ -174,6 +175,46 @@ function _embSacPour(format, formule, espece){
     if(parEspece) return parEspece;
   }
   return actifs.find(e => !e.espece && !listeDe(e).length) || null;
+}
+
+// Ce que les emballages d'un lot ont REELLEMENT couté : les sacs sortis, au prix
+// auquel on les a achetés. Pas une moyenne, pas un paramètre à tenir à jour —
+// 40 sacs lapin à 150 F font 6 000 F, et c'est ce chiffre qui entre dans le prix
+// de revient du lot.
+function coutEmballagesLot(det, formule, espece){
+  if(!det || typeof det !== 'object') return 0;
+  let total = 0, sacs = 0;
+  for(const format of Object.keys(det)){
+    const n = Number(det[format]) || 0;
+    if(n <= 0) continue;
+    sacs += n;
+    const art = _embSacPour(format, formule, espece);
+    if(art) total += n * Number(art.prix_unitaire || 0);
+  }
+  // Fil, ficelle, étiquette : un par sac, quel que soit le format.
+  (GP_EMBALLAGES||[]).filter(e => e.actif !== false && e.par_sac).forEach(e => {
+    total += sacs * Number(e.prix_unitaire || 0);
+  });
+  return Math.round(total);
+}
+
+// Les dépenses « Emballage » qui n'ont pas encore reçu leur marchandise.
+// C'est exactement « payé, pas encore livré » : utile à la réception pour
+// rattacher, et utile tout court pour savoir ce qu'on attend.
+async function embDepensesNonLivrees(){
+  try{
+    const depuis = new Date(Date.now() - 180*86400000).toISOString().slice(0,10);
+    const [rd, rl] = await Promise.all([
+      SB.from('gp_depenses').select('id,date,description,montant,beneficiaire')
+        .eq('admin_id',GP_ADMIN_ID).eq('categorie','emballage')
+        .gte('date',depuis).order('date',{ascending:false}),
+      SB.from('gp_stock_emballages').select('depense_id')
+        .eq('admin_id',GP_ADMIN_ID).not('depense_id','is',null),
+    ]);
+    if(rd.error) throw rd.error;
+    const liees = new Set((rl.data||[]).map(x=>x.depense_id));
+    return (rd.data||[]).filter(d => !liees.has(d.id));
+  }catch(e){ console.warn('emballages : d\u00e9penses non livr\u00e9es illisibles', e); return []; }
 }
 
 // ── L'alerte, qui est le cœur de la demande ─────────────────────────────────
@@ -282,10 +323,36 @@ async function renderEmballages(){
         </tr></thead><tbody>${lignes}</tbody></table>`
         : '<div style="color:var(--textm);font-size:12px">Aucun article. Crée-en un avec ➕ Nouvel article.</div>'}
     </div>
+    <div class="card" style="margin-top:14px" id="emb-attente-card"></div>
     <div class="card" style="margin-top:14px">
       <div class="card-title"><div class="ct-left"><span>📜 Derniers mouvements</span></div></div>
       ${hist || '<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>'}
     </div>`;
+
+  // Payé mais pas encore reçu : de l'argent sorti dont la marchandise n'est pas
+  // arrivée. C'est ce qu'on oublie le plus facilement.
+  const attente = await embDepensesNonLivrees();
+  const carte = document.getElementById('emb-attente-card');
+  if(carte){
+    if(!attente.length){ carte.style.display = 'none'; }
+    else {
+      carte.style.display = '';
+      const total = attente.reduce((t,d)=>t+Number(d.montant||0),0);
+      carte.innerHTML = `
+        <div class="card-title"><div class="ct-left"><span>\u23F3 Payé, pas encore reçu</span></div>
+          <span class="badge bdg-gold" style="font-size:9px">${fmt(total)} F</span></div>
+        <div style="font-size:11px;color:var(--textm);margin-bottom:8px">
+          Ces dépenses d'emballage n'ont pas encore été rattachées à une livraison.
+          Au moment de la réception, choisis-les dans la liste.
+        </div>
+        ${attente.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11.5px">
+          <div>${_embEsc(d.description||'Dépense emballage')}
+            <div style="font-size:10px;color:var(--textm)">${_embEsc(d.date||'')}${d.beneficiaire?' · '+_embEsc(d.beneficiaire):''}</div>
+          </div>
+          <div style="font-weight:700;white-space:nowrap">${fmt(d.montant)} F</div>
+        </div>`).join('')}`;
+    }
+  }
 }
 
 // ── Fenêtres ─────────────────────────────────────────────────────────────────
@@ -462,7 +529,100 @@ function _embFormMvt(a, titre, motifs, action, extra){
     action);
 }
 
-function ouvrirEntreeEmb(id){ const a=embArticle(id); if(a) _embFormMvt(a, `➕ Réception — ${a.nom}`, EMB_MOTIFS_ENTREE, 'saveEntreeEmb()'); }
+// Une réception, c'est de la marchandise ET de l'argent qui sort. Les deux
+// écrans ne se parlaient pas : on saisissait les sacs, et la dépense était
+// oubliée. On la propose ici, pré-remplie — mais JAMAIS en devinant la caisse :
+// sans caisse choisie, on refuse, exactement comme l'écran Dépenses.
+function ouvrirEntreeEmb(id){
+  const a = embArticle(id); if(!a) return;
+  const pu = Number(a.prix_unitaire||0);
+  _embFormMvt(a, '➕ Réception — ' + a.nom, EMB_MOTIFS_ENTREE, 'saveEntreeEmb()');
+  const corps = document.getElementById('emb-modal-corps');
+  if(!corps) return;
+  _embMontantTouche = false;
+  corps.insertAdjacentHTML('beforeend',
+    '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">'
+    + '<div class="fr"><label>\uD83D\uDCB8 Cette livraison correspond à quelle dépense ?</label>'
+    + '<select id="eb_dep_lien" onchange="onEmbLienChange()">'
+    + '<option value="">— Chargement… —</option></select>'
+    + '<div style="font-size:10.5px;color:var(--textm);margin-top:4px">'
+    + 'Les sacs sont payés avant d\'arriver : choisis la dépense déjà saisie. '
+    + 'Le prix unitaire se calculera tout seul.</div></div>'
+    + '<div id="eb_dep_zone">'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700">'
+    + '<input type="checkbox" id="eb_dep" onchange="onEmbDepToggle()">'
+    + '\uD83D\uDCB0 Non payée d\'avance — enregistrer la dépense maintenant</label>'
+    + '<div id="eb_dep_wrap" style="display:none;margin-top:10px">'
+    + '<div class="fg2">'
+    + '<div class="fr"><label>Montant payé (FCFA)</label>'
+    + '<input type="number" id="eb_dep_montant" min="0" step="100" oninput="_embMontantTouche=true"></div>'
+    + '<div class="fr"><label>Fournisseur</label>'
+    + '<input type="text" id="eb_dep_benef" placeholder="Nom du fournisseur"></div></div>'
+    + '<div class="fr"><label>Caisse à débiter *</label>'
+    + '<select id="eb_dep_caisse"></select>'
+    + '<div style="font-size:10.5px;color:var(--textm);margin-top:4px">'
+    + (pu>0 ? ('Prix connu : ' + fmt(pu) + ' F l\'unité.')
+            : 'Aucun prix connu — saisis le montant payé.')
+    + '</div></div></div></div></div>');
+  embDepensesNonLivrees().then(function(L){
+    const sel = document.getElementById('eb_dep_lien');
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— Aucune (ou déjà rattachée) —</option>'
+      + L.map(function(d){
+          return '<option value="' + d.id + '" data-montant="' + Number(d.montant||0) + '">'
+            + _embEsc(d.date) + ' · ' + fmt(d.montant) + ' F'
+            + (d.beneficiaire ? ' · ' + _embEsc(d.beneficiaire) : '')
+            + '</option>';
+        }).join('');
+    if(!L.length) sel.innerHTML = '<option value="">— Aucune dépense emballage en attente —</option>';
+  });
+  // La quantité commande le montant, tant que personne ne l'a corrigé à la main.
+  const q = document.getElementById('em_qte');
+  if(q) q.addEventListener('input', onEmbQteChange);
+  if(typeof remplirSelectCaisses === 'function'){
+    remplirSelectCaisses('eb_dep_caisse', '— Choisir la caisse —')
+      .then(function(){ if(typeof preselectCaissePDV === 'function') preselectCaissePDV('eb_dep_caisse'); });
+  }
+}
+
+let _embMontantTouche = false;
+function onEmbQteChange(){
+  if(_embMontantTouche) return;
+  const a = embArticle(document.getElementById('em_id') && document.getElementById('em_id').value);
+  const pu = Number((a && a.prix_unitaire) || 0);
+  const q = +(document.getElementById('em_qte') || {}).value || 0;
+  const m = document.getElementById('eb_dep_montant');
+  if(m && pu > 0) m.value = Math.round(pu * q) || '';
+}
+
+function onEmbDepToggle(){
+  const on = document.getElementById('eb_dep') && document.getElementById('eb_dep').checked;
+  const w = document.getElementById('eb_dep_wrap');
+  if(w) w.style.display = on ? 'block' : 'none';
+}
+
+// Une dépense rattachée, c'est de l'argent DÉJÀ sorti : on cache l'option qui en
+// ferait sortir une seconde fois. C'est tout l'intérêt du rattachement.
+function onEmbLienChange(){
+  const sel = document.getElementById('eb_dep_lien');
+  const zone = document.getElementById('eb_dep_zone');
+  const choisie = sel && sel.value;
+  if(zone) zone.style.display = choisie ? 'none' : 'block';
+  if(choisie){
+    const chk = document.getElementById('eb_dep');
+    if(chk) chk.checked = false;
+    const w = document.getElementById('eb_dep_wrap');
+    if(w) w.style.display = 'none';
+  }
+}
+
+// Montant de la dépense rattachée, lu sur l'option choisie.
+function _embMontantLien(){
+  const sel = document.getElementById('eb_dep_lien');
+  if(!sel || !sel.value) return 0;
+  const opt = sel.options[sel.selectedIndex];
+  return Number((opt && opt.dataset && opt.dataset.montant) || 0);
+}
 function ouvrirSortieEmb(id){
   const a=embArticle(id); if(!a) return;
   _embFormMvt(a, `➖ Sortie sans production — ${a.nom}`, EMB_MOTIFS_SORTIE, 'saveSortieEmb()',
@@ -521,7 +681,97 @@ async function _embEnregistrer(type, motif, qte, v, message){
 async function saveEntreeEmb(){
   const v=_embLire(), err=document.getElementById('emb-modal-err');
   if(!(v.qte>0)){ err.textContent='Entre une quantité.'; return; }
-  await _embEnregistrer('entree', v.motif||'achat', v.qte, v, '+'+fmt(v.qte)+' en stock ✓');
+
+  const dep = document.getElementById('eb_dep');
+  const avecDep = !!(dep && dep.checked);
+  const montant = +(document.getElementById('eb_dep_montant') || {}).value || 0;
+  const caisseId = (document.getElementById('eb_dep_caisse') || {}).value || null;
+  if(avecDep){
+    if(!(montant > 0)){ err.textContent='Entre le montant payé, ou décoche la dépense.'; return; }
+    // Même règle que l'écran Dépenses : on ne devine JAMAIS la caisse. Sans
+    // choix explicite, l'argent sortirait d'un tiroir que personne n'a désigné.
+    if(!caisseId){ err.textContent="Choisis la caisse qui a payé — sinon la dépense n'est pas enregistrée."; return; }
+  }
+
+  const lienId = (document.getElementById('eb_dep_lien') || {}).value || null;
+  const art = embArticle(v.id);
+  const r = await _embMouvement(v.id, 'entree', v.qte, v.motif||'achat',
+    {date:v.date, note:v.note, saisie:'emb_mvt', depense_id: lienId});
+  if(r.doublon){ fermerModalEmb(); notify('Cette réception est déjà enregistrée ✓','gold'); if(typeof idemTerminee==='function') idemTerminee('emb_mvt'); renderEmballages(); return; }
+  if(r.error){ _embErreur(r.error); return; }
+  if(typeof idemTerminee==='function') idemTerminee('emb_mvt');
+
+  let message = '+'+fmt(v.qte)+' en stock ✓';
+  let souci = null;
+  // Rattachée : l'argent est déjà sorti le jour du paiement. On n'y touche pas,
+  // on en déduit seulement le prix unitaire réel.
+  if(lienId){
+    const paye = _embMontantLien();
+    const pu = Math.round(paye / v.qte);
+    message = '+'+fmt(v.qte)+' en stock · rattaché à une dépense de '+fmt(paye)+' F ✓';
+    if(pu > 0 && pu !== Number((art && art.prix_unitaire) || 0)){
+      try{ await SB.from('gp_emballages').update({prix_unitaire:pu}).eq('id',v.id).eq('admin_id',GP_ADMIN_ID); }catch(e){}
+      message += ' · prix unitaire : '+fmt(pu)+' F';
+    }
+  }
+  if(avecDep && !lienId){
+    souci = await _embEnregistrerDepense(art, v, montant, caisseId);
+    if(souci){
+      message = '+'+fmt(v.qte)+" en stock — mais la dépense n'est PAS passée : "+souci;
+    } else {
+      message = '+'+fmt(v.qte)+' en stock · '+fmt(montant)+' F sortis de la caisse ✓';
+      // Le prix unitaire se met à jour : la prochaine réception sera pré-remplie
+      // juste, au lieu de repartir d'un prix périmé. On le DIT, on ne le fait
+      // pas en douce.
+      const pu = Math.round(montant / v.qte);
+      if(pu > 0 && pu !== Number((art && art.prix_unitaire) || 0)){
+        try{ await SB.from('gp_emballages').update({prix_unitaire:pu}).eq('id',v.id).eq('admin_id',GP_ADMIN_ID); }catch(e){}
+        message += ' · prix unitaire : '+fmt(pu)+' F';
+      }
+    }
+  }
+  await loadStockEmballages();
+  await verifierAlerteEmballage(v.id);
+  _embMontantTouche = false;
+  fermerModalEmb();
+  notify(message, souci ? 'r' : 'gold');
+  renderEmballages();
+}
+
+// Écrit la dépense et débite la caisse par le chemin DÉJÀ éprouvé de l'écran
+// Dépenses : pas de second code pour faire sortir de l'argent, c'est comme ça
+// qu'on creuse un solde sans s'en apercevoir. Renvoie la raison de l'échec,
+// ou null. La réception, elle, est déjà enregistrée et le reste.
+async function _embEnregistrerDepense(art, v, montant, caisseId){
+  const benef = (document.getElementById('eb_dep_benef') || {}).value || '';
+  const ligne = {
+    admin_id: GP_ADMIN_ID,
+    saisi_par: (typeof GP_USER !== 'undefined' && GP_USER) ? GP_USER.id : null,
+    date: v.date || (typeof today==='function' ? today() : null),
+    categorie: 'emballage',
+    description: 'Emballages : ' + ((art && art.nom) || 'article') + ' × ' + v.qte,
+    montant: montant,
+    beneficiaire: benef.trim() || null,
+    point_vente: (typeof GP_POINT_VENTE !== 'undefined' && GP_POINT_VENTE) || 'Production',
+  };
+  let d = null;
+  try{
+    if(typeof idemInserer === 'function'){
+      const r = await idemInserer('gp_depenses', ligne, 'emb_depense', '*');
+      if(r.doublon) return null;
+      if(r.error) return r.error.message;
+      d = r.data;
+    } else {
+      const r = await SB.from('gp_depenses').insert(ligne).select().maybeSingle();
+      if(r.error) return r.error.message;
+      d = r.data;
+    }
+    if(typeof idemTerminee==='function') idemTerminee('emb_depense');
+    if(typeof _debiterCaisseDepense === 'function') await _debiterCaisseDepense(d, caisseId);
+    return null;
+  }catch(e){
+    return (e && e.message) || String(e);
+  }
 }
 
 async function saveSortieEmb(){
@@ -562,6 +812,11 @@ if (typeof window !== 'undefined') {
   window.ouvrirSortieEmb = ouvrirSortieEmb;
   window.ouvrirComptageEmb = ouvrirComptageEmb;
   window.saveEntreeEmb = saveEntreeEmb;
+  window.onEmbDepToggle = onEmbDepToggle;
+  window.onEmbLienChange = onEmbLienChange;
+  window.embDepensesNonLivrees = embDepensesNonLivrees;
+  window.coutEmballagesLot = coutEmballagesLot;
+  window.onEmbQteChange = onEmbQteChange;
   window.saveSortieEmb = saveSortieEmb;
   window.saveComptageEmb = saveComptageEmb;
   window.fermerModalEmb = fermerModalEmb;
