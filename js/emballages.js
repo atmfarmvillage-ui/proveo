@@ -462,7 +462,58 @@ function _embFormMvt(a, titre, motifs, action, extra){
     action);
 }
 
-function ouvrirEntreeEmb(id){ const a=embArticle(id); if(a) _embFormMvt(a, `➕ Réception — ${a.nom}`, EMB_MOTIFS_ENTREE, 'saveEntreeEmb()'); }
+// Une réception, c'est de la marchandise ET de l'argent qui sort. Les deux
+// écrans ne se parlaient pas : on saisissait les sacs, et la dépense était
+// oubliée. On la propose ici, pré-remplie — mais JAMAIS en devinant la caisse :
+// sans caisse choisie, on refuse, exactement comme l'écran Dépenses.
+function ouvrirEntreeEmb(id){
+  const a = embArticle(id); if(!a) return;
+  const pu = Number(a.prix_unitaire||0);
+  _embFormMvt(a, '➕ Réception — ' + a.nom, EMB_MOTIFS_ENTREE, 'saveEntreeEmb()');
+  const corps = document.getElementById('emb-modal-corps');
+  if(!corps) return;
+  _embMontantTouche = false;
+  corps.insertAdjacentHTML('beforeend',
+    '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700">'
+    + '<input type="checkbox" id="eb_dep" ' + (pu>0?'checked':'') + ' onchange="onEmbDepToggle()">'
+    + '\uD83D\uDCB0 Enregistrer aussi la dépense</label>'
+    + '<div id="eb_dep_wrap" style="display:' + (pu>0?'block':'none') + ';margin-top:10px">'
+    + '<div class="fg2">'
+    + '<div class="fr"><label>Montant payé (FCFA)</label>'
+    + '<input type="number" id="eb_dep_montant" min="0" step="100" oninput="_embMontantTouche=true"></div>'
+    + '<div class="fr"><label>Fournisseur</label>'
+    + '<input type="text" id="eb_dep_benef" placeholder="Nom du fournisseur"></div></div>'
+    + '<div class="fr"><label>Caisse à débiter *</label>'
+    + '<select id="eb_dep_caisse"></select>'
+    + '<div style="font-size:10.5px;color:var(--textm);margin-top:4px">'
+    + (pu>0 ? ('Proposé : ' + fmt(pu) + ' F l\'unité.')
+            : 'Aucun prix connu — saisis le montant payé.')
+    + '</div></div></div></div>');
+  // La quantité commande le montant, tant que personne ne l'a corrigé à la main.
+  const q = document.getElementById('em_qte');
+  if(q) q.addEventListener('input', onEmbQteChange);
+  if(typeof remplirSelectCaisses === 'function'){
+    remplirSelectCaisses('eb_dep_caisse', '— Choisir la caisse —')
+      .then(function(){ if(typeof preselectCaissePDV === 'function') preselectCaissePDV('eb_dep_caisse'); });
+  }
+}
+
+let _embMontantTouche = false;
+function onEmbQteChange(){
+  if(_embMontantTouche) return;
+  const a = embArticle(document.getElementById('em_id') && document.getElementById('em_id').value);
+  const pu = Number((a && a.prix_unitaire) || 0);
+  const q = +(document.getElementById('em_qte') || {}).value || 0;
+  const m = document.getElementById('eb_dep_montant');
+  if(m && pu > 0) m.value = Math.round(pu * q) || '';
+}
+
+function onEmbDepToggle(){
+  const on = document.getElementById('eb_dep') && document.getElementById('eb_dep').checked;
+  const w = document.getElementById('eb_dep_wrap');
+  if(w) w.style.display = on ? 'block' : 'none';
+}
 function ouvrirSortieEmb(id){
   const a=embArticle(id); if(!a) return;
   _embFormMvt(a, `➖ Sortie sans production — ${a.nom}`, EMB_MOTIFS_SORTIE, 'saveSortieEmb()',
@@ -521,7 +572,84 @@ async function _embEnregistrer(type, motif, qte, v, message){
 async function saveEntreeEmb(){
   const v=_embLire(), err=document.getElementById('emb-modal-err');
   if(!(v.qte>0)){ err.textContent='Entre une quantité.'; return; }
-  await _embEnregistrer('entree', v.motif||'achat', v.qte, v, '+'+fmt(v.qte)+' en stock ✓');
+
+  const dep = document.getElementById('eb_dep');
+  const avecDep = !!(dep && dep.checked);
+  const montant = +(document.getElementById('eb_dep_montant') || {}).value || 0;
+  const caisseId = (document.getElementById('eb_dep_caisse') || {}).value || null;
+  if(avecDep){
+    if(!(montant > 0)){ err.textContent='Entre le montant payé, ou décoche la dépense.'; return; }
+    // Même règle que l'écran Dépenses : on ne devine JAMAIS la caisse. Sans
+    // choix explicite, l'argent sortirait d'un tiroir que personne n'a désigné.
+    if(!caisseId){ err.textContent="Choisis la caisse qui a payé — sinon la dépense n'est pas enregistrée."; return; }
+  }
+
+  const art = embArticle(v.id);
+  const r = await _embMouvement(v.id, 'entree', v.qte, v.motif||'achat', {date:v.date, note:v.note, saisie:'emb_mvt'});
+  if(r.doublon){ fermerModalEmb(); notify('Cette réception est déjà enregistrée ✓','gold'); if(typeof idemTerminee==='function') idemTerminee('emb_mvt'); renderEmballages(); return; }
+  if(r.error){ _embErreur(r.error); return; }
+  if(typeof idemTerminee==='function') idemTerminee('emb_mvt');
+
+  let message = '+'+fmt(v.qte)+' en stock ✓';
+  let souci = null;
+  if(avecDep){
+    souci = await _embEnregistrerDepense(art, v, montant, caisseId);
+    if(souci){
+      message = '+'+fmt(v.qte)+" en stock — mais la dépense n'est PAS passée : "+souci;
+    } else {
+      message = '+'+fmt(v.qte)+' en stock · '+fmt(montant)+' F sortis de la caisse ✓';
+      // Le prix unitaire se met à jour : la prochaine réception sera pré-remplie
+      // juste, au lieu de repartir d'un prix périmé. On le DIT, on ne le fait
+      // pas en douce.
+      const pu = Math.round(montant / v.qte);
+      if(pu > 0 && pu !== Number((art && art.prix_unitaire) || 0)){
+        try{ await SB.from('gp_emballages').update({prix_unitaire:pu}).eq('id',v.id).eq('admin_id',GP_ADMIN_ID); }catch(e){}
+        message += ' · prix unitaire : '+fmt(pu)+' F';
+      }
+    }
+  }
+  await loadStockEmballages();
+  await verifierAlerteEmballage(v.id);
+  _embMontantTouche = false;
+  fermerModalEmb();
+  notify(message, souci ? 'r' : 'gold');
+  renderEmballages();
+}
+
+// Écrit la dépense et débite la caisse par le chemin DÉJÀ éprouvé de l'écran
+// Dépenses : pas de second code pour faire sortir de l'argent, c'est comme ça
+// qu'on creuse un solde sans s'en apercevoir. Renvoie la raison de l'échec,
+// ou null. La réception, elle, est déjà enregistrée et le reste.
+async function _embEnregistrerDepense(art, v, montant, caisseId){
+  const benef = (document.getElementById('eb_dep_benef') || {}).value || '';
+  const ligne = {
+    admin_id: GP_ADMIN_ID,
+    saisi_par: (typeof GP_USER !== 'undefined' && GP_USER) ? GP_USER.id : null,
+    date: v.date || (typeof today==='function' ? today() : null),
+    categorie: 'emballage',
+    description: 'Emballages : ' + ((art && art.nom) || 'article') + ' × ' + v.qte,
+    montant: montant,
+    beneficiaire: benef.trim() || null,
+    point_vente: (typeof GP_POINT_VENTE !== 'undefined' && GP_POINT_VENTE) || 'Production',
+  };
+  let d = null;
+  try{
+    if(typeof idemInserer === 'function'){
+      const r = await idemInserer('gp_depenses', ligne, 'emb_depense', '*');
+      if(r.doublon) return null;
+      if(r.error) return r.error.message;
+      d = r.data;
+    } else {
+      const r = await SB.from('gp_depenses').insert(ligne).select().maybeSingle();
+      if(r.error) return r.error.message;
+      d = r.data;
+    }
+    if(typeof idemTerminee==='function') idemTerminee('emb_depense');
+    if(typeof _debiterCaisseDepense === 'function') await _debiterCaisseDepense(d, caisseId);
+    return null;
+  }catch(e){
+    return (e && e.message) || String(e);
+  }
 }
 
 async function saveSortieEmb(){
@@ -562,6 +690,8 @@ if (typeof window !== 'undefined') {
   window.ouvrirSortieEmb = ouvrirSortieEmb;
   window.ouvrirComptageEmb = ouvrirComptageEmb;
   window.saveEntreeEmb = saveEntreeEmb;
+  window.onEmbDepToggle = onEmbDepToggle;
+  window.onEmbQteChange = onEmbQteChange;
   window.saveSortieEmb = saveSortieEmb;
   window.saveComptageEmb = saveComptageEmb;
   window.fermerModalEmb = fermerModalEmb;
