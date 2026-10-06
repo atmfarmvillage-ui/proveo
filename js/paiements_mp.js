@@ -253,8 +253,12 @@ async function _saveModalPaiement(){
   const caisseSel = document.getElementById('pmt-caisse')?.value || null;
   let caisseId = caisseSel;
   if(!caisseId){
-    const{data:caisseFb}=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
-    caisseId = caisseFb?.[0]?.id || null;
+    // Rien de choisi : on prend la caisse de CE point de vente, et rien d'autre.
+    let _c=null; try{ _c = await caisseDuPdv(GP_POINT_VENTE, 'physique'); }catch(_){}
+    caisseId = _c?.id || null;
+    if(!caisseId && typeof notify==='function') notify(
+      `Paiement enregistr\u00e9, mais aucune caisse physique sur ${GP_POINT_VENTE||'Production'} : `
+      + `l'argent n'est pas encore sorti de caisse.`, 'r');
   }
   let _caisseOk=false;
   if(caisseId && paie?.id){
@@ -380,16 +384,17 @@ async function voirHistoPaiements(achatId, fournisseurNom){
 async function _debiterCaissePaiementMP(p){
   let caisseId = p.caisse_id || null;
   if(!caisseId){
-    // Repli : résoudre la caisse via le PDV de l'achat
+    // La caisse du PDV de l'ACHAT (c'est de là que l'argent est sorti), sans
+    // jamais retomber sur une autre : un rattrapage qui se trompe de tiroir
+    // installe l'erreur durablement, puisque plus rien ne repassera dessus.
     let pv=null;
     try{ const{data:a}=await SB.from('gp_achats').select('point_vente').eq('id',p.achat_id).maybeSingle(); pv=a?.point_vente||null; }catch(_){}
-    let cq=SB.from('gp_caisses').select('id').eq('admin_id',p.admin_id).eq('type','physique');
-    cq = pv ? cq.eq('point_vente',pv) : cq.is('point_vente',null);
-    let{data:cc}=await cq.limit(1);
-    if(!cc||!cc.length){ const r=await SB.from('gp_caisses').select('id').eq('admin_id',p.admin_id).eq('type','physique').limit(1); cc=r.data; }
-    caisseId=cc?.[0]?.id||null;
+    const _c = await caisseDuPdv(pv, 'physique');
+    caisseId=_c?.id||null;
   }
-  if(!caisseId) throw new Error('Aucune caisse pour débiter le paiement');
+  // On ÉCHOUE plutôt que de deviner : le paiement reste \u00e0 rattraper, visible,
+  // au lieu d'être sorti du mauvais tiroir et oublié.
+  if(!caisseId) throw new Error(`Aucune caisse physique pour ce point de vente — paiement non débité`);
   const{error}=await SB.from('gp_mouvements_caisse').insert({
     admin_id:p.admin_id, caisse_id:caisseId,
     type:'sortie', categorie:'paiement_fournisseur',
