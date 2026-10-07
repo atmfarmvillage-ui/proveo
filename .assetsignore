@@ -1,0 +1,13 @@
+# Fichiers internes : jamais servis en ligne
+.git
+.gitignore
+.gitattributes
+.assetsignore
+.serve.ps1
+.wrangler
+node_modules
+*.md
+*.sql
+migrations
+proveo-ia
+wrangler.jsonc
