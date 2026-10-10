@@ -767,16 +767,22 @@ async function _retirerStockAchat(id){
 // Restaure le solde, dans la caisse physique du PDV (ou siège).
 async function _rembourserCaisseAchat(montant, ref){
   if(!montant || montant<=0) return;
-  let cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
-  cq = GP_POINT_VENTE ? cq.eq('point_vente',GP_POINT_VENTE) : cq.is('point_vente',null);
-  let{data:caisses}=await cq.limit(1);
-  if(!caisses?.length){
-    const r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
-    caisses=r.data;
+  // La caisse du PDV, et AUCUNE autre. Rembourser dans le tiroir d'un autre point
+  // de vente gonfle un solde et en creuse un autre : c'est ainsi qu'on fabrique
+  // un solde negatif que personne ne sait expliquer.
+  let caisse=null;
+  try{ caisse = await caisseDuPdv(GP_POINT_VENTE, 'physique'); }catch(_){}
+  if(!caisse){
+    // On ne fait pas semblant : l'achat est bien annule, mais l'argent n'est pas
+    // revenu en caisse et il faut que quelqu'un le sache.
+    if(typeof notify==='function') notify(
+      `Achat annul\u00e9, mais le remboursement de ${typeof fmt==='function'?fmt(montant):montant} F n'a pas pu \u00eatre plac\u00e9 : `
+      + `aucune caisse physique sur ${GP_POINT_VENTE||'Production'}. Cr\u00e9e-la puis r\u00e9gularise.`, 'r');
+    return;
   }
-  if(caisses?.length){
+  {
     await SB.from('gp_mouvements_caisse').insert({
-      admin_id:GP_ADMIN_ID, caisse_id:caisses[0].id,
+      admin_id:GP_ADMIN_ID, caisse_id:caisse.id,
       type:'entree', categorie:'annulation_achat',
       montant, date_mouvement:today(),
       description:`Remboursement annulation achat ${ref||''}`.trim(),
@@ -1035,15 +1041,15 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
     statut_paiement:statutPaiement
   }).eq('id',achatId);
 
-  // Sortie caisse — caisse du PDV (ou siège). Débit OBLIGATOIRE : si échec → rattrapé au refresh.
-  let _cq=SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique');
-  _cq = GP_POINT_VENTE ? _cq.eq('point_vente',GP_POINT_VENTE) : _cq.is('point_vente',null);
-  let{data:caisses}=await _cq.limit(1);
-  if(!caisses?.length){
-    const _r=await SB.from('gp_caisses').select('id').eq('admin_id',GP_ADMIN_ID).eq('type','physique').limit(1);
-    caisses=_r.data;
-  }
-  const _caisseId=caisses?.[0]?.id||null;
+  // Sortie caisse — LA caisse de CE point de vente, jamais une autre. Si elle
+  // manque, le paiement reste enregistré et le rattrapage s'en chargera quand la
+  // caisse existera ; debiter le tiroir d'un autre PDV serait pire que d'attendre.
+  let _caisse=null;
+  try{ _caisse = await caisseDuPdv(GP_POINT_VENTE, 'physique'); }catch(_){}
+  if(!_caisse && typeof notify==='function') notify(
+    `Paiement enregistr\u00e9, mais aucune caisse physique sur ${GP_POINT_VENTE||'Production'} : `
+    + `l'argent n'est pas encore sorti de caisse.`, 'r');
+  const _caisseId=_caisse?.id||null;
   let _caisseOk=false;
   if(_caisseId && paie?.id){
     const{error:eSortie}=await SB.from('gp_mouvements_caisse').insert({
