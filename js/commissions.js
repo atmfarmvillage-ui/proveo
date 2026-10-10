@@ -214,6 +214,9 @@ async function renderCommissions(){
 
   // Bloc config (admin uniquement)
   const configBloc = (GP_ROLE==='admin'||GP_EST_GERANT) ? _commConfigCard() : '';
+  // « Apporté par » : vue d'AUDIT, réservée à qui peut régler. Un membre n'a pas
+  // à voir ce que les autres apportent.
+  const apporteBloc = gestion ? await _commApporteBloc(C, moisCourant) : '';
 
   const pdvKeys=Object.keys(parPdv).sort((a,b)=>parPdv[b].due-parPdv[a].due);
   const cards = pdvKeys.length ? pdvKeys.map(pv=>{
@@ -253,7 +256,167 @@ async function renderCommissions(){
   </div>
   <div style="font-size:11px;color:var(--textm);margin-bottom:10px">💡 Les commissions n'entrent PAS dans la caisse. Le règlement (bouton « Régler ») crée un seul mouvement de caisse au moment du versement réel.</div>`;
 
-  root.innerHTML = entete + configBloc + cards;
+  root.innerHTML = entete + apporteBloc + configBloc + cards;
+}
+
+// ── QUI A APPORTÉ QUOI (admin) ────────────────────
+// Le rattachement vit sur le CLIENT ; la commission, elle, fige son
+// bénéficiaire à la vente. Les deux lectures sont donc différentes et on ne
+// les additionne jamais :
+//   · ACQUIS = les lignes de `gp_commissions`, figées. C'est ce qui se paie,
+//     et c'est opposable : réattribuer un client demain ne réécrit pas le passé.
+//   · RATTACHÉ AUJOURD'HUI = le badge actuel du client. C'est ce que la vente
+//     RAPPORTERAIT si un barème existait. Utile pour décider, jamais pour payer.
+function _commEtiqApporteur(cl, pointVente){
+  const a=String((cl&&cl.attribution)||'pdv').toLowerCase();
+  const nom=((cl&&cl.responsable_nom)||'').trim();
+  if(a==='groupe')                 return {cle:'groupe', lbl:'🏢 Clients du Groupe', aide:'aucune commission, pour personne'};
+  if(a==='commerciale' && nom)     return {cle:'c:'+nom, lbl:'👤 '+nom, aide:'commercial(e)'};
+  if(a==='secretaire'  && nom)     return {cle:'s:'+nom, lbl:'📋 '+nom, aide:'secrétaire'};
+  return {cle:'pdv:'+(pointVente||'—'), lbl:'🏪 '+(pointVente||'Production'), aide:'point de vente'};
+}
+
+// La même étiquette, vue depuis une ligne de commission déjà figée.
+function _commEtiqLigne(c){
+  const nom=(c.beneficiaire_nom||'').trim();
+  if(nom) return (c.role_beneficiaire==='secretaire'?'s:':'c:')+nom;
+  return 'pdv:'+(c.point_vente||'—');
+}
+
+async function _commApporteBloc(lignesComm, mois){
+  const d0=mois+'-01';
+  let V=[], CL=[];
+  try{
+    const[rv,rc]=await Promise.all([
+      SB.from('gp_ventes').select('id,date,client_id,client_nom,point_vente,montant_total')
+        .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).gte('date',d0)
+        .order('date',{ascending:false}).limit(5000),
+      SB.from('gp_clients').select('id,nom,attribution,responsable_nom')
+        .eq('admin_id',GP_ADMIN_ID).limit(5000),
+    ]);
+    if(rv.error) throw rv.error;
+    if(rc.error) throw rc.error;
+    V=rv.data||[]; CL=rc.data||[];
+  }catch(e){
+    // Un bloc muet ferait chercher un chiffre qui n'existe pas : on dit pourquoi.
+    return `<div class="card"><div class="card-title"><div class="ct-left"><span>🤝 Apporté par</span></div></div>
+      <div style="padding:10px;font-size:12px;color:var(--textm)">Lecture impossible : ${String(e&&e.message||e)}</div></div>`;
+  }
+
+  const parId={}; CL.forEach(c=>{ parId[c.id]=c; });
+
+  // 1. Le cumul par apporteur : ventes + chiffre d'affaires (badge ACTUEL).
+  const A={};
+  V.forEach(v=>{
+    const e=_commEtiqApporteur(parId[v.client_id], v.point_vente);
+    const a=A[e.cle]=A[e.cle]||{lbl:e.lbl, aide:e.aide, n:0, ca:0, acquis:0};
+    a.n++; a.ca+=Number(v.montant_total)||0;
+  });
+  // 2. La commission ACQUISE du mois, figée, rangée sous la même étiquette.
+  (lignesComm||[]).forEach(c=>{
+    if(!String(c.date||'').startsWith(mois)) return;
+    const cle=_commEtiqLigne(c);
+    const a=A[cle]=A[cle]||{lbl:cle.startsWith('pdv:')?('🏪 '+cle.slice(4)):('👤 '+cle.slice(2)), aide:'', n:0, ca:0, acquis:0};
+    a.acquis+=Number(c.montant)||0;
+  });
+
+  const cles=Object.keys(A).sort((x,y)=>A[y].ca-A[x].ca);
+  const totCA=cles.reduce((t,k)=>t+A[k].ca,0);
+  const totAcq=cles.reduce((t,k)=>t+A[k].acquis,0);
+
+  const tabApporteurs = !cles.length ? '<div style="font-size:12px;color:var(--textm);padding:8px 0">Aucune vente ce mois-ci.</div>'
+   : `<div style="overflow-x:auto"><table class="tbl" style="font-size:12px"><thead><tr>
+        <th>Apporteur</th><th class="num">Ventes</th><th class="num">Chiffre d'affaires</th><th class="num">Commission acquise</th>
+      </tr></thead><tbody>
+      ${cles.map(k=>`<tr>
+        <td><b>${A[k].lbl}</b>${A[k].aide?` <span style="font-size:10px;color:var(--textm)">· ${A[k].aide}</span>`:''}</td>
+        <td class="num">${A[k].n||'—'}</td>
+        <td class="num">${A[k].ca?fmt(Math.round(A[k].ca))+' F':'—'}</td>
+        <td class="num" style="font-weight:700;color:${A[k].acquis?'var(--gold)':'var(--textm)'}">${A[k].acquis?fmt(Math.round(A[k].acquis))+' F':'0 F'}</td>
+      </tr>`).join('')}
+      </tbody></table></div>`;
+
+  // 3. Les clients qui ACHÈTENT sans apporteur : c'est là que dort l'argent.
+  const sans={};
+  V.forEach(v=>{
+    const cl=parId[v.client_id];
+    const a=String((cl&&cl.attribution)||'pdv').toLowerCase();
+    if(a==='commerciale'||a==='secretaire') return;
+    const id=v.client_id||('pv:'+(v.point_vente||'—'));
+    const o=sans[id]=sans[id]||{id:v.client_id||null, nom:(cl&&cl.nom)||v.client_nom||'(comptoir)',
+                                groupe:(a==='groupe'), pv:v.point_vente||'—', n:0, ca:0};
+    o.n++; o.ca+=Number(v.montant_total)||0;
+  });
+  const sKeys=Object.keys(sans).sort((x,y)=>sans[y].ca-sans[x].ca);
+  const caSans=sKeys.reduce((t,k)=>t+sans[k].ca,0);
+  const tabSans = !sKeys.length ? '<div style="font-size:12px;color:var(--textm);padding:8px 0">Toutes les ventes du mois sont rattachées à quelqu\'un.</div>'
+   : `<div style="overflow-x:auto"><table class="tbl" style="font-size:11.5px"><thead><tr>
+        <th>Client</th><th>Point de vente</th><th class="num">Ventes</th><th class="num">CA</th><th></th>
+      </tr></thead><tbody>
+      ${sKeys.slice(0,200).map(k=>{const o=sans[k];return `<tr>
+        <td>${String(o.nom).replace(/</g,'&lt;')}${o.groupe?' <span class="badge bdg-g" style="font-size:9px">Groupe</span>':''}</td>
+        <td style="font-size:10px">${String(o.pv).replace(/</g,'&lt;')}</td>
+        <td class="num">${o.n}</td>
+        <td class="num">${fmt(Math.round(o.ca))} F</td>
+        <td class="num">${(o.id && !o.groupe)?`<button class="btn btn-out btn-sm" onclick="_commRattacher('${o.id}')">🤝 Rattacher</button>`:''}</td>
+      </tr>`;}).join('')}
+      </tbody></table></div>`;
+
+  // 4. Le détail, vente par vente.
+  const lignes=V.slice(0,400).map(v=>{
+    const cl=parId[v.client_id];
+    const e=_commEtiqApporteur(cl, v.point_vente);
+    const acq=(lignesComm||[]).filter(c=>c.vente_id===v.id).reduce((t,c)=>t+(Number(c.montant)||0),0);
+    return `<tr>
+      <td style="font-size:10px">${v.date||''}</td>
+      <td style="font-size:11px">${String((cl&&cl.nom)||v.client_nom||'—').replace(/</g,'&lt;')}</td>
+      <td style="font-size:11px">${e.lbl}</td>
+      <td style="font-size:10px">${String(v.point_vente||'—').replace(/</g,'&lt;')}</td>
+      <td class="num">${fmt(Math.round(Number(v.montant_total)||0))} F</td>
+      <td class="num" style="font-weight:700;color:${acq?'var(--gold)':'var(--textm)'}">${acq?fmt(Math.round(acq))+' F':'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="card">
+    <div class="card-title"><div class="ct-left"><span>🤝 Apporté par — ${mois}</span></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="econo-box"><div class="econo-val">${fmt(Math.round(totCA))} F</div><div class="econo-lbl">CA du mois</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(Math.round(totAcq))} F</div><div class="econo-lbl">Commission acquise</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:${caSans?'var(--red)':'var(--green)'}">${fmt(Math.round(caSans))} F</div><div class="econo-lbl">CA sans apporteur</div></div>
+    </div>
+    ${tabApporteurs}
+    <div style="font-size:11px;color:var(--textm);margin-top:8px;line-height:1.5">
+      💡 Le <b>chiffre d'affaires</b> est rangé selon le rattachement <b>d'aujourd'hui</b> : c'est ce que la vente
+      rapporterait si un barème existait. La <b>commission acquise</b>, elle, est <b>figée à la vente</b> — réattribuer
+      un client demain ne réécrit jamais le passé. Les deux ne s'additionnent pas.
+    </div>
+
+    <div style="font-size:11.5px;color:var(--textm);cursor:pointer;margin-top:12px" onclick="var e=document.getElementById('comm-sans');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Clients qui achètent sans apporteur (${sKeys.length})</div>
+    <div id="comm-sans" style="display:none;margin-top:6px">
+      <div style="font-size:11px;color:var(--textm);margin-bottom:6px">Les clients <b>du Groupe</b> n'ont pas de bouton : leurs achats, même à venir, n'ouvrent droit à aucune commission — décision du 29/08.</div>
+      ${tabSans}
+    </div>
+
+    <div style="font-size:11.5px;color:var(--textm);cursor:pointer;margin-top:10px" onclick="var e=document.getElementById('comm-ventes');if(e)e.style.display=e.style.display==='none'?'block':'none'">▸ Le détail, vente par vente (${V.length})</div>
+    <div id="comm-ventes" style="display:none;overflow-x:auto;margin-top:6px"><table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Date</th><th>Client</th><th>Apporté par</th><th>PDV</th><th class="num">Montant</th><th class="num">Commission</th>
+    </tr></thead><tbody>${lignes}</tbody></table></div>
+  </div>`;
+}
+
+// Ouvrir la fiche client depuis ici. `openEditClient` lit `GP_CLIENTS`, qui peut
+// être vide sur cette page : sans ce chargement le bouton ne ferait RIEN, sans
+// un mot. Même règle que partout — on agit, ou on dit pourquoi on ne peut pas.
+async function _commRattacher(id){
+  try{
+    if(typeof GP_CLIENTS==='undefined' || !GP_CLIENTS || !GP_CLIENTS.length){
+      if(typeof loadClients==='function') await loadClients();
+    }
+    if(typeof openEditClient!=='function'){
+      notify("Ouvre la page Clients pour rattacher cette fiche.",'r'); return;
+    }
+    await openEditClient(id);
+  }catch(e){ notify('Fiche introuvable : '+(e&&e.message||e),'r'); }
 }
 
 // ── CONFIG DES RÈGLES (admin) ─────────────────────
