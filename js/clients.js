@@ -163,8 +163,12 @@ function cliBadgeSuivi(c, cliquable){
     cle=c.responsable_id||a; ic=(a==='commerciale')?'🤝':'📋';
     lbl=nom||(a==='commerciale'?'Commercial':'Secrétaire'); cls='bdg-g';
   } else { cle='pdv'; }
-  const clic=cliquable?` style="cursor:pointer" title="Voir tous les clients suivis par : ${lbl}" onclick="event.stopPropagation();cliFiltrerSuivi('${cle}')"`:'';
-  return `<span class="badge ${cls}"${clic ? clic : ''} style="font-size:8px">${ic} ${lbl}</span>`;
+  // UN SEUL attribut `style` : il y en avait deux quand le badge etait
+  // cliquable, et en HTML c'est le PREMIER qui gagne — la taille n'etait donc
+  // jamais appliquee. D'ou un badge de 8 px qu'on ne voyait pas.
+  const sty=`font-size:10.5px;font-weight:700${cliquable?';cursor:pointer':''}`;
+  const clic=cliquable?` title="Voir tous les clients suivis par : ${lbl}" onclick="event.stopPropagation();cliFiltrerSuivi('${cle}')"`:'';
+  return `<span class="badge ${cls}" style="${sty}"${clic}>${ic} ${lbl}</span>`;
 }
 
 // Le libellé du filtre courant, lu sur le premier client qui y répond.
@@ -832,8 +836,9 @@ async function renderClients(){
     </div>` : '';
 
   document.getElementById('clients-liste').innerHTML=_bandeauFiltre+((filtered.length||autres.length)?`
-    <table class="tbl"><thead><tr>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr>
       <th>Nom & Contact</th><th>Type</th>
+      <th>🤝 Apporté par</th>
       <th class="num">CA total</th>
       <th class="num" style="color:var(--red)">Dette</th>
       <th></th>
@@ -851,7 +856,6 @@ async function renderClients(){
             <span style="font-size:9px;font-weight:700;color:${st.color}">${st.emoji} ${st.label}</span>
             ${montantDu>0?`<span class="badge bdg-r" style="font-size:9px">⚠ ${fmt(montantDu)} F</span>`:''}
             ${cliBadgePdv(c.point_vente)}
-            ${cliBadgeSuivi(c, true)}
             ${typeof dblBadge==='function'?dblBadge(c):''}
           </div>
           <div style="font-size:10px;color:var(--textm)">
@@ -864,6 +868,7 @@ async function renderClients(){
           <span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span>
           ${Number(c.points_fidelite)>0?`<span class="badge bdg-gold" style="font-size:9px;margin-left:3px">🎁 ${c.points_fidelite} pts</span>`:''}
         </td>
+        <td onclick="event.stopPropagation()">${cliBadgeSuivi(c, true)}</td>
         <td class="num" style="color:var(--gold)">${fmt((GP_CLIENT_STATS?.[c.id]?.totalCA)||c.total_achats||0)} F</td>
         <td class="num" style="color:${montantDu>0?'var(--red)':'var(--green)'}">
           ${montantDu>0?fmt(montantDu)+' F':'✅'}
@@ -881,7 +886,7 @@ async function renderClients(){
         </td>
       </tr>`;
     }).join('')}
-    ${autres.length?`<tr><td colspan="5" style="padding:9px 6px;background:rgba(0,0,0,.05)">
+    ${autres.length?`<tr><td colspan="6" style="padding:9px 6px;background:rgba(0,0,0,.05)">
       <span style="font-size:10.5px;color:var(--textm)">
         <b>${autres.length} client(s) des autres points de vente</b> — affichés pour ne pas les
         enregistrer une deuxième fois. Leurs chiffres restent à leur point de vente.
@@ -891,18 +896,18 @@ async function renderClients(){
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span style="font-weight:700">${c.nom}</span>
           ${cliBadgePdv(c.point_vente)}
-          ${cliBadgeSuivi(c, true)}
         </div>
         <div style="font-size:10px;color:var(--textm)">
           ${c.telephone?'📞 '+c.telephone:''}${c.localite?' · 📍 '+c.localite:''}
         </div>
       </td>
       <td><span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span></td>
+      <td onclick="event.stopPropagation()">${cliBadgeSuivi(c, true)}</td>
       <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
       <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
       <td></td>
     </tr>`).join('')}
-    </tbody></table>`
+    </tbody></table></div>`
   :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>');
 }
 // ══════════════════════════════════════════════════
