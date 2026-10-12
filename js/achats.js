@@ -575,6 +575,123 @@ async function saveModificationAchat(){
   notify(dejaEnStock?'Achat modifié ✓ — stock recalculé':'Achat modifié ✓','gold');
 }
 
+// ── FRAIS ANNEXES (dédouanement, transport…) ───────────────────
+// Le bloc vit DANS la fiche du bon : une commande, son argent et son coût réel
+// se lisent au même endroit. Le détail du calcul est affiché — un prix de
+// revient qu'on ne peut pas refaire à la main n'est pas cru.
+function _achatBlocFrais(a, L, F, CR){
+  if(F === null){
+    return `<div style="margin-top:12px;font-size:11.5px;color:var(--textm)">
+      Les frais annexes ne sont pas lisibles — passe le SQL <b>gp_achats_frais</b> (fourni dans le chat).</div>`;
+  }
+  const clos = !!a.cloture_le;
+  const total = (F||[]).reduce((s,f)=>s+(Number(f.montant)||0),0);
+  const peut = (typeof GP_PEUT_PAYER_MP!=='undefined' && GP_PEUT_PAYER_MP===true) || GP_ROLE==='admin';
+  const liste = (F||[]).length ? `<table class="tbl" style="font-size:11px">
+      <thead><tr><th>Date</th><th>Frais</th><th class="num">Montant</th><th></th></tr></thead><tbody>
+      ${F.map(f=>`<tr>
+        <td>${String(f.date||'').slice(0,10)}</td>
+        <td>${String(f.libelle||'').replace(/</g,'&lt;')}</td>
+        <td class="num" style="color:var(--red)">${fmt(f.montant)} F</td>
+        <td class="num">${(peut&&!clos)?`<button class="btn btn-red btn-sm" onclick="supprimerFraisAchat('${f.id}','${a.id}')" title="Retirer ce frais">✕</button>`:''}</td>
+      </tr>`).join('')}
+      <tr style="font-weight:700"><td colspan="2">TOTAL FRAIS</td>
+        <td class="num" style="color:var(--red)">${fmt(total)} F</td><td></td></tr>
+      </tbody></table>` : '<div style="color:var(--textm);font-size:12px">Aucun frais annexe.</div>';
+
+  // Le coût réel, ligne par ligne. Répartir au prorata de la VALEUR revient à
+  // appliquer le même coefficient partout : on l'affiche, ça se vérifie en une
+  // division.
+  const detail = (CR && CR.coef > 0) ? `
+    <div style="font-size:11px;color:var(--textm);margin:8px 0 4px">
+      Coût réel = prix fournisseur + <b>${Math.round(CR.coef*1000)/10} %</b>
+      (${fmt(CR.totalFrais)} F de frais sur ${fmt(CR.totalValeur)} F de marchandise)
+    </div>
+    <table class="tbl" style="font-size:11px"><thead><tr>
+      <th>Ingrédient</th><th class="num">Prix fournisseur</th><th class="num">Part des frais</th><th class="num">Coût réel</th>
+    </tr></thead><tbody>
+    ${L.map(l=>{const c=CR.lignes[l.id]; if(!c) return ''; return `<tr>
+      <td>${String(l.ingredient_nom||'—').replace(/</g,'&lt;')}</td>
+      <td class="num">${fmt(c.prix_fournisseur)} F</td>
+      <td class="num" style="color:var(--red)">+${fmt(c.part_frais)} F</td>
+      <td class="num" style="font-weight:700;color:var(--gold)">${fmt(c.prix_reel)} F</td>
+    </tr>`;}).join('')}
+    </tbody></table>` : '';
+
+  const form = (peut && !clos) ? `
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:6px;align-items:end;margin-top:8px">
+      <div class="fr" style="margin:0"><label>Frais</label>
+        <input id="af_lib" type="text" placeholder="Dédouanement, transport…"></div>
+      <div class="fr" style="margin:0"><label>Montant</label>
+        <input id="af_montant" type="number" min="0" step="1"></div>
+      <div class="fr" style="margin:0"><label>Date</label>
+        <input id="af_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <button class="btn btn-g btn-sm" onclick="ajouterFraisAchat('${a.id}')">+ Ajouter</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--textm);margin-top:4px">
+      Saisis le frais le jour où tu le <b>paies</b>. Il renchérit le kilo pour les
+      prochains lots — <b>les lots déjà produits gardent leur coût</b>.
+    </div>` : '';
+
+  const cloture = !peut ? '' : (clos
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11.5px">
+         <span style="color:var(--green);font-weight:700">🔒 Clôturé le ${String(a.cloture_le).slice(0,10)}${a.cloture_par_nom?' par '+a.cloture_par_nom:''}</span>
+         <button class="btn btn-out btn-sm" onclick="rouvrirAchatFrais('${a.id}')">Rouvrir</button></div>`
+    : `<div style="margin-top:8px"><button class="btn btn-out btn-sm" onclick="cloturerAchatFrais('${a.id}')">🔒 Clôturer — plus aucun frais</button>
+         <span style="font-size:10.5px;color:var(--textm);margin-left:6px">fige le coût de cet achat</span></div>`);
+
+  return `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+    <div style="font-size:11px;font-weight:700;color:var(--g6);margin-bottom:6px">💸 Frais annexes — dédouanement, transport</div>
+    ${liste}${detail}${form}${cloture}
+  </div>`;
+}
+
+async function ajouterFraisAchat(achatId){
+  const lib=(document.getElementById('af_lib')||{}).value||'';
+  const mt=(document.getElementById('af_montant')||{}).value||0;
+  const dt=(document.getElementById('af_date')||{}).value||'';
+  const r=await achatFraisAjouter(achatId, lib, mt, dt, null);
+  if(r.error){ notify(r.error,'r'); return; }
+  // Le coût réel se recalcule, et on DIT ce que ça ne change pas.
+  const app=await achatAppliquerCoutReel(achatId);
+  let msg='Frais ajouté ✓';
+  if(app && app.calc && app.calc.coef>0) msg+=' · coût réel +'+(Math.round(app.calc.coef*1000)/10)+' %';
+  try{
+    const{data:st}=await SB.from('gp_stock_mp').select('date').eq('achat_id',achatId)
+      .eq('admin_id',GP_ADMIN_ID).order('date').limit(1);
+    const n=(st&&st[0])?await achatLotsDepuis(st[0].date):0;
+    if(n>0) msg+=' — '+n+' lot(s) déjà produits depuis l’entrée en stock gardent leur coût';
+  }catch(_){}
+  notify(msg,'gold');
+  await voirDetailAchat(achatId);
+}
+
+async function supprimerFraisAchat(fraisId, achatId){
+  if(!confirm('Retirer ce frais ? Le coût réel sera recalculé.')) return;
+  try{
+    const{error}=await SB.from('gp_achats_frais').delete().eq('id',fraisId).eq('admin_id',GP_ADMIN_ID);
+    if(error) throw error;
+  }catch(e){ notify('Suppression impossible : '+((e&&e.message)||e),'r'); return; }
+  await achatAppliquerCoutReel(achatId);
+  notify('Frais retiré ✓ · coût recalculé','gold');
+  await voirDetailAchat(achatId);
+}
+
+async function cloturerAchatFrais(achatId){
+  if(!confirm('Clôturer cet achat ? Plus aucun frais ne pourra s’y rattacher et le coût sera figé.')) return;
+  const r=await achatCloturer(achatId);
+  if(r.error){ notify('Clôture impossible : '+r.error,'r'); return; }
+  notify('Achat clôturé ✓ — coût figé','gold');
+  await voirDetailAchat(achatId);
+}
+
+async function rouvrirAchatFrais(achatId){
+  const r=await achatRouvrir(achatId);
+  if(r.error){ notify('Réouverture impossible : '+r.error,'r'); return; }
+  notify('Achat rouvert — tu peux ajouter un frais','gold');
+  await voirDetailAchat(achatId);
+}
+
 // ── CONFIRMER ─────────────────────────────────────
 async function confirmerAchat(id){
   await SB.from('gp_achats').update({statut:'confirme'}).eq('id',id);
@@ -867,18 +984,31 @@ async function crediterStockDepuisAchat(achatId){
   if(!(deja && deja.length)){
     const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
     const L=lignes||[];
+    // LE STOCK VAUT CE QU'IL A COUTÉ, pas ce que le fournisseur a facturé.
+    // Le dédouanement et le transport sont dans le prix du kilo, sinon le prix
+    // de revient est sous-estimé et les marges paraissent meilleures qu'elles
+    // ne sont. Sans frais saisis, le coût réel égale le prix fournisseur :
+    // l'ancien comportement est intact.
+    let _cr = null;
+    try{
+      if(typeof achatFraisLire==='function' && typeof coutReelAchat==='function'){
+        const _f = await achatFraisLire(achatId);
+        if(_f) _cr = coutReelAchat(L, _f);
+      }
+    }catch(_){}
+    const _pu = l => (_cr && _cr.lignes[l.id] && _cr.lignes[l.id].prix_reel) || l.prix_unitaire;
     const stockEntrees=L.map(l=>({
       admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
       type:'entree',date:achat.date_commande,
       ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
       quantite:l.qte_recue||l.qte_commandee,
-      prix_unit:l.prix_unitaire,
+      prix_unit:_pu(l),
       ref:'Achat '+achat.ref,note:'Entrée stock validée'
     }));
     if(stockEntrees.length){ const{error}=await SB.from('gp_stock_mp').insert(stockEntrees); if(error) throw error; }
     for(const l of L){
       if(l.ingredient_id){
-        await majPrixMP(l.ingredient_id, l.prix_unitaire);
+        await majPrixMP(l.ingredient_id, _pu(l));
       }
     }
   }
@@ -897,6 +1027,8 @@ async function voirDetailAchat(id){
   const{data:paiements}=await SB.from('gp_achats_paiements').select('*').eq('achat_id',id).order('date_paiement');
   if(!a)return;
   const L=lignes||[];const P=paiements||[];
+  const F=(typeof achatFraisLire==='function') ? await achatFraisLire(id) : [];
+  const CR=(typeof coutReelAchat==='function') ? coutReelAchat(L, F||[]) : null;
   const modal=document.getElementById('modal-detail-achat');
   document.getElementById('detail-achat-content').innerHTML=`
     <div style="margin-bottom:12px">
@@ -930,6 +1062,7 @@ async function voirDetailAchat(id){
       <tr style="font-weight:700"><td colspan="3">TOTAL PAYÉ</td><td class="num" style="color:var(--green)">${fmt(a.montant_paye)} F</td></tr>
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement enregistré.</div>'}
+    ${_achatBlocFrais(a, L, F, CR)}
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
     ${a.note_daf?`<div style="font-size:11px"><strong>Note DAF :</strong> ${a.note_daf}</div>`:''}
