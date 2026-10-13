@@ -116,8 +116,90 @@ function rebuildLotCompo(){
         prix: ingData?.prix_actuel||0
       });
     });
+    _ajouterAromeAuLot(qte);
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ARÔME DE LA FOURNÉE
+// Un blend se décide seau en main, pas dans la recette : la même formule peut
+// sortir sans arôme, avec le A ou avec le B. Dupliquer la formule pour ça
+// donnerait deux recettes à maintenir et deux occasions de diverger.
+// ══════════════════════════════════════════════════════════════════
+const AROME_PCT = 0.2;          // 2 kg par tonne — la dose du blend
+const AROME_MIN_PESABLE = 500;  // en grammes : en dessous, on ne prépare pas le blend à ce format
+
+// Les arômes disponibles = les fiches MP dont le nom contient « blend ».
+// Règle volontairement explicite : l'éleveur contrôle la liste en nommant ses
+// fiches, sans qu'on ait à inventer une catégorie qu'il faudrait maintenir.
+function aromesDisponibles(){
+  return (GP_INGREDIENTS || []).filter(i => /blend/i.test(i.nom || ''))
+    .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+}
+
+function aromeChoisi(){
+  const el = document.querySelector('input[name="lot_arome"]:checked');
+  const id = el ? el.value : '';
+  return id ? (GP_INGREDIENTS || []).find(i => i.id === id) || null : null;
+}
+
+// Ajoute la ligne d'arôme au lot et RETIRE la même quantité à la matière la
+// plus abondante : sans cette contrepartie, le lot pèserait plus que la
+// quantité lancée et toutes les autres matières seraient diluées d'autant.
+function _ajouterAromeAuLot(qte){
+  const ar = aromeChoisi();
+  if(!ar || !(qte > 0)) return;
+  if(LOT_COMPO.some(c => c.id === ar.id)) return;   // déjà dans la formule : on n'ajoute pas deux fois
+  const kg = Math.round((AROME_PCT / 100) * qte * 100) / 100;
+  if(!(kg > 0)) return;
+  // La plus abondante encaisse : c'est celle dont le retrait change le moins.
+  let iMax = -1, max = 0;
+  LOT_COMPO.forEach((c, i) => { if(Number(c.kg || 0) > max){ max = Number(c.kg); iMax = i; } });
+  if(iMax >= 0 && max > kg){
+    LOT_COMPO[iMax].kg = Math.round((max - kg) * 100) / 100;
+    LOT_COMPO[iMax].cedeAuArome = kg;
+  }
+  LOT_COMPO.push({ id: ar.id, nom: ar.nom, nomFormule: ar.nom,
+                   kg, prix: ar.prix_actuel || 0, estArome: true });
+}
+
+// Les boutons de choix. Reconstruits à chaque rendu : le catalogue peut bouger.
+function renderAromeChoix(){
+  const row = document.getElementById('lot-arome-row');
+  const zone = document.getElementById('lot-arome-choix');
+  if(!row || !zone) return;
+  const l = aromesDisponibles();
+  if(!l.length){ row.style.display = 'none'; return; }
+  const dejaId = (document.querySelector('input[name="lot_arome"]:checked') || {}).value || '';
+  row.style.display = 'block';
+  const bouton = (id, lib) => `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px">
+    <input type="radio" name="lot_arome" value="${id}" ${dejaId === id ? 'checked' : ''} onchange="previewLot()"> ${lib}</label>`;
+  zone.innerHTML = bouton('', 'Aucun') + l.map(i => bouton(i.id, i.nom)).join('');
+  if(!dejaId){ const a = zone.querySelector('input[value=""]'); if(a) a.checked = true; }
+}
+
+// Ce que l'arôme demande POUR CETTE FOURNÉE. La consigne 📋 de la fiche, elle,
+// est écrite pour une quantité fixe : à 100 kg d'aliment il faudrait diviser
+// ses grammages de tête, et 3,6 g d'origan ne se pèsent pas. On le dit.
+function renderAromeInfo(){
+  const z = document.getElementById('lot-arome-info');
+  if(!z) return;
+  const ar = aromeChoisi();
+  const ligne = LOT_COMPO.find(c => c.estArome);
+  if(!ar || !ligne){ z.innerHTML = ''; return; }
+  const g = Math.round(Number(ligne.kg || 0) * 1000);
+  const cede = LOT_COMPO.find(c => c.cedeAuArome);
+  const trop = g > 0 && g < AROME_MIN_PESABLE;
+  z.innerHTML = `<div style="margin-top:6px;font-size:11px;line-height:1.55;background:rgba(232,197,71,.10);
+    border:1px solid rgba(232,197,71,.35);border-radius:8px;padding:8px 10px">
+    <div><b>${esc_(ar.nom)}</b> — il en faut <b>${g.toLocaleString('fr-FR')} g</b> pour cette fournée.</div>
+    ${cede ? `<div style="color:var(--textm);font-size:10px;margin-top:3px">${esc_(cede.nom)} cède ${Math.round(cede.cedeAuArome * 1000).toLocaleString('fr-FR')} g — le total de la fournée ne bouge pas.</div>` : ''}
+    ${trop ? `<div style="color:var(--gold);margin-top:4px">⚠️ Trop peu pour préparer le blend à ce format : prépare-en au moins 1 kg d'un coup et prélève les ${g} g dessus. Les grammages de la consigne 📋 ne se pèsent pas à cette échelle.</div>` : ''}
+  </div>`;
+}
+
+function esc_(s){ return String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // True si une MP de la composition dépasse le stock disponible.
 function lotARupture(){
@@ -159,6 +241,8 @@ function renderLotMP(){
     // Consignes des MP du lot (blend à diluer, prémix à peser) : elles servent
     // ici, seau en main, pas seulement sur la fiche.
     + ((typeof notesLotHtml==='function') ? notesLotHtml(LOT_COMPO) : '');
+  renderAromeChoix();
+  renderAromeInfo();
   if(rupt){
     if(nbOrphelines>0){
       rupt.style.display='block';
@@ -505,7 +589,12 @@ async function saveLot(){
   const fData=getFormule(nom);
   const avecTrans=document.getElementById('lot_avec_trans')?.checked;
   const transport=avecTrans?(_formuleCoûts.trans||fData?.cout_transport_lot||0):0;
-  const obs=document.getElementById('lot_obs').value.trim();
+  let obs=document.getElementById('lot_obs').value.trim();
+  // La TRACE de l'arôme. Sans elle, dans trois mois plus personne ne saura
+  // quelle fournée portait le A et laquelle portait le B — et l'essai de
+  // préférence ne voudra plus rien dire.
+  const _ar=(typeof aromeChoisi==='function')?aromeChoisi():null;
+  if(_ar) obs=(obs?obs+' · ':'')+`Arôme : ${_ar.nom} (${AROME_PCT} %)`;
   const pv=GP_POINT_VENTE||'';
   const err=document.getElementById('lot_err');
   if(!nom||!date||!qte){err.textContent='Formule, date et quantité requis.';return;}

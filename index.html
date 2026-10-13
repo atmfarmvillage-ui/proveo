@@ -281,6 +281,13 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <div class="fg2">
         <div class="fr"><label>Quantité lancée (kg)</label><input type="number" id="lot_qte" placeholder="1000" oninput="previewLot()"></div>
       </div>
+      <!-- Arôme : un choix de FOURNÉE, pas de formule. Masqué tant qu'aucune
+           fiche « BLEND » n'existe au catalogue — rien ne change pour personne. -->
+      <div class="fr" id="lot-arome-row" style="display:none;margin-bottom:8px">
+        <label>🎯 Arôme de cette fournée</label>
+        <div id="lot-arome-choix" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+        <div id="lot-arome-info"></div>
+      </div>
       <div style="font-size:10px;color:var(--textm);margin-bottom:8px">ℹ️ Les <strong>sacs obtenus</strong> se saisissent <strong>après</strong> la production, depuis la liste des lots ci-dessous (bouton 📦). C'est là que le stock est crédité et la perte calculée.</div>
       <!-- Coûts automatiques depuis la formule -->
       <div id="lot-couts-auto" style="display:none;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.2);border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">
@@ -3684,7 +3691,7 @@ try{
 <script src="js/ajustements.js?v=1.1.0"></script>
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
-<script src="js/production.js?v=2.35.0"></script>
+<script src="js/production.js?v=2.36.0"></script>
 <script src="js/ventes.js?v=2.37.0"></script>
 <script src="js/idempotence.js?v=1.0.0"></script>
 <script src="js/produits_ferme.js?v=1.0.0"></script>
