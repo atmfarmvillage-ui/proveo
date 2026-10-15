@@ -63,7 +63,7 @@ function showSalTab(name){
     if(btn) btn.classList.toggle('active', t===name);
   });
   if(name==='ouvriers') renderOuvriers();
-  else if(name==='pointage') renderPointage();
+  else if(name==='pointage'){ renderPointage(); if(typeof renderCamPointage==='function') renderCamPointage(); }   // 📹 propositions des caméras MIGNA (D5)
   else if(name==='virement') renderApercuVirement();
   else if(name==='bulletins' && typeof renderSalaires==='function') renderSalaires();
 }

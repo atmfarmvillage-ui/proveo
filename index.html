@@ -2806,10 +2806,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div id="saltab-pointage" style="display:none">
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
-        <div><label class="lbl">Jour</label><input type="date" id="point-date" onchange="renderPointage()" style="width:auto"></div>
+        <div><label class="lbl">Jour</label><input type="date" id="point-date" onchange="renderPointage();if(typeof renderCamPointage==='function')renderCamPointage()" style="width:auto"></div>
         <div style="font-size:11px;color:var(--textm);flex:1;min-width:200px">Pointez chaque ouvrier qui vient : les retards et absences alimentent automatiquement les retranchements du bulletin.</div>
       </div>
     </div>
+    <div id="cam-pointage"></div>
     <div class="card">
       <div class="card-title"><div class="ct-left"><span>🕐 Pointage du jour</span></div></div>
       <div id="pointage-liste"></div>
@@ -3744,7 +3745,8 @@ try{
 <script src="js/nutrition.js?v=2.32.0"></script>
 <script src="js/prixvente.js?v=1.1.0"></script>
 <script src="js/maj.js?v=1.0.0"></script>
-<script src="js/rh.js?v=2.30.0"></script>
+<script src="js/rh.js?v=2.30.1"></script>
+<script src="js/cameras-pointage.js?v=1.0.0"></script>
 <script src="js/dossier.js?v=2.26.1"></script>
 
 <script>
