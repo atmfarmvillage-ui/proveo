@@ -2251,9 +2251,9 @@ async function renderVentes(){
         ${v.statut_paiement!=='paye'?`<button class="btn btn-g btn-sm" onclick="ouvrirPaiementVente('${v.id}')" title="Encaisser un paiement" style="padding:4px 7px">💳</button>`:''}
         <button class="btn btn-out btn-sm" onclick="envoyerWAVente('${v.id}')" title="WhatsApp" style="color:#25D366;border-color:rgba(37,211,102,.3);padding:4px 7px">📲</button>
         <button class="btn btn-print btn-sm" onclick="imprimerVente('${encodeURIComponent(JSON.stringify(v))}')">🖨️</button>
-        ${GP_ROLE==='admin'?`
-          <button class="btn btn-out btn-sm" onclick="ouvrirModifierVente('${v.id}')" title="Modifier" style="padding:4px 7px">✏️</button>
-          <button class="btn btn-red btn-sm" onclick="supprimerVente('${v.id}')" style="padding:4px 7px">✕</button>
+        ${(typeof canModify==='function' ? canModify(v) : GP_ROLE==='admin')?`
+          <button class="btn btn-out btn-sm" onclick="ouvrirModifierVente('${v.id}')" title="${GP_ROLE==='admin'?'Modifier':'Modifier — pendant 24 h après ta saisie'}" style="padding:4px 7px">✏️</button>
+          <button class="btn btn-red btn-sm" onclick="supprimerVente('${v.id}')" title="${GP_ROLE==='admin'?'Supprimer':'Supprimer — pendant 24 h après ta saisie'}" style="padding:4px 7px">✕</button>
         `:''}
       </td>
     </tr>`).join('')}</tbody></table>`:`<div style="color:var(--textm);font-size:12px;padding:10px">Aucune vente ${r.label}.</div>`;
@@ -2368,7 +2368,7 @@ async function renderDep(){
       <td>${d.description}<div style="margin-top:3px">${typeof pvBadgeHtml==='function'?pvBadgeHtml(d.point_vente||'Production'):('📍 '+(d.point_vente||'Production'))}</div></td>
       <td style="color:var(--textm);font-size:10px">${d.beneficiaire||'—'}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--red)">${fmt(d.montant)} F</td>`:''}
-      <td>${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')">✕</button>`:''}</td>
+      <td>${(typeof canModify==='function' ? canModify(d) : GP_ROLE==='admin')?`<button class="btn btn-red btn-sm" onclick="deleteDep('${d.id}')" title="${GP_ROLE==='admin'?'Supprimer':'Supprimer — pendant 24 h après ta saisie'}">✕</button>`:''}</td>
     </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucune dépense.</div>'}</div>`;
 
   // LE MENU DES CAISSES SE REMPLIT ICI, depuis l'écran lui-même.
@@ -2426,9 +2426,13 @@ async function saveDep(){
 }
 
 async function deleteDep(id){
-  if(GP_ROLE!=='admin'){ notify('Suppression réservée à l\'administrateur','r'); return; }
   const{data:d}=await SB.from('gp_depenses').select('*').eq('id',id).maybeSingle();
   if(!d){ notify('Dépense introuvable','r'); return; }
+  // Un bouton caché n'est pas une permission : on reverifie ici.
+  if(typeof canModify==='function' && !canModify(d)){
+    notify('Trop tard — une dépense ne se supprime que dans les 24 h qui suivent ta saisie. Demande à l’admin.','r');
+    return;
+  }
   if(!confirm(`Supprimer la dépense « ${d.description||''} » (${fmt(d.montant)} F) ?\n\n💰 Si elle avait sorti du cash, l'argent sera rendu à la caisse.`))return;
   // Rendre l'argent : retrouver et supprimer le mouvement caisse lié (sortie 'depense')
   try{
@@ -3163,11 +3167,17 @@ function onConditionnementChange(){
 // ── SUPPRESSION VENTE — revert complet + soft delete + audit log ──
 // Restaure stock, caisse, fidélité, parrainage. Marque deleted_at (récupérable via Corbeille).
 async function supprimerVente(id){
-  if(GP_ROLE !== 'admin' && !GP_EST_GERANT){ notify('Suppression réservée à l\'admin','r'); return; }
-
   // 1. Récupérer tous les éléments liés à la vente
   const {data:vente} = await SB.from('gp_ventes').select('*').eq('id',id).eq('admin_id',GP_ADMIN_ID).maybeSingle();
   if(!vente){ notify('Vente introuvable','r'); return; }
+  // La secrétaire peut supprimer SA vente dans les 24 h qui suivent sa saisie.
+  // On lit la vente AVANT de trancher : la règle dépend de son auteur et de
+  // l'heure d'enregistrement. Même règle que le bouton, revérifiée ici —
+  // un bouton caché n'est pas une permission.
+  if(!(typeof canModify==='function' ? canModify(vente) : (GP_ROLE==='admin'||GP_EST_GERANT))){
+    notify('Trop tard — une vente ne se supprime que dans les 24 h qui suivent ta saisie. Demande à l’admin.','r');
+    return;
+  }
   if(vente.deleted_at){ notify('Cette vente est déjà dans la Corbeille','r'); return; }
 
   const {data:lignes} = await SB.from('gp_ventes_lignes').select('*').eq('vente_id',id);
@@ -3381,6 +3391,10 @@ function confirmDeleteVenteModal(vente, detailHtml){
 async function ouvrirModifierVente(id){
   const{data:v}=await SB.from('gp_ventes').select('*').eq('id',id).maybeSingle();
   if(!v)return;
+  if(typeof canModify==='function' && !canModify(v)){
+    notify('Trop tard — une vente ne se modifie que dans les 24 h qui suivent ta saisie. Demande à l’admin.','r');
+    return;
+  }
   const modal=document.getElementById('modal-modifier-vente');
   if(!modal)return;
   document.getElementById('mv-id').value=id;
