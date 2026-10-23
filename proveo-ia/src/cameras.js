@@ -71,6 +71,29 @@ export async function routeCameras(request, env, url, deps) {
       }
       return json({ ok: true, jour, gardiens });
     }
+    // Lot E1 : zones des caméras reliées (pour les rattacher à un point de vente) et entrées d'un jour.
+    if (url.pathname === '/cameras/zones') {
+      const lieux = (await env.CAMERAS.lieuxFerme(entreprise)) || [], gardiens = [];
+      for (const l of lieux) {
+        if (!l.en_ligne) { gardiens.push({ g: l.g, lieu: l.lieu, en_ligne: false, cameras: [] }); continue; }
+        let r; try { r = await env.CAMERAS.demanderFerme(entreprise, l.g, { quoi: 'zones' }); } catch (e) { r = { ok: false, erreur: e.message }; }
+        gardiens.push({ g: l.g, lieu: l.lieu, en_ligne: true, cameras: (r && r.ok && r.cameras) || [], erreur: r && !r.ok ? r.erreur : undefined });
+      }
+      return json({ ok: true, gardiens });
+    }
+    if (url.pathname === '/cameras/entrees') {
+      const jour = /^\d{4}-\d\d-\d\d$/.test(String(c.date || '')) ? c.date : new Date().toISOString().slice(0, 10);
+      const debut = Date.parse(jour + 'T00:00:00Z'), fin = debut + 864e5;       // Togo = UTC
+      const lieux = (await env.CAMERAS.lieuxFerme(entreprise)) || [], entrees = [], erreurs = [];
+      for (const l of lieux) {
+        if (!l.en_ligne) { erreurs.push(`${l.lieu || 'Gardien'} : hors ligne`); continue; }
+        let r; try { r = await env.CAMERAS.demanderFerme(entreprise, l.g, { quoi: 'evenements', depuis: debut - 1 }); } catch (e) { r = { ok: false, erreur: e.message }; }
+        if (!r || !r.ok) { erreurs.push(`${l.lieu || 'Gardien'} : ${(r && r.erreur) || 'réponse illisible'}`); continue; }
+        // Seulement l'heure, la zone et « employé ou non » : ni nom, ni photo.
+        for (const e of r.evenements || []) if (e.type === 'personne' && e.t >= debut && e.t < fin) entrees.push({ t: e.t, cle: `${l.g}:${e.zid}`, employe: !!e.employe });
+      }
+      return json({ ok: true, jour, entrees, erreurs });
+    }
     if (url.pathname === '/cameras/delier') {
       const g = String(c.g || '');
       if (!/^[a-f0-9]{32}$/.test(g)) return json({ ok: false, erreur: 'Gardien invalide' }, 400);

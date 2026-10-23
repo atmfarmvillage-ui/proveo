@@ -594,7 +594,7 @@ var PAGE_RENDERERS = {
   veto:          function(){ if(typeof renderVeto==='function') renderVeto(); },
   ferme:         function(){ if(typeof renderProduitsFerme==='function') renderProduitsFerme(); },
   emballages:    function(){ if(typeof renderEmballages==='function') renderEmballages(); },
-  comparatif:    function(){ if(typeof renderComparatifPDV==='function') renderComparatifPDV(); },
+  comparatif:    function(){ if(typeof renderComparatifPDV==='function') renderComparatifPDV(); if(typeof renderFrequentation==='function') renderFrequentation(); },   // 📹 fréquentation (caméras MIGNA, E1)
   alertes:       function(){ if(typeof renderAlertes==='function') renderAlertes(); },
   reversements:  renderReversements,
   paiements_mp:  renderPaiementsMP,

@@ -19,7 +19,10 @@ const appels = [];
 const env = { SUPABASE_URL: 'https://sb.test', SUPABASE_ANON_KEY: 'anon', CAMERAS: {
   lier: async (code, f) => { appels.push(['lier', code, f.id]); return code === '482193' ? { ok: true, g: 'a'.repeat(32), lieu: 'Provenderie', en_ligne: true } : { ok: false, erreur: 'Code inconnu ou expiré' }; },
   lieuxFerme: async (f) => [{ g: 'a'.repeat(32), lieu: 'Provenderie', en_ligne: true }, { g: 'b'.repeat(32), lieu: 'Magasin', en_ligne: false }],
-  demanderFerme: async (f, g, d) => { appels.push(['demander', f, g, d.quoi, d.jour]); return { ok: true, actif: true, embauche: '07:30', tolerance: 10, lignes: [{ id: 'k', nom: 'Kossi', arrivee: 1, depart: null, passages: 1, statut: 'present' }] }; },
+  demanderFerme: async (f, g, d) => { appels.push(['demander', f, g, d.quoi, d.jour]);
+    if (d.quoi === 'zones') return { ok: true, cameras: [{ id: 'c1', nom: 'Entrée', zones: [{ id: 'z1', nom: 'Porte' }] }] };
+    if (d.quoi === 'evenements') { const j = Date.parse('2026-10-15T00:00:00Z'); return { ok: true, evenements: [{ t: j - 5000, zid: 'z1', type: 'personne' }, { t: j + 3600e3, zid: 'z1', type: 'personne', nom: 'secret' }, { t: j + 7200e3, zid: 'z1', type: 'personne', employe: true }, { t: j + 9000e3, zid: 'z1', type: 'vehicule_rentre' }] }; }
+    return { ok: true, actif: true, embauche: '07:30', tolerance: 10, lignes: [{ id: 'k', nom: 'Kossi', arrivee: 1, depart: null, passages: 1, statut: 'present' }] }; },
   delierFerme: async () => ({ ok: true }),
 } };
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s });
@@ -40,5 +43,11 @@ r = await appeler('/cameras/pointage', 'owner', { date: '2026-10-15' });
 ok(r.ok && r.gardiens.length === 2 && r.gardiens[0].lignes[0].nom === 'Kossi' && r.gardiens[1].erreur === 'Gardien hors ligne' && appels.some((a) => a[0] === 'demander' && a[3] === 'pointage' && a[4] === '2026-10-15'), 'pointage : propositions du Gardien en ligne ; l\'autre signalé hors ligne');
 r = await appeler('/cameras/delier', 'patron', { g: 'a'.repeat(32) });
 ok(r.ok && ecrits.some((e) => e.m === 'DELETE' && e.q.includes('gardien=eq.' + 'a'.repeat(32))), 'délier : relais + ligne effacée');
+r = await appeler('/cameras/zones', 'patron');
+ok(r.ok && r.gardiens[0].cameras[0].zones[0].nom === 'Porte' && r.gardiens[1].en_ligne === false, 'zones des caméras reliées (Gardien hors ligne signalé)');
+r = await appeler('/cameras/entrees', 'patron', { date: '2026-10-15' });
+ok(r.ok && r.entrees.length === 2 && r.entrees[0].cle === 'a'.repeat(32) + ':z1' && r.entrees[1].employe === true && !JSON.stringify(r).includes('secret') && r.erreurs.length === 1,
+  'entrées du jour seulement (veille et véhicule exclus), employé marqué, aucun autre champ ne sort');
+ok((await appeler('/cameras/entrees', 'vendeur')).s === 403, 'fréquentation réservée au responsable');
 console.log(echecs ? `${echecs} échec(s)` : 'Tout est bon.');
 process.exit(echecs ? 1 : 0);

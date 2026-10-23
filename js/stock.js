@@ -307,7 +307,7 @@ async function renderMouvements(){
   if(filtMois)q=q.gte('date',filtMois+'-01').lte('date',filtMoisfinMois(mois));
   const{data}=await q;
   const M=data||[];
-  document.getElementById('mouvements-liste').innerHTML=M.length?`<table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Prix/kg</th>':''}<th>Réf/Lot</th></tr></thead><tbody>
+  document.getElementById('mouvements-liste').innerHTML=M.length?`<table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Prix/kg</th>':''}<th>Réf/Lot</th><th></th></tr></thead><tbody>
     ${M.map(m=>`<tr>
       <td style="font-family:'DM Mono',monospace;font-size:10px">${m.date}</td>
       <td><span class="badge ${m.type==='entree'?'bdg-g':m.type==='sortie_production'?'bdg-b':'bdg-r'}">${m.type==='entree'?'📥 Entrée':m.type==='sortie_production'?'🏭 Production':'📤 Sortie'}</span></td>
@@ -315,9 +315,44 @@ async function renderMouvements(){
       <td class="num" style="color:${m.type==='entree'?'var(--green)':'var(--red)'}">${m.type==='entree'?'+':'−'}${fmtKg(m.quantite)}</td>
       ${GP_ROLE==='admin'?`<td class="num" style="color:var(--textm)">${fmt(m.prix_unit)} F</td>`:''}
       <td style="font-size:10px;color:var(--textm)">${m.ref||m.note||'—'}</td>
+      <td class="num">${(m.type==='entree' && !String(m.note||'').startsWith('Annulation') && (typeof canModify==='function' ? canModify(m) : GP_ROLE==='admin'))
+        ? `<button class="btn btn-out btn-sm" onclick="annulerEntreeStock('${m.id}')" title="${GP_ROLE==='admin'?'Annuler cette entrée':'Annuler — pendant 24 h après ta saisie'}" style="padding:3px 7px;color:var(--red);border-color:rgba(239,68,68,.35)">↩</button>`
+        : ''}</td>
     </tr>`).join('')}
     </tbody></table>`:'<div style="color:var(--textm);font-size:12px;padding:10px">Aucun mouvement.</div>';
 }
+// ── ANNULER UNE ENTREE DE STOCK ────────────────────────────
+// ON N'EFFACE PAS, ON CONTRE-PASSE. Le mouvement d'origine reste visible et
+// une SORTIE de même quantité vient l'annuler. Trois mois plus tard, on
+// comprend encore ce qui s'est passé — ce qui n'est pas le cas d'une ligne
+// qui a disparu.
+async function annulerEntreeStock(id){
+  const{data:m,error}=await SB.from('gp_stock_mp').select('*')
+    .eq('id',id).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+  if(error || !m){ notify('Mouvement introuvable','r'); return; }
+  if(m.type!=='entree'){ notify('Seule une entrée s’annule ici.','r'); return; }
+  // Même règle que le bouton, revérifiée : un bouton caché n'est pas une permission.
+  if(!(typeof canModify==='function' ? canModify(m) : (GP_ROLE==='admin'||GP_EST_GERANT))){
+    notify('Trop tard — une entrée ne s’annule que dans les 24 h qui suivent ta saisie. Demande à l’admin.','r');
+    return;
+  }
+  const qui=(typeof GP_USER!=='undefined' && GP_USER && GP_USER.email) ? String(GP_USER.email).split('@')[0] : 'inconnu';
+  if(!confirm(`Annuler cette entrée de ${fmtKg(m.quantite)} kg de ${m.ingredient_nom} ?\n\n`
+    + `La ligne d’origine RESTE visible et une sortie de même quantité viendra l’annuler.`)) return;
+  const{error:e2}=await SB.from('gp_stock_mp').insert({
+    admin_id:GP_ADMIN_ID, saisi_par:(typeof GP_USER!=='undefined'&&GP_USER)?GP_USER.id:null,
+    type:'sortie', date:new Date().toISOString().slice(0,10),
+    ingredient_id:m.ingredient_id, ingredient_nom:m.ingredient_nom,
+    quantite:m.quantite, prix_unit:m.prix_unit,
+    ref:m.ref||null,
+    note:`Annulation de l’entrée du ${m.date} par ${qui}`,
+  });
+  if(e2){ notify('Annulation impossible : '+e2.message,'r'); return; }
+  notify(`Entrée annulée — −${fmtKg(m.quantite)} kg ✓ (la ligne d’origine reste visible)`,'gold');
+  try{ await renderMouvements(); }catch(_){}
+  try{ await renderStockNiveaux(); }catch(_){}
+}
+
 function onMPChange(){
   // Géré par selectionnerMPStock() désormais
 }
