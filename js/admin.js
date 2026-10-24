@@ -372,7 +372,10 @@ function _renderMFIngredients(){
       ? `<div style="grid-column:1/-1;font-size:9px;color:var(--red);margin-top:3px">⚠ ${violation.type==='max'?'Maximum':'Minimum'} : ${violation.limite}%${violation.note?' — '+violation.note:''}</div>`
       : '';
     return `<div style="display:grid;grid-template-columns:1fr 80px 80px 28px;gap:6px;align-items:center;padding:6px 8px;background:${bg};border:1px solid ${border};border-radius:6px;margin-bottom:4px">
-      <div style="font-size:11px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ing.nom}">${ing.nom}</div>
+      <div style="min-width:0">
+        <div style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ing.nom}">${ing.nom}</div>
+        <div style="font-size:9.5px;color:${prix>0?'var(--textm)':'var(--gold)'};margin-top:1px">${prix>0?fmt(prix)+' F/kg':'⚠ prix à renseigner'}</div>
+      </div>
       <input type="number" step="0.01" value="${ing.pct}" onchange="modifierPctIngrFormule(${i}, this.value)"
         style="font-size:11px;padding:3px 5px;text-align:right;${violation?'color:var(--red);font-weight:700':''}">
       <div style="font-size:10px;color:var(--textm);text-align:right">${fmt(Math.round(ing.pct*10*prix))} F/t</div>
