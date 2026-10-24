@@ -129,11 +129,33 @@ function rebuildLotCompo(){
 const AROME_PCT = 0.2;          // 2 kg par tonne — la dose du blend
 const AROME_MIN_PESABLE = 500;  // en grammes : en dessous, on ne prépare pas le blend à ce format
 
-// Les arômes disponibles = les fiches MP dont le nom contient « blend ».
+// Les arômes disponibles = les fiches MP dont le nom contient « blend »,
+// ET qui concernent l'espèce de la formule lancée.
 // Règle volontairement explicite : l'éleveur contrôle la liste en nommant ses
 // fiches, sans qu'on ait à inventer une catégorie qu'il faudrait maintenir.
+//
+// L'ESPÈCE SE LIT DANS LE NOM, comme le mot « blend » lui-même :
+//   « SADARI BLEND lapin B » → proposé UNIQUEMENT sur une formule lapin ;
+//   « SADARI BLEND maison »   → aucune espèce nommée, donc proposé partout.
+// Sans ça, une fournée de pondeuse se voyait proposer un arôme lapin — et
+// cocher la case y aurait mis 2 kg de blend à la tonne sans que rien ne le
+// signale avant le sac.
+function _aromeEspeceDuNom(nom){
+  const n = String(nom || '').toLowerCase();
+  return Object.keys(typeof ESPECE_ICON !== 'undefined' ? ESPECE_ICON : {})
+    .find(e => n.includes(e)) || null;
+}
+
 function aromesDisponibles(){
-  return (GP_INGREDIENTS || []).filter(i => /blend/i.test(i.nom || ''))
+  const f = (typeof getFormule === 'function')
+    ? getFormule(document.getElementById('lot_formule')?.value) : null;
+  const esp = f && f.espece ? String(f.espece).toLowerCase() : null;
+  return (GP_INGREDIENTS || [])
+    .filter(i => /blend/i.test(i.nom || ''))
+    .filter(i => {
+      const e = _aromeEspeceDuNom(i.nom);
+      return !e || !esp || e === esp;   // sans espèce nommée : valable partout
+    })
     .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
 }
 
