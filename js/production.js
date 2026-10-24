@@ -135,15 +135,20 @@ const AROME_MIN_PESABLE = 500;  // en grammes : en dessous, on ne prépare pas l
 // fiches, sans qu'on ait à inventer une catégorie qu'il faudrait maintenir.
 //
 // L'ESPÈCE SE LIT DANS LE NOM, comme le mot « blend » lui-même :
-//   « SADARI BLEND lapin B » → proposé UNIQUEMENT sur une formule lapin ;
-//   « SADARI BLEND maison »   → aucune espèce nommée, donc proposé partout.
+//   « SADARI BLEND lapin B »      → uniquement sur une formule lapin ;
+//   « SADARI BLEND pondeuse chair » → sur les deux, avec UN SEUL stock ;
+//   « SADARI BLEND maison »         → aucune espèce nommée, proposé partout.
+// On collecte TOUTES les espèces du nom, pas la première : un même seau peut
+// servir la pondeuse, la chair et le goliath. Créer une fiche par espèce
+// donnerait au même produit physique plusieurs stocks, dont aucun ne serait
+// vrai.
 // Sans ça, une fournée de pondeuse se voyait proposer un arôme lapin — et
 // cocher la case y aurait mis 2 kg de blend à la tonne sans que rien ne le
 // signale avant le sac.
-function _aromeEspeceDuNom(nom){
+function _aromeEspecesDuNom(nom){
   const n = String(nom || '').toLowerCase();
   return Object.keys(typeof ESPECE_ICON !== 'undefined' ? ESPECE_ICON : {})
-    .find(e => n.includes(e)) || null;
+    .filter(e => n.includes(e));
 }
 
 function aromesDisponibles(){
@@ -153,8 +158,8 @@ function aromesDisponibles(){
   return (GP_INGREDIENTS || [])
     .filter(i => /blend/i.test(i.nom || ''))
     .filter(i => {
-      const e = _aromeEspeceDuNom(i.nom);
-      return !e || !esp || e === esp;   // sans espèce nommée : valable partout
+      const es = _aromeEspecesDuNom(i.nom);
+      return !es.length || !esp || es.includes(esp);   // aucune nommée : partout
     })
     .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
 }
