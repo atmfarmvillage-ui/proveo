@@ -825,7 +825,13 @@ function populateSelects(){
     const filtrerStock = id==='vt_formule' && typeof vtFiltrerStockActif==='function' && vtFiltrerStockActif();
     let nbOpt=0, corps='';
     Object.entries(groups).forEach(([esp,fs])=>{
-      const liste=(id==='vt_formule' && typeof vtFormulesPourVente==='function') ? vtFormulesPourVente(fs) : fs;
+      // PRODUCTION : seules les VRAIES formules. `getAllFormules()` ajoute les
+    // noms trouvés dans la grille de prix, qui n'ont aucune composition — on
+    // ne peut pas produire une recette qui n'existe pas. Elles restent
+    // proposées à la vente, où seul le nom compte. Le marqueur : une vraie
+    // formule vient de la base, donc elle a un `id`.
+    const liste=(id==='vt_formule' && typeof vtFormulesPourVente==='function') ? vtFormulesPourVente(fs)
+      : (id==='lot_formule' ? fs.filter(f=>f && f.id) : fs);
       if(!liste.length) return; // ne pas afficher d'optgroup vide
       corps+=`<optgroup label="${ESPECE_ICON[esp]||''} ${esp.charAt(0).toUpperCase()+esp.slice(1)}">`;
       liste.forEach(f=>{corps+=`<option value="${f.nom}">${id==='vt_formule'?vtFormuleLabel(f):f.nom}</option>`;nbOpt++;});
