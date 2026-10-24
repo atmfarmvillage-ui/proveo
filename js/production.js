@@ -501,7 +501,22 @@ function previewLot(){
 
   if(!f||!nom){
     if(coutZone)coutZone.style.display='none';
-    document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
+    // DIRE CE QUI MANQUE VRAIMENT. Annoncer « sélectionnez une formule » à
+    // quelqu'un qui vient d'en sélectionner une l'envoie chercher le problème
+    // au mauvais endroit — et tout ce qui suit (composition, consignes, case
+    // Arôme) reste invisible sans qu'il sache pourquoi.
+    document.getElementById('lot-preview').textContent = (nom && nom!=='__creer__')
+      ? `« ${nom} » n’a pas de composition : ce nom vient d’une ancienne grille de tarif, pas d’une formule active. Choisis-en une autre dans la liste.`
+      : 'Sélectionnez une formule et une quantité.';
+    document.getElementById('lot-mp-preview').style.display='none';
+    LOT_COMPO=[];
+    return;
+  }
+  // Une vraie formule, mais vide : ça aussi se dit.
+  if(!(Array.isArray(f.ingredients) && f.ingredients.length)){
+    if(coutZone)coutZone.style.display='none';
+    document.getElementById('lot-preview').textContent =
+      `« ${f.nom} » n’a aucune matière dans sa composition. Complète-la dans Formules & Prix avant de lancer un lot.`;
     document.getElementById('lot-mp-preview').style.display='none';
     LOT_COMPO=[];
     return;
@@ -519,7 +534,9 @@ function previewLot(){
   }
 
   if(!nom||!qte){
-    document.getElementById('lot-preview').textContent='Sélectionnez une formule et une quantité.';
+    document.getElementById('lot-preview').textContent = qte
+      ? 'Sélectionnez une formule.'
+      : 'Saisis la quantité à produire, en kg.';
     document.getElementById('lot-mp-preview').style.display='none';
     LOT_COMPO=[];
     return;
