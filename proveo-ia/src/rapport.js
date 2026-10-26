@@ -431,6 +431,69 @@ async function rapportClotureBilan(env, adminId) {
     texte: l.join('\n'),
   };
 }
+
+// ── Règlements d'impayés encaissés (relayé chaque heure) ──
+// Le DG veut savoir, à chaque paiement d'un impayé, qui a encaissé quoi et où.
+// KEPELA passe `depuis` = l'heure du dernier envoi réussi ; on rend tout ce qui a été
+// enregistré depuis, et `curseur` = l'instant de cette lecture, que KEPELA garde pour
+// la fois suivante. Ainsi un règlement n'est annoncé qu'une fois, et un envoi raté est
+// rejoué à l'heure suivante au lieu d'être perdu.
+async function rapportReglements(env, adminId, depuis) {
+  const curseur = new Date().toISOString();
+  const borne = (depuis && !isNaN(Date.parse(depuis))) ? new Date(depuis).toISOString()
+    : new Date(Date.now() - 3600e3).toISOString();
+  const regs = await sb(env, `gp_reglements_clients?admin_id=eq.${adminId}&deleted_at=is.null`
+    + `&created_at=gt.${encodeURIComponent(borne)}&created_at=lte.${encodeURIComponent(curseur)}`
+    + `&select=id,client_id,montant,mode,point_vente,created_by,created_at&order=created_at.asc`);
+  const base = { type: 'reglements', date: aujourdhui(), curseur, reglements: [] };
+  if (!regs.length) return { ...base, titre: 'Aucun règlement', texte: null };
+
+  const ids = [...new Set(regs.map(r => r.client_id).filter(Boolean))];
+  const [clients, membres, ventes] = await Promise.all([
+    ids.length ? sb(env, `gp_clients?id=in.(${ids.join(',')})&select=id,nom`).catch(() => []) : [],
+    sb(env, `gp_membres?admin_id=eq.${adminId}&select=user_id,nom,email`).catch(() => []),
+    ids.length ? sbTout(env, `gp_ventes?admin_id=eq.${adminId}&deleted_at=is.null&statut_paiement=neq.paye`
+      + `&client_id=in.(${ids.join(',')})&select=client_id,montant_total,montant_paye`).catch(() => []) : [],
+  ]);
+  const nomClient = Object.fromEntries((clients || []).map(c => [c.id, c.nom]));
+  const nomMembre = Object.fromEntries((membres || []).filter(m => m.user_id)
+    .map(m => [m.user_id, m.nom || String(m.email || '').split('@')[0]]));
+  const resteDu = {};
+  (ventes || []).forEach(v => {
+    resteDu[v.client_id] = (resteDu[v.client_id] || 0)
+      + Math.max(0, Number(v.montant_total || 0) - Number(v.montant_paye || 0));
+  });
+
+  const lignes = regs.map(r => ({
+    client: nomClient[r.client_id] || 'Client',
+    montant: Number(r.montant) || 0,
+    mode: r.mode || '—',
+    point_vente: r.point_vente || 'Production',
+    par: nomMembre[r.created_by] || 'l\'administration',
+    heure: String(r.created_at || '').slice(11, 16),
+    reste: resteDu[r.client_id] || 0,
+  }));
+  const total = lignes.reduce((t, l) => t + l.montant, 0);
+
+  const l = [`💰 *Règlement${lignes.length > 1 ? 's' : ''} d'impayé encaissé${lignes.length > 1 ? 's' : ''}*`, ''];
+  lignes.forEach(x => {
+    l.push(`• *${x.client}* : ${fmt(x.montant)} F (${x.mode})`);
+    l.push(`   ${x.point_vente} · par ${x.par}${x.heure ? ' à ' + x.heure : ''}`);
+    l.push(`   Reste dû : ${fmt(x.reste)} F`);
+  });
+  if (lignes.length > 1) { l.push(''); l.push(`Total encaissé : ${fmt(total)} F`); }
+
+  const d = lignes[lignes.length - 1];
+  return {
+    ...base,
+    reglements: lignes,
+    titre: `${lignes.length} règlement(s), ${fmt(total)} F`,
+    texte: l.join('\n'),
+    // Modèle Meta « reglement_encaisse » : [nb, total, client, montant, encaissé par]
+    parametres: [String(lignes.length), fmt(total), d.client, fmt(d.montant), `${d.par} (${d.point_vente})`],
+  };
+}
+
 // ══════════════════════════════════════════════════
 // POINT D'ACCÈS
 // ══════════════════════════════════════════════════
@@ -456,6 +519,7 @@ export async function handleRapport(request, env, url) {
     else if (type === 'impayes') corps = await rapportImpayes(env, adminId);
     else if (type === 'cloture_rappel') corps = await rapportClotureRappel(env, adminId);
     else if (type === 'cloture_bilan') corps = await rapportClotureBilan(env, adminId);
+    else if (type === 'reglements') corps = await rapportReglements(env, adminId, url.searchParams.get('depuis'));
     else corps = await rapportQuotidien(env, adminId);
 
     // L'entreprise fournit elle-même ses destinataires : KEPELA n'a pas à

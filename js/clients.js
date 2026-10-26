@@ -384,7 +384,7 @@ async function openClientDetail(id){
   const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):null;
 
   let _qDet=SB.from('gp_ventes')
-    .select('date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement,point_vente')
+    .select('id,date,formule_nom,qte_vendue,montant_total,montant_paye,statut_paiement,point_vente')
     .eq('admin_id',GP_ADMIN_ID).eq('client_id',id).is('deleted_at',null);
   if(typeof scopeQueryClientsPole==='function') _qDet=scopeQueryClientsPole(_qDet); // historique partagé dans le pôle central
   const{data:V}=await _qDet.order('date',{ascending:false}).limit(2000);
@@ -473,6 +473,25 @@ async function openClientDetail(id){
   // Le mois en cours s'ouvre seul : c'est celui qu'on vient consulter.
   const _moisCourantReleve = mKeys[0] || '';
   const releve=mKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Solde</th></tr></thead><tbody>${mKeys.map(ym=>{const m=byM[ym],mm=ym.split('-');const det=m.evts.slice().reverse().map(e=>`<tr style="background:var(--card2,#f5f5f9)"><td style="font-size:9px;padding-left:14px">${fmtDate?fmtDate(e.d):e.d}</td><td style="font-size:9px">${e.t==='a'?'🛒 ':'💰 '}${e.lib}${e.det?`<div style="font-size:8.5px;color:var(--textm);margin-top:1px">${e.det}</div>`:''}</td><td class="num" style="font-size:9px;color:${e.t==='a'?'#c0392b':'#0a8a4f'}">${e.t==='a'?'+':'−'}${fmt(e.mt)}</td><td class="num" style="font-size:9px;color:${e.solde>0?'#c0392b':'var(--textm)'}">${fmt(e.solde)}</td></tr>`).join('');return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')"><td style="font-size:10px" title="Cliquer pour voir le détail daté"><span id="mi-${ym}">${ym===_moisCourantReleve?'▾':'▸'}</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td><td class="num">${fmt(m.achete)} F</td><td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td><td class="num" style="color:${m.soldeFin>0?'#c0392b':'var(--textm)'}">${fmt(m.soldeFin)} F</td></tr><tr id="md-${ym}" style="display:${ym===_moisCourantReleve?'table-row':'none'}"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><thead><tr><th style="font-size:8px">Date</th><th style="font-size:8px">Opération</th><th class="num" style="font-size:8px">Montant</th><th class="num" style="font-size:8px">Solde</th></tr></thead><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune transaction.</div>';
+  // Vue partielle : ce point de vente encaisse des dettes de ventes qu'il ne peut pas
+  // lire (ventes de Production vues depuis Lomé Sanguéra). Le relevé complet serait
+  // faux (paiements sans les achats) : on montre la dette exacte, vente par vente.
+  let _releveHtml=releve, _titreReleve='📒 Relevé de compte', _acheteAff=fmt(totAchete||(s.totalCA)||c.total_achats||0), _resteAff=totReste;
+  try{
+    const _impP=await impayesPole(id);
+    const _vus=new Set(rows.map(r=>r.id));
+    if(_impP.some(x=>!_vus.has(x.id))){
+      const _du=x=>Math.max(0,Number(x.montant_total||0)-Number(x.montant_paye||0));
+      _resteAff=_impP.reduce((t,x)=>t+_du(x),0);
+      _acheteAff='—';
+      _titreReleve='🧾 Ventes impayées';
+      _releveHtml=`<div style="font-size:11px;background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.45);border-radius:8px;padding:7px 10px;margin-bottom:8px">
+        Une partie des achats de ce client a été faite à un autre point de vente : tu vois ses <b>ventes impayées</b>, et tu peux les encaisser. L'argent entre dans ta caisse.</div>
+        <table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Vendu à</th><th>Produit</th><th class="num">Total</th><th class="num">Reste dû</th></tr></thead><tbody>
+        ${_impP.slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(x=>`<tr><td style="font-size:10px">${fmtDate?fmtDate(x.date):x.date}</td><td style="font-size:10px">${x.point_vente||'Production'}</td><td style="font-size:10px">${x.formule_nom||'—'}</td><td class="num">${fmt(x.montant_total)} F</td><td class="num" style="color:#c0392b;font-weight:700">${fmt(_du(x))} F</td></tr>`).join('')}
+        </tbody></table>`;
+    }
+  }catch(e){ console.warn('[fiche client] dettes du pôle', e); }
   const telClean=c.telephone?String(c.telephone).replace(/\s/g,''):'';
   document.getElementById('cd-content').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
@@ -483,9 +502,9 @@ async function openClientDetail(id){
       <button class="btn btn-out btn-sm" onclick="openEditClient('${c.id}')">✏️ Modifier</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
-      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(totAchete||(s.totalCA)||c.total_achats||0)}</div><div class="econo-lbl">Acheté total (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:var(--gold)">${_acheteAff}</div><div class="econo-lbl">Acheté total (F)</div></div>
       <div class="econo-box"><div class="econo-val" style="color:#0a8a4f">${fmt(totEncaisse)}</div><div class="econo-lbl">Total payé (F)</div></div>
-      <div class="econo-box"><div class="econo-val" style="color:${totReste>0?'#c0392b':'var(--textm)'}">${fmt(totReste)}</div><div class="econo-lbl">Reste à payer (F)</div></div>
+      <div class="econo-box"><div class="econo-val" style="color:${_resteAff>0?'#c0392b':'var(--textm)'}">${fmt(_resteAff)}</div><div class="econo-lbl">Reste à payer (F)</div></div>
       <div class="econo-box"><div class="econo-val">${s.nbAchats||rows.length||0}</div><div class="econo-lbl">Achats</div></div>
       <div class="econo-box"><div class="econo-val">${s.freqMoyenne?s.freqMoyenne+' j':'—'}</div><div class="econo-lbl">Fréquence moy.</div></div>
       <div class="econo-box"><div class="econo-val" style="color:${st.color}">${jours!=null?jours+' j':'—'}</div><div class="econo-lbl">Depuis dernier achat</div></div>
@@ -496,8 +515,8 @@ async function openClientDetail(id){
       <button class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" onclick="closeClientDetail();ouvrirModalWA('${c.id}')">📲 Relancer</button>
       ${telClean?`<a class="btn btn-out btn-sm" style="flex:1;min-width:110px;justify-content:center" href="tel:${telClean}">📞 Appeler</a>`:''}
     </div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:6px">📒 Relevé de compte <span style="font-weight:400;color:var(--textm);font-size:10px">· total encaissé ${fmt(totEncaisse)} F · clique un mois pour le détail daté (achats 🛒, paiements 💰 & solde)</span></div>
-    <div style="max-height:340px;overflow:auto">${releve}</div>`;
+    <div style="font-weight:700;font-size:12px;margin-bottom:6px">${_titreReleve} <span style="font-weight:400;color:var(--textm);font-size:10px">· total encaissé ${fmt(totEncaisse)} F · clique un mois pour le détail daté (achats 🛒, paiements 💰 & solde)</span></div>
+    <div style="max-height:340px;overflow:auto">${_releveHtml}</div>`;
   document.getElementById('modal-client-detail').style.display='flex';
 }
 function closeClientDetail(){ document.getElementById('modal-client-detail').style.display='none'; }
@@ -511,6 +530,48 @@ function _toggleMois(ym){ const d=document.getElementById('md-'+ym),i=document.g
 // caisse physique au hasard, et ne lisait aucune erreur d'écriture. Résultat : un
 // règlement réduisait la dette du client sans apparaître dans aucune caisse.
 let _REGL_IMPAYES=[];
+
+// ── DETTES DU PÔLE ─────────────────────────────────────────────────
+// La base (RLS « pdv_scope_select ») ne laisse un point de vente lire que SES ventes.
+// Or Lomé Sanguéra encaisse aussi les dettes de clients de Production (Fairfield) :
+// sa secrétaire ne voyait ni la dette ni le bouton, et un encaissement aurait crédité
+// sa caisse sans pouvoir marquer les ventes payées — la base refuse SANS erreur.
+// Deux fonctions en base, limitées aux ventes IMPAYÉES du pôle (Production + PDV
+// principaux) : gp_impayes_pole() pour lire, gp_imputer_reglement() pour AJOUTER un
+// paiement — jamais modifier une vente, jamais baisser un payé.
+// Repli : si les fonctions n'existent pas encore, lecture directe comme avant.
+async function impayesPole(clientId){
+  try{
+    const{data,error}=await SB.rpc('gp_impayes_pole',{p_client_id:clientId||null});
+    if(!error && Array.isArray(data)) return data;
+    console.warn('[impayesPole] fonction indisponible, lecture directe :', error&&error.message);
+  }catch(e){ console.warn('[impayesPole]', e); }
+  let q=SB.from('gp_ventes').select('id,client_id,date,montant_total,montant_paye,statut_paiement,formule_nom,point_vente')
+    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
+  if(clientId) q=q.eq('client_id',clientId);
+  if(typeof scopeQueryPDV==='function') q=scopeQueryPDV(q);
+  const{data}=await q.order('date',{ascending:true});
+  return data||[];
+}
+
+// Ajoute `montant` au payé d'une vente. Rend le montant RÉELLEMENT imputé, ou -1 si
+// la vente n'a pas bougé. Une mise à jour refusée par la RLS ne renvoie aucune erreur,
+// juste zéro ligne : c'est pour ça qu'on relit ce qui a été écrit.
+async function imputerSurVente(v, montant){
+  try{
+    const{data,error}=await SB.rpc('gp_imputer_reglement',{p_vente_id:v.id,p_montant:montant});
+    if(!error) return Number(data)||0;
+    if(!/could not find|does not exist|schema cache/i.test(error.message||'')){
+      console.warn('[imputerSurVente]', error.message); return -1;
+    }
+  }catch(e){ console.warn('[imputerSurVente]', e); }
+  const np=Number(v.montant_paye||0)+montant;
+  const{data,error}=await SB.from('gp_ventes')
+    .update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'})
+    .eq('id',v.id).eq('admin_id',GP_ADMIN_ID).select('id');
+  if(error || !data || !data.length) return -1;
+  return montant;
+}
 let _REGL_CAISSES=[];
 let _REGL_CTX={clientId:null,pdv:'Production',mode:'especes'};
 
@@ -520,10 +581,7 @@ function _reglPdv(){ return document.getElementById('regl-pdv')?.value || _REGL_
 
 async function encaisserReglement(clientId){
   const c=GP_CLIENTS.find(x=>x.id===clientId); if(!c)return;
-  let _q=SB.from('gp_ventes').select('id,date,montant_total,montant_paye,statut_paiement').eq('admin_id',GP_ADMIN_ID).eq('client_id',clientId).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
-  if(typeof scopeQueryPDV==='function') _q=scopeQueryPDV(_q);
-  const{data:imp}=await _q.order('date',{ascending:true});
-  _REGL_IMPAYES=imp||[];
+  _REGL_IMPAYES=(await impayesPole(clientId)).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
   try{ _REGL_CAISSES=(typeof caissesAccessibles==='function') ? await caissesAccessibles() : []; }catch(_){ _REGL_CAISSES=[]; }
   const pdv=_reglChoixPdv() ? (c.point_vente||'Production') : (GP_POINT_VENTE||'Production');
   _REGL_CTX={clientId, pdv, mode:'especes'};
@@ -678,10 +736,10 @@ async function confirmerReglement(clientId){
     for(const v of (_REGL_IMPAYES||[])){
       if(reste<=0)break;
       const du=Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0)); if(du<=0)continue;
-      const applique=Math.min(reste,du); const np=Number(v.montant_paye||0)+applique;
-      const{error:eV}=await SB.from('gp_ventes').update({montant_paye:np,statut_paiement:np>=Number(v.montant_total||0)?'paye':'partiel'}).eq('id',v.id).eq('admin_id',GP_ADMIN_ID);
-      if(eV) echecs++;
-      reste-=applique;
+      const applique=Math.min(reste,du);
+      const ecrit=await imputerSurVente(v, applique);
+      if(ecrit<0){ echecs++; reste-=applique; }
+      else reste-=ecrit;
     }
     fermer();
     // L'encaissement a abouti : le prochain aura sa propre clé.
@@ -810,10 +868,7 @@ async function renderClients(){
 
   // Charger les ventes impayées/partielles pour calculer les dettes (scopées au PDV)
   const mois=new Date().toISOString().slice(0,7);
-  let _qDette=SB.from('gp_ventes').select('client_id,montant_total,montant_paye,statut_paiement,date,formule_nom,point_vente')
-    .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null).in('statut_paiement',['impaye','partiel']);
-  if(typeof scopeQueryPDV==='function') _qDette=scopeQueryPDV(_qDette);
-  const{data:vImpayees}=await _qDette;
+  const vImpayees=await impayesPole(null);
 
   // Calculer dette par client
   const dettes={};
