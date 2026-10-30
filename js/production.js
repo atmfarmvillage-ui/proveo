@@ -97,12 +97,19 @@ function trouverIngrParNom(nom){
   return trouverIngr({nom});
 }
 
+// Ce que la composition affichée suppose : une formule et une quantité.
+// Tant que ces deux-là ne bougent pas, on NE RECONSTRUIT PAS — sinon chaque case
+// de coût cochée, chaque clic sur l’arôme et même le chargement différé du taux de
+// main-d’œuvre (auth.js) effacerait les kg ajustés à la main.
+let _compoSignature = '';
+
 // (Re)construit la composition du lot depuis la formule × quantité à produire.
 function rebuildLotCompo(){
   const nom=document.getElementById('lot_formule')?.value;
   const qte=+document.getElementById('lot_qte')?.value||0;
   const f=getFormule(nom)||FORMULES_SADARI.find(x=>x.nom===nom)||null;
   LOT_COMPO=[];
+  _compoSignature='';
   if(f&&qte>0&&Array.isArray(f.ingredients)){
     f.ingredients.forEach(ing=>{
       const ingData=trouverIngr(ing);   // id d'abord, puis nom normalisé
@@ -117,6 +124,7 @@ function rebuildLotCompo(){
       });
     });
     _ajouterAromeAuLot(qte);
+    _compoSignature = nom + '|' + qte;
   }
 }
 
@@ -188,6 +196,25 @@ function _ajouterAromeAuLot(qte){
   }
   LOT_COMPO.push({ id: ar.id, nom: ar.nom, nomFormule: ar.nom,
                    kg, prix: ar.prix_actuel || 0, estArome: true });
+}
+
+// Remet la composition d’accord avec l’arôme coché, SANS rien toucher d’autre.
+// Changer d’arôme ne doit pas coûter les ajustements faits juste avant : on retire
+// l’ancienne ligne, on rend ses kg à la matière qui avait cédé, puis on pose la
+// nouvelle. Le total de la fournée ne bouge jamais.
+function _syncAromeLot(qte){
+  const ar = aromeChoisi();
+  const ligne = LOT_COMPO.find(c => c.estArome);
+  if((ligne && ligne.id || '') === (ar && ar.id || '')) return;   // rien n’a changé
+  if(ligne){
+    const cede = LOT_COMPO.find(c => c.cedeAuArome);
+    if(cede){
+      cede.kg = Math.round((Number(cede.kg || 0) + Number(cede.cedeAuArome || 0)) * 100) / 100;
+      delete cede.cedeAuArome;
+    }
+    LOT_COMPO.splice(LOT_COMPO.indexOf(ligne), 1);
+  }
+  _ajouterAromeAuLot(qte);
 }
 
 // Les boutons de choix. Reconstruits à chaque rendu : le catalogue peut bouger.
@@ -608,6 +635,25 @@ function previewLot(){
   if(document.getElementById('lot_emb'))document.getElementById('lot_emb').value=embVal;
 
 
+  // LA COMPOSITION D’ABORD : c’est elle qui donne le coût matière, et c’est elle
+  // que l’écran laisse ajuster. Elle n’est reconstruite que si la formule ou la
+  // quantité a changé ; sinon on garde les kg saisis à la main et on se contente
+  // de remettre l’arôme d’accord avec le bouton coché.
+  const sig = nom + '|' + qte;
+  if(!LOT_COMPO.length || _compoSignature !== sig) rebuildLotCompo();
+  else _syncAromeLot(qte);
+
+  // MÊME calcul que saveLot, sur la MÊME source. Avant, ces deux variables
+  // n’existaient que dans saveLot : previewLot plantait ici sur un
+  // ReferenceError, et les deux lignes qui suivaient — composition ajustable et
+  // choix de l’arôme — n’étaient jamais atteintes.
+  let coutMP = 0;
+  LOT_COMPO.forEach(c => {
+    const ingData = trouverIngr(c);
+    coutMP += Number(c.kg || 0) * ((ingData && ingData.prix_actuel) || c.prix || 0);
+  });
+  const coutTotal = coutMP + moVal + embVal + transVal;
+
   const prixVente=getPrix(nom);
   const margeKg=prixVente-coutTotal/Math.max(1,qte);
   document.getElementById('lot-preview').innerHTML=`
@@ -619,7 +665,6 @@ function previewLot(){
       :`<div>Formule : <strong style="color:var(--g6)">${nom}</strong></div>
       <div>Quantité : <strong style="color:var(--g6)">${fmt(qte)} kg</strong></div>`}
     </div>`;
-  rebuildLotCompo();
   renderLotMP();
 }
 async function saveLot(){
@@ -781,8 +826,8 @@ async function renderLots(){
       <td class="num" style="color:var(--g6)">${fmt(l.qte_produite)}</td>
       ${GP_ROLE==='admin'?_lotCellulesMarge(l):''}
       <td style="white-space:nowrap;display:flex;gap:3px;align-items:center">
-        ${Number(l.nb_sacs)>0
-          ? `<span class="badge bdg-g" style="font-size:9px" title="Cliquer pour corriger">📦 ${l.nb_sacs} sacs${Number(l.kg_pertes)>0?' · perte '+fmt(l.kg_pertes)+' kg':''}</span>
+        ${(Number(l.nb_sacs)>0 || Number(l.kg_vrac)>0)
+          ? `<span class="badge bdg-g" style="font-size:9px" title="Cliquer pour corriger">${_lotObtenuLabel(l)}</span>
              <button class="btn btn-out btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:3px 6px" title="Corriger">✏️</button>`
           : `<button class="btn btn-g btn-sm" onclick="ouvrirSacsObtenus('${l.id}')" style="padding:4px 8px">📦 Sacs obtenus</button>`}
         ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteLot('${l.id}')">✕</button>`:''}
@@ -790,6 +835,19 @@ async function renderLots(){
     </tr>`).join('')}</tbody></table>`:`<div style="color:var(--textm);font-size:12px">${filtMois?'Aucun lot ce mois.':'Aucun lot enregistré.'}</div>`}</div>`;
 }
 // ── VOIR CUMUL (désactive filtre mois) ─────────────────
+// CE QUE LA FOURNÉE A DONNÉ, EN ENTIER.
+// Le badge ne montrait que les sacs : un lot de 250 kg sorti en 4 sacs de 50 et
+// 42 kg en vrac s’affichait « 4 sacs · perte 8 kg », et les 42 kg manquants
+// passaient pour évaporés. Le vrac compte autant que le sac — il est en stock.
+function _lotObtenuLabel(l){
+  const bouts=[];
+  const ns=Number(l.nb_sacs||0), vr=Number(l.kg_vrac||0);
+  if(ns>0) bouts.push(ns+' sac'+(ns>1?'s':''));
+  if(vr>0) bouts.push(fmt(vr)+' kg vrac');
+  return '📦 '+(bouts.join(' + ')||'rien saisi')
+    + (Number(l.kg_pertes)>0 ? ' · perte '+fmt(l.kg_pertes)+' kg' : '');
+}
+
 function voirCumulLots(){
   const el = document.getElementById('lot-filtre-mois');
   if(el) el.value = '';

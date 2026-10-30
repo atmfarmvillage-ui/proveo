@@ -92,8 +92,15 @@ async function restaurerVente(id){
   // 1. Re-décrémenter stock formules
   for(const l of L){
     if(l.type_produit === 'formule'){
-      const {data:stk} = await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
-        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock).eq('formule_nom',l.formule_nom).maybeSingle();
+      const {data:_rows} = await SB.from('gp_stock_produits_pdv').select('id,qte_disponible,formule_nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+      const stk = _ligneStock(_rows, l.formule_nom);
+      if(!stk){
+        // Ne rien faire en silence, c’est laisser le stock mentir sans trace.
+        const dit = `⚠️ « ${l.formule_nom} » introuvable en stock à ${pdvStock} — les ${l.quantite} kg de la vente restaurée n’ont PAS été redéduits.`;
+        if(typeof notify==='function') notify(dit,'r');
+        console.warn(dit);
+      }
       if(stk){
         await SB.from('gp_stock_produits_pdv').update({
           qte_disponible: Math.max(0, Number(stk.qte_disponible||0) - Number(l.quantite||0)),

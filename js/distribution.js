@@ -116,15 +116,52 @@ function _livInterne(l){
 // vendu (ventes) − redistribué (livraisons sortantes) ± écart (inventaire).
 // Utilisé par le modal 🔎 (A) ET injecté dans le contexte IA (B).
 // ══════════════════════════════════════════════════════════════════
+// UN NOM D’ALIMENT SE COMPARE TOUJOURS DE LA MÊME FAÇON.
+// « Lapin repro A » et « LAPIN Repro A » sont le même sac. La vente le savait
+// déjà ; la production, les livraisons et la traçabilité ne le savaient pas, et
+// tenaient deux comptes pour un seul produit.
+function _normFormule(s){
+  return String(s == null ? '' : s)
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+// L’OBTENU réel d’un lot : les sacs de chaque format, plus le vrac.
+// Ce n’est PAS la quantité lancée : ce qui s’est perdu au mélange n’est jamais
+// entré en magasin. Un lot dont les sacs ne sont pas encore saisis compte 0 —
+// c’est la vérité : il n’a rien mis en stock.
+function _lotObtenuKg(l){
+  let det = l && l.sacs_detail;
+  if(typeof det === 'string'){ try{ det = JSON.parse(det); }catch(_){ det = null; } }
+  let kg = 0;
+  if(det && typeof det === 'object' && Object.keys(det).length){
+    Object.keys(det).forEach(p => { kg += Number(det[p] || 0) * Number(p || 0); });
+  } else {
+    kg = Number(l && l.nb_sacs || 0) * Number(l && l.poids_sac || 25);
+  }
+  return kg + Number(l && l.kg_vrac || 0);
+}
+
+// Dans une liste de lignes de stock, celle qui porte LE MÊME produit — la plus
+// garnie d’abord. Tous les chemins qui touchent au stock passent par ici : la
+// vente, la production, les livraisons, l’annulation, la corbeille, le cadeau.
+function _ligneStock(rows, formuleNom){
+  const memes=(rows||[]).filter(r=>_normFormule(r.formule_nom)===_normFormule(formuleNom))
+    .sort((a,b)=>Number(b.qte_disponible||0)-Number(a.qte_disponible||0));
+  return memes.length?memes[0]:null;
+}
+
 async function calcTracabiliteStockAll(){
   const [liv, vts, stk, lots] = await Promise.all([
     SB.from('gp_livraisons_pdv').select('pdv_source_nom,pdv_dest_nom,formule_nom,qte_envoyee,qte_confirmee,poids_sac,statut').eq('admin_id',GP_ADMIN_ID),
     SB.from('gp_ventes').select('point_vente,formule_nom,qte_vendue').eq('admin_id',GP_ADMIN_ID).is('deleted_at',null),
     SB.from('gp_stock_produits_pdv').select('pdv_nom,formule_nom,qte_disponible').eq('admin_id',GP_ADMIN_ID),
-    SB.from('gp_lots').select('formule_nom,qte_produite').eq('admin_id',GP_ADMIN_ID)
+    SB.from('gp_lots').select('formule_nom,qte_produite,nb_sacs,poids_sac,sacs_detail,kg_vrac,kg_pertes,pdv_production').eq('admin_id',GP_ADMIN_ID)
   ]);
   const map={};
-  const get=(p,f)=>{ const k=(p||'Production')+'||'+f; if(!map[k]) map[k]={pdv:p||'Production',produit:f,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0}; return map[k]; };
+  // La clé ignore la casse : deux orthographes du même aliment ne doivent pas
+  // donner deux lignes de traçabilité dont aucune ne tombe juste.
+  const get=(p,f)=>{ const k=(p||'Production')+'||'+_normFormule(f); if(!map[k]) map[k]={pdv:p||'Production',produit:f,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0,perte_kg:0}; return map[k]; };
   // Reçu (dest) / redistribué (source) — livraisons confirmées, converties en kg
   (liv.data||[]).forEach(l=>{
     if(!l.formule_nom) return;
@@ -134,8 +171,16 @@ async function calcTracabiliteStockAll(){
   });
   // Vendu (ventes) — déjà en kg
   (vts.data||[]).forEach(v=>{ if(v.formule_nom) get(v.point_vente||'Production',v.formule_nom).vendu += Number(v.qte_vendue||0); });
-  // Produit (lots) → entrées de la Production
-  (lots.data||[]).forEach(l=>{ if(l.formule_nom) get('Production',l.formule_nom).produit_kg += Number(l.qte_produite||0); });
+  // Produit (lots) → entrées du PDV QUI A PRODUIT (pas de la « Production »
+  // littérale : le stock, lui, est crédité à lot.pdv_production).
+  // Et on compte l’OBTENU, pas le lancé : sinon l’écran annonce un écart égal au
+  // cumul des pertes de fabrication, et on cherche un voleur qui n’existe pas.
+  (lots.data||[]).forEach(l=>{
+    if(!l.formule_nom) return;
+    const g = get(l.pdv_production||'Production', l.formule_nom);
+    g.produit_kg += _lotObtenuKg(l);
+    g.perte_kg   += Number(l.kg_pertes||0);
+  });
   // Stock actuel
   (stk.data||[]).forEach(s=>{ if(s.formule_nom) get(s.pdv_nom,s.formule_nom).stock = Number(s.qte_disponible||0); });
   return Object.values(map).map(o=>{
@@ -156,7 +201,7 @@ async function ouvrirTracabilite(pdvNom, formuleNom){
   let row;
   try{
     const all=await calcTracabiliteStockAll();
-    row=all.find(r=>r.pdv===pdvNom && r.produit===formuleNom) || {pdv:pdvNom,produit:formuleNom,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0,entrees:0,theorique:0,ecart:0};
+    row=all.find(r=>r.pdv===pdvNom && _normFormule(r.produit)===_normFormule(formuleNom)) || {pdv:pdvNom,produit:formuleNom,recu:0,produit_kg:0,vendu:0,redistribue:0,stock:0,entrees:0,theorique:0,ecart:0};
   }catch(e){ row={pdv:pdvNom,produit:formuleNom,_err:e.message}; }
   const L=(lbl,val,color)=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${lbl}</span><span style="font-weight:700;${color?'color:'+color:''}">${val}</span></div>`;
   host.innerHTML=`<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto">
@@ -166,7 +211,8 @@ async function ouvrirTracabilite(pdvNom, formuleNom){
     </div>
     <div style="font-size:12px;color:var(--textm);margin-bottom:12px">${formuleNom} · ${pdvNom}</div>
     ${row._err?`<div style="color:var(--red);font-size:12px">Erreur : ${row._err}</div>`:`
-      ${row.produit_kg>0?L('🏭 Produit (lots)','+'+fmtKg(row.produit_kg)+' kg','var(--green)'):''}
+      ${row.produit_kg>0?L('🏭 Produit (lots, obtenu réel)','+'+fmtKg(row.produit_kg)+' kg','var(--green)'):''}
+      ${row.perte_kg>0?L('🔥 Perte fabrication (jamais entrée en stock)',fmtKg(row.perte_kg)+' kg','var(--textm)'):''}
       ${L('📥 Reçu (livraisons)','+'+fmtKg(row.recu)+' kg','var(--green)')}
       ${L('🛒 Vendu (ventes)','−'+fmtKg(row.vendu)+' kg','var(--red)')}
       ${row.redistribue>0?L('🚚 Redistribué (vers d\'autres PDV)','−'+fmtKg(row.redistribue)+' kg','var(--red)'):''}
@@ -565,11 +611,13 @@ async function savePaiementLivraison(){
 // Les appelants existants ignorent la valeur — non-cassant.
 async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
   if(!pdvNom || !formuleNom) return false;
-  const{data:rows,error:eSel}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom)
-    .order('qte_disponible',{ascending:false});
+  // On lit TOUT le stock du PDV puis on compare les noms comme la vente les
+  // compare. Une égalité stricte créait une SECONDE ligne dès qu’une majuscule
+  // changeait : la vente vidait l’une, la production remplissait l’autre.
+  const{data:rows,error:eSel}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom);
   if(eSel) return false;
-  const st=(rows&&rows.length)?rows[0]:null;
+  const st=_ligneStock(rows, formuleNom);
   if(st){
     const{error}=await SB.from('gp_stock_produits_pdv').update({
       qte_disponible:Math.max(0,Number(st.qte_disponible||0)+deltaKg),
@@ -590,9 +638,9 @@ async function ajusterStockPDV(pdvNom, formuleNom, deltaKg){
 async function setStockPDV(pdvNom, formuleNom, kgAbsolu){
   if(!pdvNom||!formuleNom) return;
   // TOUTES les lignes (gère les doublons) : on garde la 1re et on n'en crée pas de nouvelle s'il en existe
-  const{data:rows}=await SB.from('gp_stock_produits_pdv').select('id')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom).eq('formule_nom',formuleNom).limit(1);
-  const st=(rows&&rows.length)?rows[0]:null;
+  const{data:rows}=await SB.from('gp_stock_produits_pdv').select('id,qte_disponible,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvNom);
+  const st=_ligneStock(rows, formuleNom);
   if(st){
     await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,kgAbsolu),updated_at:new Date().toISOString()}).eq('id',st.id);
   } else {
@@ -667,8 +715,12 @@ function remplirSelectsStockManuel(){
   }
   const selF=document.getElementById('sm_formule');
   if(selF && typeof getAllFormules==='function'){
+    // Même règle que la production : SEULES les formules actives (celles qui
+    // portent un id). Les libellés orphelins de l’ancienne grille de tarifs
+    // n’ont pas de composition — et c’est par ce menu qu’ils entraient en stock
+    // à côté du vrai produit, sous une autre orthographe.
     selF.innerHTML='<option value="">— Formule —</option>'+
-      getAllFormules().map(f=>`<option value="${f.nom}">${f.nom}</option>`).join('');
+      getAllFormules().filter(f=>f && f.id).map(f=>`<option value="${f.nom}">${f.nom}</option>`).join('');
   }
 }
 
