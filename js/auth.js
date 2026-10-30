@@ -53,16 +53,69 @@ function showAuthForm(f){
   const jf=document.getElementById('auth-join-form');  if(jf)jf.style.display=f==='join'?'block':'none';
 }
 
+// UN NOM DE FORMULE SE COMPARE COMME UN NOM D’ALIMENT EN STOCK.
+// La casse, les espaces en trop et les accents ne font pas une autre recette.
+// `gp_prix_formules.formule_nom` est du texte libre, unique à l’orthographe
+// près : deux casses = deux lignes = deux prix. Résultat, « Lapin repro A » ne
+// trouvait ni la composition, ni l’espèce, ni le prix de « LAPIN Repro A ».
+// Même règle que le stock (_normFormule, distribution.js) ; le repli sert au
+// cas où ce fichier-là n’est pas encore chargé.
+function _nomFormuleCle(s){
+  return (typeof _normFormule==='function')
+    ? _normFormule(s)
+    : String(s==null?'':s).normalize('NFD').replace(/\p{Diacritic}/gu,'')
+        .replace(/\s+/g,' ').trim().toLowerCase();
+}
+
+// QUAND LA GRILLE PORTE DEUX PRIX POUR LE MÊME PRODUIT.
+// « Lapin repro A » est à 288 F et « LAPIN Repro A » à 300 F, pour 294 ventes.
+// Rapprocher les orthographes sans traiter ce cas aurait fait dépendre le prix
+// de l’ordre des clés de GP_PRIX : un prix de vente qui change tout seul.
+// On relit donc le conflit et on l’AFFICHE, au lieu de trancher en silence.
+let GP_PRIX_AMBIGUS = {};
+function prixAmbigu(nom){
+  return GP_PRIX_AMBIGUS[_nomFormuleCle(nom)] || null;
+}
+
+// Cherche un prix dans une grille (détail ou gros) sans buter sur l’orthographe.
+function prixGrille(map, nom){
+  if(!map) return 0;
+  const k=_nomFormuleCle(nom);
+  const cles=Object.keys(map).filter(n=>_nomFormuleCle(n)===k && Number(map[n])>0);
+  if(!cles.length) return 0;
+  const prix=[...new Set(cles.map(n=>Number(map[n])))].sort((x,y)=>x-y);
+  if(prix.length>1) GP_PRIX_AMBIGUS[k]={orthographes:cles, prix};
+  else delete GP_PRIX_AMBIGUS[k];
+  // 1. L’orthographe exactement demandée fait foi : rien ne change pour elle.
+  if(Number(map[nom])>0) return Number(map[nom]);
+  // 2. Sinon celle de la formule active — c’est la fiche de référence.
+  const active=(FORMULES_SADARI||[]).find(f=>_nomFormuleCle(f.nom)===k);
+  if(active && Number(map[active.nom])>0) return Number(map[active.nom]);
+  // 3. À défaut le plus élevé, jamais le premier venu dans l’ordre des clés.
+  return prix[prix.length-1];
+}
+
 function getAllFormules(){
-  // Merge sadari + custom from GP_PRIX keys
-  const custom=Object.keys(GP_PRIX).filter(k=>!FORMULES_SADARI.find(f=>f.nom===k)).map(k=>({nom:k,prix_defaut:GP_PRIX[k]}));
+  // Les noms LIBRES de la grille de prix restent proposés — la vente s’en sert.
+  // Mais plus ceux qui ne sont qu’une autre orthographe d’une formule active :
+  // ils ajoutaient un doublon dans tous les menus, sans composition derrière,
+  // et c’est en en choisissant un que l’aperçu de production restait muet.
+  const vues=new Set(FORMULES_SADARI.map(f=>_nomFormuleCle(f.nom)));
+  const custom=Object.keys(GP_PRIX)
+    .filter(k=>!vues.has(_nomFormuleCle(k)))
+    .map(k=>({nom:k,prix_defaut:GP_PRIX[k]}));
   return [...FORMULES_SADARI,...custom];
 }
 function getPrix(formuleNom){
-  return GP_PRIX[formuleNom]||FORMULES_SADARI.find(f=>f.nom===formuleNom)?.prix_defaut||0;
+  const p=prixGrille(GP_PRIX, formuleNom);
+  if(p) return p;
+  const k=_nomFormuleCle(formuleNom);
+  const f=FORMULES_SADARI.find(x=>_nomFormuleCle(x.nom)===k);
+  return (f && Number(f.prix_defaut)) || 0;
 }
 function getFormule(nom){
-  return FORMULES_SADARI.find(f=>f.nom===nom);
+  const k=_nomFormuleCle(nom);
+  return FORMULES_SADARI.find(f=>_nomFormuleCle(f.nom)===k);
 }
 
 // ── PERMISSIONS GRANULAIRES ────────────────────────

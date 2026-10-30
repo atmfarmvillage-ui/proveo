@@ -967,18 +967,34 @@ async function onVenteFormuleChange(){
   const client=GP_CLIENTS.find(c=>c.id===clientId);
   const typeClient=client?.type_client||'detail';
 
-  let prix=typeClient==='gros'?(GP_PRIX_GROS?.[nom]||GP_PRIX?.[nom]||0):(GP_PRIX?.[nom]||0);
+  // Même rapprochement que getPrix : une majuscule de travers ne doit pas
+  // laisser la case prix vide devant le client.
+  const _gr=(m)=>(typeof prixGrille==='function') ? prixGrille(m,nom) : (m?.[nom]||0);
+  let prix=typeClient==='gros'?(_gr(GP_PRIX_GROS)||_gr(GP_PRIX)):_gr(GP_PRIX);
 
   if(!prix){
-    const{data:pf}=await SB.from('gp_prix_formules').select('prix_detail,prix_gros,cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
+    // SEULEMENT LES COLONNES QUI EXISTENT. La table ne porte ni prix_detail ni
+    // les coûts : la requête échouait en entier et ce repli n’a jamais servi —
+    // la case prix restait vide devant le client, sans explication.
+    const{data:pf,error:ePf}=await SB.from('gp_prix_formules').select('prix,prix_gros')
       .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',nom).maybeSingle();
-    if(pf)prix=typeClient==='gros'?(pf.prix_gros||pf.prix_detail||0):(pf.prix_detail||0);
-    // Afficher coût de revient estimé
-    if(pf){
-      const cr=(pf.cout_mo_tonne||0)/1000+(pf.cout_emballage_kg||0)+(pf.cout_transport_lot||0)/1000;
+    if(ePf) console.warn('prix non lu : '+ePf.message);
+    if(pf)prix=typeClient==='gros'?(pf.prix_gros||pf.prix||0):(pf.prix||0);
+    // Le coût de revient estimé vient de la FICHE formule : c’est là que
+    // gp_formules garde main-d’œuvre, emballage et transport.
+    const _fc=(typeof getFormule==='function')?getFormule(nom):null;
+    if(_fc){
+      const cr=(_fc.cout_mo_tonne||0)/1000+(_fc.cout_emballage_kg||0)+(_fc.cout_transport_lot||0)/1000;
       const el=document.getElementById('vt-cout-info');
       if(el&&cr>0)el.textContent=`Coût estimé : ~${fmt(Math.round(cr))} F/kg`;
     }
+  }
+
+  // Deux prix pour le même produit : le vendeur doit le savoir AVANT d’encaisser.
+  const _amb=(typeof prixAmbigu==='function') ? prixAmbigu(nom) : null;
+  if(_amb){
+    const el=document.getElementById('vt-cout-info');
+    if(el) el.textContent=`⚠️ ${_amb.prix.map(p=>fmt(p)+' F').join(' et ')} enregistrés pour ce produit — ${fmt(prix)} F proposé. À corriger dans Formules & Prix.`;
   }
 
   const prixEl=document.getElementById('vt_prix');
