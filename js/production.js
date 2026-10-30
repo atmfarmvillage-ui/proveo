@@ -21,20 +21,29 @@ let _lastFormule='';
 // Coûts chargés depuis gp_formules
 let _formuleCoûts={};
 
+// Vrai pour deux noms qui désignent la même recette.
+function _memeFormule(a, b){
+  return (typeof _nomFormuleCle==='function')
+    ? _nomFormuleCle(a)===_nomFormuleCle(b)
+    : String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();
+}
+
 async function chargerCoutsFormule(nom){
-  // Chercher dans gp_prix_formules (où les coûts sont définis via le bouton ⚙️)
-  const[{data:pf},{data:gf}]=await Promise.all([
-    SB.from('gp_prix_formules').select('cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
-      .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',nom).maybeSingle(),
-    SB.from('gp_formules').select('cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
-      .eq('admin_id',GP_ADMIN_ID).eq('nom',nom).maybeSingle()
-  ]);
-  const d=pf||gf;
+  // LES COÛTS NE SONT PAS DANS gp_prix_formules — cette table ne porte que
+  // `prix` et `prix_gros`, et admin.js n’y écrit jamais rien d’autre. La lire
+  // avec cout_mo_tonne faisait échouer la requête ENTIÈRE (42703 : colonne
+  // inexistante), donc elle n’a jamais rien rendu. On lit la vraie source.
+  // Et on rapproche sur le nom NORMALISÉ : une égalité stricte faisait
+  // retomber emballage et transport à 0 dès qu’une majuscule différait.
+  const{data:gf,error:eGf}=await SB.from('gp_formules')
+    .select('nom,cout_mo_tonne,cout_emballage_kg,cout_transport_lot')
+    .eq('admin_id',GP_ADMIN_ID);
+  if(eGf) console.warn('coûts formule non lus : '+eGf.message);
+  const d = (gf||[]).find(x=>_memeFormule(x.nom, nom));
   if(d&&(d.cout_mo_tonne||d.cout_emballage_kg||d.cout_transport_lot)){
     _formuleCoûts={mo:d.cout_mo_tonne||0,emb:d.cout_emballage_kg||0,trans:d.cout_transport_lot||0};
   } else {
-    // Fallback FORMULES_SADARI
-    const fs=FORMULES_SADARI.find(x=>x.nom===nom);
+    const fs=(typeof getFormule==='function') ? getFormule(nom) : null;
     _formuleCoûts={mo:fs?.cout_mo_tonne||0,emb:fs?.cout_emballage_kg||0,trans:fs?.cout_transport_lot||0};
   }
 }
@@ -656,12 +665,21 @@ function previewLot(){
 
   const prixVente=getPrix(nom);
   const margeKg=prixVente-coutTotal/Math.max(1,qte);
+  // UNE FORMULE SANS PRIX N’A PAS UNE MARGE NÉGATIVE, ELLE N’A PAS DE PRIX.
+  // Affichée telle quelle, la marge valait l’opposé du coût : un chiffre qui
+  // ressemble à une perte alors que c’est un trou dans la fiche. En base, cinq
+  // formules actives sont dans ce cas.
+  const _sansPrix = !(prixVente>0);
+  // Et le cas inverse : DEUX prix enregistrés pour le même produit.
+  const _ambPrix = (typeof prixAmbigu==='function') ? prixAmbigu(nom) : null;
   document.getElementById('lot-preview').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
       ${GP_ROLE==='admin'?`<div>Coût MP : <strong style="color:var(--gold)">${fmt(coutMP)} F</strong></div>
       <div>Coût total : <strong style="color:var(--red)">${fmt(coutTotal)} F</strong></div>
       <div>Prix vente : <strong style="color:var(--g6)">${fmt(prixVente)} F/kg</strong></div>
-      <div>Marge/kg : <strong style="color:${margeKg>=0?'var(--green)':'var(--red)'}">${fmt(margeKg)} F</strong></div>`
+      <div>Marge/kg : <strong style="color:${_sansPrix?'var(--textm)':margeKg>=0?'var(--green)':'var(--red)'}">${_sansPrix?'—':fmt(margeKg)+' F'}</strong></div>
+      ${_sansPrix?`<div style="grid-column:1/-1;color:var(--gold);font-size:10.5px;line-height:1.45">⚠️ Aucun prix de vente enregistré pour « ${nom} » — la marge ne peut pas être calculée. Renseigne-le dans <b>Formules &amp; Prix</b>.</div>`:''}
+      ${_ambPrix?`<div style="grid-column:1/-1;color:var(--gold);font-size:10.5px;line-height:1.45">⚠️ <b>${_ambPrix.prix.map(p=>fmt(p)+' F').join(' et ')}</b> sont enregistrés pour ce même produit, sous ${_ambPrix.orthographes.length} orthographes (${_ambPrix.orthographes.join(' / ')}). ${fmt(prixVente)} F retenu ici. Corrige la grille dans <b>Formules &amp; Prix</b>.</div>`:''}`
       :`<div>Formule : <strong style="color:var(--g6)">${nom}</strong></div>
       <div>Quantité : <strong style="color:var(--g6)">${fmt(qte)} kg</strong></div>`}
     </div>`;
