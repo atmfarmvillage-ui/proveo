@@ -1157,9 +1157,12 @@ async function _finaliserEchange(clientId, recompenseId, mode, pfDeduct){
 // Déduit le stock produit fini (FIFO sur toutes les lignes de la formule).
 async function _deduirePFStockCadeau(formuleNom, kg){
   const{data:stocks}=await SB.from('gp_stock_produits_pdv').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('formule_nom',formuleNom)
+    .eq('admin_id',GP_ADMIN_ID)
     .order('qte_disponible',{ascending:false});
-  const rows=stocks||[]; let reste=Number(kg)||0;
+  // Le nom se compare comme partout ailleurs : un cadeau pris sur « LAPIN Repro A »
+  // doit sortir du même stock que la vente de « Lapin repro A ».
+  const rows=(stocks||[]).filter(s=>_normFormule(s.formule_nom)===_normFormule(formuleNom));
+  let reste=Number(kg)||0;
   for(const st of rows){
     if(reste<=0) break;
     const dispo=Number(st.qte_disponible||0);
@@ -1178,8 +1181,15 @@ async function ouvrirCadeauStock(clientId, recompenseId){
   if(!client||!rec)return;
   const{data:stk}=await SB.from('gp_stock_produits_pdv')
     .select('formule_nom,qte_disponible').eq('admin_id',GP_ADMIN_ID).gt('qte_disponible',0);
-  const agg={}; (stk||[]).forEach(s=>{ agg[s.formule_nom]=(agg[s.formule_nom]||0)+Number(s.qte_disponible||0); });
-  const formules=Object.entries(agg).sort((a,b)=>a[0].localeCompare(b[0]));
+  // Un seul produit par ligne du menu, même si la base en porte deux orthographes :
+  // proposer deux fois « Lapin repro A » avec deux soldes partiels ne veut rien dire.
+  const agg={}, libelle={};
+  (stk||[]).forEach(s=>{
+    const k=_normFormule(s.formule_nom);
+    if(!libelle[k]) libelle[k]=s.formule_nom;
+    agg[k]=(agg[k]||0)+Number(s.qte_disponible||0);
+  });
+  const formules=Object.keys(agg).map(k=>[libelle[k],agg[k]]).sort((a,b)=>a[0].localeCompare(b[0]));
   let host=document.getElementById('modal-cadeau-stock');
   if(!host){ host=document.createElement('div'); host.id='modal-cadeau-stock'; document.body.appendChild(host); }
   host.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';

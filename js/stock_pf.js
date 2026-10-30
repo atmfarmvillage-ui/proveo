@@ -131,9 +131,9 @@ async function onBLFormuleChange(){
 }
 
 async function afficherStockDispo(pdv,formule,poids){
-  const{data}=await SB.from('gp_stock_produits_finis').select('nb_sacs,poids_sac')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdv).eq('formule_nom',formule).eq('poids_sac',+poids).maybeSingle();
-  const dispo=data?.nb_sacs||0;
+  const{data}=await SB.from('gp_stock_produits_finis').select('nb_sacs,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdv).eq('poids_sac',+poids);
+  const dispo=_pfMeme(data,formule)?.nb_sacs||0;
   const el=document.getElementById('bl-stock-dispo');
   if(el)el.innerHTML=`<span style="color:${dispo>0?'var(--green)':'var(--red)'}">
     ${dispo>0?'✅':'⛔'} Stock disponible à <strong>${pdv}</strong> : <strong>${dispo} sacs</strong> de ${formule}
@@ -163,8 +163,9 @@ async function saveBonLivraison(){
   if(source===dest){err.textContent='Source et destination doivent être différentes.';return;}
 
   // Vérifier stock disponible à la source
-  const{data:stockSrc}=await SB.from('gp_stock_produits_finis').select('nb_sacs,id')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',source).eq('formule_nom',formule).eq('poids_sac',poids).maybeSingle();
+  const{data:_src}=await SB.from('gp_stock_produits_finis').select('nb_sacs,id,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',source).eq('poids_sac',poids);
+  const stockSrc=_pfMeme(_src,formule);
 
   if(!stockSrc||Number(stockSrc.nb_sacs||0)<nb){
     err.textContent=`Stock insuffisant à ${source} : seulement ${stockSrc?.nb_sacs||0} sacs disponibles.`;
@@ -199,10 +200,24 @@ async function saveBonLivraison(){
   await renderStockPF();
 }
 
+// Dans une liste de lignes de stock, celle qui porte LE MÊME produit — la casse
+// et les espaces en trop ne font pas un autre aliment. Sans ça, « LAPIN Repro A »
+// et « Lapin repro A » vivaient chacun leur stock, et aucun des deux n’était vrai.
+function _pfMeme(rows, formule){
+  const n = (typeof _normFormule === 'function')
+    ? _normFormule(formule)
+    : String(formule || '').trim().toLowerCase();
+  const memes = (rows || []).filter(r => (typeof _normFormule === 'function'
+      ? _normFormule(r.formule_nom) : String(r.formule_nom || '').trim().toLowerCase()) === n);
+  memes.sort((a, b) => Number(b.nb_sacs || 0) - Number(a.nb_sacs || 0));
+  return memes.length ? memes[0] : null;
+}
+
 // Upsert stock produits finis (ajouter ou créer)
 async function upsertStockPF(pdv, formule, poids, delta){
-  const{data:existing}=await SB.from('gp_stock_produits_finis').select('id,nb_sacs')
-    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdv).eq('formule_nom',formule).eq('poids_sac',poids).maybeSingle();
+  const{data:_rows}=await SB.from('gp_stock_produits_finis').select('id,nb_sacs,formule_nom')
+    .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdv).eq('poids_sac',poids);
+  const existing=_pfMeme(_rows,formule);
 
   if(existing){
     await SB.from('gp_stock_produits_finis').update({
@@ -261,13 +276,21 @@ function afficherFeuilleFabrication(lot){
 
   const kgNets=nbSacs*poidsSac;
   const pertes=Math.max(0,qte-kgNets);
+  // La feuille s’ouvre AVANT l’emballage : à ce moment-là il n’y a pas de perte,
+  // il n’y a rien de mesuré. Annoncer « 1000 kg (100,0 %) » en rouge à quelqu’un
+  // qui vient de lancer sa fournée, c’est l’alarmer pour rien.
+  const pasEncore = !(nbSacs>0);
 
   document.getElementById('fab-header').innerHTML=`
     <div><span style="color:var(--textm)">Formule</span><br><strong>${nom}</strong></div>
     <div><span style="color:var(--textm)">PDV Production</span><br><strong>${pdv||'—'}</strong></div>
     <div><span style="color:var(--textm)">Quantité brute</span><br><strong style="color:var(--gold)">${fmt(qte)} kg</strong></div>
-    <div><span style="color:var(--textm)">Sacs emballés</span><br><strong style="color:var(--green)">${nbSacs} × ${poidsSac}kg = ${fmt(kgNets)} kg</strong></div>
-    <div><span style="color:var(--textm)">Pertes</span><br><strong style="color:${pertes>0?'var(--red)':'var(--green)'}">${fmt(pertes)} kg (${qte>0?((pertes/qte)*100).toFixed(1):0}%)</strong></div>
+    <div><span style="color:var(--textm)">Sacs emballés</span><br>${pasEncore
+      ? `<strong style="color:var(--textm)">pas encore saisis</strong>`
+      : `<strong style="color:var(--green)">${nbSacs} × ${poidsSac}kg = ${fmt(kgNets)} kg</strong>`}</div>
+    <div><span style="color:var(--textm)">Pertes</span><br>${pasEncore
+      ? `<strong style="color:var(--textm)">à mesurer après emballage</strong>`
+      : `<strong style="color:${pertes>0?'var(--red)':'var(--green)'}">${fmt(pertes)} kg (${qte>0?((pertes/qte)*100).toFixed(1):0}%)</strong>`}</div>
     <div><span style="color:var(--textm)">Opérateur</span><br>
       <input type="text" id="fab-tech" placeholder="Nom technicien" value="${GP_USER?.email?.split('@')[0]||''}"
         style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text);width:100%">

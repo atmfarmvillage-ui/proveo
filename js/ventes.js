@@ -1058,7 +1058,11 @@ async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
   // Date de la vente : en rattrapage, la sortie de stock doit porter la date du
   // jour où la marchandise est réellement partie, pas celle de la saisie.
   const dateMvt = (opts && opts.date) || today();
-  const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  // Même comparaison de noms que l’écriture du stock (distribution.js) :
+  // vendre et déduire doivent désigner le même sac.
+  const norm = s => (typeof _normFormule === 'function')
+    ? _normFormule(s)
+    : String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   pdvStock = pdvStock || 'Production';
   for(const l of (lignes||[])){
     const tp = l.type_produit || 'formule';
@@ -1098,6 +1102,15 @@ async function _appliquerDeductionStock(lignes, pdvStock, refVente, opts){
       const pris=Math.min(dispo,reste); reste-=pris;
       const{error:eUpd}=await SB.from('gp_stock_produits_pdv').update({qte_disponible:Math.max(0,dispo-pris),updated_at:new Date().toISOString()}).eq('id',st.id);
       if(eUpd) throw eUpd;
+    }
+    // LE SILENCE QUI FAUSSE TOUT. Le stock se cale à 0 au lieu de passer en
+    // négatif : les kg vendus au-delà de ce qui était enregistré n’étaient pas
+    // déduits, et personne n’en entendait parler. L’écart ne se découvrait qu’à
+    // l’inventaire, des mois plus tard, sans plus aucun moyen de l’expliquer.
+    if(reste>0.001){
+      const dit=`⚠️ ${Math.round(reste*10)/10} kg de « ${l.formule_nom} » vendus au-delà du stock enregistré à ${pdvStock} — stock à vérifier.`;
+      if(typeof notify==='function') notify(dit,'r');
+      console.warn(dit);
     }
     const totalRestant=rows.reduce((s,st)=>s+Number(st.qte_disponible||0),0)-besoin;
     const seuil=Number(rows[0].seuil_critique||0);
@@ -3232,8 +3245,9 @@ async function supprimerVente(id){
   const pdvStock = vente.point_vente || 'Production';
   for(const l of L){
     if(l.type_produit === 'formule'){
-      const {data:stk} = await SB.from('gp_stock_produits_pdv').select('id,qte_disponible')
-        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock).eq('formule_nom',l.formule_nom).maybeSingle();
+      const {data:_rows} = await SB.from('gp_stock_produits_pdv').select('id,qte_disponible,formule_nom')
+        .eq('admin_id',GP_ADMIN_ID).eq('pdv_nom',pdvStock);
+      const stk = _ligneStock(_rows, l.formule_nom);
       if(stk){
         await SB.from('gp_stock_produits_pdv').update({
           qte_disponible: Number(stk.qte_disponible||0) + Number(l.quantite||0),
