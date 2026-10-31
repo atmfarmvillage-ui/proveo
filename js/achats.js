@@ -1112,7 +1112,9 @@ async function supprimerAchat(id){
 // Chaque ligne consomme d'abord ce qui est déjà en stock pour SA matière ;
 // seul le reste est à créditer. Deux lignes de la même matière se partagent
 // donc correctement le déjà-entré, au lieu que la seconde soit avalée.
-function resteACrediter(lignes, entrees){
+// `receptionFaite` : une réception a-t-elle eu lieu sur ce bon (`recu_par`) ?
+// Elle commande la lecture du zéro — voir plus bas, c'est tout l'enjeu.
+function resteACrediter(lignes, entrees, receptionFaite){
   const couvert={};
   (entrees||[]).forEach(s=>{
     if(s.type!=='entree') return;
@@ -1122,13 +1124,18 @@ function resteACrediter(lignes, entrees){
   const out={};
   (lignes||[]).forEach(l=>{
     const k=l.ingredient_id||'';
-    // 0 reçu est une information, pas un vide : l’ancien repli créditait
-    // la quantité COMMANDÉE quand rien n’était arrivé. On ne retombe sur le
-    // commandé que si la réception n’a jamais eu lieu.
+    // UN ZÉRO NE VAUT ZÉRO QUE SI QUELQU'UN A RÉCEPTIONNÉ.
+    // Quand la réception a eu lieu, 0 reçu veut dire 0 reçu : l'ancien repli
+    // créditait la quantité COMMANDÉE alors que rien n'était arrivé.
+    // Mais `qte_recue` vaut aussi 0 sur un bon JAMAIS réceptionné — et quatre
+    // chemins créditent le stock sans passer par l'écran de réception
+    // (« Confirmer » la file des entrées MP, « Entrer en stock », le bouton
+    // « Stock », le rattrapage automatique). Sur ceux-là, lire 0 reviendrait à
+    // ne rien créditer du tout, en silence. D'où la condition.
     const recu=l.qte_recue;
-    const du=(recu===null||recu===undefined||recu==='')
-      ? (Number(l.qte_commandee)||0)
-      : (Number(recu)||0);
+    const vide=(recu===null||recu===undefined||recu==='')
+             || (!receptionFaite && Number(recu)===0);
+    const du=vide ? (Number(l.qte_commandee)||0) : (Number(recu)||0);
     const absorbe=Math.min(du, couvert[k]||0);
     couvert[k]=(couvert[k]||0)-absorbe;
     const reste=Math.round((du-absorbe)*1000)/1000;
@@ -1152,7 +1159,9 @@ async function crediterStockDepuisAchat(achatId, statutFinal){
   // rien — l'idempotence est conservée, le rattrapage devient possible.
   const{data:entrees}=await SB.from('gp_stock_mp')
     .select('ingredient_id,quantite,type').eq('achat_id',achatId);
-  const aCrediter=resteACrediter(L, entrees||[]);
+  // `recu_par` est écrit par confirmerReception, et par elle seule : c'est la
+  // preuve qu'une réception a eu lieu, sur les anciens bons comme les neufs.
+  const aCrediter=resteACrediter(L, entrees||[], !!(achat.recu_par || achat.note_reception));
 
   // LE STOCK VAUT CE QU'IL A COUTÉ, pas ce que le fournisseur a facturé.
   // Le dédouanement et le transport sont dans le prix du kilo, sinon le prix
