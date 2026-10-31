@@ -94,7 +94,13 @@ async function renderAchats(){
           <td style="font-size:10px;font-family:'DM Mono',monospace">${a.date_commande}</td>
           <td style="font-size:10px;font-weight:600">${a.ref||'—'}</td>
           <td style="font-weight:600">${a.fournisseur_nom||'—'}
-            <div style="font-size:9px;color:var(--textm);font-weight:500;line-height:1.5;margin-top:2px">${(lignesParAchat[a.id]||[]).map(l=>`🌾 ${l.ingredient_nom} · <b>${fmtKg(l.qte_recue||l.qte_commandee)} kg</b>`).join('<br>')||'—'}</div>
+            <div style="font-size:9px;color:var(--textm);font-weight:500;line-height:1.5;margin-top:2px">${(lignesParAchat[a.id]||[]).map(l=>{
+              const cmd=Number(l.qte_commandee||0);
+              const rec=(l.qte_recue===null||l.qte_recue===undefined||l.qte_recue==='')?null:Number(l.qte_recue);
+              const manque=(rec!==null && rec<cmd-0.01) ? cmd-rec : 0;
+              return `🌾 ${l.ingredient_nom} · <b>${fmtKg(rec!==null?rec:cmd)} kg</b>`
+                + (manque?` <span style="color:var(--red);font-weight:700">⚠ manque ${fmtKg(manque)} kg</span>`:'');
+            }).join('<br>')||'—'}</div>
           </td>
           <td class="num">${fmt(a.montant_total)}</td>
           <td class="num" style="color:${reste>0?'var(--red)':'var(--green)'}">${reste>0?fmt(Number(a.montant_paye||0))+' F':'✓ Payé'}</td>
@@ -126,8 +132,10 @@ function actionsAchat(a){
     btns+=`<button class="btn btn-g btn-sm" onclick="confirmerAchat('${a.id}')">✓ Confirmer</button>`;
   }
   // Secrétaire/Admin : confirmer réception
-  if(['confirme','en_livraison'].includes(a.statut)&&(GP_ROLE==='secretaire'||GP_ROLE==='admin'||GP_ROLE==='logistique')){
-    btns+=`<button class="btn btn-out btn-sm" onclick="ouvrirReception('${a.id}')">📦 Réception</button>`;
+  // « Reçu partiel » en fait partie : c'est par là que le reste de la
+  // livraison entre, et le crédit du stock est désormais différentiel.
+  if(['confirme','en_livraison','recu_partiel'].includes(a.statut)&&(GP_ROLE==='secretaire'||GP_ROLE==='admin'||GP_ROLE==='logistique')){
+    btns+=`<button class="btn ${a.statut==='recu_partiel'?'btn-g':'btn-out'} btn-sm" onclick="ouvrirReception('${a.id}')">📦 ${a.statut==='recu_partiel'?'Réception du reste':'Réception'}</button>`;
   }
   // Réception déjà faite mais stock pas encore crédité (anciens bons) : permettre de finaliser
   if(['recu_complet','recu_partiel'].includes(a.statut)&&(GP_ROLE==='daf'||GP_ROLE==='admin'||GP_ROLE==='secretaire'||GP_ROLE==='logistique')){
@@ -731,58 +739,180 @@ async function ouvrirReception(achatId){
   modal.style.display='flex';
 }
 
+// ── ÉCART DE RÉCEPTION ────────────────────────────
+// CE QUI A COÛTÉ 360 000 F. Le 24/10/2026, un bon de 250 kg de lysine est
+// réceptionné à 25 kg : un zéro oublié. L'application avait TOUT vu — elle
+// calculait déjà l'écart, et écrivait même « ⚠️ avec écarts » dans le WhatsApp
+// de l'admin. Mais elle créditait quand même, fermait le bon en « ✅ En stock »,
+// et trois jours plus tard laissait payer 400 000 F pour 40 000 F de
+// marchandise. Le signal existait depuis le début : il était câblé sur une
+// décoration au lieu d'un frein.
+//
+// Désormais un manque ARRÊTE la confirmation et pose la seule question que le
+// logiciel ne peut pas trancher à la place de l'humain : le reste va-t-il
+// arriver ? Recalculer le montant tout seul effacerait une avance chez le
+// fournisseur ; ne rien faire laisse l'argent sortir sans marchandise.
+
 function checkEcartReception(ligneId,qteCmdee){
   const recu=+document.getElementById('rec-'+ligneId)?.value||0;
   const el=document.getElementById('ecart-'+ligneId);
   if(!el)return;
   const ecart=recu-qteCmdee;
   if(Math.abs(ecart)<0.01){el.textContent='';return;}
+  const pct=qteCmdee>0?Math.round(Math.abs(ecart)/qteCmdee*100):0;
+  el.style.fontWeight='700';
   el.style.color=ecart<0?'var(--red)':'var(--green)';
-  el.textContent=ecart<0?`⚠ Manque ${fmtKg(Math.abs(ecart))} kg`:`+${fmtKg(ecart)} kg en surplus`;
+  el.textContent=ecart<0
+    ? `⚠ Manque ${fmtKg(Math.abs(ecart))} kg — ${pct} % de la commande`
+    : `+${fmtKg(ecart)} kg en surplus`;
+}
+
+// Les lignes reçues EN MOINS. Un surplus ne bloque personne.
+function _manquesReception(saisies){
+  return (saisies||[]).filter(s=>Number(s.recu) < Number(s.ligne.qte_commandee||0)-0.01);
+}
+
+// La question posée en grand, avec les trois seules suites possibles.
+// Rend 'corriger' | 'partiel' | 'solder'.
+function _demanderSuiteEcart(manques){
+  return new Promise(resolve=>{
+    const li=manques.map(m=>{
+      const cmd=Number(m.ligne.qte_commandee||0), rec=Number(m.recu||0);
+      const pct=cmd>0?Math.round((cmd-rec)/cmd*100):0;
+      return `<li style="margin-bottom:5px"><b>${m.ligne.ingredient_nom}</b> — commandé ${fmtKg(cmd)} kg, reçu ${fmtKg(rec)} kg<br>
+        <span style="color:var(--red);font-weight:700">il manque ${fmtKg(cmd-rec)} kg (${pct} %)</span></li>`;
+    }).join('');
+    const perdu=manques.reduce((s,m)=>
+      s+(Number(m.ligne.qte_commandee||0)-Number(m.recu||0))*Number(m.ligne.prix_unitaire||0),0);
+    const ov=document.createElement('div');
+    ov.id='ecart-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;'
+      +'display:flex;align-items:center;justify-content:center;padding:16px';
+    const btn='width:100%;justify-content:center;margin-top:8px;min-height:46px;font-size:13px';
+    ov.innerHTML=`<div style="background:var(--card2);color:var(--text);border:2px solid var(--red);border-radius:14px;padding:22px;max-width:520px;width:100%;max-height:88vh;overflow-y:auto">
+      <div style="font-weight:800;font-size:16px;color:var(--red);margin-bottom:10px">⚠️ Il manque de la marchandise</div>
+      <ul style="font-size:12px;line-height:1.55;padding-left:18px;margin:0 0 12px">${li}</ul>
+      <div style="font-size:12px;line-height:1.6;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:14px">
+        Soit <b>${fmt(Math.round(perdu))} F</b> facturés sans marchandise en face.<br>
+        <b>Le reste va-t-il arriver ?</b>
+      </div>
+      <button class="btn btn-out" id="ec-corriger" style="${btn}">✏️ Je me suis trompé — je corrige la quantité</button>
+      <button class="btn btn-g"   id="ec-partiel"  style="${btn}">🚚 Livraison partielle — le reste arrive</button>
+      <button class="btn btn-red" id="ec-solder"   style="${btn}">🔒 Le fournisseur en reste là — solder le bon</button>
+      <div style="font-size:10.5px;color:var(--textm);margin-top:12px;line-height:1.55">
+        <b>Le reste arrive</b> : le bon reste ouvert, le montant ne bouge pas, et la prochaine réception créditera la différence.<br>
+        <b>Solder</b> : le montant est ramené à ce qui est arrivé, et le trop-payé devient un avoir chez le fournisseur.
+      </div>
+    </div>`;
+    const fin=(choix)=>{ try{ov.remove();}catch(_){} resolve(choix); };
+    document.body.appendChild(ov);
+    ov.querySelector('#ec-corriger').onclick=()=>fin('corriger');
+    ov.querySelector('#ec-partiel').onclick =()=>fin('partiel');
+    ov.querySelector('#ec-solder').onclick  =()=>fin('solder');
+    // Fermer en cliquant à côté = ne rien enregistrer. Le doute profite au bon.
+    ov.onclick=(e)=>{ if(e.target===ov) fin('corriger'); };
+  });
 }
 
 async function confirmerReception(){
   const achatId=document.getElementById('reception-achat-id')?.value;
   const note=document.getElementById('reception-note')?.value.trim()||null;
+  const err=document.getElementById('reception-err');
+  if(err)err.textContent='';
   const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
   const L=lignes||[];
 
-  let aDesEcarts=false;
-  const updates=L.map(l=>{
-    const recu=+document.getElementById('rec-'+l.id)?.value||0;
-    if(Math.abs(recu-l.qte_commandee)>0.01)aDesEcarts=true;
-    return SB.from('gp_achats_lignes').update({qte_recue:recu}).eq('id',l.id);
+  // UN CHAMP ABSENT N'EST PAS « ZÉRO REÇU ». L'ancien code faisait
+  // `+undefined || 0` : un écran incomplet enregistrait 0 kg reçu, en silence,
+  // et effaçait une livraison entière. On refuse plutôt que d'inventer.
+  const saisies=[], absents=[];
+  L.forEach(l=>{
+    const el=document.getElementById('rec-'+l.id);
+    if(!el){ absents.push(l.ingredient_nom||'ligne'); return; }
+    saisies.push({ligne:l, recu:Number(el.value||0)});
   });
-  await Promise.all(updates);
+  if(absents.length){
+    const m='Écran de réception incomplet ('+absents.join(', ')+') — recharge la page (Ctrl+Maj+R). Rien n\'a été enregistré.';
+    if(err)err.textContent='⛔ '+m; else alert(m);
+    return;
+  }
+  if(!saisies.length){ if(err)err.textContent='⛔ Aucune ligne à réceptionner.'; return; }
 
-  // Tracer la réception (qui / note)
+  // LE FREIN. Un manque arrête tout et demande la suite.
+  const manques=_manquesReception(saisies);
+  let suite='complet';
+  if(manques.length){
+    suite=await _demanderSuiteEcart(manques);
+    if(suite==='corriger') return;   // la fenêtre reste ouverte, la case est modifiable
+  }
+
+  // Quantités reçues
+  await Promise.all(saisies.map(s=>
+    SB.from('gp_achats_lignes').update({qte_recue:s.recu}).eq('id',s.ligne.id)));
+
+  // Trace de la réception (qui / note)
   await SB.from('gp_achats').update({
     note_reception:note,
     recu_par:GP_USER.id,recu_par_nom:GP_USER.email
   }).eq('id',achatId);
 
-  // 🔓 La réception crédite DIRECTEMENT le stock — AVEC remontée d'erreur visible.
+  // SOLDER : le bon est ramené à ce qui est arrivé, et le trop-payé devient un
+  // AVOIR chez le fournisseur — affiché dans la fiche, pas un trou silencieux.
+  let _avoir=0;
+  if(suite==='solder'){
+    let total=0;
+    for(const s of saisies){
+      const mnt=Math.round(Number(s.recu)*Number(s.ligne.prix_unitaire||0));
+      total+=mnt;
+      await SB.from('gp_achats_lignes').update({montant_ligne:mnt}).eq('id',s.ligne.id);
+    }
+    const{data:av}=await SB.from('gp_achats').select('montant_paye').eq('id',achatId).maybeSingle();
+    _avoir=Math.max(0, Number(av?.montant_paye||0)-total);
+    await SB.from('gp_achats').update({montant_total:total}).eq('id',achatId);
+  }
+
+  // Le stock reçoit ce qui est arrivé, dans tous les cas. Mais le STATUT dit la
+  // vérité : « reçu partiel » rouvre le bon dans la file des entrées à
+  // confirmer au lieu de le classer en vert.
   window._mpAjustCredit=false;
   let _creditOk=true, _creditErr='';
-  try{ await crediterStockDepuisAchat(achatId); }
+  try{ await crediterStockDepuisAchat(achatId, suite==='partiel'?'recu_partiel':'valide_daf'); }
   catch(e){ _creditOk=false; _creditErr=(e.message||e); }
-  document.getElementById('modal-reception').style.display='none';
+  const _modal=document.getElementById('modal-reception');
+  if(_modal)_modal.style.display='none';
 
-  // 🔔 Notifier l'admin (push + WhatsApp) — il garde le contrôle a posteriori
+  // 🔔 Notifier l'admin. LE MESSAGE DIT CE QUI MANQUE — l'ancien annonçait le
+  // montant de la commande et « stock crédité », ce qui se lisait comme une
+  // bonne nouvelle le jour même où 225 kg manquaient.
   const{data:a}=await SB.from('gp_achats').select('fournisseur_nom,ref,montant_total').eq('id',achatId).maybeSingle();
   const qui=GP_USER?.email?.split('@')[0]||'secrétaire';
-  const ecartTxt=aDesEcarts?' ⚠️ avec écarts':'';
-  const stockTxt=_creditOk?'Stock crédité automatiquement.':('⚠️ STOCK NON CRÉDITÉ ('+_creditErr+') — à re-créditer (bouton 🔄 Stock).');
+  const titre=!manques.length ? '📦 Réception MP'
+    : (suite==='partiel' ? '🚚 Réception PARTIELLE — il manque de la marchandise'
+                         : '⚠️ Réception INCOMPLÈTE — bon soldé sur le reçu');
+  const detailManque=manques.map(m=>
+    `• ${m.ligne.ingredient_nom} : ${fmtKg(Number(m.ligne.qte_commandee||0)-Number(m.recu||0))} kg manquants `
+    +`sur ${fmtKg(m.ligne.qte_commandee)} commandés`).join('\n');
+  const blocManque=!manques.length ? '' :
+    ('\n\n⚠️ *IL MANQUE :*\n'+detailManque
+     +(suite==='partiel' ? '\n➡️ Le reste est attendu — le bon reste ouvert.'
+                         : '\n➡️ Bon soldé sur ce qui est arrivé.')
+     +(_avoir>0 ? `\n💰 Avoir fournisseur : *${fmt(_avoir)} F*` : ''));
+  const stockTxt=_creditOk?'Stock crédité de ce qui est arrivé.'
+    :('⚠️ STOCK NON CRÉDITÉ ('+_creditErr+') — à re-créditer (bouton 🔄 Stock).');
   notifierAdmin(
-    '📦 Réception MP'+ecartTxt+(_creditOk?'':' — STOCK NON CRÉDITÉ'),
-    `${a?.fournisseur_nom||'Fournisseur'} · ${fmt(a?.montant_total||0)} F — reçu par ${qui}${ecartTxt}`,
-    `📦 *Réception MP*${ecartTxt}\nFournisseur : ${a?.fournisseur_nom||'—'}\nRéf : ${a?.ref||'—'}\nMontant : ${fmt(a?.montant_total||0)} F\nReçu par : ${qui}\n${stockTxt}\n\n_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
+    titre+(_creditOk?'':' — STOCK NON CRÉDITÉ'),
+    `${a?.fournisseur_nom||'Fournisseur'} · ${fmt(a?.montant_total||0)} F — reçu par ${qui}`
+      +(manques.length?` · ${manques.length} ligne(s) incomplète(s)`:''),
+    `${titre}\nFournisseur : ${a?.fournisseur_nom||'—'}\nRéf : ${a?.ref||'—'}\n`
+      +`Montant du bon : ${fmt(a?.montant_total||0)} F\nReçu par : ${qui}${blocManque}\n${stockTxt}\n\n`
+      +`_${GP_CONFIG?.nom_provenderie||'PROVENDA'}_`,
     true /* ouvrir WhatsApp admin */
   );
 
-  notify(_creditOk
-    ? (aDesEcarts?'Réception (avec écarts) — stock crédité ✓':'Réception confirmée — stock crédité ✓')
-    : ('⚠ Réception enregistrée mais STOCK NON CRÉDITÉ : '+_creditErr),
+  notify(!_creditOk ? ('⚠ Réception enregistrée mais STOCK NON CRÉDITÉ : '+_creditErr)
+    : suite==='partiel' ? 'Réception partielle — le bon reste ouvert, le reste est attendu ✓'
+    : suite==='solder'  ? ('Bon soldé sur le reçu'+(_avoir>0?` — avoir fournisseur de ${fmt(_avoir)} F`:'')+' ✓')
+    : 'Réception confirmée — stock crédité ✓',
     _creditOk?'gold':'r');
   // Rafraîchir seulement les vues présentes (le bouton Ajuster vient de la page Stock,
   // où renderAchats() planterait car ses éléments DOM n'existent pas).
@@ -976,44 +1106,93 @@ async function supprimerAchat(id){
 // Crédite le stock MP à partir d'un achat (entrées = qté reçue ou, à défaut, commandée),
 // met à jour le prix des ingrédients et passe l'achat en "validé".
 // Réutilisé par la validation DAF ET par la file "Entrées MP à confirmer" de la page Stock MP.
-async function crediterStockDepuisAchat(achatId){
+// CE QUI RESTE À CRÉDITER, ligne par ligne (pur, testable hors navigateur).
+// `lignes`  : [{id, ingredient_id, qte_commandee, qte_recue}]
+// `entrees` : les mouvements gp_stock_mp portant déjà cet achat_id
+// Chaque ligne consomme d'abord ce qui est déjà en stock pour SA matière ;
+// seul le reste est à créditer. Deux lignes de la même matière se partagent
+// donc correctement le déjà-entré, au lieu que la seconde soit avalée.
+function resteACrediter(lignes, entrees){
+  const couvert={};
+  (entrees||[]).forEach(s=>{
+    if(s.type!=='entree') return;
+    const k=s.ingredient_id||'';
+    couvert[k]=(couvert[k]||0)+Number(s.quantite||0);
+  });
+  const out={};
+  (lignes||[]).forEach(l=>{
+    const k=l.ingredient_id||'';
+    // 0 reçu est une information, pas un vide : l’ancien repli créditait
+    // la quantité COMMANDÉE quand rien n’était arrivé. On ne retombe sur le
+    // commandé que si la réception n’a jamais eu lieu.
+    const recu=l.qte_recue;
+    const du=(recu===null||recu===undefined||recu==='')
+      ? (Number(l.qte_commandee)||0)
+      : (Number(recu)||0);
+    const absorbe=Math.min(du, couvert[k]||0);
+    couvert[k]=(couvert[k]||0)-absorbe;
+    const reste=Math.round((du-absorbe)*1000)/1000;
+    if(reste>0.001) out[l.id]=reste;
+  });
+  return out;
+}
+
+async function crediterStockDepuisAchat(achatId, statutFinal){
   const{data:achat}=await SB.from('gp_achats').select('*').eq('id',achatId).maybeSingle();
   if(!achat) return;
-  // IDEMPOTENCE : déjà crédité ? (entrées stock portant cet achat_id) → ne pas re-créditer
-  const{data:deja}=await SB.from('gp_stock_mp').select('id').eq('achat_id',achatId).limit(1);
-  if(!(deja && deja.length)){
-    const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
-    const L=lignes||[];
-    // LE STOCK VAUT CE QU'IL A COUTÉ, pas ce que le fournisseur a facturé.
-    // Le dédouanement et le transport sont dans le prix du kilo, sinon le prix
-    // de revient est sous-estimé et les marges paraissent meilleures qu'elles
-    // ne sont. Sans frais saisis, le coût réel égale le prix fournisseur :
-    // l'ancien comportement est intact.
-    let _cr = null;
-    try{
-      if(typeof achatFraisLire==='function' && typeof coutReelAchat==='function'){
-        const _f = await achatFraisLire(achatId);
-        if(_f) _cr = coutReelAchat(L, _f);
-      }
-    }catch(_){}
-    const _pu = l => (_cr && _cr.lignes[l.id] && _cr.lignes[l.id].prix_reel) || l.prix_unitaire;
-    const stockEntrees=L.map(l=>({
+  const{data:lignes}=await SB.from('gp_achats_lignes').select('*').eq('achat_id',achatId);
+  const L=lignes||[];
+
+  // CRÉDIT DIFFÉRENTIEL — on crédite CE QUI MANQUE, pas tout ou rien.
+  // L'ancien code refusait de créditer dès qu'UNE entrée existait pour ce bon.
+  // Conséquence : une livraison partielle complétée la semaine suivante
+  // n'entrait jamais en stock, et personne n'en était averti. Désormais chaque
+  // ligne consomme d'abord ce qui est déjà entré pour sa matière, et seul le
+  // reste est crédité. Repasser deux fois sur un bon inchangé ne fait toujours
+  // rien — l'idempotence est conservée, le rattrapage devient possible.
+  const{data:entrees}=await SB.from('gp_stock_mp')
+    .select('ingredient_id,quantite,type').eq('achat_id',achatId);
+  const aCrediter=resteACrediter(L, entrees||[]);
+
+  // LE STOCK VAUT CE QU'IL A COUTÉ, pas ce que le fournisseur a facturé.
+  // Le dédouanement et le transport sont dans le prix du kilo, sinon le prix
+  // de revient est sous-estimé et les marges paraissent meilleures qu'elles
+  // ne sont. Sans frais saisis, le coût réel égale le prix fournisseur :
+  // l'ancien comportement est intact.
+  let _cr = null;
+  try{
+    if(typeof achatFraisLire==='function' && typeof coutReelAchat==='function'){
+      const _f = await achatFraisLire(achatId);
+      if(_f) _cr = coutReelAchat(L, _f);
+    }
+  }catch(_){}
+  const _pu = l => (_cr && _cr.lignes[l.id] && _cr.lignes[l.id].prix_reel) || l.prix_unitaire;
+
+  const stockEntrees=[];
+  L.forEach(l=>{
+    const reste=aCrediter[l.id];
+    if(!(reste>0.001)) return;
+    stockEntrees.push({
       admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,achat_id:achat.id,
       type:'entree',date:achat.date_commande,
       ingredient_id:l.ingredient_id,ingredient_nom:l.ingredient_nom,
-      quantite:l.qte_recue||l.qte_commandee,
+      quantite:reste,
       prix_unit:_pu(l),
       ref:'Achat '+achat.ref,note:'Entrée stock validée'
-    }));
-    if(stockEntrees.length){ const{error}=await SB.from('gp_stock_mp').insert(stockEntrees); if(error) throw error; }
+    });
+  });
+  if(stockEntrees.length){
+    const{error}=await SB.from('gp_stock_mp').insert(stockEntrees);
+    if(error) throw error;
     for(const l of L){
       if(l.ingredient_id){
         await majPrixMP(l.ingredient_id, _pu(l));
       }
     }
   }
+
   await SB.from('gp_achats').update({
-    statut:'valide_daf',
+    statut:statutFinal||'valide_daf',
     valide_par:GP_USER.id,valide_par_nom:GP_USER.email
   }).eq('id',achatId);
   // Drapeau (séparé : inoffensif si colonne absente) — stock bien crédité
@@ -1048,6 +1227,14 @@ async function voirDetailAchat(id){
           <td class="num">${fmt(l.montant_ligne)} F</td>
         </tr>`;}).join('')}
       <tr style="font-weight:700"><td colspan="4">TOTAL</td><td class="num" style="color:var(--gold)">${fmt(a.montant_total)} F</td></tr>
+      ${(()=>{
+        // LA SOUSTRACTION QUI MANQUAIT. Le bon affichait « 25 kg » et
+        // « 400 000 F » sur la même ligne sans jamais les rapprocher.
+        const vr=L.reduce((s,l)=>s+(Number(l.qte_recue>0?l.qte_recue:l.qte_commandee)||0)*Number(l.prix_unitaire||0),0);
+        return Math.abs(vr-Number(a.montant_total||0))>1
+          ? `<tr style="font-weight:700"><td colspan="4" style="color:var(--red)">VALEUR RÉELLEMENT REÇUE</td><td class="num" style="color:var(--red)">${fmt(Math.round(vr))} F</td></tr>`
+          : '';
+      })()}
       </tbody>
     </table>
     <div style="font-size:11px;font-weight:700;color:var(--g6);margin-bottom:6px">Historique paiements</div>
@@ -1062,6 +1249,11 @@ async function voirDetailAchat(id){
       <tr style="font-weight:700"><td colspan="3">TOTAL PAYÉ</td><td class="num" style="color:var(--green)">${fmt(a.montant_paye)} F</td></tr>
       </tbody>
     </table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement enregistré.</div>'}
+    ${Number(a.montant_paye||0)>Number(a.montant_total||0)+1?`
+    <div style="margin-top:10px;background:rgba(245,158,11,.10);border:1px solid var(--gold);border-radius:8px;padding:10px;font-size:11.5px;line-height:1.6">
+      💰 <b>Avoir chez ${a.fournisseur_nom||'le fournisseur'} : ${fmt(Number(a.montant_paye||0)-Number(a.montant_total||0))} F</b><br>
+      <span style="color:var(--textm)">Payé ${fmt(a.montant_paye)} F pour ${fmt(a.montant_total)} F de marchandise. À récupérer, ou à imputer sur la prochaine commande.</span>
+    </div>`:''}
     ${_achatBlocFrais(a, L, F, CR)}
     ${a.note_logistique?`<div style="margin-top:8px;font-size:11px"><strong>Note logistique :</strong> ${a.note_logistique}</div>`:''}
     ${a.note_reception?`<div style="font-size:11px"><strong>Note réception :</strong> ${a.note_reception}</div>`:''}
@@ -1150,6 +1342,23 @@ async function savePaiementAchat(achatId, montantTotal, montantDejaPayé){
   const err=document.getElementById('pmt_err');
 
   if(!montant||montant<=0){err.textContent='Entrez un montant valide.';return;}
+
+  // GARDE-FOU : payer plus que ce qui est arrivé. Le 27/10/2026, 400 000 F sont
+  // sortis de la caisse pour 40 000 F de lysine enregistrée, sans qu'aucun
+  // écran ne rapproche les deux. Il les rapproche maintenant.
+  try{
+    const{data:_ls}=await SB.from('gp_achats_lignes')
+      .select('qte_commandee,qte_recue,prix_unitaire').eq('achat_id',achatId);
+    const _valeurRecue=(_ls||[]).reduce((s,l)=>
+      s+(Number(l.qte_recue>0?l.qte_recue:l.qte_commandee)||0)*Number(l.prix_unitaire||0),0);
+    const _apres=Number(montantDejaPayé||0)+montant;
+    if(_valeurRecue>0 && _apres>_valeurRecue*1.05 && (_apres-_valeurRecue)>1000){
+      if(!confirm(`⚠️ ATTENTION\n\nAprès ce paiement tu auras versé ${fmt(Math.round(_apres))} F `
+        +`pour ${fmt(Math.round(_valeurRecue))} F de marchandise réellement reçue.\n\n`
+        +`Écart : ${fmt(Math.round(_apres-_valeurRecue))} F.\n\n`
+        +`Vérifie la réception du bon avant de payer. Continuer quand même ?`)) return;
+    }
+  }catch(_){}
 
   const nouveauPaye=Number(montantDejaPayé)+montant;
   const reste=Number(montantTotal)-nouveauPaye;

@@ -69,8 +69,8 @@ async function checkRelanceClients(){
     (GP_CLIENTS||[]).forEach(c=>{
       if(typeof estCloisonnePDV==='function' && estCloisonnePDV() && c.point_vente && c.point_vente!==GP_POINT_VENTE) return;
       const s=GP_CLIENT_STATS?.[c.id]; if(!s) return;
-      const k=clientStatut(s).key;
-      if(k==='retard'||k==='perdu') n++;
+      const k=clientStatut(s,0,c.nom).key;
+      if(k==='retard'||k==='perdu'||k==='recouvrer') n++;
     });
     try{ localStorage.setItem(key,'1'); }catch(e){}
     if(n>0 && typeof notify==='function'){

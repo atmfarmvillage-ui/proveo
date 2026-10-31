@@ -103,6 +103,11 @@ async function loadClientStats(force){
     s.freqMoyenne=ds.length>=2
       ? Math.max(1,Math.round((new Date(ds[ds.length-1])-new Date(ds[0]))/86400000/(ds.length-1)))
       : null;
+    // LE PLUS LONG CREUX DÉJÀ OBSERVÉ. C'est lui qui dit si un silence est
+    // inhabituel POUR CE CLIENT. La moyenne, elle, est tirée vers le bas par
+    // les achats serrés d'une même bande et ne décrit personne : chez ATM,
+    // « Inconnu 2 » a une médiane de 1 jour et un plus long creux de 47.
+    s.plusLongCreux=plusLongCreuxDe(ds);
     const fe=Object.entries(s.formules).sort((a,b)=>b[1]-a[1]);
     s.produitHabituel=fe.length?fe[0][0]:null;
   });
@@ -110,15 +115,63 @@ async function loadClientStats(force){
   return map;
 }
 
-// Statut auto : 🟢 Régulier · 🟠 En retard · 🔴 Perdu · ⚪ Nouveau
-function clientStatut(s){
-  if(!s||!s.nbAchats) return {key:'aucun',label:'—',color:'var(--textm)',emoji:'⚪',jours:null};
-  if(s.nbAchats===1)  return {key:'nouveau',label:'Nouveau',color:'var(--textm)',emoji:'⚪',jours:null};
+// Le plus long intervalle entre deux visites (pur, testable hors navigateur).
+// `jours` : les dates de visite DISTINCTES, triees.
+function plusLongCreuxDe(jours){
+  const d=(jours||[]).filter(Boolean);
+  if(d.length<2) return null;
+  return d.slice(1).reduce((mx,j,i)=>Math.max(mx,Math.round((new Date(j)-new Date(d[i]))/86400000)),0);
+}
+
+// ── STATUT CLIENT ─────────────────────────────────────────────────────────
+// CE QUE L'ANCIENNE RÈGLE FAISAIT. Elle comparait le silence d'un client à sa
+// fréquence MOYENNE sur toute son histoire : perdu dès que jours > 2 × moyenne.
+// Plus un client venait souvent, plus sa moyenne était courte — donc plus vite
+// il était enterré. Relevé du 31/10/2026 sur les 40 clients les plus
+// silencieux : 35 marqués « Perdu ». Parmi eux Rosa, deux achats à deux jours
+// d'écart pour 15 000 F. Et Hero farm — 341 500 F, 70 jours de silence —
+// ÉPARGNÉ, parce que ses deux seuls achats étaient espacés de 57 jours. La
+// règle ne mesurait rien : elle tirait au sort sur deux points.
+//
+// CE QUI CHANGE :
+//  1. des seuils en JOURS RÉELS, tirés des écarts observés chez ATM. Les creux
+//     normaux des clients établis montent à 47, 51, 57, 59 jours — le vide
+//     sanitaire entre deux bandes d'élevage. Donc rien avant 45 jours, et le
+//     mot « perdu » seulement au-delà de 90, soit un cycle complet manqué ;
+//  2. une dette change le geste : on ne reconquiert pas un client qui doit de
+//     l'argent, on le recouvre. Un message commercial y serait déplacé ;
+//  3. les ventes au comptoir (« Inconnu 1 », « Inconnu 2 »…) sortent du suivi :
+//     ce ne sont pas des clients, et elles représentaient un quart de la liste.
+// Le rythme personnel n'est pas perdu : il revient en INFORMATION (`inhabituel`),
+// comparé au plus long creux déjà observé — jamais en verdict.
+//
+// La clé 'retard' est conservée (marketing.js et notifications.js s'en servent) ;
+// c'est son seuil et son libellé qui changent.
+const CL_SEUIL_RELANCE = 45;   // jours — en deçà, un creux de cycle est normal
+const CL_SEUIL_PERDU   = 90;   // jours — trois mois, un cycle complet manqué
+const CL_MIN_ACHATS    = 3;    // moins que ça, aucun rythme n'est mesurable
+
+// Les ventes au comptoir sans nom sont enregistrées sous « Inconnu … ».
+function clientAnonyme(nom){
+  return /^inconnu\b/i.test(String(nom||'').trim());
+}
+
+// Statut auto : 🟢 Régulier · 🟠 À relancer · 🔴 Perdu · 🔴 À recouvrer · ⚪ Nouveau
+function clientStatut(s, dette, nom){
+  const du=Number(dette||0);
+  if(!s||!s.nbAchats) return {key:'aucun',label:'—',color:'var(--textm)',emoji:'⚪',jours:null,inhabituel:null,dette:du};
   const jours=Math.floor((Date.now()-new Date(s.dernier))/86400000);
-  const f=s.freqMoyenne||30;
-  if(jours>60 || jours>2*f) return {key:'perdu',label:'Perdu',color:'var(--red)',emoji:'🔴',jours};
-  if(jours>f*1.5)           return {key:'retard',label:'En retard',color:'var(--gold)',emoji:'🟠',jours};
-  return {key:'regulier',label:'Régulier',color:'var(--green)',emoji:'🟢',jours};
+  const record=Number(s.plusLongCreux||0);
+  // « Inhabituel » n'est renseigné que si le client a une vraie histoire.
+  const inhabituel=(s.nbAchats>=CL_MIN_ACHATS && record>0 && jours>record) ? record : null;
+  const fin=(key,label,color,emoji)=>({key,label,color,emoji,jours,inhabituel,dette:du});
+
+  if(clientAnonyme(nom))             return fin('comptoir','Comptoir','var(--textm)','🧾');
+  if(du>0 && jours>CL_SEUIL_RELANCE) return fin('recouvrer','À recouvrer','var(--red)','🔴');
+  if(jours>CL_SEUIL_PERDU)           return fin('perdu','Perdu','var(--red)','🔴');
+  if(jours>CL_SEUIL_RELANCE)         return fin('retard','À relancer','var(--gold)','🟠');
+  if(s.nbAchats<CL_MIN_ACHATS)       return fin('nouveau','Nouveau','var(--textm)','⚪');
+  return fin('regulier','Régulier','var(--green)','🟢');
 }
 
 // ── SUIVI COMMERCIAL DU CLIENT (badge d'attribution) ───────────────
@@ -380,7 +433,7 @@ async function openClientDetail(id){
   const c=GP_CLIENTS.find(x=>x.id===id); if(!c)return;
   await loadClientStats();
   const s=GP_CLIENT_STATS[id]||{};
-  const st=clientStatut(s);
+  const st=clientStatut(s,0,c.nom);
   const jours=s.dernier?Math.floor((Date.now()-new Date(s.dernier))/86400000):null;
 
   let _qDet=SB.from('gp_ventes')
@@ -766,8 +819,11 @@ async function redigerRelanceIA(id, tier){
   const angles={
     nouveau:`C'est un NOUVEAU client (1 seul achat). Souhaite-lui la bienvenue et donne-lui envie de revenir pour une 2e commande.`,
     regulier:`C'est un client FIDÈLE et régulier. Remercie-le et propose un réapprovisionnement au bon moment.`,
-    retard:`Ce client est EN RETARD (${jours} jours sans acheter, au-delà de son rythme habituel). Relance douce et bienveillante pour le faire revenir.`,
-    perdu:`Ce client est PERDU (${jours} jours sans achat). Message de reconquête avec une vraie raison de revenir (qualité, disponibilité, petit geste).`,
+    retard:`Ce client n'a pas acheté depuis ${jours} jours, au-delà de son creux habituel. Relance douce et bienveillante pour le faire revenir.`,
+    perdu:`Ce client n'a plus acheté depuis ${jours} jours, soit plus de trois mois. Message de reconquête avec une vraie raison de revenir (qualité, disponibilité, petit geste).`,
+    // Une dette en cours : on ne vend pas, on recouvre — et avec tact.
+    recouvrer:`Ce client a une DETTE en cours et n'a pas acheté depuis ${jours} jours. Message respectueux qui prend de ses nouvelles et évoque le solde à régler, sans aucune relance commerciale ni proposition d'achat.`,
+    comptoir:`Vente au comptoir sans client identifié : message d'accueil générique, très court.`,
   };
   const angle=angles[st.key]||angles.retard;
   notify(`✍️ Rédaction (${tier==='eco'?'Pro':'Premium'})…`,'gold');
@@ -902,7 +958,7 @@ async function renderClients(){
       const dette=dettes[c.id];
       const montantDu=dette?.total||0;
       const s=GP_CLIENT_STATS?.[c.id];
-      const st=clientStatut(s);
+      const st=clientStatut(s,montantDu,c.nom);
       const dernierTxt=(s&&s.dernier)?' · 🛒 '+(st.jours!=null?'il y a '+st.jours+' j':fmtDate(s.dernier)):'';
       return`<tr style="cursor:pointer" onclick="openClientDetail('${c.id}')">
         <td>
@@ -1239,21 +1295,30 @@ async function deleteClient(id){
 // ── SUIVI & APPELS ─────────────────────────────────
 async function renderSuivi(){
   await loadClientStats(true);
-  const seg={retard:[],perdu:[]};
+  // LA DETTE CHANGE LE GESTE. Un client qui doit de l'argent ne se reconquiert
+  // pas, il se recouvre — un message commercial y serait déplacé. Si les
+  // impayés ne sont pas lisibles depuis ce point de vente, on le DIT dans la
+  // console et le statut se calcule sans eux, au lieu de faire comme si.
+  const dettes={};
+  try{
+    (await impayesPole(null)).forEach(v=>{
+      const reste=Math.max(0,Number(v.montant_total||0)-Number(v.montant_paye||0));
+      if(v.client_id && reste>0) dettes[v.client_id]=(dettes[v.client_id]||0)+reste;
+    });
+  }catch(e){ console.warn('[suivi] dettes illisibles — statut calculé sans elles', e); }
+  const seg={recouvrer:[],retard:[],perdu:[]};
   GP_CLIENTS.forEach(c=>{
     const s=GP_CLIENT_STATS[c.id]; if(!s||!s.nbAchats)return;
-    const st=clientStatut(s);
-    if(st.key==='retard') seg.retard.push({c,st,s});
-    else if(st.key==='perdu') seg.perdu.push({c,st,s});
+    const st=clientStatut(s, dettes[c.id]||0, c.nom);
+    if(seg[st.key]) seg[st.key].push({c,st,s});   // 'comptoir' et 'régulier' n'y sont pas
   });
-  seg.retard.sort((a,b)=>b.st.jours-a.st.jours);
-  seg.perdu.sort((a,b)=>b.st.jours-a.st.jours);
+  Object.keys(seg).forEach(k=>seg[k].sort((a,b)=>b.st.jours-a.st.jours));
 
   const ligne=(c,st,s)=>`<div style="padding:10px;background:rgba(239,68,68,${st.key==='perdu'?'.08':'.05'});border:1px solid rgba(239,68,68,.2);border-radius:8px;margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div style="min-width:0;cursor:pointer" onclick="openClientDetail('${c.id}')">
         <div style="font-weight:700;color:var(--text)">${c.nom} <span style="font-size:9px;color:${st.color}">${st.emoji} ${st.label}</span></div>
-        <div style="font-size:10px;color:var(--textm);margin-top:2px">📞 ${c.telephone||'—'} · Dernier achat il y a <b style="color:var(--red)">${st.jours} j</b>${s.freqMoyenne?' (habituel : '+s.freqMoyenne+' j)':''}</div>
+        <div style="font-size:10px;color:var(--textm);margin-top:2px">📞 ${c.telephone||'—'} · Dernier achat il y a <b style="color:var(--red)">${st.jours} j</b>${st.inhabituel?` — son plus long creux était ${st.inhabituel} j`:''}${st.dette>0?` · <b style="color:var(--red)">doit ${fmt(st.dette)} F</b>`:''}</div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
         <button class="btn btn-out btn-sm" onclick="event.stopPropagation();preFillAppel('${c.id}')" title="Enregistrer un appel">📞</button>
@@ -1263,10 +1328,12 @@ async function renderSuivi(){
     </div>
   </div>`;
 
+  const titre=(couleur,txt)=>`<div style="font-size:11px;font-weight:700;color:${couleur};margin:10px 0 6px">${txt}</div>`;
   const html=
-    (seg.retard.length?`<div style="font-size:11px;font-weight:700;color:var(--gold);margin:4px 0 6px">🟠 En retard (${seg.retard.length})</div>`+seg.retard.map(x=>ligne(x.c,x.st,x.s)).join(''):'')+
-    (seg.perdu.length?`<div style="font-size:11px;font-weight:700;color:var(--red);margin:10px 0 6px">🔴 Perdus / à reconquérir (${seg.perdu.length})</div>`+seg.perdu.map(x=>ligne(x.c,x.st,x.s)).join(''):'');
-  document.getElementById('clients-relance').innerHTML=html||'<div style="color:var(--green);font-size:12px">✅ Tous tes clients actifs sont dans leur fréquence habituelle.</div>';
+    (seg.recouvrer.length?titre('var(--red)',`🔴 À recouvrer (${seg.recouvrer.length}) — ils doivent de l'argent : encaisser avant de revendre`)+seg.recouvrer.map(x=>ligne(x.c,x.st,x.s)).join(''):'')+
+    (seg.retard.length?titre('var(--gold)',`🟠 À relancer (${seg.retard.length}) — plus de ${CL_SEUIL_RELANCE} jours sans commande`)+seg.retard.map(x=>ligne(x.c,x.st,x.s)).join(''):'')+
+    (seg.perdu.length?titre('var(--red)',`🔴 Perdus (${seg.perdu.length}) — plus de ${CL_SEUIL_PERDU} jours, un cycle complet manqué`)+seg.perdu.map(x=>ligne(x.c,x.st,x.s)).join(''):'');
+  document.getElementById('clients-relance').innerHTML=html||`<div style="color:var(--green);font-size:12px">✅ Aucun client silencieux depuis plus de ${CL_SEUIL_RELANCE} jours.</div>`;
 
   SB.from('gp_appels').select('*').eq('admin_id',GP_ADMIN_ID).order('date_appel',{ascending:false}).limit(30).then(({data})=>{
     const A=data||[];

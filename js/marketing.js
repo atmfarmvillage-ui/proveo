@@ -261,11 +261,13 @@ async function renderMarketingSegments(){
   const clients = (typeof GP_CLIENTS!=='undefined' ? GP_CLIENTS : []) || [];
 
   // Segmenter
-  const segs = {nouveau:[],regulier:[],retard:[],perdu:[],aucun:[]};
+  // 'recouvrer' et 'comptoir' ont leur propre case : sans elles, elles
+  // tombaient dans 'aucun' et polluaient les campagnes.
+  const segs = {nouveau:[],regulier:[],retard:[],perdu:[],recouvrer:[],comptoir:[],aucun:[]};
   const tous = [];
   clients.forEach(c=>{
     const s = (GP_CLIENT_STATS||{})[c.id] || {};
-    const st = (typeof clientStatut==='function') ? clientStatut(s) : {key:'aucun'};
+    const st = (typeof clientStatut==='function') ? clientStatut(s, 0, c.nom) : {key:'aucun'};
     const item = {c, s, st, jours:st.jours, ca:Number(s.totalCA||0)};
     (segs[st.key]||segs.aucun).push(item);
     tous.push(item);
