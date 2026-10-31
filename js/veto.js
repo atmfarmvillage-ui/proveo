@@ -353,8 +353,23 @@ async function saveProduitVeto(){
   else  { ({error}=await SB.from('gp_produits_veto').insert(rec)); }
   if(error){ if(err)err.textContent='Erreur : '+error.message; return; }
   vetoFermerProduit();
-  notify(id?`Produit "${nom}" modifié ✓`:`Produit "${nom}" ajouté ✓`,'gold');
   await renderVeto();
+  if(id){ notify(`Produit "${nom}" modifié ✓`,'gold'); return; }
+  // Un produit qui vient d'être créé n'a pas de stock, et c'est la question que
+  // tout le monde se pose en fermant la fiche. On y conduit au lieu de
+  // l'expliquer : produit pré-sélectionné dans la Réception, curseur sur la
+  // quantité. Le point de vente est déjà le bon (verrouillé pour un non-admin).
+  const neuf=GP_VETO_CATALOGUE.find(p=>p.nom===nom);
+  const sel=document.getElementById('vtk_produit');
+  if(neuf && sel){
+    sel.value=neuf.id;
+    onVetoProduitChange();
+    const q=document.getElementById('vtk_qte');
+    if(q){ q.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>q.focus(),350); }
+    notify(`Produit "${nom}" ajouté ✓ — saisis maintenant la quantité reçue.`,'gold');
+  } else {
+    notify(`Produit "${nom}" ajouté ✓`,'gold');
+  }
 }
 
 // ARCHIVER, jamais effacer : le stock et les ventes déjà saisis pointent sur ce
