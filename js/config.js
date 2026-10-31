@@ -85,7 +85,7 @@ function normalizeMpNom(s){
 // continuent de fonctionner — elles voient les formules saisies par l'admin.
 const FORMULES_SADARI = [];
 const ESPECE_ICON={lapin:'🐰',pondeuse:'🥚',chair:'🐔',porc:'🐷',canard:'🦆',tilapia:'🐟',goliath:'🐔'};
-const CAT_LABELS={matiere_premiere:'🌾 MP',salaire:'👤 Salaire',transport:'🚚 Transport',emballage:'📦 Emballage',energie:'⚡ Énergie',maintenance:'🔧 Maintenance',autre:'📝 Autre'};
+const CAT_LABELS={matiere_premiere:'🌾 MP',salaire:'👤 Salaire',transport:'🚚 Transport',emballage:'📦 Emballage',energie:'⚡ Énergie',maintenance:'🔧 Maintenance',veto:'💊 Véto & matériel',autre:'📝 Autre'};
 // ── FONCTIONS DATE ────────────────────────────────
 function today(){
   return new Date().toISOString().slice(0,10);

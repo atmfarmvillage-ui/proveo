@@ -209,7 +209,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="nav-sect">🚚 Distribution</div>
   <div class="nav-item" onclick="showGP('distribution')" data-page="distribution" data-roles="admin,secretaire"><span class="nav-icon">🚚</span>Distribution PDV</div>
   <div class="nav-item" onclick="showGP('stock_central')" data-page="stock_central" data-roles="admin,secretaire"><span class="nav-icon">🏭</span>Stock central &amp; réappro</div>
-  <div class="nav-item" onclick="showGP('veto')" data-page="veto" data-roles="admin,secretaire"><span class="nav-icon">💊</span>Produits Véto</div>
+  <div class="nav-item" onclick="showGP('veto')" data-page="veto" data-roles="admin,secretaire"><span class="nav-icon">💊</span>Véto & matériel</div>
   <div class="nav-item" onclick="showGP('ferme')" data-page="ferme" data-roles="admin,secretaire,gerant"><span class="nav-icon">🐔</span>Produits Ferme</div>
   <div class="nav-item" onclick="showGP('emballages')" data-page="emballages" data-roles="admin,secretaire,logistique,gerant"><span class="nav-icon">&#128230;</span>Emballages</div>
   <div class="nav-item admin-only" onclick="showGP('reversements')" data-page="reversements"><span class="nav-icon">🔄</span>Reversements</div>
@@ -1026,6 +1026,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
             <option value="emballage">📦 Emballage</option>
             <option value="energie">⚡ Énergie</option>
             <option value="maintenance">🔧 Maintenance</option>
+            <option value="veto">💊 Véto & matériel</option>
             <option value="autre">📝 Autre</option>
           </select>
         </div>
@@ -2728,63 +2729,142 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 </div>
 
 <div class="page" id="page-veto">
-  <div class="page-title">Produits Véto</div>
-  <div class="page-sub">Catalogue · Stock par point de vente · Péremption · Vente (via l'écran Ventes)</div>
+  <div class="page-title">Boutique véto & matériel</div>
+  <div class="page-sub">Produits vétérinaires · Outils d'élevage · Stock en lots par point de vente · Péremption · Marché MIGNA</div>
   <div class="g4" id="veto-kpis" style="margin-bottom:14px"></div>
   <div class="g2" style="align-items:start">
     <div>
-      <!-- Réception véto -->
+      <!-- 🔎 Un client cherche… : KEPELA comprend le besoin, on cherche dans NOTRE stock -->
       <div class="card">
-        <div class="card-title"><div class="ct-left"><span>📥 Réception véto</span></div></div>
+        <div class="card-title"><div class="ct-left"><span>🔎 Un client cherche…</span></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="vbz-q" placeholder="Ex : mes poules toussent, mangeoire 10 kg, déparasitant lapin…" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')vetoChercherBesoin()">
+          <button class="btn btn-out btn-sm" id="vbz-mic" onclick="vetoBesoinMic()" title="Dicter" style="display:none">🎤</button>
+          <button class="btn btn-g btn-sm" onclick="vetoChercherBesoin()">Chercher</button>
+        </div>
+        <div id="vbz-res" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Réception : une entrée = un lot, avec sa propre péremption -->
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📥 Réception</span></div></div>
         <div class="fg2">
-          <div class="fr"><label>Produit</label><select id="vtk_produit" onchange="onVetoProduitChange()"><option value="">— Produit véto —</option></select></div>
+          <div class="fr"><label>Produit</label><select id="vtk_produit" onchange="onVetoProduitChange()"><option value="">— Produit —</option></select></div>
           <div class="fr"><label>Point de vente</label><select id="vtk_pdv"></select></div>
         </div>
         <div class="fg2">
-          <div class="fr"><label>Quantité (<span id="vtk_unite_label">unité</span>)</label><input type="number" id="vtk_qte" placeholder="10" min="0" step="0.1"></div>
+          <div class="fr"><label>Quantité (<span id="vtk_unite_label">unité</span>)</label><input type="number" id="vtk_qte" placeholder="10" min="0" step="0.01" oninput="vetoMajTotalEntree()"></div>
           <div class="fr"><label>Date de péremption</label><input type="date" id="vtk_perem"></div>
         </div>
         <div class="fg2">
-          <div class="fr"><label>Prix d'achat / unité (F)</label><input type="number" id="vtk_prix" placeholder="0"></div>
+          <div class="fr"><label>Prix d'achat / unité (F)</label><input type="number" id="vtk_prix" placeholder="0" oninput="vetoMajTotalEntree()"></div>
           <div class="fr"><label>Fournisseur</label><input type="text" id="vtk_fourn" placeholder="Optionnel"></div>
         </div>
+        <!-- Sans la dépense, le stock monte et l'argent ne sort nulle part :
+             chaque vente de véto gonflerait le résultat d'un coût jamais compté. -->
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--text);background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="vtk_depense" checked style="margin-top:2px;flex:0 0 auto;width:auto">
+          <span><b>Enregistrer la dépense</b> et sortir l'argent de la caisse.<br>
+          <span style="color:var(--textm)">Décoche seulement si cette marchandise est déjà payée ailleurs (bon d'achat, dépense déjà saisie).</span></span>
+        </label>
+        <div id="vtk_total" style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px"></div>
         <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEntreeVeto()">✓ Enregistrer l'entrée</button>
         <div class="a-err" id="vtk_err"></div>
       </div>
-      <!-- Catalogue (ajout réservé admin) -->
+
+      <!-- Le catalogue : alertes en haut, une rangée d'actions par produit -->
       <div class="card">
-        <div class="card-title"><div class="ct-left"><span>📋 Catalogue des produits</span></div></div>
-        <details class="admin-only-action" style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
-          <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--g6)">➕ Nouveau produit véto</summary>
-          <div style="margin-top:8px">
-            <div class="fr"><label>Nom</label><input type="text" id="vcat_nom" placeholder="Ex: Vaccin Newcastle"></div>
-            <div class="fg2">
-              <div class="fr"><label>Catégorie</label><select id="vcat_cat"></select></div>
-              <div class="fr"><label>Unité de vente</label><select id="vcat_unite"></select></div>
-            </div>
-            <div class="fg2">
-              <div class="fr"><label>Prix d'achat / unité</label><input type="number" id="vcat_prix_achat" placeholder="0"></div>
-              <div class="fr"><label>Prix de vente / unité</label><input type="number" id="vcat_prix_vente" placeholder="0"></div>
-            </div>
-            <div class="fg2">
-              <div class="fr"><label>Seuil alerte (unités)</label><input type="number" id="vcat_seuil" value="5"></div>
-              <div class="fr" style="display:flex;align-items:flex-end"><button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveProduitVeto()">✓ Ajouter au catalogue</button></div>
-            </div>
-            <div class="a-err" id="vcat_err"></div>
-          </div>
-        </details>
+        <div class="card-title">
+          <div class="ct-left"><span>📦 Produits</span></div>
+          <button class="btn btn-g btn-sm admin-only-action" onclick="vetoOuvrirProduit('')">➕ Nouveau produit</button>
+        </div>
         <div id="veto-catalogue-liste"></div>
       </div>
     </div>
     <div>
       <div class="card">
-        <div class="card-title"><div class="ct-left"><span>⚠ Alertes péremption</span></div></div>
+        <div class="card-title"><div class="ct-left"><span>🔔 Alertes</span></div></div>
         <div id="veto-alertes"></div>
+      </div>
+      <!-- Apprentissage : ce qu'on nous demande et qu'on n'a PAS = quoi acheter -->
+      <div class="card">
+        <div class="card-title"><div class="ct-left"><span>📊 Ce que les clients demandent</span></div></div>
+        <div id="vdz-filtre"></div>
+        <div id="vdz-res"></div>
       </div>
       <div class="card">
         <div class="card-title"><div class="ct-left"><span>📦 Stock par point de vente</span></div></div>
         <div id="veto-stock-liste"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE PRODUIT (fiche catalogue : photo, KEPELA, repère de prix, prix MIGNA) -->
+<div id="modal-veto-produit" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)vetoFermerProduit()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-weight:700;font-size:15px" id="vcat_titre">➕ Nouveau produit</div>
+      <button onclick="vetoFermerProduit()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="vcat_id">
+    <input type="hidden" id="vcat_photo">
+    <!-- La photo part à KEPELA, qui lit l'étiquette et remplit les champs VIDES -->
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px">
+      <div id="vcat_photo_prev" style="width:74px;height:74px;flex:0 0 74px;border-radius:10px;border:1px dashed var(--border);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--textm)">📷</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="btn btn-out btn-sm" style="cursor:pointer">📷 Photo<input type="file" id="vcat_photo_cam" accept="image/*" capture="environment" onchange="vetoPhotoUpload(this)" style="display:none"></label>
+          <label class="btn btn-out btn-sm" style="cursor:pointer">🖼️ Galerie<input type="file" id="vcat_photo_file" accept="image/*" onchange="vetoPhotoUpload(this)" style="display:none"></label>
+          <button class="btn btn-red btn-sm" id="vcat_photo_del" onclick="vetoPhotoRetirer()" style="display:none">✕</button>
+        </div>
+        <div id="vcat_photo_info" style="font-size:10px;color:var(--textm);margin-top:5px;line-height:1.4">Prise de vue ou galerie — l'image est réduite avant l'envoi.</div>
+      </div>
+    </div>
+    <div class="fr"><label>Nom *</label><input type="text" id="vcat_nom" placeholder="Ex: Vaccin Newcastle · Mangeoire 10 kg"></div>
+    <div class="fg2">
+      <div class="fr"><label>Catégorie</label><select id="vcat_cat" onchange="vetoPrixHint()"></select></div>
+      <div class="fr"><label>Unité de vente</label><select id="vcat_unite"></select></div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label>Prix d'achat / unité</label><input type="number" id="vcat_prix_achat" placeholder="0"></div>
+      <div class="fr"><label>Prix de vente / unité</label><input type="number" id="vcat_prix_vente" placeholder="0"></div>
+    </div>
+    <div id="vcat_pv_hint" style="font-size:10px;color:var(--gold);margin:-4px 0 8px"></div>
+    <div class="fg2">
+      <div class="fr"><label>Seuil alerte (unités)</label><input type="number" id="vcat_seuil" value="5"></div>
+      <div class="fr"><label>Prix sur le marché MIGNA</label><input type="number" id="vcat_migna_prix" placeholder="vide = prix comptoir"></div>
+    </div>
+    <div class="fr"><label>Description (visible sur MIGNA)</label><input type="text" id="vcat_desc" placeholder="À quoi sert le produit, en une phrase"></div>
+    <div class="a-err" id="vcat_err"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-g" onclick="saveProduitVeto()" style="flex:1;justify-content:center">✓ Enregistrer</button>
+      <button class="btn btn-out" onclick="vetoFermerProduit()" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE SORTIE : un flacon cassé ou périmé doit pouvoir QUITTER le stock -->
+<div id="modal-veto-mvt" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)vetoFermerMouvement()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-weight:700;font-size:15px" id="vmv_titre">➖ Sortie</div>
+      <button onclick="vetoFermerMouvement()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="vmv_produit">
+    <div style="font-size:11px;color:var(--textm);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.45">
+      Cette sortie n'est <b>pas une vente</b> : une vente se saisit dans 🛒 Ventes. Ici on fait quitter le stock ce qui est perdu, cassé, périmé ou donné.
+    </div>
+    <div class="fr"><label>Point de vente</label><select id="vmv_pdv"></select></div>
+    <div class="fg2">
+      <div class="fr"><label>Quantité (<span id="vmv_unite_label">unité</span>)</label><input type="number" id="vmv_qte" placeholder="1" min="0" step="0.01"></div>
+      <div class="fr"><label>Motif</label><select id="vmv_motif"></select></div>
+    </div>
+    <div class="fr"><label>Note (facultatif)</label><input type="text" id="vmv_note" placeholder="Ex: flacon tombé au comptoir"></div>
+    <div class="a-err" id="vmv_err"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-g" onclick="vetoEnregistrerMouvement()" style="flex:1;justify-content:center">✓ Retirer du stock</button>
+      <button class="btn btn-out" onclick="vetoFermerMouvement()" style="flex:1;justify-content:center">Annuler</button>
     </div>
   </div>
 </div>
@@ -3756,7 +3836,7 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.30.0"></script>
+<script src="js/config.js?v=2.31.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
   <script src="js/catalogue.js?v=1.7.0"></script>
   <script src="js/devis.js?v=1.1.0"></script>
@@ -3799,7 +3879,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=2.26.1"></script>
+<script src="js/veto.js?v=3.0.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>
@@ -3808,7 +3888,7 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.41.0"></script>
+<script src="js/auth.js?v=2.42.0"></script>
 <script src="js/comptes_attente.js?v=1.0.0"></script>
 <script src="js/reservations_admin.js?v=2.27.6"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
