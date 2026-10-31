@@ -180,6 +180,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <!-- VENTES & CLIENTS (en première position après Dashboard — usage quotidien) -->
   <div class="nav-sect">💰 Ventes & Clients</div>
   <div class="nav-item" onclick="showGP('ventes')" data-page="ventes"><span class="nav-icon">💰</span>Ventes</div>
+  <div class="nav-item" onclick="showGP('devis')" data-page="devis"><span class="nav-icon">🧾</span>Devis &amp; Factures</div>
   <div class="nav-item" onclick="showGP('reservations')" data-page="reservations" data-roles="admin,secretaire,gerant"><span class="nav-icon">📋</span>Réservations <span id="nav-badge-resa" class="nav-badge" style="display:none">0</span></div>
   <div class="nav-item" onclick="showGP('clients')" data-page="clients" data-roles="admin,secretaire,logistique,daf,directeur,commercial"><span class="nav-icon">👥</span>Clients</div>
   <div class="nav-item" onclick="showGP('suivi')" data-page="suivi" data-roles="admin,secretaire,logistique,daf,directeur,commercial"><span class="nav-icon">📞</span>Suivi & Appels</div>
@@ -1199,6 +1200,78 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   </div>
   <!-- Conseiller IA achats (admin uniquement) — rempli par renderStrategieMP -->
   <div id="strat-ia-zone"></div>
+</div>
+
+<!-- DEVIS & FACTURES -->
+<div class="page" id="page-devis">
+  <div class="page-title">Devis &amp; Factures</div>
+  <div class="page-sub">Le client demande un prix — l'application le chiffre et lui envoie le document</div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-t">👤 Client</div>
+    <div class="g2">
+      <div class="fr">
+        <label>Nom du client *</label>
+        <input id="dev-client" list="dev-clients-list" placeholder="Nom, ou choisis dans la liste" onchange="devClientChange()">
+        <datalist id="dev-clients-list"></datalist>
+      </div>
+      <div class="fr">
+        <label>Numéro WhatsApp</label>
+        <input id="dev-tel" type="tel" placeholder="90 00 00 00">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-t">🛒 Ce qu'il veut prendre</div>
+    <div class="g4" style="align-items:end">
+      <div class="fr" style="grid-column:span 2">
+        <label>Matière première ou aliment</label>
+        <input id="dev-produit" list="dev-produits-list" placeholder="Maïs, L-Lysine, Pondeuse ponte A…" onchange="devMajUnites()">
+        <datalist id="dev-produits-list"></datalist>
+      </div>
+      <div class="fr"><label>Quantité</label><input id="dev-qte" type="number" step="0.1" min="0" placeholder="400"></div>
+      <div class="fr"><label>Unité</label><select id="dev-unite" onchange="devMajUnites()"><option value="kg">kg</option></select></div>
+    </div>
+    <div class="g4" style="align-items:end">
+      <div class="fr" style="grid-column:span 2">
+        <label>Prix/kg imposé <span style="font-weight:400;color:var(--textm)">— vide = le tarif de la fiche</span></label>
+        <input id="dev-prix-manuel" type="number" step="1" min="0" placeholder="laisse vide">
+      </div>
+      <div class="fr" style="grid-column:span 2;display:flex;align-items:flex-end">
+        <button class="btn btn-g" style="width:100%;justify-content:center" onclick="devAjouterLigne()">+ Ajouter au panier</button>
+      </div>
+    </div>
+    <div id="dev-prix-info" style="font-size:11.5px;margin-top:4px"></div>
+    <div class="a-err" id="dev-err"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-t">🧾 Panier — <span id="dev-total" style="color:var(--gold)">0 F</span></div>
+    <div id="dev-panier"></div>
+    <div class="fr" style="margin-top:10px">
+      <label>Note sur le document <span style="font-weight:400;color:var(--textm)">— facultatif</span></label>
+      <input id="dev-note" placeholder="Livraison incluse, retrait au dépôt…">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-g"   onclick="devEnvoyer('devis')">📲 Envoyer le devis</button>
+      <button class="btn btn-out" onclick="devImprimer('devis')">🖨️ Imprimer le devis</button>
+      <button class="btn btn-g"   onclick="devEnvoyer('facture')" style="background:var(--g6)">📲 Envoyer la facture</button>
+      <button class="btn btn-out" onclick="devImprimer('facture')">🖨️ Imprimer la facture</button>
+      <button class="btn btn-out" onclick="devVersVente()" style="border-color:var(--gold);color:var(--gold)">✅ Transformer en vente</button>
+      <button class="btn btn-red btn-sm" onclick="devViderPanier()">🗑 Vider</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--textm);margin-top:8px;line-height:1.55">
+      Un devis ou une facture ne sort <b>aucun stock</b> et ne touche <b>ni la caisse ni la dette</b> :
+      ce sont des documents. Quand le client achète pour de bon, clique sur
+      <b>Transformer en vente</b> — le panier part dans la page Ventes où tu choisis le paiement.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-t">📁 Derniers devis et factures</div>
+    <div id="dev-liste"></div>
+  </div>
 </div>
 
 <!-- CLIENTS -->
@@ -3686,6 +3759,7 @@ try{
 <script src="js/config.js?v=2.30.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
   <script src="js/catalogue.js?v=1.7.0"></script>
+  <script src="js/devis.js?v=1.0.0"></script>
   <script src="js/print.js?v=2.31.0"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.33.0"></script>
@@ -3709,7 +3783,7 @@ try{
 <script src="js/corbeille.js?v=2.27.0"></script>
 <script src="js/dashboard_drill.js?v=2.27.0"></script>
 <script src="js/fournisseurs.js?v=2.26.1"></script>
-<script src="js/achats.js?v=2.31.0"></script>
+<script src="js/achats.js?v=2.31.1"></script>
 <script src="js/achats_frais.js?v=1.0.0"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
 <script src="js/caisse.js?v=2.34.0"></script>
@@ -3734,7 +3808,7 @@ try{
 <script src="js/directeur.js?v=2.26.4"></script>
 <script src="js/licences.js?v=2.26.1"></script>
 <!-- auth.js EN DERNIER — il utilise toutes les fonctions ci-dessus -->
-<script src="js/auth.js?v=2.40.0"></script>
+<script src="js/auth.js?v=2.41.0"></script>
 <script src="js/comptes_attente.js?v=1.0.0"></script>
 <script src="js/reservations_admin.js?v=2.27.6"></script>
 <script src="js/strategie_mp.js?v=2.26.1"></script>
