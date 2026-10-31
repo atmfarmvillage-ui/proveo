@@ -17,5 +17,10 @@
   },
   // ANTHROPIC_API_KEY n'est PAS ici — c'est un secret : `wrangler secret put ANTHROPIC_API_KEY`
   // Caméras MIGNA (Lot D5) : liaison de service vers le relais (même compte Cloudflare), point d'entrée Questions.
-  "services": [{ "binding": "CAMERAS", "service": "migna-cameras", "entrypoint": "Questions" }]
+  // MIGNA : un fetch() direct vers migna.live depuis ce Worker (meme compte)
+  // peut reboucler sur l appelant. Le binding sort de l impasse.
+  "services": [
+    { "binding": "CAMERAS", "service": "migna-cameras", "entrypoint": "Questions" },
+    { "binding": "MIGNA", "service": "migna" }
+  ]
 }

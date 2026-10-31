@@ -7,7 +7,8 @@
 // ══════════════════════════════════════════════════
 
 import { handleRapport } from './rapport.js';
-import { routeCameras } from './cameras.js';   // pointage proposé par les caméras MIGNA (Lot D5)
+import { routeCameras } from './cameras.js';
+import { routeMigna } from './migna.js';      // pont boutique veto -> marche MIGNA + cerveau KEPELA loue   // pointage proposé par les caméras MIGNA (Lot D5)
 
 // Niveaux → moteur + modèle
 const TIERS = {
@@ -118,6 +119,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/rapport') return handleRapport(request, env, url);
     if (url.pathname.startsWith('/cameras/')) return routeCameras(request, env, url, { json });
+    // Pont MIGNA + cerveau KEPELA : ces routes portent leur PROPRE controle du
+    // jeton, elles doivent passer AVANT le garde generique ci-dessous.
+    if (url.pathname.startsWith('/migna/') || url.pathname.startsWith('/ia/')) return routeMigna(request, env, url, { json });
 
     if (request.method !== 'POST') return json({ error: 'POST uniquement' }, 405);
 
