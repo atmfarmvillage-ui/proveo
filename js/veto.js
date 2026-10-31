@@ -539,6 +539,10 @@ async function saveEntreeVeto(){
     }
   }
 
+  // Le produit vient de revenir en stock : MIGNA doit cesser de le dire épuisé.
+  // Sans attendre — la saisie ne doit pas dépendre du réseau.
+  vetoSyncMignaDispo(produitId);
+
   ['vtk_qte','vtk_prix','vtk_fourn','vtk_perem'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   vetoMajTotalEntree();
   if(avertDep && err) err.textContent=avertDep.trim();
@@ -981,13 +985,59 @@ async function vetoPublierSurMigna(id, btn){
       migna_publie_le:new Date().toISOString()
     }).eq('id',id).eq('admin_id',GP_ADMIN_ID);
     if(error){ notify('Publié sur MIGNA, mais le lien n\'a pas pu être retenu : '+error.message,'r'); }
+    else if(!dispo){
+      // DIRE QU'IL SERA INVISIBLE. MIGNA ne montre que les produits disponibles :
+      // annoncer « publié ✓ » puis ouvrir une vitrine où il n'est pas, c'est
+      // mentir deux fois.
+      notify('Publié sur MIGNA — mais INVISIBLE tant que le stock est à 0. Il apparaîtra tout seul à la première entrée.','r');
+    }
     else notify(out.retrait_seul?'Publié sur MIGNA — retrait en boutique uniquement ✓':'Publié sur le marché MIGNA ✓','gold');
-    if(out.url) window.open(out.url,'_blank','noopener');
+    // On n'ouvre la fiche que si elle est réellement visible.
+    if(out.url && dispo) window.open(out.url,'_blank','noopener');
     await renderVeto();
   }catch(e){
     notify('Publication impossible : '+((e&&e.message)||e),'r');
   }finally{
     if(btn){ btn.disabled=false; btn.textContent=label; }
+  }
+}
+
+// RAFRAÎCHIR LA DISPONIBILITÉ SUR MIGNA APRÈS CHAQUE MOUVEMENT DE STOCK.
+// On ne publie jamais le stock exact — seulement « disponible / épuisé » — et
+// toutes les surfaces de MIGNA filtrent sur dispo=true. Cette disponibilité
+// était figée au moment de la publication : on réceptionnait 20 boîtes et la
+// vitrine continuait d'afficher « épuisé ». Elle suit maintenant le stock.
+//
+// Ne fait rien pour un produit jamais publié. Lit la fiche en base plutôt que
+// le catalogue en mémoire : cette fonction est appelée depuis l'écran Ventes,
+// où GP_VETO_CATALOGUE peut très bien être vide.
+async function vetoSyncMignaDispo(produitId){
+  if(!produitId || !GP_ADMIN_ID) return;
+  try{
+    const{data:p}=await SB.from('gp_produits_veto')
+      .select('id,nom,migna_produit_id')
+      .eq('id',produitId).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+    if(!p || !p.migna_produit_id) return;     // jamais publié : rien à rafraîchir
+    const{data:lots}=await SB.from('gp_stock_veto').select('qte')
+      .eq('admin_id',GP_ADMIN_ID).eq('produit_id',produitId);
+    const qte=(lots||[]).reduce((a,l)=>a+Number(l.qte||0),0);
+    const token=await _vToken(); if(!token) return;
+    const{data:{session}}=await SB.auth.getSession();
+    const r=await fetch(_vIaBase()+'/migna/publier',{
+      method:'POST',
+      headers:{'content-type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify({
+        produit_id:produitId,
+        owner_email:(session&&session.user&&session.user.email)||null,
+        en_stock:qte>0
+      })
+    });
+    if(!r.ok){ const o=await r.json().catch(()=>({})); throw new Error(o.error||('erreur '+r.status)); }
+  }catch(e){
+    // Pas de silence : une vitrine qui ment est exactement ce qu'on répare ici.
+    if(typeof notify==='function'){
+      notify('⚠️ MIGNA n\'a pas pu être mis à jour pour ce produit ('+((e&&e.message)||e)+') — reclique 🔄 sur sa ligne.','r');
+    }
   }
 }
 
@@ -1020,6 +1070,8 @@ async function recrediterStockVeto(pdvNom, produitId, qte, produitNom){
       saisi_par:GP_USER&&GP_USER.id
     });
   }
+  // La marchandise revient en stock : la vitrine doit le refléter.
+  vetoSyncMignaDispo(produitId);
 }
 
 // Déduit une quantité du stock véto d'un PDV en FIFO par date de péremption (les plus proches d'abord)
@@ -1037,4 +1089,7 @@ async function deduireStockVeto(pdvNom, produitId, qteAVendre){
     await SB.from('gp_stock_veto').update({qte:dispo-pris}).eq('id',l.id);
     reste-=pris;
   }
+  // Point de passage de TOUTES les sorties — vente, corbeille, perte, casse.
+  // Lancé sans attendre : la vente ne doit pas patienter sur le réseau.
+  vetoSyncMignaDispo(produitId);
 }
