@@ -2810,6 +2810,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     </div>
     <input type="hidden" id="vcat_id">
     <input type="hidden" id="vcat_photo">
+    <div style="font-size:11px;line-height:1.45;color:var(--textm);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px">
+      Cette fiche décrit le produit et ses prix. <b>La quantité ne se saisit pas ici</b> : chaque arrivage entre par <b>📥 Réception</b>, avec sa propre date de péremption et son point de vente.
+    </div>
     <!-- La photo part à KEPELA, qui lit l'étiquette et remplit les champs VIDES -->
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px">
       <div id="vcat_photo_prev" style="width:74px;height:74px;flex:0 0 74px;border-radius:10px;border:1px dashed var(--border);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--textm)">📷</div>
@@ -2840,7 +2843,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     <!-- Ce que le produit SOIGNE : c'est par là que la secrétaire le retrouvera
          quand l'''éleveur décrira un mal au lieu de nommer une molécule. -->
     <div class="fr"><label>🩺 Soigne / prévient</label><input type="text" id="vcat_soigne" placeholder="Ex: trypanosomiase, babésiose">
-      <div style="font-size:10px;color:var(--textm);margin-top:4px;line-height:1.4">Les maladies ou symptômes, séparés par des virgules. Jamais de dose — pour un dosage, c'''est le vétérinaire.</div>
+      <div style="font-size:10px;color:var(--textm);margin-top:4px;line-height:1.4">Les maladies ou symptômes, séparés par des virgules. Jamais de dose — pour un dosage, c'est le vétérinaire.</div>
     </div>
     <div class="a-err" id="vcat_err"></div>
     <div style="display:flex;gap:8px;margin-top:6px">
@@ -3885,7 +3888,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=3.2.0"></script>
+<script src="js/veto.js?v=3.3.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>
