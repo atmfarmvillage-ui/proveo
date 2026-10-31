@@ -130,6 +130,80 @@ function devProduits() {
   );
 }
 
+// ── RECHERCHE (le motif de achat_ingr_search, repris tel quel) ───────────
+function _devNorm(s) {
+  return (typeof normalizeSearch === 'function')
+    ? normalizeSearch(s)
+    : String(s == null ? '' : s).toLowerCase().normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _devEchappe(s) {
+  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function _devFermer(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+function devFiltrerClient() {
+  const q = _devNorm(document.getElementById('dev-client')?.value);
+  const box = document.getElementById('dev-client-results');
+  if (!box) return;
+  if (!q) { box.style.display = 'none'; return; }
+  const l = ((typeof GP_CLIENTS !== 'undefined' ? GP_CLIENTS : []) || [])
+    .filter(c => _devNorm(c.nom).includes(q)).slice(0, 10);
+  if (!l.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = l.map(c => `<div onclick="devChoisirClient('${_devEchappe(c.nom)}','${_devEchappe(c.telephone || '')}')"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
+      <span style="font-weight:600">${c.nom}</span>
+      ${c.telephone ? `<span style="color:var(--textm);margin-left:8px">${c.telephone}</span>` : ''}
+    </div>`).join('');
+}
+
+function devChoisirClient(nom, tel) {
+  const n = document.getElementById('dev-client'); if (n) n.value = nom;
+  const t = document.getElementById('dev-tel');    if (t && !t.value && tel) t.value = tel;
+  _devFermer('dev-client-results');
+}
+
+// Le produit retenu, mémorisé : la case peut contenir une faute de frappe
+// sans que le panier se trompe de matière.
+let DEV_PRODUIT_SEL = null;
+
+function devFiltrerProduit() {
+  const q = _devNorm(document.getElementById('dev-produit')?.value);
+  const box = document.getElementById('dev-produit-results');
+  DEV_PRODUIT_SEL = null;
+  if (!box) return;
+  if (!q) { box.style.display = 'none'; devMajUnites(); return; }
+  const l = devProduits().filter(p => _devNorm(p.nom).includes(q)).slice(0, 12);
+  if (!l.length) { box.style.display = 'none'; devMajUnites(); return; }
+  box.style.display = 'block';
+  box.innerHTML = l.map(p => {
+    const pk = devPrixKg(p, 'kg');
+    const stock = p.type === 'mp' ? devStockDe(p.id) : null;
+    return `<div onclick="devChoisirProduit('${_devEchappe(p.nom)}')"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='rgba(22,163,74,.1)'" onmouseout="this.style.background=''">
+      <span style="font-weight:600">${p.type === 'mp' ? '🌾 ' : '🥣 '}${p.nom}</span>
+      ${pk != null ? `<span style="color:var(--gold);margin-left:8px;font-weight:700">${fmt(Math.round(pk))} F/kg</span>` : ''}
+      ${p.prix_sac != null && p.poids_sac > 0 ? `<span style="color:var(--textm);margin-left:6px">ou ${fmt(p.prix_sac)} F le sac de ${fmt(p.poids_sac)} kg</span>` : ''}
+      ${stock != null ? `<span style="margin-left:8px;color:${stock > 0 ? 'var(--g6)' : 'var(--red)'}">· ${fmtKg(Math.max(0, stock))} kg en stock</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function devChoisirProduit(nom) {
+  const el = document.getElementById('dev-produit'); if (el) el.value = nom;
+  DEV_PRODUIT_SEL = devTrouverProduit(nom);
+  _devFermer('dev-produit-results');
+  devMajUnites();
+}
+
 function devTrouverProduit(nom) {
   const n = String(nom || '').trim().toLowerCase();
   if (!n) return null;
@@ -146,13 +220,6 @@ async function renderDevis() {
   if (!window._stockNiveaux && typeof _fetchAllStockMp === 'function') {
     try { window._stockNiveaux = await _fetchAllStockMp(); } catch (_) {}
   }
-  // Les listes de choix : clients connus, produits vendables.
-  const dlC = document.getElementById('dev-clients-list');
-  if (dlC) dlC.innerHTML = ((typeof GP_CLIENTS !== 'undefined' ? GP_CLIENTS : []) || [])
-    .map(c => `<option value="${(c.nom || '').replace(/"/g, '&quot;')}">`).join('');
-  const dlP = document.getElementById('dev-produits-list');
-  if (dlP) dlP.innerHTML = devProduits()
-    .map(p => `<option value="${(p.nom || '').replace(/"/g, '&quot;')}">`).join('');
   devMajUnites();
   devRenderPanier();
   await devRenderListe();
@@ -187,7 +254,9 @@ function devAjouterLigne() {
   const err = document.getElementById('dev-err');
   if (err) err.textContent = '';
   const nom = document.getElementById('dev-produit')?.value;
-  const p = devTrouverProduit(nom);
+  // Celui choisi dans la liste fait foi ; sinon le nom tapé en entier.
+  const p = (DEV_PRODUIT_SEL && _devNorm(DEV_PRODUIT_SEL.nom) === _devNorm(nom))
+    ? DEV_PRODUIT_SEL : devTrouverProduit(nom);
   if (!p) {
     if (err) err.textContent = '⛔ Choisis un produit dans la liste. '
       + 'Une matière absente n\'a pas de prix de vente : fixe-le dans 🌾 Matières premières.';
@@ -205,27 +274,33 @@ function devAjouterLigne() {
   ['dev-produit', 'dev-qte', 'dev-prix-manuel'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  DEV_PRODUIT_SEL = null;
   devMajUnites();
   devRenderPanier();
 }
 
 function devSupprimerLigne(i) { DEV_LIGNES.splice(i, 1); devRenderPanier(); }
-function devViderPanier() { DEV_LIGNES = []; DEV_CLIENT = { id: null, nom: '', tel: '' };
+function devViderPanier() { DEV_LIGNES = []; DEV_CLIENT = { id: null, nom: '', tel: '' }; DEV_PRODUIT_SEL = null;
   ['dev-client', 'dev-tel', 'dev-note'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   devRenderPanier(); }
 
 // Ce qui reste en stock, pour prévenir — jamais pour bloquer. Un client peut
 // commander ce qu'on n'a pas encore : c'est le rôle d'un devis.
-function devStockDispo(ligne) {
-  if (ligne.type_produit !== 'mp' || !ligne.ingredient_id) return null;
+function devStockDe(ingredientId) {
+  if (!ingredientId) return null;
   const niv = window._stockNiveaux;
   if (!niv || !niv.length) return null;
   let net = 0;
   niv.forEach(m => {
-    if (m.ingredient_id !== ligne.ingredient_id) return;
+    if (m.ingredient_id !== ingredientId) return;
     net += (m.type === 'entree' ? 1 : -1) * Number(m.quantite || 0);
   });
   return net;
+}
+
+function devStockDispo(ligne) {
+  if (ligne.type_produit !== 'mp') return null;
+  return devStockDe(ligne.ingredient_id);
 }
 
 function devRenderPanier() {
@@ -663,6 +738,11 @@ if (typeof window !== 'undefined') {
   window.devViderPanier = devViderPanier;
   window.devMajUnites = devMajUnites;
   window.devClientChange = devClientChange;
+  window.devFiltrerClient = devFiltrerClient;
+  window.devChoisirClient = devChoisirClient;
+  window.devFiltrerProduit = devFiltrerProduit;
+  window.devChoisirProduit = devChoisirProduit;
+  window.devStockDe = devStockDe;
   window.devEnvoyer = devEnvoyer;
   window.devImprimer = devImprimer;
   window.devRouvrir = devRouvrir;

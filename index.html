@@ -1210,10 +1210,10 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="card" style="margin-bottom:14px">
     <div class="card-t">👤 Client</div>
     <div class="g2">
-      <div class="fr">
+      <div class="fr" style="position:relative">
         <label>Nom du client *</label>
-        <input id="dev-client" list="dev-clients-list" placeholder="Nom, ou choisis dans la liste" onchange="devClientChange()">
-        <datalist id="dev-clients-list"></datalist>
+        <input type="text" id="dev-client" placeholder="🔍 Tapez le nom du client…" oninput="devFiltrerClient()" autocomplete="off">
+        <div id="dev-client-results" style="display:none;position:absolute;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:8px;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;margin-top:4px;box-shadow:0 12px 40px rgba(0,0,0,.28)"></div>
       </div>
       <div class="fr">
         <label>Numéro WhatsApp</label>
@@ -1225,20 +1225,20 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="card" style="margin-bottom:14px">
     <div class="card-t">🛒 Ce qu'il veut prendre</div>
     <div class="g4" style="align-items:end">
-      <div class="fr" style="grid-column:span 2">
+      <div class="fr" style="grid-column:span 2;position:relative">
         <label>Matière première ou aliment</label>
-        <input id="dev-produit" list="dev-produits-list" placeholder="Maïs, L-Lysine, Pondeuse ponte A…" onchange="devMajUnites()">
-        <datalist id="dev-produits-list"></datalist>
+        <input type="text" id="dev-produit" placeholder="🔍 Maïs, Lysine, Pondeuse ponte A…" oninput="devFiltrerProduit()" autocomplete="off">
+        <div id="dev-produit-results" style="display:none;position:absolute;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:8px;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;margin-top:4px;box-shadow:0 12px 40px rgba(0,0,0,.28)"></div>
       </div>
       <div class="fr"><label>Quantité</label><input id="dev-qte" type="number" step="0.1" min="0" placeholder="400"></div>
       <div class="fr"><label>Unité</label><select id="dev-unite" onchange="devMajUnites()"><option value="kg">kg</option></select></div>
     </div>
     <div class="g4" style="align-items:end">
-      <div class="fr" style="grid-column:span 2">
-        <label>Prix/kg imposé <span style="font-weight:400;color:var(--textm)">— vide = le tarif de la fiche</span></label>
+      <div class="fr">
+        <label>Prix/kg imposé <span style="font-weight:400;color:var(--textm)">— vide = tarif fiche</span></label>
         <input id="dev-prix-manuel" type="number" step="1" min="0" placeholder="laisse vide">
       </div>
-      <div class="fr" style="grid-column:span 2;display:flex;align-items:flex-end">
+      <div class="fr" style="grid-column:span 3;display:flex;align-items:flex-end">
         <button class="btn btn-g" style="width:100%;justify-content:center" onclick="devAjouterLigne()">+ Ajouter au panier</button>
       </div>
     </div>
@@ -1251,7 +1251,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     <div id="dev-panier"></div>
     <div class="fr" style="margin-top:10px">
       <label>Note sur le document <span style="font-weight:400;color:var(--textm)">— facultatif</span></label>
-      <input id="dev-note" placeholder="Livraison incluse, retrait au dépôt…">
+      <input type="text" id="dev-note" placeholder="Livraison incluse, retrait au dépôt…">
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-g"   onclick="devEnvoyer('devis')">📲 Envoyer le devis</button>
@@ -3759,7 +3759,7 @@ try{
 <script src="js/config.js?v=2.30.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
   <script src="js/catalogue.js?v=1.7.0"></script>
-  <script src="js/devis.js?v=1.0.0"></script>
+  <script src="js/devis.js?v=1.1.0"></script>
   <script src="js/print.js?v=2.31.0"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.33.0"></script>
