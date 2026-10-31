@@ -466,7 +466,7 @@ const PAGES_TECHNICIEN=['dashboard','achats','matieres','stock','inventaire_phys
 // 'stock_central' (consultation stock principal/production + réappro) sera ajouté à l'étape 3.
 var GP_EST_SECONDAIRE = false;
 var GP_EST_PRINCIPAL = false;   // secrétaire du PDV principal → vue stock réseau (lecture seule)
-const PAGES_PDV_SECONDAIRE=['dashboard','ventes','reservations','clients','suivi','classement','distribution','equipe','caisse','stock_central','marketing','aide'];
+const PAGES_PDV_SECONDAIRE=['dashboard','ventes','devis','reservations','clients','suivi','classement','distribution','equipe','caisse','stock_central','marketing','aide'];
 
 // ── Surcharges d'accès par tenant (Phase 2 : grille éditable) ──
 // GP_ACCESS_OVERRIDES = { "<page>": { "<role>": true|false } }. Vide = comportement par défaut.
@@ -622,6 +622,7 @@ var PAGE_RENDERERS = {
     if(typeof remplirApportePar==='function') await remplirApportePar('vt_cl_apporte_par');
     await renderVentes();
   },
+  devis:         function(){ if(typeof renderDevis==='function') renderDevis(); },
   depenses:      renderDep,
   bilan_jour:    typeof renderBilanJour==="function"?renderBilanJour:(typeof renderBilanAvance==="function"&&renderBilanAvance),
   corbeille:     typeof renderCorbeille==="function"&&renderCorbeille,
