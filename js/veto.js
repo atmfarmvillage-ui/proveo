@@ -27,16 +27,33 @@ let GP_VETO_LOTS = [];          // lots visibles du dernier rendu (sert aux moda
 
 // ⚠️ Valeurs ACCENTUÉES conservées telles quelles : elles sont déjà en base.
 // « matériel » est ajouté pour les outils d'élevage (mangeoire, abreuvoir, pince).
-const VETO_CATEGORIES = ['vaccin','antibiotique','vitamine','déparasitant','désinfectant','matériel','autre'];
+const VETO_CATEGORIES = [
+  'vaccin','antibiotique','trypanocide','anticoccidien','déparasitant',
+  'antiparasitaire-externe','antifongique','anti-inflammatoire','vitamine',
+  'anti-stress','reproduction','désinfectant','antiseptique',
+  'matériel','materiel-veto','autre',
+];
 const VETO_CAT_INFO = {
-  'vaccin':        { icon:'💉', l:'Vaccin' },
-  'antibiotique':  { icon:'💊', l:'Antibiotique' },
-  'vitamine':      { icon:'🧪', l:'Vitamine' },
-  'déparasitant':  { icon:'🐛', l:'Déparasitant' },
-  'désinfectant':  { icon:'🧼', l:'Désinfectant' },
-  'matériel':      { icon:'🪣', l:'Matériel d\'élevage' },
-  'autre':         { icon:'📦', l:'Autre' },
+  'vaccin':                  { icon:'💉', l:'Vaccin' },
+  'antibiotique':            { icon:'💊', l:'Antibiotique' },
+  'trypanocide':             { icon:'🩸', l:'Trypanocide' },
+  'anticoccidien':           { icon:'🐣', l:'Anticoccidien' },
+  'déparasitant':            { icon:'🐛', l:'Déparasitant (interne)' },
+  'antiparasitaire-externe': { icon:'🪰', l:'Antiparasitaire externe' },
+  'antifongique':            { icon:'🍄', l:'Antifongique' },
+  'anti-inflammatoire':      { icon:'🔥', l:'Anti-inflammatoire / douleur' },
+  'vitamine':                { icon:'🧪', l:'Vitamine & minéraux' },
+  'anti-stress':             { icon:'⚡', l:'Anti-stress & électrolytes' },
+  'reproduction':            { icon:'🐄', l:'Reproduction & hormones' },
+  'désinfectant':            { icon:'🧼', l:'Désinfectant & hygiène' },
+  'antiseptique':            { icon:'🩹', l:'Antiseptique & soin de plaie' },
+  'matériel':                { icon:'🪣', l:'Matériel d\'élevage' },
+  'materiel-veto':           { icon:'🔧', l:'Matériel vétérinaire' },
+  'autre':                   { icon:'📦', l:'Autre' },
 };
+// Ce qui n'est PAS un médicament se commande à distance sur MIGNA ; tout le
+// reste part en retrait en boutique. Le Worker applique la même règle.
+const VETO_CAT_MATERIEL = ['matériel','materiel-veto'];
 const VETO_UNITES = ['unité','pièce','flacon','boîte','sachet','dose','comprimé','paquet','lot','100g','1Kg','kg','100ml','ml','L'];
 
 // Motifs d'une sortie qui n'est PAS une vente. Sans eux, un produit cassé ou
@@ -194,6 +211,7 @@ async function renderVeto(){
     <div class="econo-box"><div class="econo-val" style="color:${(nbRupture+nbBas)?'var(--red)':'var(--green)'}">${nbRupture+nbBas}</div><div class="econo-lbl">Rupture / manque / bas</div></div>`;
 
   renderVetoAlertes(lotsVisibles, todayStr, in30);
+  renderVetoCompleter();
   renderVetoCatalogue(AGG);
   renderVetoStockParPDV(lotsVisibles, todayStr, in30);
 
@@ -234,7 +252,8 @@ function remplirSelectsVeto(PDVS){
   }
   const selCat=document.getElementById('vcat_cat');
   if(selCat&&!selCat.dataset.filled){
-    selCat.innerHTML=VETO_CATEGORIES.map(c=>`<option value="${c}">${vetoCatInfo(c).icon} ${vetoCatInfo(c).l}</option>`).join('');
+    selCat.innerHTML='<option value="">— à choisir —</option>'+
+      VETO_CATEGORIES.map(c=>`<option value="${c}">${vetoCatInfo(c).icon} ${vetoCatInfo(c).l}</option>`).join('');
     selCat.dataset.filled='1';
   }
   const selMotif=document.getElementById('vmv_motif');
@@ -276,12 +295,13 @@ function vetoOuvrirProduit(id){
   document.getElementById('vcat_titre').textContent = p ? '✏️ Modifier le produit' : '➕ Nouveau produit';
   set('vcat_id', p?p.id:'');
   set('vcat_nom', p?p.nom:'');
-  set('vcat_cat', p?(p.categorie||'vaccin'):'vaccin');
+  set('vcat_cat', p?(p.categorie||''):'');
   set('vcat_unite', p?(p.unite||'unité'):'unité');
   set('vcat_prix_achat', p?(p.prix_achat||''):'');
   set('vcat_prix_vente', p?(p.prix_vente||''):'');
   set('vcat_seuil', p?(p.seuil_alerte||5):5);
   set('vcat_desc', p?(p.description||''):'');
+  set('vcat_soigne', p?(p.soigne||''):'');
   set('vcat_migna_prix', p?(p.migna_prix||''):'');
   vetoPhotoSet(p?(p.photo_url||''):'');
   const info=document.getElementById('vcat_photo_info');
@@ -310,15 +330,19 @@ async function saveProduitVeto(){
   const g=k=>((document.getElementById(k)||{}).value||'');
   const nom=g('vcat_nom').trim();
   if(!nom){ if(err)err.textContent='Le nom du produit est requis.'; return; }
+  // On ne laisse plus passer un produit non classé : c'est la case qui range le
+  // trypanocide avec les vaccins si personne ne la regarde.
+  if(!g('vcat_cat')){ if(err)err.textContent='Choisis la famille du produit (Catégorie) — un véto mal rangé se vend pour un autre.'; return; }
   const rec={
     admin_id:GP_ADMIN_ID,
     nom,
-    categorie:g('vcat_cat')||'autre',
+    categorie:g('vcat_cat'),
     unite:g('vcat_unite')||'unité',
     prix_achat:+g('vcat_prix_achat')||0,
     prix_vente:+g('vcat_prix_vente')||0,
     seuil_alerte:+g('vcat_seuil')||5,
     description:g('vcat_desc').trim()||null,
+    soigne:g('vcat_soigne').trim()||null,
     photo_url:g('vcat_photo').trim()||null,
     migna_prix:+g('vcat_migna_prix')||null,
     actif:true,
@@ -434,7 +458,7 @@ async function vetoFicheDepuisPhoto(blob){
     const r=await fetch(_vIaBase()+'/ia/fiche',{
       method:'POST',
       headers:{'content-type':'application/json',Authorization:'Bearer '+token},
-      body:JSON.stringify({images:[dataUrl],cats,unites:VETO_UNITES,lang:'fr'})
+      body:JSON.stringify({images:[dataUrl],cats,unites:VETO_UNITES,soigne:true,lang:'fr'})
     });
     const out=await r.json().catch(()=>({}));
     if(!r.ok||!out.ok||!out.fiche){
@@ -445,11 +469,21 @@ async function vetoFicheDepuisPhoto(blob){
     const siVide=(id,val)=>{ const el=document.getElementById(id); if(el&&!String(el.value||'').trim()&&val) el.value=val; };
     siVide('vcat_nom', f.titre);
     siVide('vcat_desc', f.description);
-    // Les listes : on ne remplace que la valeur par défaut, pas un choix fait.
-    if(f.categorie){ const s=document.getElementById('vcat_cat'); if(s&&s.value==='vaccin') s.value=f.categorie; }
+    siVide('vcat_soigne', f.soigne);
+    // On ne remplit que ce qui est VIDE, jamais un choix déjà fait.
+    if(f.categorie){ const s=document.getElementById('vcat_cat'); if(s&&!s.value) s.value=f.categorie; }
     if(f.unite){ const u=document.getElementById('vcat_unite'); if(u&&u.value==='unité') u.value=f.unite; }
     vetoPrixHint();
-    if(info) info.textContent='✨ KEPELA a rempli la fiche — vérifie et corrige si besoin.';
+    // DIRE CE QU'IL N'A PAS TROUVÉ. « A rempli la fiche » au-dessus d'une case
+    // posée par défaut, c'est ce qui a fait passer un trypanocide pour un vaccin.
+    if(info){
+      const manque=[];
+      if(!f.categorie) manque.push('la famille');
+      if(!String(f.soigne||'').trim()) manque.push('ce qu\'il soigne');
+      info.textContent = manque.length
+        ? '✨ KEPELA a lu l\'étiquette — il n\'a pas reconnu '+manque.join(' ni ')+'. À toi de compléter.'
+        : '✨ KEPELA a rempli la fiche — vérifie et corrige si besoin.';
+    }
   }catch(e){ if(info) info.textContent='✅ Photo ajoutée. ✨ KEPELA injoignable.'; }
 }
 
@@ -608,6 +642,7 @@ function renderVetoCatalogue(AGG){
         <td><div style="display:flex;gap:8px;align-items:center">${vign}<div style="min-width:0">
           <div style="font-weight:600">${_vEsc(p.nom)}</div>
           <div style="font-size:9px;color:var(--textm)">${ci.icon} ${ci.l}${migna}</div>
+          ${p.soigne?`<div style="font-size:9px;color:var(--g6);margin-top:1px">🩺 ${_vEsc(p.soigne)}</div>`:''}
         </div></div></td>
         <td class="num" style="font-weight:700">${_vQ(a.qte)} <span style="font-size:9px;color:var(--textm)">${_vEsc(p.unite||'')}</span></td>
         ${GP_ROLE==='admin'?`<td class="num">${fmt(p.prix_achat||0)} F</td>`:''}
@@ -622,6 +657,61 @@ function renderVetoCatalogue(AGG){
         </div></td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
+}
+
+// Combien de produits n'ont pas encore d'indication, et le bouton pour les
+// demander d'un coup. Le nombre est annoncé AVANT de dépenser de l'IA.
+function renderVetoCompleter(){
+  const el=document.getElementById('veto-completer');
+  if(!el) return;
+  const vides=GP_VETO_CATALOGUE.filter(p=>!String(p.soigne||'').trim());
+  if(!vides.length || GP_ROLE!=='admin'){ el.innerHTML=''; return; }
+  el.innerHTML=`<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;background:rgba(232,197,71,.10);border:1px solid rgba(232,197,71,.4);border-radius:8px;padding:8px 11px;margin-bottom:10px;font-size:11px">
+    <span style="flex:1;min-width:150px">🩺 <b>${vides.length} produit${vides.length>1?'s':''}</b> sans indication — on ne sait pas ce qu'${vides.length>1?'ils soignent':'il soigne'}.</span>
+    <button class="btn btn-g btn-sm" id="veto-completer-btn" onclick="vetoCompleterCatalogue(this)">✨ Compléter le catalogue</button>
+  </div>`;
+}
+
+// Demande à KEPELA, produit par produit, ce que soigne chacun — à partir du NOM,
+// sans photo. Séquentiel : on ne matraque pas le moteur, et on voit la
+// progression. Ce qu'il ne reconnaît pas reste VIDE : on ne devine pas ce que
+// soigne un médicament vétérinaire.
+async function vetoCompleterCatalogue(btn){
+  const vides=GP_VETO_CATALOGUE.filter(p=>!String(p.soigne||'').trim());
+  if(!vides.length){ notify('Tous les produits portent déjà une indication ✓','gold'); return; }
+  if(!confirm(`Demander à KEPELA ce que soignent ${vides.length} produit(s) ?\n\nIl laisse VIDE ce qu'il ne reconnaît pas — une indication inventée sur un médicament est pire qu'une case vide.`)) return;
+  const token=await _vToken();
+  if(!token){ notify('Session expirée — reconnecte-toi.','r'); return; }
+  const cats=VETO_CATEGORIES.map(c=>({v:c,l:vetoCatInfo(c).l}));
+  let remplis=0, inconnus=0, echecs=0;
+  if(btn){ btn.disabled=true; }
+  for(let i=0;i<vides.length;i++){
+    const p=vides[i];
+    if(btn) btn.textContent=`⏳ ${i+1}/${vides.length}…`;
+    try{
+      const r=await fetch(_vIaBase()+'/ia/soigne',{
+        method:'POST',
+        headers:{'content-type':'application/json',Authorization:'Bearer '+token},
+        body:JSON.stringify({nom:p.nom,cats,lang:'fr'})
+      });
+      const out=await r.json().catch(()=>({}));
+      if(!r.ok||!out.ok||!out.fiche){ echecs++; continue; }
+      const soigne=String(out.fiche.soigne||'').trim();
+      if(!soigne){ inconnus++; continue; }
+      const maj={soigne};
+      // La famille n'est corrigée que si elle était VIDE : on ne réécrit pas un
+      // classement que quelqu'un a posé à la main.
+      if(out.fiche.categorie && !p.categorie) maj.categorie=out.fiche.categorie;
+      const{error}=await SB.from('gp_produits_veto').update(maj).eq('id',p.id).eq('admin_id',GP_ADMIN_ID);
+      if(error){ echecs++; continue; }
+      remplis++;
+    }catch(e){ echecs++; }
+  }
+  if(btn){ btn.disabled=false; btn.textContent='✨ Compléter le catalogue'; }
+  // On dit les trois chiffres, y compris les échecs : un rattrapage muet laisse
+  // croire que tout est passé.
+  notify(`${remplis} complété(s) · ${inconnus} non reconnu(s) par KEPELA`+(echecs?` · ${echecs} en échec`:'')+' ✓', echecs?'r':'gold');
+  await renderVeto();
 }
 
 // ══════════════════════════════════════════════════
@@ -734,8 +824,10 @@ function _vBesoinRendre(q,b){
   const mots=(b.mots_cles||[]).map(_vNorm).filter(Boolean);
   const type=b.type||'';
   const scored=GP_VETO_CATALOGUE.map(p=>{
-    const nom=_vNorm(p.nom), des=_vNorm(p.description||'');
-    let s=mots.reduce((a,m)=>a+(nom.includes(m)?1:(des.includes(m)?0.5:0)),0);
+    const nom=_vNorm(p.nom), des=_vNorm(p.description||''), soi=_vNorm(p.soigne||'');
+    // Le mal traité pèse autant que le nom : « mes bœufs tremblent » doit
+    // trouver le trypanocide, dont le nom ne dit rien à l'éleveur.
+    let s=mots.reduce((a,m)=>a+(nom.includes(m)?1:(soi.includes(m)?1:(des.includes(m)?0.5:0))),0);
     if(b.categorie && p.categorie===b.categorie) s+=0.5;
     return {p, s, qte:Number((A[p.id]||{}).qte||0)};
   }).filter(x=>x.s>0).sort((a,b2)=>{
@@ -754,7 +846,7 @@ function _vBesoinRendre(q,b){
     liste=scored.map(({p,qte})=>{
       const dispo=qte>0;
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div><b style="font-size:12px">${_vEsc(p.nom)}</b><div style="font-size:10px;color:var(--textm)">${vetoCatInfo(p.categorie).icon} ${fmt(p.prix_vente||0)} F / ${_vEsc(p.unite||'')}</div></div>
+        <div><b style="font-size:12px">${_vEsc(p.nom)}</b><div style="font-size:10px;color:var(--textm)">${vetoCatInfo(p.categorie).icon} ${fmt(p.prix_vente||0)} F / ${_vEsc(p.unite||'')}</div>${p.soigne?`<div style="font-size:9px;color:var(--g6)">🩺 ${_vEsc(p.soigne)}</div>`:''}</div>
         <span style="font-size:9px;font-weight:700;color:${dispo?'var(--green)':'var(--red)'};white-space:nowrap">${dispo?('Stock '+_vQ(qte)):'Rupture'}</span>
       </div>`;
     }).join('');

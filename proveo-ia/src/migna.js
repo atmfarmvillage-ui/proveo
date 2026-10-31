@@ -71,13 +71,21 @@ async function handleIa(request, env, kind, json) {
   if (kind === 'fiche') {
     payload.images = Array.isArray(body.images) ? body.images.slice(0, 3) : [];
     payload.notes = String(body.notes || '').slice(0, 300);
-    payload.cats = Array.isArray(body.cats) ? body.cats.slice(0, 12) : [];
+    payload.cats = Array.isArray(body.cats) ? body.cats.slice(0, 24) : [];
     payload.unites = Array.isArray(body.unites) ? body.unites.slice(0, 20) : [];
+    // Le champ « soigne » : les maladies que le produit traite. Demande explicite,
+    // pour ne pas changer la forme de reponse attendue par les autres appelants.
+    payload.soigne = body.soigne === true;
     if (!payload.images.length) return json({ error: 'Photo manquante.' }, 400);
   } else if (kind === 'besoin') {
     payload.texte = String(body.texte || '').slice(0, 400);
-    payload.cats = Array.isArray(body.cats) ? body.cats.slice(0, 12) : [];
+    payload.cats = Array.isArray(body.cats) ? body.cats.slice(0, 24) : [];
     if (!payload.texte.trim()) return json({ error: 'Besoin vide.' }, 400);
+  } else if (kind === 'soigne') {
+    // Rattrapage d un catalogue deja saisi : a partir du NOM seul, sans photo.
+    payload.nom = String(body.nom || '').slice(0, 160);
+    payload.cats = Array.isArray(body.cats) ? body.cats.slice(0, 20) : [];
+    if (!payload.nom.trim()) return json({ error: 'Nom du produit manquant.' }, 400);
   } else {
     return json({ error: 'Type inconnu.' }, 400);
   }
@@ -117,7 +125,7 @@ async function handlePublier(request, env, json) {
   // le marché, mise en relation possible, mais JAMAIS de commande à distance.
   // Le matériel d'élevage (mangeoire, abreuvoir, pince) se commande normalement.
   const cat = String(prod.categorie || '');
-  const retraitSeul = cat !== 'matériel';
+  const retraitSeul = !['matériel', 'materiel-veto'].includes(cat);
 
   const payload = {
     // Le préfixe distingue l'origine : 'proveo:<id>' ne peut pas écraser un
@@ -130,7 +138,8 @@ async function handlePublier(request, env, json) {
     whatsapp: (cfg && (cfg.telephone || cfg.tel_dirigeant)) || null,
     owner_email: String(body.owner_email || '').toLowerCase() || null,
     titre: prod.nom,
-    description: prod.description || null,
+    description: [prod.description || '', prod.soigne ? ('Soigne : ' + prod.soigne + '.') : '']
+      .filter(Boolean).join(' ').trim() || null,
     photos: prod.photo_url ? [prod.photo_url] : [],
     prix,
     categorie: cat || null,
@@ -183,6 +192,7 @@ export async function routeMigna(request, env, url, { json }) {
   if (request.method !== 'POST') return json({ error: 'POST uniquement' }, 405);
   if (url.pathname === '/ia/fiche') return handleIa(request, env, 'fiche', json);
   if (url.pathname === '/ia/besoin') return handleIa(request, env, 'besoin', json);
+  if (url.pathname === '/ia/soigne') return handleIa(request, env, 'soigne', json);
   if (url.pathname === '/migna/publier') return handlePublier(request, env, json);
   if (url.pathname === '/migna/depublier') return handleDepublier(request, env, json);
   return json({ error: 'Route inconnue' }, 404);
