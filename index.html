@@ -2778,6 +2778,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <div class="ct-left"><span>📦 Produits</span></div>
           <button class="btn btn-g btn-sm admin-only-action" onclick="vetoOuvrirProduit('')">➕ Nouveau produit</button>
         </div>
+        <div id="veto-completer"></div>
         <div id="veto-catalogue-liste"></div>
       </div>
     </div>
@@ -2836,6 +2837,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <div class="fr"><label>Prix sur le marché MIGNA</label><input type="number" id="vcat_migna_prix" placeholder="vide = prix comptoir"></div>
     </div>
     <div class="fr"><label>Description (visible sur MIGNA)</label><input type="text" id="vcat_desc" placeholder="À quoi sert le produit, en une phrase"></div>
+    <!-- Ce que le produit SOIGNE : c'est par là que la secrétaire le retrouvera
+         quand l'''éleveur décrira un mal au lieu de nommer une molécule. -->
+    <div class="fr"><label>🩺 Soigne / prévient</label><input type="text" id="vcat_soigne" placeholder="Ex: trypanosomiase, babésiose">
+      <div style="font-size:10px;color:var(--textm);margin-top:4px;line-height:1.4">Les maladies ou symptômes, séparés par des virgules. Jamais de dose — pour un dosage, c'''est le vétérinaire.</div>
+    </div>
     <div class="a-err" id="vcat_err"></div>
     <div style="display:flex;gap:8px;margin-top:6px">
       <button class="btn btn-g" onclick="saveProduitVeto()" style="flex:1;justify-content:center">✓ Enregistrer</button>
@@ -3879,7 +3885,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=3.0.0"></script>
+<script src="js/veto.js?v=3.1.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>
