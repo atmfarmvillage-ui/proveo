@@ -2776,7 +2776,10 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       <div class="card">
         <div class="card-title">
           <div class="ct-left"><span>📦 Produits</span></div>
-          <button class="btn btn-g btn-sm admin-only-action" onclick="vetoOuvrirProduit('')">➕ Nouveau produit</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-out btn-sm admin-only-action" onclick="vetoOuvrirStockInitial()" title="Saisir tout l'inventaire d'un coup, sans créer de dépense">📋 Stock initial</button>
+            <button class="btn btn-g btn-sm admin-only-action" onclick="vetoOuvrirProduit('')">➕ Nouveau produit</button>
+          </div>
         </div>
         <div id="veto-completer"></div>
         <div id="veto-catalogue-liste"></div>
@@ -2849,6 +2852,47 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     <div style="display:flex;gap:8px;margin-top:6px">
       <button class="btn btn-g" onclick="saveProduitVeto()" style="flex:1;justify-content:center">✓ Enregistrer</button>
       <button class="btn btn-out" onclick="vetoFermerProduit()" style="flex:1;justify-content:center">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE STOCK INITIAL VÉTO : l'inventaire de départ, sans dépense.
+     Même patron que « Stock initial MP », plus la péremption par ligne et un
+     point de vente commun — on compte un dépôt à la fois. -->
+<div id="modal-veto-init" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)vetoFermerStockInitial()">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:760px;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-weight:700;font-size:16px">📋 Stock initial — véto &amp; matériel</div>
+      <button onclick="vetoFermerStockInitial()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;line-height:1.5;color:var(--text)">
+      <b>Inventaire de départ.</b> Entre ce qui est réellement sur l'étagère aujourd'hui. <b>Aucune dépense n'est créée</b> et la caisse n'est pas touchée — cet argent est sorti il y a longtemps. Les lignes vides ou à 0 sont ignorées.
+    </div>
+    <div class="fr" style="margin-bottom:10px">
+      <label>Point de vente compté</label>
+      <select id="vsi_pdv"></select>
+    </div>
+    <div style="max-height:46vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px">
+      <table class="tbl" style="font-size:12px;width:100%">
+        <thead style="position:sticky;top:0;background:var(--card2);z-index:5">
+          <tr>
+            <th>Produit</th>
+            <th class="num" style="width:90px">Quantité</th>
+            <th class="num" style="width:100px">Prix d'achat</th>
+            <th style="width:140px">Péremption</th>
+          </tr>
+        </thead>
+        <tbody id="vsi_tbody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;gap:8px;flex-wrap:wrap">
+      <span style="color:var(--textm)" id="vsi_recap">0 ligne(s) à enregistrer</span>
+      <span style="font-weight:700">Valeur au prix d'achat : <span id="vsi_valeur" style="color:var(--gold)">0 F</span></span>
+    </div>
+    <div class="a-err" id="vsi_err"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" onclick="vetoSaveStockInitial()" style="flex:1;justify-content:center;font-size:14px;min-height:44px">✓ Enregistrer tout l'inventaire</button>
+      <button class="btn btn-out" onclick="vetoFermerStockInitial()" style="padding:0 16px">Annuler</button>
     </div>
   </div>
 </div>
@@ -3888,7 +3932,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=3.3.0"></script>
+<script src="js/veto.js?v=3.4.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>

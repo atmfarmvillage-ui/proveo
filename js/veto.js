@@ -566,6 +566,86 @@ async function saveEntreeVeto(){
 }
 
 // ══════════════════════════════════════════════════
+// INVENTAIRE DE DÉPART — saisie en masse, SANS DÉPENSE
+//
+// Pour une ligne, décocher la case de la Réception suffit. Pour TOUT le stock
+// déjà sur l'étagère, il faut cet écran. Même règle que « Stock initial MP » :
+// on enregistre ce qui est là, on ne crée AUCUNE dépense et on ne touche pas la
+// caisse — cet argent est sorti il y a des mois, parfois sur un autre exercice.
+// ══════════════════════════════════════════════════
+function vetoOuvrirStockInitial(){
+  if(!GP_VETO_CATALOGUE.length){ notify('Aucun produit au catalogue — crée-en d\'abord.','r'); return; }
+  const err=document.getElementById('vsi_err'); if(err) err.textContent='';
+  // Le PDV commande toute la saisie : on compte un dépôt à la fois.
+  const sel=document.getElementById('vsi_pdv');
+  const src=document.getElementById('vtk_pdv');
+  if(sel && src){
+    sel.innerHTML=src.innerHTML;
+    sel.value=src.value;
+    sel.disabled=(GP_ROLE!=='admin');
+  }
+  const tb=document.getElementById('vsi_tbody');
+  if(tb){
+    tb.innerHTML=GP_VETO_CATALOGUE.slice()
+      .sort((a,b)=>String(a.nom||'').localeCompare(String(b.nom||'')))
+      .map(p=>{
+        const ci=vetoCatInfo(p.categorie);
+        const pa=Number(p.prix_achat||0);
+        return `<tr data-id="${p.id}" data-nom="${_vEsc(p.nom)}" data-unite="${_vEsc(p.unite||'unité')}">
+          <td><div style="font-weight:600">${_vEsc(p.nom)}</div><div style="font-size:9px;color:var(--textm)">${ci.icon} ${_vEsc(p.unite||'unité')}</div></td>
+          <td class="num"><input type="number" class="vsi-qte" placeholder="0" step="0.01" min="0" style="width:100%;text-align:right;font-weight:700" oninput="vetoRecalcStockInitial()"></td>
+          <td class="num"><input type="number" class="vsi-prix" value="${pa||''}" placeholder="${pa}" step="1" min="0" style="width:100%;text-align:right" oninput="vetoRecalcStockInitial()"></td>
+          <td><input type="date" class="vsi-perem" style="width:100%"></td>
+        </tr>`;
+      }).join('');
+  }
+  vetoRecalcStockInitial();
+  const m=document.getElementById('modal-veto-init'); if(m) m.style.display='flex';
+}
+function vetoFermerStockInitial(){ const m=document.getElementById('modal-veto-init'); if(m) m.style.display='none'; }
+
+function vetoRecalcStockInitial(){
+  let n=0, total=0;
+  document.querySelectorAll('#vsi_tbody tr').forEach(tr=>{
+    const q=+tr.querySelector('.vsi-qte').value||0;
+    const p=+tr.querySelector('.vsi-prix').value||0;
+    if(q>0){ n++; total+=q*p; }
+  });
+  const r=document.getElementById('vsi_recap'); if(r) r.textContent=n+' ligne(s) à enregistrer';
+  const v=document.getElementById('vsi_valeur'); if(v) v.textContent=fmt(total)+' F';
+}
+
+async function vetoSaveStockInitial(){
+  const err=document.getElementById('vsi_err');
+  if(err) err.textContent='';
+  const pdv=(document.getElementById('vsi_pdv')||{}).value;
+  if(!pdv){ if(err)err.textContent='Choisis le point de vente compté.'; return; }
+  const rows=[];
+  document.querySelectorAll('#vsi_tbody tr').forEach(tr=>{
+    const q=+tr.querySelector('.vsi-qte').value||0;
+    if(q<=0) return;   // une ligne vide n'est pas un stock à zéro, c'est une ligne non comptée
+    const p=+tr.querySelector('.vsi-prix').value||0;
+    const perem=tr.querySelector('.vsi-perem').value||null;
+    rows.push({
+      admin_id:GP_ADMIN_ID, pdv_nom:pdv,
+      produit_id:tr.dataset.id, produit_nom:tr.dataset.nom,
+      qte:q, unite:tr.dataset.unite,
+      prix_achat:p, date_peremption:perem,
+      fournisseur:null, saisi_par:GP_USER&&GP_USER.id
+    });
+  });
+  if(!rows.length){ if(err)err.textContent='Saisis au moins une quantité supérieure à 0.'; return; }
+  if(err) err.textContent='Enregistrement de '+rows.length+' ligne(s)…';
+  const{error}=await SB.from('gp_stock_veto').insert(rows);
+  if(error){ if(err)err.textContent='Erreur : '+error.message; return; }
+  vetoFermerStockInitial();
+  notify(`${rows.length} ligne(s) d'inventaire enregistrée(s) à ${pdv} ✓ — aucune dépense créée.`,'gold');
+  // Ce qui était publié sur MIGNA et revient en stock doit cesser d'y être « épuisé ».
+  for(const r of rows){ await vetoSyncMignaDispo(r.produit_id); }
+  await renderVeto();
+}
+
+// ══════════════════════════════════════════════════
 // SORTIE MANUELLE (perte, casse, périmé, don…)
 // Les ENTRÉES sont les lots eux-mêmes : on ne les retrace pas une 2e fois,
 // deux histoires du même fait finiraient par se contredire.
