@@ -33,6 +33,10 @@ const DEV_VALIDITE_JOURS = 7;   // les prix MP bougent : la lysine a fait +33 % 
 let DEV_LIGNES = [];
 let DEV_CLIENT = { id: null, nom: '', tel: '' };
 let DEV_LISTE  = [];
+// D'OÙ VIENT CE PANIER. Rempli quand on établit un document ou qu'on reprend
+// un devis ; il voyage jusqu'à la page Ventes, qui marque alors le devis
+// comme vendu. Sans ce fil, `gp_devis.vente_id` restait vide pour toujours.
+let DEV_DEVIS_ID = null;
 
 // ── LE CALCUL (pur, testable hors navigateur) ─────────────────────────────
 
@@ -299,6 +303,7 @@ function devAjouterLigne() {
 
 function devSupprimerLigne(i) { DEV_LIGNES.splice(i, 1); devRenderPanier(); }
 function devViderPanier() { DEV_LIGNES = []; DEV_CLIENT = { id: null, nom: '', tel: '' }; DEV_PRODUIT_SEL = null;
+  DEV_DEVIS_ID = null;   // panier vide : plus aucun devis à marquer
   ['dev-client', 'dev-tel', 'dev-note'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   devRenderPanier(); }
 
@@ -460,6 +465,9 @@ async function devEnregistrer(type) {
       if (typeof notify === 'function') notify('Lignes non enregistrées : ' + eL.message, 'r', 8000);
       return null;
     }
+    // Le panier à l'écran EST ce document : s'il part en vente juste après
+    // (le client accepte au comptoir), c'est ce numéro qui sera marqué vendu.
+    DEV_DEVIS_ID = d.id;
     if (typeof notify === 'function') {
       notify((type === 'facture' ? 'Facture ' : 'Devis ') + numero + ' enregistré ✓', 'gold');
     }
@@ -676,9 +684,20 @@ async function devRenderListe() {
   }
   DEV_LISTE = data || [];
   const auj = (typeof today === 'function') ? today() : new Date().toISOString().slice(0, 10);
+  // CE QUE DEVIENNENT LES DEVIS. Un devis qu'on établit sans jamais savoir
+  // s'il s'est vendu est un papier ; ce chiffre en fait un outil. Compté sur
+  // les devis affichés — et la phrase le dit, plutôt que d'annoncer un taux
+  // « global » qui ne porterait que sur 40 lignes.
+  const _devisSeuls = DEV_LISTE.filter(d => d.type === 'devis');
+  const _vendus = _devisSeuls.filter(d => d.vente_id).length;
+  const _taux = _devisSeuls.length >= 3
+    ? `<div style="font-size:11px;color:var(--textm);padding:4px 10px 8px">
+        <b style="color:var(--text)">${_vendus} des ${_devisSeuls.length} derniers devis</b>
+        sont devenus des ventes — ${Math.round(_vendus * 100 / _devisSeuls.length)} %</div>`
+    : '';
   box.innerHTML = !DEV_LISTE.length
     ? '<div style="color:var(--textm);font-size:12px;padding:10px">Aucun devis pour l\'instant.</div>'
-    : `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+    : _taux + `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
       <thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Montant</th><th>État</th><th></th></tr></thead>
       <tbody>${DEV_LISTE.map(d => {
         const expire = d.type === 'devis' && d.valable_jusqu_au && d.valable_jusqu_au < auj;
@@ -720,6 +739,11 @@ async function devChargerLignes(devisId) {
 async function devRouvrir(devisId) {
   const d = DEV_LISTE.find(x => x.id === devisId);
   if (!d) return;
+  // DÉJÀ VENDU ? On le dit AVANT de remonter le panier, pas après la sortie de
+  // stock. Un devis repris deux fois, c'est deux ventes du même tonnage au
+  // même client — et personne ne s'en aperçoit avant l'inventaire.
+  if (d.vente_id && typeof confirm === 'function'
+      && !confirm(`${d.numero} a déjà été transformé en vente.\n\nLe reprendre quand même ? Ce serait une SECONDE vente.`)) return;
   const lignes = await devChargerLignes(devisId);
   let bouges = 0;
   lignes.forEach(l => {
@@ -733,6 +757,7 @@ async function devRouvrir(devisId) {
     }
   });
   DEV_LIGNES = lignes;
+  DEV_DEVIS_ID = devisId;   // le panier se souvient du devis qu'il rejoue
   const c = document.getElementById('dev-client'); if (c) c.value = d.client_nom || '';
   const t = document.getElementById('dev-tel');    if (t) t.value = d.client_tel || '';
   const n = document.getElementById('dev-note');   if (n) n.value = d.note || '';
@@ -782,6 +807,10 @@ function devVersVente() {
       : null,
     veto_id: null, ferme_produit_id: null, type_prix: 'detail',
   }));
+  // Le devis d'origine voyage avec le panier : la page Ventes le marquera
+  // vendu quand l'argent entrera. Un panier monté à la main (jamais enregistré)
+  // n'a pas d'origine — et il n'y a alors rien à marquer.
+  window.VT_DEVIS_ID = DEV_DEVIS_ID || null;
   const cli = devLireClient();
   if (typeof showGP === 'function') showGP('ventes');
   setTimeout(() => {
@@ -792,7 +821,9 @@ function devVersVente() {
       const s = document.getElementById('vt_client_search'); if (s) s.value = connu.nom;
     }
     if (typeof renderLignesVente === 'function') renderLignesVente();
-    notify('Panier transféré — choisis le paiement puis enregistre la vente', 'gold', 8000);
+    notify(DEV_DEVIS_ID
+      ? 'Panier transféré — choisis le paiement puis enregistre la vente (le devis sera marqué vendu)'
+      : 'Panier transféré — choisis le paiement puis enregistre la vente', 'gold', 8000);
   }, 400);
 }
 

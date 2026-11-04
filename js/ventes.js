@@ -1479,6 +1479,35 @@ async function saveVente(){
 
   if(error){_showErr('Erreur enregistrement vente : '+error.message);return;}
 
+  // ── LE DEVIS D'OÙ VIENT CE PANIER DEVIENT « VENDU » ─────────────────────
+  // `gp_devis.vente_id` existait et n'était jamais rempli : le même devis
+  // pouvait se vendre deux fois sans alerte, et le taux de transformation
+  // était invisible. On lit l'origine puis on l'OUBLIE TOUT DE SUITE — si la
+  // suite s'interrompt, la vente d'après ne doit pas hériter de ce devis.
+  const _devisOrig = (typeof window!=='undefined' && window.VT_DEVIS_ID) || null;
+  if(typeof window!=='undefined') window.VT_DEVIS_ID=null;
+  if(_devisOrig){
+    try{
+      // `.is('vente_id',null)` : la PREMIÈRE vente garde le devis. Un second
+      // passage ne réécrit rien — et on le dit, on ne l'avale pas.
+      const{data:_mk,error:_eMk}=await SB.from('gp_devis')
+        .update({vente_id:vente.id})
+        .eq('id',_devisOrig).eq('admin_id',GP_ADMIN_ID).is('vente_id',null)
+        .select('numero');
+      if(_eMk) notify('⚠ Vente enregistrée, mais le devis n\'a pas été marqué vendu ('+_eMk.message+') — il pourra être revendu par erreur.','r',9000);
+      else if((_mk||[]).length) notify('Devis '+_mk[0].numero+' marqué vendu ✓','gold');
+      else {
+        // ZERO LIGNE, MAIS POURQUOI ? Un UPDATE refusé par RLS ne renvoie pas
+        // d'erreur : il renvoie zéro ligne, comme un devis déjà marqué. On relit
+        // la colonne avant d'accuser la secrétaire d'avoir vendu deux fois.
+        const{data:_dv}=await SB.from('gp_devis').select('vente_id')
+          .eq('id',_devisOrig).eq('admin_id',GP_ADMIN_ID).maybeSingle();
+        if(_dv && _dv.vente_id) notify('⚠ Ce devis était DÉJÀ marqué vendu : la vente est bien enregistrée, mais c\'est la deuxième sur ce document.','gold',10000);
+        else notify('⚠ Vente enregistrée, mais le devis n\'a pas pu être marqué vendu (droits d\'écriture manquants sur les devis) — signale-le, il pourra être revendu par erreur.','r',10000);
+      }
+    }catch(e){ notify('⚠ Vente enregistrée, mais le devis n\'a pas été marqué vendu ('+((e&&e.message)||e)+').','r',9000); }
+  }
+
   // Registre des règlements clients (paiement DATÉ) — trace le paiement immédiat de cette vente.
   if(clientId && Number(paye)>0){
     let _regErr=null;
@@ -2958,6 +2987,9 @@ Continuer ?`)) return;
 
 async function supprimerLigneVente(idx){
   VT_LIGNES.splice(idx,1);
+  // Panier vidé à la main : ce n'est plus le devis transféré. Sans ça, la
+  // vente suivante — un tout autre client — marquerait ce devis comme vendu.
+  if(!VT_LIGNES.length && typeof window!=='undefined') window.VT_DEVIS_ID=null;
   renderLignesVente();
   calcVente();
 }
