@@ -513,8 +513,10 @@ async function devPdfDoc(dv) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20);
   doc.text(String(cfg.nom_provenderie || 'PROVENDERIE').toUpperCase(), xT, y + 7);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
-  const coord = [cfg.localisation, [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ')]
-    .filter(Boolean);
+  // Le numéro de l'ENTREPRISE seulement : la ligne directe du dirigeant n'a pas
+  // à partir chez chaque client. Elle reste dans la fiche entreprise et sert
+  // toujours en interne — on la retire du document, pas de la base.
+  const coord = [cfg.localisation, cfg.telephone].filter(Boolean);
   coord.forEach((t, i) => doc.text(String(t), xT, y + 13 + i * 5));
 
   // Le titre, à droite, en gros : on doit savoir en un coup d'œil si c'est un
@@ -574,10 +576,15 @@ async function devPdfDoc(dv) {
     doc.text(`Prix valables jusqu'au ${jolie(dv.valable_jusqu_au)}.`, M, y);
     doc.setTextColor(90); y += 6;
   }
+  // Le prix affiché n'est pas le dernier mot : on dit où se discute le reste.
+  // Sur un DEVIS seulement — une facture est un montant dû, pas une proposition.
+  if (!estFacture) {
+    doc.text(`Pour toute négociation, merci de contacter la Direction.`, M, y);
+    y += 6;
+  }
   if (dv.note) { doc.text(doc.splitTextToSize(String(dv.note), W - 2 * M), M, y); y += 6; }
 
-  const pied = [cfg.localisation, [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ')]
-    .filter(Boolean).join('   |   ');
+  const pied = [cfg.localisation, cfg.telephone].filter(Boolean).join('   |   ');
   const n = doc.internal.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
     doc.setPage(p);
@@ -611,8 +618,10 @@ function devTexteWa(dv) {
     l.push(`Prix valables jusqu'au ${new Date(dv.valable_jusqu_au + 'T12:00:00')
       .toLocaleDateString('fr-FR')}.`);
   }
-  const tel = [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ');
-  if (tel) { l.push(''); l.push(`📞 ${tel}`); }
+  if (dv.type !== 'facture') {
+    l.push(`Pour toute négociation, merci de contacter la Direction.`);
+  }
+  if (cfg.telephone) { l.push(''); l.push(`📞 ${cfg.telephone}`); }
   return l.join('\n');
 }
 
