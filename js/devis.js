@@ -78,11 +78,14 @@ function devLigneCalc(produit, quantite, unite, prixKgForce) {
   const q = Number(quantite) || 0;
   const poids = Number(produit && produit.poids_sac) || 0;
   const kg = (unite === 'sac' && poids > 0) ? q * poids : q;
-  const prixKg = (prixKgForce != null && prixKgForce !== '')
-    ? Number(prixKgForce)
-    : devPrixKg(produit, unite);
+  // Un prix IMPOSE a la main ne doit jamais etre ramene au tarif du catalogue
+  // dans le dos de celle qui l'a annonce au client : la ligne s'en souvient.
+  // Marqueur en memoire seulement — l'insertion en base liste ses champs.
+  const impose = (prixKgForce != null && prixKgForce !== '');
+  const prixKg = impose ? Number(prixKgForce) : devPrixKg(produit, unite);
   if (prixKg == null || !(kg > 0)) return null;
   return {
+    prix_force: impose,
     type_produit: produit.type,
     ingredient_id: produit.type === 'mp' ? produit.id : null,
     designation: produit.nom,
@@ -220,6 +223,21 @@ async function renderDevis() {
   if (!window._stockNiveaux && typeof _fetchAllStockMp === 'function') {
     try { window._stockNiveaux = await _fetchAllStockMp(); } catch (_) {}
   }
+  // LES PRIX DOIVENT ETRE CEUX DU JOUR. GP_INGREDIENTS et GP_PRIX sont chargés
+  // une seule fois à l'ouverture de session : un tarif changé ailleurs — autre
+  // appareil, autre personne, ou simplement hier — n'arrivait jamais jusqu'ici,
+  // et le devis partait au client avec un prix périmé. Un écran qui engage un
+  // prix va le chercher ; il n'attend pas qu'un autre fichier y pense.
+  try{
+    await Promise.all([
+      (typeof loadIngredients === 'function') ? loadIngredients() : null,
+      (typeof loadPrix === 'function') ? loadPrix() : null,
+    ]);
+  }catch(e){
+    const err = document.getElementById('dev-err');
+    if (err) err.textContent = '⚠️ Les tarifs n\'ont pas pu être actualisés ('
+      + ((e && e.message) || e) + ') — vérifie les prix avant d\'envoyer.';
+  }
   devMajUnites();
   devRenderPanier();
   await devRenderListe();
@@ -352,12 +370,50 @@ function devClientChange() {
   if (t && !t.value && c.tel) t.value = c.tel;
 }
 
+// Relit les tarifs et compare au panier. Rend false si la secrétaire refuse
+// d'établir le document au prix du jour.
+async function devVerifierTarifs() {
+  try{
+    await Promise.all([
+      (typeof loadIngredients === 'function') ? loadIngredients() : null,
+      (typeof loadPrix === 'function') ? loadPrix() : null,
+    ]);
+  }catch(e){ return true; }   // réseau indisponible : on n'empêche pas de travailler
+  const bouges = [];
+  DEV_LIGNES.forEach(l => {
+    // Un prix imposé à la main reste celui qu'on a voulu.
+    if (l.prix_force) return;
+    const p = devTrouverProduit(l.designation);
+    if (!p) return;
+    const neuf = devPrixKg(p, l.unite);
+    if (neuf == null) return;
+    if (Math.round(neuf) !== Math.round(Number(l.prix_kg))) {
+      bouges.push({ ligne: l, avant: Math.round(Number(l.prix_kg)), apres: Math.round(neuf), produit: p });
+    }
+  });
+  if (!bouges.length) return true;
+  const detail = bouges.map(b => `• ${b.ligne.designation} : ${fmt(b.avant)} → ${fmt(b.apres)} F/kg`).join('\n');
+  if (!confirm(`Le tarif a changé depuis que le panier a été monté :\n\n${detail}\n\nÉtablir le document au PRIX DU JOUR ?`)) return false;
+  // On recalcule la ligne entière : le montant suit le prix, sinon le total ment.
+  bouges.forEach(b => {
+    const rec = devLigneCalc(b.produit, b.ligne.quantite, b.ligne.unite);
+    if (rec) { b.ligne.prix_kg = rec.prix_kg; b.ligne.montant_ligne = rec.montant_ligne; }
+  });
+  devRenderPanier();
+  return true;
+}
+
 async function devEnregistrer(type) {
   const err = document.getElementById('dev-err');
   if (err) err.textContent = '';
   const cli = devLireClient();
   if (!cli.nom) { if (err) err.textContent = '⛔ Mets au moins le nom du client.'; return null; }
   if (!DEV_LIGNES.length) { if (err) err.textContent = '⛔ Le panier est vide.'; return null; }
+  // Un panier monté le matin peut être imprimé le soir. Le document engage un
+  // prix : on relit les tarifs juste avant de l'établir, et si l'un a bougé on
+  // le DIT avant d'imprimer — on ne corrige pas un prix dans le dos de celle
+  // qui l'a annoncé au client.
+  if (!(await devVerifierTarifs())) return null;
 
   const date = (typeof today === 'function') ? today() : new Date().toISOString().slice(0, 10);
   const an = new Date(date).getFullYear();
