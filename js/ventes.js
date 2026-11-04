@@ -1223,6 +1223,38 @@ async function saveVente(){
           : `il manque ${_sacsEtKg(manque, d.ps)} de « ${formule} » — en stock ${_sacsEtKg(dispo, d.ps)}, demandé ${_sacsEtKg(d.qte, d.ps)}`);
       }
     }
+    // ── VÉTO : LE STOCK RÉEL, RELU MAINTENANT ──────────────────────
+    // « Quand le stock est 0, pas de vente » (DG, 04/11/2026). La garde posée
+    // à l'ajout de la ligne lit `dataset.stock`, figé au chargement de la page :
+    // une autre secrétaire qui vend la dernière boîte ne met pas à jour cet
+    // onglet. Et deduireStockVeto s'arrête quand les lots sont vides — vendre 5
+    // avec 2 en stock enlève 2 et PERD 3 en silence. On relit la base avant
+    // d'écrire, sur le PDV qui servira justement à la sortie.
+    const _lignesVeto = VT_LIGNES.filter(l => l.type_produit === 'veto' && l.veto_id);
+    if(_lignesVeto.length && typeof vetoDispoPourVente === 'function'){
+      const _pdvV = (typeof pdvSourceVente === 'function' ? pdvSourceVente() : pv) || 'Production';
+      let _dispoV = null;
+      try{ _dispoV = await vetoDispoPourVente(_pdvV); }
+      catch(e){
+        // Stock illisible : on ne devine pas, et on ne vend pas à l'aveugle.
+        _showErr('Stock véto illisible (' + ((e && e.message) || e) + ') — la vente n\'a PAS été enregistrée, réessaie.');
+        return;
+      }
+      const _vouluV = {};
+      _lignesVeto.forEach(l => { _vouluV[l.veto_id] = (_vouluV[l.veto_id] || 0) + Number(l.quantite || 0); });
+      Object.keys(_vouluV).forEach(id => {
+        const e = (_dispoV && _dispoV[id]) || Object.values(_dispoV || {}).find(x => x && x.produit_id === id) || null;
+        const dispo = Number((e && e.qte) || 0);
+        const veut = Number(_vouluV[id] || 0);
+        const nom = (e && e.nom) || (VT_LIGNES.find(l => l.veto_id === id) || {}).formule_nom || 'produit véto';
+        if(veut > dispo + 0.001){
+          ruptures.push(dispo <= 0
+            ? `aucun stock de « ${nom} » à ${_pdvV} — demandé ${fmt(veut)}`
+            : `il manque ${fmt(veut - dispo)} de « ${nom} » — en stock ${fmt(dispo)}, demandé ${fmt(veut)}`);
+        }
+      });
+    }
+
     if(ruptures.length){
       _showErr(`🚫 Vente bloquée — ${ruptures.join(' · ')}`);
       return;
@@ -2895,6 +2927,13 @@ function ajouterLigneVente(){
     const qteSaisie = +document.getElementById('vt_qte')?.value || 0;
     if(stockDispo <= 0){ err.textContent = `🚫 ${produitNom} en rupture — vente impossible.`; return; }
     if(qteSaisie > stockDispo){
+      // Vendre 5 quand il en reste 2, c'est vendre 3 à stock zéro : la sortie
+      // de stock ne descend pas sous zéro, les 3 manquants disparaîtraient des
+      // comptes. L'admin garde la main — lui seul corrige un inventaire.
+      if(GP_ROLE !== 'admin'){
+        err.textContent = `🚫 ${produitNom} : ${fmt(stockDispo)} en stock, tu en demandes ${fmt(qteSaisie)}. Vente impossible — fais compter le rayon, ou passe par l'admin.`;
+        return;
+      }
       if(!confirm(`⚠ Stock insuffisant : ${fmt(stockDispo)} dispo, vous voulez vendre ${qteSaisie}.\nContinuer quand même ?`)) return;
     }
   } else {

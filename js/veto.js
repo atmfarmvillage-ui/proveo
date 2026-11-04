@@ -1184,6 +1184,18 @@ async function deduireStockVeto(pdvNom, produitId, qteAVendre){
     await SB.from('gp_stock_veto').update({qte:dispo-pris}).eq('id',l.id);
     reste-=pris;
   }
+  // LE RESTE NON DÉDUIT NE DOIT PAS DISPARAÎTRE. Les lots sont épuisés avant la
+  // fin : on a sorti moins que ce qui a été vendu. Se taire ici, c'est effacer
+  // de la marchandise des comptes — le stock affichera zéro, la vente dira 5,
+  // et personne ne saura où sont passées les 3 unités.
+  if(reste > 0.001){
+    const _p = (typeof GP_VETO_CATALOGUE !== 'undefined' ? GP_VETO_CATALOGUE : []).find(x => x.id === produitId);
+    if(typeof notify === 'function'){
+      notify('⚠️ ' + _vQ(reste) + ' de « ' + ((_p && _p.nom) || 'produit véto')
+        + ' » n\'ont PAS pu être déduits à ' + pdvNom
+        + ' : le stock était déjà à zéro. Fais compter le rayon.', 'r', 12000);
+    }
+  }
   // Point de passage de TOUTES les sorties — vente, corbeille, perte, casse.
   // Lancé sans attendre : la vente ne doit pas patienter sur le réseau.
   vetoSyncMignaDispo(produitId);
