@@ -1255,6 +1255,66 @@ async function saveVente(){
       });
     }
 
+    // ── MATIÈRES PREMIÈRES ──────────────────────────────────
+    // Même règle que le véto et les formules. La garde posée à l'ajout lit
+    // `window._vtMPStock`, fixé au moment où la matière a été choisie : entre
+    // ce clic et l'enregistrement, une autre saisie a pu vider le stock.
+    const _lignesMP = VT_LIGNES.filter(l => l.type_produit === 'mp' && l.ingredient_id);
+    if(_lignesMP.length && typeof calcNiveaux === 'function'){
+      let _niv = null;
+      try{ _niv = calcNiveaux(await _vtStockMpStrict()); }
+      catch(e){
+        _showErr('Stock matières illisible (' + ((e && e.message) || e) + ') — la vente n\'a PAS été enregistrée, réessaie.');
+        return;
+      }
+      const _vouluMP = {};
+      _lignesMP.forEach(l => {
+        const ing = ((typeof GP_INGREDIENTS !== 'undefined' && GP_INGREDIENTS) || []).find(i => i.id === l.ingredient_id);
+        const nom = (ing && ing.nom) || l.formule_nom || 'matière';
+        _vouluMP[nom] = (_vouluMP[nom] || 0) + Number(l.quantite || 0);
+      });
+      Object.keys(_vouluMP).forEach(nom => {
+        const dispo = Number((_niv || {})[nom] || 0);
+        const veut = Number(_vouluMP[nom] || 0);
+        if(veut > dispo + 0.001){
+          ruptures.push(dispo <= 0
+            ? `aucun stock de « ${nom} » — demandé ${fmtKg(veut)} kg`
+            : `il manque ${fmtKg(veut - dispo)} kg de « ${nom} » — en stock ${fmtKg(dispo)} kg, demandé ${fmtKg(veut)} kg`);
+        }
+      });
+    }
+
+    // ── PRODUITS DE LA FERME ──────────────────────────────────
+    // On relit les mouvements ici plutôt que par loadFermeMouvements(), qui
+    // avale son erreur (stock vide = « tout est en rupture ») et plafonne à
+    // 500 lignes — au-delà, le solde calculé serait faux.
+    const _lignesFerme = VT_LIGNES.filter(l => l.type_produit === 'ferme' && l.ferme_produit_id);
+    if(_lignesFerme.length && typeof fermeSolde === 'function'){
+      let _mvF = null;
+      try{
+        const{data,error} = await SB.from('gp_stock_ferme').select('produit_id,type,qte')
+          .eq('admin_id', GP_ADMIN_ID);
+        if(error) throw error;
+        _mvF = data || [];
+      }catch(e){
+        _showErr('Stock ferme illisible (' + ((e && e.message) || e) + ') — la vente n\'a PAS été enregistrée, réessaie.');
+        return;
+      }
+      const _vouluF = {};
+      _lignesFerme.forEach(l => { _vouluF[l.ferme_produit_id] = (_vouluF[l.ferme_produit_id] || 0) + Number(l.quantite || 0); });
+      Object.keys(_vouluF).forEach(id => {
+        const dispo = Number(fermeSolde(id, _mvF) || 0);
+        const veut = Number(_vouluF[id] || 0);
+        const p = (typeof fermeProduit === 'function') ? fermeProduit(id) : null;
+        const nom = (p && p.nom) || (VT_LIGNES.find(l => l.ferme_produit_id === id) || {}).formule_nom || 'produit ferme';
+        if(veut > dispo + 0.001){
+          ruptures.push(dispo <= 0
+            ? `aucun stock de « ${nom} » — demandé ${fmt(veut)}`
+            : `il manque ${fmt(veut - dispo)} de « ${nom} » — en stock ${fmt(dispo)}, demandé ${fmt(veut)}`);
+        }
+      });
+    }
+
     if(ruptures.length){
       _showErr(`🚫 Vente bloquée — ${ruptures.join(' · ')}`);
       return;
@@ -2659,6 +2719,27 @@ function choisirSousTypeFerme(st){
   }
 }
 
+// LIT TOUS LES MOUVEMENTS MP, ET DIT SI LA LECTURE A ÉCHOUÉ.
+// `_fetchAllStockMp()` (stock.js) sort de sa boucle sur erreur et rend la
+// liste qu'elle a — vide si la première page a raté. Pour AFFICHER un stock,
+// c'est tolérable ; pour REFUSER une vente, non : une coupure réseau ferait
+// lire « aucun stock » sur toutes les matières et bloquerait la journée avec
+// un message faux. Ici l'erreur remonte, et la vente s'arrête en le disant.
+async function _vtStockMpStrict(){
+  let all = [], from = 0; const page = 1000;
+  for(;;){
+    const{data,error} = await SB.from('gp_stock_mp')
+      .select('ingredient_id,ingredient_nom,type,quantite')
+      .eq('admin_id', GP_ADMIN_ID).order('id',{ascending:true}).range(from, from+page-1);
+    if(error) throw error;
+    if(!data || !data.length) break;
+    all = all.concat(data);
+    if(data.length < page) break;
+    from += page;
+  }
+  return all;
+}
+
 // Précharge MP + stock en mémoire (appelé au passage en mode "MP")
 async function populateSelectMPVente(){
   // Fetch direct des MP (resync si désynchronisé)
@@ -2891,6 +2972,12 @@ function ajouterLigneVente(){
     // Vérifier qté demandée vs stock dispo (warning, pas blocage strict)
     const qteSaisie = +document.getElementById('vt_qte')?.value || 0;
     if(qteSaisie > stockDispo){
+      // Même règle que le véto : vendre 400 kg quand il en reste 150, c'est
+      // vendre 250 kg à stock zéro. L'admin garde la main pour corriger.
+      if(GP_ROLE !== 'admin'){
+        err.textContent = `🚫 ${produitNom} : ${fmtKg(stockDispo)} kg en stock, tu en demandes ${fmtKg(qteSaisie)} kg. Vente impossible — fais compter le magasin, ou passe par l'admin.`;
+        return;
+      }
       if(!confirm(`⚠ Stock insuffisant : ${fmtKg(stockDispo)} kg dispo, vous voulez vendre ${qteSaisie} kg.\nContinuer quand même (créera un stock négatif) ?`)){
         return;
       }
@@ -2905,8 +2992,17 @@ function ajouterLigneVente(){
       produitNom = ((opt && opt.dataset.nom) || 'Produit ferme') + (desc ? ' — '+desc : '');
       const reste = Number((opt && opt.dataset.stock) || 0);
       const veut = +document.getElementById('vt_qte')?.value || 0;
-      if(veut > reste && !confirm('⚠ Il ne reste que '+fmt(reste)+' en stock, tu veux en vendre '+fmt(veut)
-        +'.\nContinuer quand même ? Le stock passera en négatif.')) return;
+      // Il n'y avait AUCUN refus à zéro ici : un produit épuisé se vendait
+      // d'un simple « OK ». Même règle que partout désormais.
+      if(reste <= 0){ err.textContent = `🚫 ${produitNom} en rupture — vente impossible.`; return; }
+      if(veut > reste){
+        if(GP_ROLE !== 'admin'){
+          err.textContent = `🚫 ${produitNom} : ${fmt(reste)} en stock, tu en demandes ${fmt(veut)}. Vente impossible — fais compter, ou passe par l'admin.`;
+          return;
+        }
+        if(!confirm('⚠ Il ne reste que '+fmt(reste)+' en stock, tu veux en vendre '+fmt(veut)
+          +'.\nContinuer quand même ? Le stock passera en négatif.')) return;
+      }
     } else {
       if(!sousType){ err.textContent = 'Choisis un produit du catalogue, ou un sous-type ferme.'; return; }
       const labels = {lapin_vivant:'🐰 Lapin vivant', oeuf:'🥚 Œuf', poulet:'🐔 Poulet', autre_ferme:'📦 Produit ferme'};
