@@ -668,31 +668,114 @@ function _mvtLibelle(m, map){
   };
 }
 
+// L'EFFET D'UN MOUVEMENT SUR CETTE CAISSE-CI, SIGNÉ.
+// Cette formule fait foi ailleurs — page Caisse, bilan du jour, recalage par
+// inventaire. Si elle diverge ici, la dernière ligne du relevé ne tombera pas
+// sur le solde affiché sur la carte, et un relevé qui ne tombe pas juste est
+// pire que pas de relevé. Un `ajustement` porte un montant DÉJÀ signé : il
+// peut être négatif.
+function _effetCaisse(m, caisseId){
+  if(!m) return 0;
+  const v = Number(m.montant||0);
+  if(m.type==='entree'     && m.caisse_id===caisseId) return  v;
+  if(m.type==='sortie'     && m.caisse_id===caisseId) return -v;
+  if(m.type==='ajustement' && m.caisse_id===caisseId) return  v;
+  if(m.type==='transfert'  && m.statut_transfert!=='refuse'){
+    if(m.caisse_id===caisseId)      return -v;
+    if(m.caisse_dest_id===caisseId) return  v;
+  }
+  return 0;   // transfert refusé, ou mouvement d'une autre caisse
+}
+
+// L'ORDRE DU RELEVÉ. `date_mouvement` est une DATE sans heure : dix mouvements
+// du même jour n'ont aucun ordre naturel. Sans départage stable, le solde
+// progressif danserait d'un affichage à l'autre.
+function _ordreMvt(a,b){
+  const d=String(a.date_mouvement||'').localeCompare(String(b.date_mouvement||''));
+  if(d) return d;
+  const c=String(a.created_at||'').localeCompare(String(b.created_at||''));
+  if(c) return c;
+  return String(a.id||'').localeCompare(String(b.id||''));
+}
+
+// LE RELEVÉ : une fonction pure, pour qu'elle soit prouvable.
+// Rend les lignes du plus RÉCENT au plus ancien (l'ordre de lecture), chacune
+// portant son effet signé et le solde APRÈS elle. Ne touche pas à la liste
+// reçue — l'appelant s'en sert encore pour résoudre les ventes.
+function _releveCaisse(mvts, caisseId, soldeInit){
+  const tri=(mvts||[]).slice().sort(_ordreMvt);   // du plus ancien au plus récent
+  let courant=Number(soldeInit||0);
+  const lignes=tri.map(m=>{
+    const eff=_effetCaisse(m,caisseId);
+    courant+=eff;
+    return { m, eff, solde:courant };
+  });
+  lignes.reverse();
+  return { lignes, soldeFinal:courant };
+}
+
 async function voirHistoriqueCaisse(caisseId,nom){
   // Sécurité : ne montrer que les caisses visibles par le membre (map des caisses rendues).
   if(typeof GP_CAISSES_MAP!=='undefined' && !GP_CAISSES_MAP[caisseId]){ if(typeof notify==='function') notify('Caisse hors de votre périmètre','r'); return; }
-  const{data}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID)
-    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`)
-    .order('date_mouvement',{ascending:false});
-  const M=data||[];
+  // TOUS les mouvements : la requête n'avait aucune pagination et PostgREST
+  // s'arrête à 1000 lignes. Un solde progressif calculé sur une liste tronquée
+  // serait faux de bout en bout — et faux sans le dire.
+  let M=[];
+  try{
+    M = (await _fetchAllMvtsCaisse(q=>q.or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`))) || [];
+  }catch(e){
+    if(typeof notify==='function') notify('Historique illisible (' + ((e&&e.message)||e) + ') — réessaie.','r',8000);
+    return;
+  }
+  // Le point de départ du relevé. Sans lui, les soldes seraient tous décalés
+  // de la même somme : justes entre eux, faux face à la carte.
+  let soldeInit=0, soldeSur=true;
+  try{
+    const{data:c,error:eC}=await SB.from('gp_caisses').select('solde_initial')
+      .eq('id',caisseId).maybeSingle();
+    if(eC || !c) soldeSur=false; else soldeInit=Number(c.solde_initial||0);
+  }catch(_){ soldeSur=false; }
+
+  const _rel=_releveCaisse(M, caisseId, soldeInit);
+  const L=_rel.lignes, soldeFinal=_rel.soldeFinal;
+
   const _vmap=await _mvtsVentesMap(M);
   const modal=document.getElementById('modal-historique-caisse');
   document.getElementById('historique-caisse-titre').textContent='📋 '+nom;
-  document.getElementById('historique-caisse-content').innerHTML=M.length?`<table class="tbl" style="font-size:11px">
-      <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Montant</th></tr></thead>
-      <tbody>${M.map(m=>{
+
+  const entete = `<div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px">
+      Solde actuel : <span style="color:${soldeFinal<0?'var(--red)':'var(--green)'}">${fmt(soldeFinal)} F</span>
+      <span style="font-weight:400;color:var(--textm);font-size:10px"> · ${L.length} mouvement(s) · du plus récent au plus ancien</span>
+      ${soldeSur?'':'<div style="color:var(--red);font-size:10px;font-weight:600">⚠ Solde de départ illisible : les soldes ci-dessous sont décalés d’autant.</div>'}
+    </div>`;
+
+  document.getElementById('historique-caisse-content').innerHTML = L.length ? (entete + `<table class="tbl" style="font-size:11px">
+      <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Mouvement</th><th class="num">Solde après</th></tr></thead>
+      <tbody>${L.map(x=>{
+        const m=x.m;
         const refuse=m.type==='transfert'&&m.statut_transfert==='refuse';
-        const entrant=(m.caisse_id===caisseId&&m.type==='entree')||(m.caisse_dest_id===caisseId&&m.type==='transfert');
+        // Le signe vient de l'EFFET RÉEL, plus d'une devinette sur le type :
+        // un ajustement positif s'affichait en rouge précédé d'un moins, alors
+        // que le solde l'additionnait.
+        const signe=x.eff>0?'+':(x.eff<0?'−':'');
+        const coul=refuse?'var(--textm)':(x.eff>0?'var(--green)':(x.eff<0?'var(--red)':'var(--textm)'));
+        const lib=_mvtLibelle(m,_vmap);
         return `<tr style="${refuse?'opacity:.5':''}">
-          <td style="font-size:10px">${m.date_mouvement}</td>
-          <td><span class="badge ${refuse?'bdg-gold':entrant?'bdg-g':'bdg-r'}" style="font-size:9px">${m.type}${refuse?' (refusé)':''}</span></td>
-          <td style="font-size:10px">${(()=>{const L=_mvtLibelle(m,_vmap);
-            return _cEsc(L.texte)+(L.code?` <span style="color:var(--textm);font-size:9px">${L.code}</span>`:'');})()}</td>
-          <td class="num" style="color:${refuse?'var(--textm)':entrant?'var(--green)':'var(--red)'};${refuse?'text-decoration:line-through':''}">${entrant?'+':'−'}${fmt(m.montant)}</td>
+          <td style="font-size:10px">${_cEsc(m.date_mouvement)}</td>
+          <td><span class="badge ${refuse?'bdg-gold':x.eff>0?'bdg-g':'bdg-r'}" style="font-size:9px">${_cEsc(m.type)}${refuse?' (refusé)':''}</span></td>
+          <td style="font-size:10px">${_cEsc(lib.texte)}${lib.code?` <span style="color:var(--textm);font-size:9px">${_cEsc(lib.code)}</span>`:''}</td>
+          <td class="num" style="color:${coul};${refuse?'text-decoration:line-through':''}">${signe}${fmt(Math.abs(x.eff||Number(m.montant||0)))}</td>
+          <td class="num" style="font-weight:700;color:${x.solde<0?'var(--red)':'var(--text)'}">${refuse?'<span style="color:var(--textm)">—</span>':fmt(x.solde)}</td>
         </tr>`;}).join('')}
+        <tr style="background:var(--card2)">
+          <td style="font-size:10px;color:var(--textm)">—</td>
+          <td></td>
+          <td style="font-size:10px;font-weight:700">Solde de départ de la caisse</td>
+          <td class="num"></td>
+          <td class="num" style="font-weight:800">${fmt(soldeInit)}</td>
+        </tr>
       </tbody>
-    </table>`:'<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>';
+    </table>`) : (entete + '<div style="color:var(--textm);font-size:12px">Aucun mouvement.</div>');
   modal.style.display='flex';
 }
 

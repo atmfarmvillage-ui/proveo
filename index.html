@@ -2760,13 +2760,21 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <div class="fr"><label>Prix d'achat / unité (F)</label><input type="number" id="vtk_prix" placeholder="0" oninput="vetoMajTotalEntree()"></div>
           <div class="fr"><label>Fournisseur</label><input type="text" id="vtk_fourn" placeholder="Optionnel"></div>
         </div>
-        <!-- Sans la dépense, le stock monte et l'argent ne sort nulle part :
-             chaque vente de véto gonflerait le résultat d'un coût jamais compté. -->
-        <label style="display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--text);background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer">
-          <input type="checkbox" id="vtk_depense" checked style="margin-top:2px;flex:0 0 auto;width:auto">
-          <span><b>Enregistrer la dépense</b> et sortir l'argent de la caisse.<br>
-          <span style="color:var(--textm)">Décoche seulement si cette marchandise est déjà payée ailleurs (bon d'achat, dépense déjà saisie).</span></span>
-        </label>
+        <!-- L'ARGENT NE SORT PLUS PAR DÉFAUT. Une case « sortir l'argent de la
+             caisse » cochée d'avance a fait sortir 138 300 F le 04/11/2026 pour
+             de la marchandise déjà payée : le seul autre chemin (« Stock
+             initial ») est réservé à l'admin, donc invisible pour qui saisissait.
+             On ne présélectionne plus rien, et le non-admin peut enfin dire
+             « déjà payée » sans fabriquer une fausse dépense. -->
+        <input type="hidden" id="vtk_origine" value="">
+        <div id="vtk_origine_bloc" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:7px">Cette marchandise vient d'où ?</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <button type="button" id="vtk_or_achat" class="btn btn-out btn-sm" style="justify-content:center;text-align:center;line-height:1.35" onclick="vetoChoisirOrigine('achat')">🧾 Je viens de l'acheter<br><span style="font-weight:400;font-size:9px;opacity:.85">l'argent sort de la caisse</span></button>
+            <button type="button" id="vtk_or_stock" class="btn btn-out btn-sm" style="justify-content:center;text-align:center;line-height:1.35" onclick="vetoChoisirOrigine('stock')">📦 Déjà payée<br><span style="font-weight:400;font-size:9px;opacity:.85">rien ne sort de la caisse</span></button>
+          </div>
+          <div id="vtk_origine_aide" style="font-size:10px;color:var(--textm);margin-top:7px">Rien n'est coché d'avance : c'est toi qui dis si de l'argent doit sortir.</div>
+        </div>
         <div id="vtk_total" style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px"></div>
         <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEntreeVeto()">✓ Enregistrer l'entrée</button>
         <div class="a-err" id="vtk_err"></div>
@@ -3919,7 +3927,7 @@ try{
 <script src="js/achats.js?v=2.31.1"></script>
 <script src="js/achats_frais.js?v=1.0.0"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
-<script src="js/caisse.js?v=2.35.0"></script>
+<script src="js/caisse.js?v=2.36.0"></script>
 <script src="js/inventaire_physique.js?v=2.31.0"></script>
 <script src="js/distribution.js?v=2.31.0"></script>
 <script src="js/salaires.js?v=2.27.0"></script>
@@ -3932,7 +3940,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=3.5.0"></script>
+<script src="js/veto.js?v=3.6.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>

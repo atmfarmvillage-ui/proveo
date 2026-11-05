@@ -275,13 +275,42 @@ function onVetoProduitChange(){
   vetoMajTotalEntree();
 }
 
-// Le montant de la dépense est calculé sous les yeux de la secrétaire : c'est
-// ce chiffre-là qui sortira de la caisse, il ne doit pas être une surprise.
+// D'OÙ VIENT LA MARCHANDISE. Rien n'est présélectionné : un défaut qui sort de
+// l'argent de la caisse n'est pas un défaut acceptable. Le choix SURVIT à
+// l'enregistrement — on saisit souvent dix lignes de la même origine — mais il
+// reste affiché en clair, et le total rappelle la conséquence à chaque frappe.
+function vetoChoisirOrigine(v){
+  const val = (v==='achat'||v==='stock') ? v : '';
+  const h=document.getElementById('vtk_origine'); if(h) h.value=val;
+  [['vtk_or_achat','achat'],['vtk_or_stock','stock']].forEach(function(paire){
+    const b=document.getElementById(paire[0]); if(!b) return;
+    b.className = 'btn btn-sm ' + (val===paire[1] ? 'btn-g' : 'btn-out');
+  });
+  const bloc=document.getElementById('vtk_origine_bloc');
+  if(bloc) bloc.style.borderColor='var(--border)';
+  const aide=document.getElementById('vtk_origine_aide');
+  if(aide) aide.textContent = val==='achat'
+    ? 'Une dépense sera créée et l\'argent sortira de la caisse.'
+    : val==='stock'
+      ? 'Le stock monte, la caisse ne bouge pas. Le prix sert à valoriser l\'inventaire.'
+      : 'Rien n\'est coché d\'avance : c\'est toi qui dis si de l\'argent doit sortir.';
+  vetoMajTotalEntree();
+}
+
+// Le montant est calculé sous les yeux de la secrétaire : ce chiffre-là sortira
+// de la caisse (ou non), il ne doit jamais être une surprise.
 function vetoMajTotalEntree(){
   const q=+((document.getElementById('vtk_qte')||{}).value)||0;
   const p=+((document.getElementById('vtk_prix')||{}).value)||0;
   const el=document.getElementById('vtk_total');
-  if(el) el.textContent = (q>0&&p>0) ? ('Coût de l\'entrée : '+fmt(q*p)+' F') : '';
+  if(!el) return;
+  if(!(q>0&&p>0)){ el.textContent=''; return; }
+  const o=((document.getElementById('vtk_origine')||{}).value)||'';
+  el.textContent = o==='stock'
+    ? 'Valeur du stock entrant : '+fmt(q*p)+' F — rien ne sort de la caisse'
+    : o==='achat'
+      ? 'Coût de l\'entrée : '+fmt(q*p)+' F — sortira de la caisse'
+      : 'Coût de l\'entrée : '+fmt(q*p)+' F';
 }
 
 // ══════════════════════════════════════════════════
@@ -512,13 +541,22 @@ async function saveEntreeVeto(){
   const perem=(document.getElementById('vtk_perem')||{}).value||null;
   const prix=+((document.getElementById('vtk_prix')||{}).value)||0;
   const fourn=((document.getElementById('vtk_fourn')||{}).value||'').trim()||null;
-  const payer=!!((document.getElementById('vtk_depense')||{}).checked);
+  // Plus de case pré-cochée : tant que l'origine n'est pas dite, on n'écrit rien.
+  const origine=(((document.getElementById('vtk_origine')||{}).value)||'').trim();
+  const payer=(origine==='achat');
   const err=document.getElementById('vtk_err');
   if(err) err.textContent='';
   // Chaque champ manquant est nommé, avec ce qu'il faut y mettre.
   if(!produitId){ if(err)err.textContent='Choisis le produit reçu.'; return; }
   if(!pdv){ if(err)err.textContent='Choisis le point de vente qui reçoit.'; return; }
   if(!qte||qte<=0){ if(err)err.textContent='Indique la quantité reçue (un nombre supérieur à 0).'; return; }
+  if(!origine){
+    // Le champ manquant se voit, et on dit quoi y mettre.
+    const bloc=document.getElementById('vtk_origine_bloc');
+    if(bloc) bloc.style.borderColor='var(--red)';
+    if(err) err.textContent='Dis d\'où vient cette marchandise : « Je viens de l\'acheter » (l\'argent sort de la caisse) ou « Déjà payée » (rien ne sort).';
+    return;
+  }
   if(payer && prix<=0){ if(err)err.textContent='Pour enregistrer la dépense, indique le prix d\'achat par unité.'; return; }
   const prod=GP_VETO_CATALOGUE.find(p=>p.id===produitId);
   const{error}=await SB.from('gp_stock_veto').insert({
@@ -561,7 +599,9 @@ async function saveEntreeVeto(){
   ['vtk_qte','vtk_prix','vtk_fourn','vtk_perem'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   vetoMajTotalEntree();
   if(avertDep && err) err.textContent=avertDep.trim();
-  notify(`Entrée enregistrée : ${_vQ(qte)} ${(prod&&prod.unite)||''} de ${(prod&&prod.nom)||''} → ${pdv} ✓`+(payer&&!avertDep?' · dépense créée':''),'gold');
+  notify(`Entrée enregistrée : ${_vQ(qte)} ${(prod&&prod.unite)||''} de ${(prod&&prod.nom)||''} → ${pdv} ✓`
+    + (payer ? (avertDep ? '' : ' · dépense créée, argent sorti de la caisse')
+             : ' · aucune dépense — la caisse n\'a pas bougé'),'gold');
   await renderVeto();
 }
 
