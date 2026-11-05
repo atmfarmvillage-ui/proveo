@@ -611,6 +611,63 @@ function ouvrirTransfert(caisseId,nom){
   setTimeout(()=>{ try{ dst.focus({preventScroll:true}); }catch(_){ } },350);
 }
 
+// ══ RENDRE L'HISTORIQUE LISIBLE ═══════════════════════════════
+// Une dépense recopie le texte tapé par la personne ; une vente écrivait un
+// code machine (« Vente 99b47ff4 »). Le lien existe pourtant déjà : le
+// mouvement porte `vente_id`, et la vente porte `client_nom` + `formule_nom`.
+
+// Échappeur local. Le nom d'un client part maintenant dans du HTML — et la
+// description d'une dépense, tapée à la main, y partait déjà sans filtre.
+function _cEsc(s){ return String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// UNE requête pour toute la liste — jamais une par ligne, l'historique en
+// compte des centaines.
+async function _mvtsVentesMap(mvts){
+  const ids = [...new Set((mvts||[]).map(m=>m.vente_id).filter(Boolean))];
+  if(!ids.length) return {};
+  const map = {}; const paquet = 150;
+  for(let i=0;i<ids.length;i+=paquet){
+    try{
+      const{data,error} = await SB.from('gp_ventes')
+        .select('id,client_nom,formule_nom')
+        .eq('admin_id',GP_ADMIN_ID).in('id',ids.slice(i,i+paquet));
+      if(error) break;   // AFFICHAGE seulement : on retombe sur le code, jamais d'écran vide
+      (data||[]).forEach(v=>{ map[v.id]=v; });
+    }catch(_){ break; }
+  }
+  return map;
+}
+
+// La NATURE du mouvement, lue sur le texte stocké : solde, rattrapage, monnaie
+// laissée… Ce qui distingue ces lignes doit survivre à la mise en forme.
+function _mvtNatureVente(m){
+  const d = String((m&&m.description)||'');
+  if(/^Monnaie laiss/i.test(d)) return 'Monnaie laissée';
+  if(/^Solde vente/i.test(d))   return 'Solde de vente';
+  if(/\(rattrapage\)/i.test(d)) return 'Vente (rattrapage)';
+  if(/\(restaur/i.test(d))      return 'Vente (restaurée)';
+  return 'Vente';
+}
+
+// Le libellé est RECOMPOSÉ depuis la vente, pas bricolé dans le texte stocké :
+// un enregistrement récent porte déjà le client, qui apparaîtrait deux fois.
+// `code` reste à part : c'est lui qu'on tape pour retrouver une vente.
+function _mvtLibelle(m, map){
+  const brut = (m&&m.description) || (m&&m.categorie) || '—';
+  const v = (m&&m.vente_id&&map) ? map[m.vente_id] : null;
+  if(!v) return { texte:brut, code:'' };
+  const mode = (String(brut).match(/\((MIX BY YAS|Espèces|Mobile money|Virement|Dépôt)\)/i)||[])[1] || '';
+  const quoi = String(v.formule_nom||'').trim();
+  return {
+    texte: _mvtNatureVente(m)
+      + ' — ' + (v.client_nom || 'Client comptant')
+      + (quoi ? ' · ' + quoi : '')
+      + (mode ? ' (' + mode + ')' : ''),
+    code: String(m.vente_id).slice(0,8)
+  };
+}
+
 async function voirHistoriqueCaisse(caisseId,nom){
   // Sécurité : ne montrer que les caisses visibles par le membre (map des caisses rendues).
   if(typeof GP_CAISSES_MAP!=='undefined' && !GP_CAISSES_MAP[caisseId]){ if(typeof notify==='function') notify('Caisse hors de votre périmètre','r'); return; }
@@ -619,6 +676,7 @@ async function voirHistoriqueCaisse(caisseId,nom){
     .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`)
     .order('date_mouvement',{ascending:false});
   const M=data||[];
+  const _vmap=await _mvtsVentesMap(M);
   const modal=document.getElementById('modal-historique-caisse');
   document.getElementById('historique-caisse-titre').textContent='📋 '+nom;
   document.getElementById('historique-caisse-content').innerHTML=M.length?`<table class="tbl" style="font-size:11px">
@@ -629,7 +687,8 @@ async function voirHistoriqueCaisse(caisseId,nom){
         return `<tr style="${refuse?'opacity:.5':''}">
           <td style="font-size:10px">${m.date_mouvement}</td>
           <td><span class="badge ${refuse?'bdg-gold':entrant?'bdg-g':'bdg-r'}" style="font-size:9px">${m.type}${refuse?' (refusé)':''}</span></td>
-          <td style="font-size:10px">${m.description||m.categorie||'—'}</td>
+          <td style="font-size:10px">${(()=>{const L=_mvtLibelle(m,_vmap);
+            return _cEsc(L.texte)+(L.code?` <span style="color:var(--textm);font-size:9px">${L.code}</span>`:'');})()}</td>
           <td class="num" style="color:${refuse?'var(--textm)':entrant?'var(--green)':'var(--red)'};${refuse?'text-decoration:line-through':''}">${entrant?'+':'−'}${fmt(m.montant)}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -667,6 +726,8 @@ async function exporterHistoriqueCaisses(type){
   if(filtreActif) M=M.filter(m=> m.caisse_id===filtreActif || m.caisse_dest_id===filtreActif);
   if(!M.length){ notify('Aucun mouvement à exporter','r'); return; }
 
+  // Ce qu'on EXPORTE doit se lire comme ce qu'on VOIT : même résolution.
+  const _vmapX = await _mvtsVentesMap(M);
   const nomCaisseFiltre = filtreActif ? (caisseMap[filtreActif]||'caisse') : 'toutes';
   const signe=m=>{
     if(m.type==='transfert') return m.statut_transfert==='refuse'?'0' : fmt(m.montant);
@@ -677,7 +738,8 @@ async function exporterHistoriqueCaisses(type){
     {label:'Caisse', render:m=> (caisseMap[m.caisse_id]||'—') + (m.caisse_dest_id?(' → '+(caisseMap[m.caisse_dest_id]||'—')):'')},
     {label:'Type', render:m=> m.type + (m.statut_transfert==='refuse'?' (refusé)':'')},
     {label:'Catégorie', key:'categorie'},
-    {label:'Description', render:m=> m.description||m.categorie||'—'},
+    {label:'Description', render:m=> _mvtLibelle(m,_vmapX).texte},
+    {label:'Réf. vente', render:m=> _mvtLibelle(m,_vmapX).code || ''},
     {label:'Montant (F)', render:signe},
     {label:'Enregistré par', key:'enregistre_par_nom'},
   ];

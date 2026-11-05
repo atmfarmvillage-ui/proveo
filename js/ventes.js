@@ -1670,7 +1670,11 @@ async function saveVente(){
         admin_id:GP_ADMIN_ID, caisse_id:caisseTarget.id,
         type:'entree', categorie:'vente',
         montant:paye, date_mouvement:dateVente,
+        // Le code seul (« Vente 99b47ff4 ») ne disait rien à qui relit sa caisse.
+        // Le client part avec la ligne ; les produits sont ajoutés à l'affichage
+        // par la jointure, pour ne pas alourdir chaque écriture.
         description:'Vente '+vente.id.slice(0,8)
+          + ' — ' + String(_payloadVente.client_nom||'Client comptant').slice(0,60)
           + (_modeVente==='mobile_money' ? ' (MIX BY YAS)' : ''),
         reference:_refVente,
         vente_id:vente.id,
