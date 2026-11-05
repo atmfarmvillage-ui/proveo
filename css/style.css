@@ -271,7 +271,13 @@ body:not(.role-admin):not(.role-gerant) .admin-only-action{display:none !importa
 #main::-webkit-scrollbar-thumb{background:var(--border);border-radius:7px;border:3px solid transparent;background-clip:padding-box}
 #main::-webkit-scrollbar-thumb:hover{background:var(--g4);background-clip:padding-box;border:3px solid transparent}
 .page{display:none;padding:24px}
-.page.active{display:block;animation:pageEnter .55s cubic-bezier(.2,.7,.3,1) both}
+/* `both` gardait la dernière image de l'animation : un transform et un filter
+   non-`none` RESTAIENT posés sur la page. Or un transform crée un bloc conteneur
+   pour les descendants `position:fixed` : les 17 modales écrites DANS une page se
+   calaient sur la page (des milliers de pixels de haut) et non sur l'écran — elles
+   s'ouvraient loin sous le pli. `backwards` anime à l'identique puis rend la main :
+   les valeurs finales valaient déjà les valeurs naturelles. */
+.page.active{display:block;animation:pageEnter .55s cubic-bezier(.2,.7,.3,1) backwards}
 @keyframes pageEnter{from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(4px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
 
 .page-title{font-family:'Plus Jakarta Sans','Outfit',sans-serif;font-size:44px;font-weight:800;color:var(--text);margin-bottom:0;letter-spacing:-1.4px;line-height:1.05;position:relative;-webkit-text-fill-color:initial;background:none}
