@@ -525,7 +525,10 @@ async function saveModifSoldeInit(){
     return;
   }
 
-  const diff = nouveau - soldeAct;
+  // ARRONDI AU FRANC. L'écart n'était pas arrondi : la base porte des ajustements
+  // à -1812311.0000000001108962 et 3365910.3. Le franc CFA n'a pas de centimes,
+  // et deux écrans qui arrondissent différemment affichent deux soldes différents.
+  const diff = Math.round(nouveau - soldeAct);
   if(diff===0){ fermerModalModifSoldeInit(); notify('Solde déjà à jour ✓','gold'); return; }
 
   // Un seul ajustement amène le solde affiché à la valeur comptée
