@@ -1027,12 +1027,28 @@ async function _rembourserCaisseAchat(montant, ref){
       + `aucune caisse physique sur ${GP_POINT_VENTE||'Production'}. Cr\u00e9e-la puis r\u00e9gularise.`, 'r');
     return;
   }
+  // UNE SEULE FOIS. `annulerAchat` et `supprimerAchat` passent tous deux ici :
+  // annuler un bon PUIS le supprimer remboursait DEUX FOIS le même argent
+  // (BC-590784, 650 000 F x2 le 31/10/2026). On refuse le doublon au lieu de
+  // l'écrire — et on le DIT, pour que personne ne croie l'argent revenu deux fois.
+  const _desc=`Remboursement annulation achat ${ref||''}`.trim();
+  try{
+    const{data:_deja}=await SB.from('gp_mouvements_caisse').select('id,date_mouvement')
+      .eq('admin_id',GP_ADMIN_ID).eq('categorie','annulation_achat')
+      .eq('description',_desc).eq('montant',montant).limit(1);
+    if(_deja && _deja.length){
+      if(typeof notify==='function') notify(
+        `Ce remboursement de ${fmt(montant)} F a déjà été passé en caisse le `
+        + `${_deja[0].date_mouvement} — il n'est pas repassé une seconde fois.`, 'gold', 9000);
+      return;
+    }
+  }catch(_){ /* lecture impossible : on continue, un doublon vaut mieux qu'un remboursement perdu */ }
   {
     await SB.from('gp_mouvements_caisse').insert({
       admin_id:GP_ADMIN_ID, caisse_id:caisse.id,
       type:'entree', categorie:'annulation_achat',
       montant, date_mouvement:today(),
-      description:`Remboursement annulation achat ${ref||''}`.trim(),
+      description:_desc,
       enregistre_par:GP_USER?.id, enregistre_par_nom:GP_USER?.email?.split('@')[0]
     });
   }
@@ -1082,9 +1098,15 @@ async function supprimerAchat(id){
   const{data:a}=await SB.from('gp_achats').select('*').eq('id',id).maybeSingle();
   if(!a){notify('Bon introuvable','r');return;}
 
+  // Un bon DÉJÀ ANNULÉ a déjà été remboursé : le supprimer ne doit pas rendre
+  // l'argent une seconde fois. `montant_paye` reste à sa valeur après une
+  // annulation — c'est ce qui rendait le second remboursement invisible.
+  const _dejaRembourse = (a.statut==='annule');
   let msg=`Supprimer DÉFINITIVEMENT le bon ${a.ref||''} (${a.fournisseur_nom||''}) ?`;
   if(a.statut==='valide_daf') msg+='\n\n• Le stock crédité par ce bon sera retiré.';
-  if(Number(a.montant_paye||0)>0) msg+=`\n• ${fmt(a.montant_paye)} F de paiements supprimés + remboursement ajouté en caisse.`;
+  if(Number(a.montant_paye||0)>0) msg+= _dejaRembourse
+    ? `\n• ${fmt(a.montant_paye)} F de paiements supprimés. Le remboursement a déjà été fait à l'annulation — la caisse ne bougera pas.`
+    : `\n• ${fmt(a.montant_paye)} F de paiements supprimés + remboursement ajouté en caisse.`;
   msg+='\n\nCette action est irréversible.';
   if(!confirm(msg)) return;
 
@@ -1093,8 +1115,8 @@ async function supprimerAchat(id){
     const ok=await _retirerStockAchat(id);
     if(!ok) return;
   }
-  // Remboursement caisse des montants déjà payés
-  if(Number(a.montant_paye||0)>0) await _rembourserCaisseAchat(Number(a.montant_paye), a.ref);
+  // Remboursement caisse des montants déjà payés — sauf si l'annulation l'a déjà fait.
+  if(Number(a.montant_paye||0)>0 && !_dejaRembourse) await _rembourserCaisseAchat(Number(a.montant_paye), a.ref);
   await SB.from('gp_achats_paiements').delete().eq('achat_id',id);
   await SB.from('gp_achats_lignes').delete().eq('achat_id',id);
   await SB.from('gp_achats').delete().eq('id',id);

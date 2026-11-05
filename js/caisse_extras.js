@@ -418,24 +418,44 @@ function afficherRappelSortieCash(montant, desc){
   document.body.appendChild(ov);
 }
 
+// LE SOLDE D'UNE CAISSE — UN SEUL CALCUL, POUR TOUT LE MONDE.
+// Il existait en DEUX exemplaires : un à l'ouverture de la fenêtre, paginé, et
+// un à l'enregistrement, SANS pagination. PostgREST s'arrêtant à 1000 lignes,
+// le second additionnait une liste incomplète : l'écran montrait un solde, et
+// l'ajustement était calculé à partir d'un autre. Sur la Caisse Production,
+// ça a injecté 538 226 F qui n'existaient pas (31/10/2026).
+// Deux copies d'un même calcul finissent toujours par diverger : il n'y en a
+// plus qu'une, et elle lève si la lecture échoue plutôt que de compter faux.
+async function soldeCaisseCourant(caisseId, soldeInitial){
+  const mvts = await _fetchAllMvtsCaisse(q=>q.or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`));
+  let s = Number(soldeInitial||0);
+  (mvts||[]).forEach(m=>{
+    if(m.type==='entree'     && m.caisse_id===caisseId) s += Number(m.montant||0);
+    if(m.type==='sortie'     && m.caisse_id===caisseId) s -= Number(m.montant||0);
+    if(m.type==='ajustement' && m.caisse_id===caisseId) s += Number(m.montant||0);
+    if(m.type==='transfert'  && m.statut_transfert!=='refuse'){
+      if(m.caisse_id===caisseId)      s -= Number(m.montant||0);
+      if(m.caisse_dest_id===caisseId) s += Number(m.montant||0);
+    }
+  });
+  return s;
+}
+
 // ── OPTION 2 : MODIFIER SOLDE INITIAL (admin only) ──
 async function ouvrirModifSoldeInit(caisseId){
   if(GP_ROLE !== 'admin' && !GP_EST_GERANT){ notify('Action réservée à l\'admin','r'); return; }
   const{data:c}=await SB.from('gp_caisses').select('*').eq('id',caisseId).maybeSingle();
   if(!c){ notify('Caisse introuvable','r'); return; }
-  // Calculer solde actuel (entrées + sorties + ajustements + transferts entrants/sortants)
-  const mvts=await _fetchAllMvtsCaisse(q=>q.or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`));
-  let soldeAct = Number(c.solde_initial||0);
-  (mvts||[]).forEach(m=>{
-    if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
-    if(m.type==='sortie' && m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
-    if(m.type==='ajustement' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
-    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
-      if(m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
-      if(m.caisse_dest_id===caisseId) soldeAct += Number(m.montant||0);
-    }
-  });
+  let soldeAct;
+  try{ soldeAct = await soldeCaisseCourant(caisseId, c.solde_initial); }
+  catch(e){
+    notify('Solde illisible (' + ((e&&e.message)||e) + ') — n\'ajuste pas à l\'aveugle, réessaie.','r',8000);
+    return;
+  }
   document.getElementById('msi-caisse-id').value = caisseId;
+  // CE QU'ON A MONTRÉ. L'enregistrement le revérifiera : si la caisse a bougé
+  // entre-temps, l'écart saisi ne veut plus rien dire.
+  const _vu=document.getElementById('msi-solde-vu'); if(_vu) _vu.value=String(soldeAct);
   document.getElementById('msi-caisse-nom').textContent = c.nom;
   document.getElementById('msi-solde-actuel').textContent = fmt(soldeAct) + ' F';
   document.getElementById('msi-solde-initial-actuel').textContent = fmt(c.solde_initial||0) + ' F';
@@ -486,21 +506,24 @@ async function saveModifSoldeInit(){
   const{data:c}=await SB.from('gp_caisses').select('solde_initial,nom').eq('id',caisseId).maybeSingle();
   if(!c){ err.textContent = 'Caisse introuvable'; return; }
 
-  // Recalculer le solde réellement affiché (initial + tous les mouvements)
-  const{data:mvts}=await SB.from('gp_mouvements_caisse')
-    .select('type,montant,caisse_id,caisse_dest_id,statut_transfert')
-    .eq('admin_id',GP_ADMIN_ID)
-    .or(`caisse_id.eq.${caisseId},caisse_dest_id.eq.${caisseId}`);
-  let soldeAct = Number(c.solde_initial||0);
-  (mvts||[]).forEach(m=>{
-    if(m.type==='entree' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
-    if(m.type==='sortie' && m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
-    if(m.type==='ajustement' && m.caisse_id===caisseId) soldeAct += Number(m.montant||0);
-    if(m.type==='transfert' && m.statut_transfert!=='refuse'){
-      if(m.caisse_id===caisseId) soldeAct -= Number(m.montant||0);
-      if(m.caisse_dest_id===caisseId) soldeAct += Number(m.montant||0);
-    }
-  });
+  // LE MÊME calcul qu'à l'ouverture — c'est leur duplication qui les avait
+  // laissés diverger, et la version d'ici n'était pas paginée.
+  let soldeAct;
+  try{ soldeAct = await soldeCaisseCourant(caisseId, c.solde_initial); }
+  catch(e){
+    err.textContent = 'Solde illisible (' + ((e&&e.message)||e) + ') — RIEN n\'a été écrit, réessaie.';
+    return;
+  }
+  // LA CAISSE A-T-ELLE BOUGÉ PENDANT LA SAISIE ? Un écart calculé sur un solde
+  // périmé n'ajuste rien : il ajoute. On s'arrête et on le dit.
+  const _vuEl=document.getElementById('msi-solde-vu');
+  const _vu=_vuEl && _vuEl.value!=='' ? Number(_vuEl.value) : null;
+  if(_vu!==null && Math.abs(_vu-soldeAct) > 0.5){
+    err.textContent = 'La caisse a bougé pendant ta saisie : ' + fmt(_vu) + ' F à l\'ouverture, '
+      + fmt(soldeAct) + ' F maintenant. RIEN n\'a été écrit — referme, recompte, recommence.';
+    notify('⚠ Solde modifié entre-temps — ajustement annulé','r',9000);
+    return;
+  }
 
   const diff = nouveau - soldeAct;
   if(diff===0){ fermerModalModifSoldeInit(); notify('Solde déjà à jour ✓','gold'); return; }
