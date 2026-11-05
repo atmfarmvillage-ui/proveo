@@ -344,15 +344,40 @@ async function renderTransfertsHistorique(caisses, filtreId){
   const{data:allC}=await SB.from('gp_caisses').select('id,nom,point_vente').eq('admin_id',GP_ADMIN_ID);
   const nom={}, pdv={};
   (allC||[]).forEach(c=>{ nom[c.id]=c.nom; pdv[c.id]=c.point_vente||'Siège'; });
-  const{data}=await SB.from('gp_mouvements_caisse').select('*')
-    .eq('admin_id',GP_ADMIN_ID).eq('type','transfert')
-    .order('date_mouvement',{ascending:false}).order('created_at',{ascending:false}).limit(200);
+  // LE FILTRE PART À LA BASE, PLUS APRÈS COUP.
+  // On chargeait les 200 derniers transferts TOUTES caisses, puis on filtrait en
+  // mémoire : si ceux de la caisse choisie étaient plus anciens que ces 200-là,
+  // la carte annonçait « Aucun transfert ». Un vide qui ment est pire qu'un vide.
+  const LIM=200;
+  const _mesIds=(caisses||[]).map(c=>c&&c.id).filter(Boolean);
+  const _scope=(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE);
+  let q=SB.from('gp_mouvements_caisse').select('*')
+    .eq('admin_id',GP_ADMIN_ID).eq('type','transfert');
+  if(filtreId){
+    q=q.or(`caisse_id.eq.${filtreId},caisse_dest_id.eq.${filtreId}`);
+  }else if(_scope){
+    if(!_mesIds.length){
+      el.innerHTML='<div style="color:var(--textm);font-size:12px">Aucune caisse dans ton p\u00e9rim\u00e8tre.</div>';
+      return;
+    }
+    q=q.or(`caisse_id.in.(${_mesIds.join(',')}),caisse_dest_id.in.(${_mesIds.join(',')})`);
+  }
+  // UN DE PLUS que la limite : c'est ainsi qu'on SAIT qu'on tronque.
+  const{data,error}=await q
+    .order('date_mouvement',{ascending:false}).order('created_at',{ascending:false})
+    .limit(LIM+1);
+  if(error){
+    // Une lecture ratée ne se déguise pas en « aucun transfert ».
+    el.innerHTML='<div style="color:var(--red);font-size:12px">Transferts illisibles ('
+      + _cEsc(error.message) + ') — ce n\'est pas « aucun transfert », c\'est une lecture ratée. Réessaie.</div>';
+    return;
+  }
   let T=data||[];
-  // Filtre par caisse sélectionnée (source ou destination)
-  if(filtreId) T=T.filter(t=>t.caisse_id===filtreId || t.caisse_dest_id===filtreId);
-  // Cloisonnement PDV : une secrétaire scopée ne voit que les transferts touchant ses caisses
-  if(GP_ROLE!=='admin' && !GP_EST_GERANT && GP_POINT_VENTE){
-    const mesIds=new Set(caisses.map(c=>c.id));
+  const tronque = T.length > LIM;
+  if(tronque) T=T.slice(0,LIM);
+  // Ceinture : le sélecteur ne propose que des caisses visibles, mais on revérifie.
+  if(filtreId && _scope){
+    const mesIds=new Set(_mesIds);
     T=T.filter(t=>mesIds.has(t.caisse_id) || mesIds.has(t.caisse_dest_id));
   }
   const badge=s=> s==='refuse'
@@ -362,7 +387,7 @@ async function renderTransfertsHistorique(caisses, filtreId){
         : '<span class="badge bdg-g" style="font-size:9px">Validé</span>';
   const totalValide=T.filter(t=>t.statut_transfert!=='refuse'&&t.statut_transfert!=='en_attente').reduce((s,t)=>s+Number(t.montant||0),0);
   el.innerHTML = T.length ? `
-    <div style="font-size:11px;color:var(--textm);margin-bottom:6px">${T.length} transfert(s) · total validé : <b style="color:var(--gold)">${fmt(totalValide)} F</b></div>
+    <div style="font-size:11px;color:var(--textm);margin-bottom:6px">${T.length} transfert(s)${tronque?' les plus récents <b>(liste plafonnée à '+LIM+')</b>':''} · total validé${tronque?' sur ces '+LIM:''} : <b style="color:var(--gold)">${fmt(totalValide)} F</b></div>
     <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
       <thead><tr><th>Date</th><th>De → Vers</th><th class="num">Montant</th><th>Statut</th><th>Par</th><th></th></tr></thead>
       <tbody>${T.map(t=>`<tr style="${t.statut_transfert==='refuse'?'opacity:.5':''}">
@@ -373,7 +398,9 @@ async function renderTransfertsHistorique(caisses, filtreId){
         <td style="font-size:10px;color:var(--textm)">${t.enregistre_par_nom||'—'}</td>
         <td>${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="supprimerMouvementCaisse('${t.id}')" title="Supprimer ce transfert — l'argent revient à la caisse source" style="padding:2px 6px">🗑</button>`:''}</td>
       </tr>`).join('')}</tbody>
-    </table></div>` : '<div style="color:var(--textm);font-size:12px">Aucun transfert entre caisses.</div>';
+    </table></div>` : `<div style="color:var(--textm);font-size:12px">${filtreId
+      ? 'Aucun transfert pour cette caisse. (Les autres caisses peuvent en avoir — retire le filtre du haut pour voir.)'
+      : 'Aucun transfert entre caisses.'}</div>`;
 }
 
 // La SOURCE d'un mouvement est limitée à ses propres caisses, mais la DESTINATION d'un
