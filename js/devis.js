@@ -33,6 +33,10 @@ const DEV_VALIDITE_JOURS = 7;   // les prix MP bougent : la lysine a fait +33 % 
 let DEV_LIGNES = [];
 let DEV_CLIENT = { id: null, nom: '', tel: '' };
 let DEV_LISTE  = [];
+// D'OÙ VIENT CE PANIER. Rempli quand on établit un document ou qu'on reprend
+// un devis ; il voyage jusqu'à la page Ventes, qui marque alors le devis
+// comme vendu. Sans ce fil, `gp_devis.vente_id` restait vide pour toujours.
+let DEV_DEVIS_ID = null;
 
 // ── LE CALCUL (pur, testable hors navigateur) ─────────────────────────────
 
@@ -78,11 +82,14 @@ function devLigneCalc(produit, quantite, unite, prixKgForce) {
   const q = Number(quantite) || 0;
   const poids = Number(produit && produit.poids_sac) || 0;
   const kg = (unite === 'sac' && poids > 0) ? q * poids : q;
-  const prixKg = (prixKgForce != null && prixKgForce !== '')
-    ? Number(prixKgForce)
-    : devPrixKg(produit, unite);
+  // Un prix IMPOSE a la main ne doit jamais etre ramene au tarif du catalogue
+  // dans le dos de celle qui l'a annonce au client : la ligne s'en souvient.
+  // Marqueur en memoire seulement — l'insertion en base liste ses champs.
+  const impose = (prixKgForce != null && prixKgForce !== '');
+  const prixKg = impose ? Number(prixKgForce) : devPrixKg(produit, unite);
   if (prixKg == null || !(kg > 0)) return null;
   return {
+    prix_force: impose,
     type_produit: produit.type,
     ingredient_id: produit.type === 'mp' ? produit.id : null,
     designation: produit.nom,
@@ -220,6 +227,21 @@ async function renderDevis() {
   if (!window._stockNiveaux && typeof _fetchAllStockMp === 'function') {
     try { window._stockNiveaux = await _fetchAllStockMp(); } catch (_) {}
   }
+  // LES PRIX DOIVENT ETRE CEUX DU JOUR. GP_INGREDIENTS et GP_PRIX sont chargés
+  // une seule fois à l'ouverture de session : un tarif changé ailleurs — autre
+  // appareil, autre personne, ou simplement hier — n'arrivait jamais jusqu'ici,
+  // et le devis partait au client avec un prix périmé. Un écran qui engage un
+  // prix va le chercher ; il n'attend pas qu'un autre fichier y pense.
+  try{
+    await Promise.all([
+      (typeof loadIngredients === 'function') ? loadIngredients() : null,
+      (typeof loadPrix === 'function') ? loadPrix() : null,
+    ]);
+  }catch(e){
+    const err = document.getElementById('dev-err');
+    if (err) err.textContent = '⚠️ Les tarifs n\'ont pas pu être actualisés ('
+      + ((e && e.message) || e) + ') — vérifie les prix avant d\'envoyer.';
+  }
   devMajUnites();
   devRenderPanier();
   await devRenderListe();
@@ -281,6 +303,7 @@ function devAjouterLigne() {
 
 function devSupprimerLigne(i) { DEV_LIGNES.splice(i, 1); devRenderPanier(); }
 function devViderPanier() { DEV_LIGNES = []; DEV_CLIENT = { id: null, nom: '', tel: '' }; DEV_PRODUIT_SEL = null;
+  DEV_DEVIS_ID = null;   // panier vide : plus aucun devis à marquer
   ['dev-client', 'dev-tel', 'dev-note'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   devRenderPanier(); }
 
@@ -352,12 +375,50 @@ function devClientChange() {
   if (t && !t.value && c.tel) t.value = c.tel;
 }
 
+// Relit les tarifs et compare au panier. Rend false si la secrétaire refuse
+// d'établir le document au prix du jour.
+async function devVerifierTarifs() {
+  try{
+    await Promise.all([
+      (typeof loadIngredients === 'function') ? loadIngredients() : null,
+      (typeof loadPrix === 'function') ? loadPrix() : null,
+    ]);
+  }catch(e){ return true; }   // réseau indisponible : on n'empêche pas de travailler
+  const bouges = [];
+  DEV_LIGNES.forEach(l => {
+    // Un prix imposé à la main reste celui qu'on a voulu.
+    if (l.prix_force) return;
+    const p = devTrouverProduit(l.designation);
+    if (!p) return;
+    const neuf = devPrixKg(p, l.unite);
+    if (neuf == null) return;
+    if (Math.round(neuf) !== Math.round(Number(l.prix_kg))) {
+      bouges.push({ ligne: l, avant: Math.round(Number(l.prix_kg)), apres: Math.round(neuf), produit: p });
+    }
+  });
+  if (!bouges.length) return true;
+  const detail = bouges.map(b => `• ${b.ligne.designation} : ${fmt(b.avant)} → ${fmt(b.apres)} F/kg`).join('\n');
+  if (!confirm(`Le tarif a changé depuis que le panier a été monté :\n\n${detail}\n\nÉtablir le document au PRIX DU JOUR ?`)) return false;
+  // On recalcule la ligne entière : le montant suit le prix, sinon le total ment.
+  bouges.forEach(b => {
+    const rec = devLigneCalc(b.produit, b.ligne.quantite, b.ligne.unite);
+    if (rec) { b.ligne.prix_kg = rec.prix_kg; b.ligne.montant_ligne = rec.montant_ligne; }
+  });
+  devRenderPanier();
+  return true;
+}
+
 async function devEnregistrer(type) {
   const err = document.getElementById('dev-err');
   if (err) err.textContent = '';
   const cli = devLireClient();
   if (!cli.nom) { if (err) err.textContent = '⛔ Mets au moins le nom du client.'; return null; }
   if (!DEV_LIGNES.length) { if (err) err.textContent = '⛔ Le panier est vide.'; return null; }
+  // Un panier monté le matin peut être imprimé le soir. Le document engage un
+  // prix : on relit les tarifs juste avant de l'établir, et si l'un a bougé on
+  // le DIT avant d'imprimer — on ne corrige pas un prix dans le dos de celle
+  // qui l'a annoncé au client.
+  if (!(await devVerifierTarifs())) return null;
 
   const date = (typeof today === 'function') ? today() : new Date().toISOString().slice(0, 10);
   const an = new Date(date).getFullYear();
@@ -404,6 +465,9 @@ async function devEnregistrer(type) {
       if (typeof notify === 'function') notify('Lignes non enregistrées : ' + eL.message, 'r', 8000);
       return null;
     }
+    // Le panier à l'écran EST ce document : s'il part en vente juste après
+    // (le client accepte au comptoir), c'est ce numéro qui sera marqué vendu.
+    DEV_DEVIS_ID = d.id;
     if (typeof notify === 'function') {
       notify((type === 'facture' ? 'Facture ' : 'Devis ') + numero + ' enregistré ✓', 'gold');
     }
@@ -457,8 +521,10 @@ async function devPdfDoc(dv) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20);
   doc.text(String(cfg.nom_provenderie || 'PROVENDERIE').toUpperCase(), xT, y + 7);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
-  const coord = [cfg.localisation, [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ')]
-    .filter(Boolean);
+  // Le numéro de l'ENTREPRISE seulement : la ligne directe du dirigeant n'a pas
+  // à partir chez chaque client. Elle reste dans la fiche entreprise et sert
+  // toujours en interne — on la retire du document, pas de la base.
+  const coord = [cfg.localisation, cfg.telephone].filter(Boolean);
   coord.forEach((t, i) => doc.text(String(t), xT, y + 13 + i * 5));
 
   // Le titre, à droite, en gros : on doit savoir en un coup d'œil si c'est un
@@ -518,10 +584,15 @@ async function devPdfDoc(dv) {
     doc.text(`Prix valables jusqu'au ${jolie(dv.valable_jusqu_au)}.`, M, y);
     doc.setTextColor(90); y += 6;
   }
+  // Le prix affiché n'est pas le dernier mot : on dit où se discute le reste.
+  // Sur un DEVIS seulement — une facture est un montant dû, pas une proposition.
+  if (!estFacture) {
+    doc.text(`Pour toute négociation, merci de contacter la Direction.`, M, y);
+    y += 6;
+  }
   if (dv.note) { doc.text(doc.splitTextToSize(String(dv.note), W - 2 * M), M, y); y += 6; }
 
-  const pied = [cfg.localisation, [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ')]
-    .filter(Boolean).join('   |   ');
+  const pied = [cfg.localisation, cfg.telephone].filter(Boolean).join('   |   ');
   const n = doc.internal.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
     doc.setPage(p);
@@ -555,8 +626,10 @@ function devTexteWa(dv) {
     l.push(`Prix valables jusqu'au ${new Date(dv.valable_jusqu_au + 'T12:00:00')
       .toLocaleDateString('fr-FR')}.`);
   }
-  const tel = [cfg.telephone, cfg.tel_dirigeant].filter(Boolean).join(' / ');
-  if (tel) { l.push(''); l.push(`📞 ${tel}`); }
+  if (dv.type !== 'facture') {
+    l.push(`Pour toute négociation, merci de contacter la Direction.`);
+  }
+  if (cfg.telephone) { l.push(''); l.push(`📞 ${cfg.telephone}`); }
   return l.join('\n');
 }
 
@@ -611,9 +684,20 @@ async function devRenderListe() {
   }
   DEV_LISTE = data || [];
   const auj = (typeof today === 'function') ? today() : new Date().toISOString().slice(0, 10);
+  // CE QUE DEVIENNENT LES DEVIS. Un devis qu'on établit sans jamais savoir
+  // s'il s'est vendu est un papier ; ce chiffre en fait un outil. Compté sur
+  // les devis affichés — et la phrase le dit, plutôt que d'annoncer un taux
+  // « global » qui ne porterait que sur 40 lignes.
+  const _devisSeuls = DEV_LISTE.filter(d => d.type === 'devis');
+  const _vendus = _devisSeuls.filter(d => d.vente_id).length;
+  const _taux = _devisSeuls.length >= 3
+    ? `<div style="font-size:11px;color:var(--textm);padding:4px 10px 8px">
+        <b style="color:var(--text)">${_vendus} des ${_devisSeuls.length} derniers devis</b>
+        sont devenus des ventes — ${Math.round(_vendus * 100 / _devisSeuls.length)} %</div>`
+    : '';
   box.innerHTML = !DEV_LISTE.length
     ? '<div style="color:var(--textm);font-size:12px;padding:10px">Aucun devis pour l\'instant.</div>'
-    : `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
+    : _taux + `<div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
       <thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Montant</th><th>État</th><th></th></tr></thead>
       <tbody>${DEV_LISTE.map(d => {
         const expire = d.type === 'devis' && d.valable_jusqu_au && d.valable_jusqu_au < auj;
@@ -655,6 +739,11 @@ async function devChargerLignes(devisId) {
 async function devRouvrir(devisId) {
   const d = DEV_LISTE.find(x => x.id === devisId);
   if (!d) return;
+  // DÉJÀ VENDU ? On le dit AVANT de remonter le panier, pas après la sortie de
+  // stock. Un devis repris deux fois, c'est deux ventes du même tonnage au
+  // même client — et personne ne s'en aperçoit avant l'inventaire.
+  if (d.vente_id && typeof confirm === 'function'
+      && !confirm(`${d.numero} a déjà été transformé en vente.\n\nLe reprendre quand même ? Ce serait une SECONDE vente.`)) return;
   const lignes = await devChargerLignes(devisId);
   let bouges = 0;
   lignes.forEach(l => {
@@ -668,6 +757,7 @@ async function devRouvrir(devisId) {
     }
   });
   DEV_LIGNES = lignes;
+  DEV_DEVIS_ID = devisId;   // le panier se souvient du devis qu'il rejoue
   const c = document.getElementById('dev-client'); if (c) c.value = d.client_nom || '';
   const t = document.getElementById('dev-tel');    if (t) t.value = d.client_tel || '';
   const n = document.getElementById('dev-note');   if (n) n.value = d.note || '';
@@ -717,6 +807,10 @@ function devVersVente() {
       : null,
     veto_id: null, ferme_produit_id: null, type_prix: 'detail',
   }));
+  // Le devis d'origine voyage avec le panier : la page Ventes le marquera
+  // vendu quand l'argent entrera. Un panier monté à la main (jamais enregistré)
+  // n'a pas d'origine — et il n'y a alors rien à marquer.
+  window.VT_DEVIS_ID = DEV_DEVIS_ID || null;
   const cli = devLireClient();
   if (typeof showGP === 'function') showGP('ventes');
   setTimeout(() => {
@@ -727,7 +821,9 @@ function devVersVente() {
       const s = document.getElementById('vt_client_search'); if (s) s.value = connu.nom;
     }
     if (typeof renderLignesVente === 'function') renderLignesVente();
-    notify('Panier transféré — choisis le paiement puis enregistre la vente', 'gold', 8000);
+    notify(DEV_DEVIS_ID
+      ? 'Panier transféré — choisis le paiement puis enregistre la vente (le devis sera marqué vendu)'
+      : 'Panier transféré — choisis le paiement puis enregistre la vente', 'gold', 8000);
   }, 400);
 }
 

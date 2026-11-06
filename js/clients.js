@@ -632,8 +632,14 @@ let _REGL_CTX={clientId:null,pdv:'Production',mode:'especes'};
 function _reglChoixPdv(){ return GP_ROLE==='admin' || !!GP_EST_GERANT; }
 function _reglPdv(){ return document.getElementById('regl-pdv')?.value || _REGL_CTX.pdv || 'Production'; }
 
+// La fiche complète si on peut la lire, sinon l'identité de l'annuaire (client du pôle).
+function _reglClient(id){
+  return GP_CLIENTS.find(x=>x.id===id) || (GP_ANNUAIRE||[]).find(x=>x.id===id) || null;
+}
+
 async function encaisserReglement(clientId){
-  const c=GP_CLIENTS.find(x=>x.id===clientId); if(!c)return;
+  const c=_reglClient(clientId);
+  if(!c){ notify('Client introuvable — recharge la page.','r'); return; }
   _REGL_IMPAYES=(await impayesPole(clientId)).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
   try{ _REGL_CAISSES=(typeof caissesAccessibles==='function') ? await caissesAccessibles() : []; }catch(_){ _REGL_CAISSES=[]; }
   const pdv=_reglChoixPdv() ? (c.point_vente||'Production') : (GP_POINT_VENTE||'Production');
@@ -724,7 +730,7 @@ async function confirmerReglement(clientId){
   const pdv=_reglPdv();
   if(montant<=0){ dire('Entre le montant reçu.'); return; }
   if(yas && !ref){ dire('Saisis la référence de la transaction YAS.'); document.getElementById('regl-ref')?.focus(); return; }
-  const c=GP_CLIENTS.find(x=>x.id===clientId);
+  const c=_reglClient(clientId);
   const nomClient=(c&&c.nom)||'client';
   const modeLabel=yas?'MIX BY YAS':'espèces';
   if(btn){ btn.disabled=true; btn.textContent='⏳ Encaissement…'; }
@@ -801,7 +807,8 @@ async function confirmerReglement(clientId){
     else notify(`✅ ${fmt(montant)} F encaissés sur ${caisse.nom}`+(reste>0?` (${fmt(reste)} F d'avance)`:''),'g');
     if(typeof loadClients==='function'){ try{ await loadClients(); }catch(_){}}
     if(typeof loadClientStats==='function'){ try{ await loadClientStats(true); }catch(_){}}
-    openClientDetail(clientId);
+    if(GP_CLIENTS.some(x=>x.id===clientId)) openClientDetail(clientId);
+    else if(typeof renderClients==='function'){ try{ await renderClients(); }catch(_){}}
   }catch(e){ dire('Erreur : '+(e.message||e)+'. Vérifie la caisse avant de réessayer.'); rendre(); }
 }
 
@@ -1002,7 +1009,11 @@ async function renderClients(){
         <b>${autres.length} client(s) des autres points de vente</b> — affichés pour ne pas les
         enregistrer une deuxième fois. Leurs chiffres restent à leur point de vente.
       </span></td></tr>`:''}
-    ${autres.map(c=>`<tr style="opacity:.68">
+    ${autres.map(c=>{
+      // Un client du pôle qui doit de l'argent : sa fiche reste fermée (CA, points), mais sa
+      // DETTE se lit par gp_impayes_pole et s'encaisse ici (Sanguéra encaisse Fairfield Production).
+      const du=dettes[c.id]?.total||0;
+      return `<tr style="opacity:${du>0?1:.68}">
       <td>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span style="font-weight:700">${c.nom}</span>
@@ -1015,9 +1026,12 @@ async function renderClients(){
       <td><span class="badge bdg-b" style="font-size:9px">${c.type_client==='gros'?'Grossiste':'Détaillant'}</span></td>
       <td onclick="event.stopPropagation()">${cliBadgeSuivi(c, true)}</td>
       <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
-      <td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
-      <td></td>
-    </tr>`).join('')}
+      ${du>0?`<td class="num" style="color:var(--red)">${fmt(du)} F</td>
+      <td style="white-space:nowrap" onclick="event.stopPropagation()">
+        <button class="btn btn-g btn-sm" onclick="encaisserReglement('${c.id}')" title="Encaisser un règlement">💳</button>
+      </td>`:`<td class="num" style="color:var(--textm)" title="Réservé à son point de vente">🔒</td>
+      <td></td>`}
+    </tr>`;}).join('')}
     </tbody></table></div>`
   :'<div style="color:var(--textm);font-size:12px">Aucun client.</div>');
 }

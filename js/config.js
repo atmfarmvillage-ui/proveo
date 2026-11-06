@@ -98,8 +98,15 @@ function finMois(mois){
   const lastDay=new Date(y,m,0).getDate();
   return `${mois}-${String(lastDay).padStart(2,'0')}`;
 }
+// LE SEPARATEUR DE MILLIERS DOIT SURVIVRE AU PDF.
+// toLocaleString('fr-FR') separe avec U+202F (espace fine insecable) depuis
+// ICU 72. Les polices standard de jsPDF sont encodees en WinAnsi, ou ce
+// caractere n'existe pas : il retombait sur « / » et le devis du client
+// affichait « 99/015 F ». U+00A0 est dans WinAnsi (0xA0), s'imprime comme une
+// espace, et reste insecable a l'ecran — un montant ne se coupe pas en deux.
+// Teste sur jspdf 2.5.1, la version que charge index.html.
 function fmt(n){
-  return Number(n||0).toLocaleString('fr-FR');
+  return Number(n||0).toLocaleString('fr-FR').replace(/\u202f/g, '\u00a0');
 }
 function fmtKg(n){
   return Number(n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});

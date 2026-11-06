@@ -125,8 +125,11 @@ let userPos = null;
 // ── CHARGER LES PDV ──────────────────────────────
 async function chargerPDV(){
   const sb = supabase.createClient(SB_URL, SB_KEY);
+  // On ne demande QUE ce que la carte montre. Un `select('*')` sur une page
+  // publique ramenait aussi le responsable, le WhatsApp et le statut salarié
+  // de la secrétaire — rien de tout cela n'a à sortir de la maison.
   const{data} = await sb.from('gp_points_vente')
-    .select('*')
+    .select('nom,adresse,telephone,latitude,longitude')
     .not('latitude','is',null)
     .not('longitude','is',null)
     .order('nom');

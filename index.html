@@ -21,7 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/prod/solver.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2.26.3">
+<link rel="stylesheet" href="css/style.css?v=2.27.0">
 <style>
 /* === Lisibilité : écritures agrandies partout, SAUF les grands titres === */
 html,body{font-size:16px}
@@ -1634,7 +1634,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <!-- ÉQUIPE (admin) -->
 <!-- MODAL COÛTS DE PRODUCTION -->
 <div id="modal-couts-formule" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px">⚙️ Coûts de production</div>
     <div id="cf-formule-nom" style="font-size:12px;color:var(--gold);margin-bottom:14px"></div>
     <input type="hidden" id="cf-formule-id">
@@ -2020,7 +2020,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
 <!-- MODAL : DASHBOARD KPI DRILL-DOWN (CA, Encaissé, Impayés, Dépenses, Lots) -->
 <div id="modal-kpi-drill" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerKpiDrill()">
-  <div style="background:var(--card2,#0E1A0C);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:920px;margin-top:20px">
+  <div style="background:var(--card2,#0E1A0C);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:920px;margin-top:20px;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <div style="font-size:18px;font-weight:800" id="kpi-drill-titre">Détail</div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -2050,6 +2050,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       Le mouvement reste visible dans l'historique pour traçabilité.
     </div>
     <input type="hidden" id="msi-caisse-id">
+    <!-- Le solde MONTRÉ à l'ouverture : l'enregistrement le revérifie et refuse
+         d'écrire si la caisse a bougé entre-temps. -->
+    <input type="hidden" id="msi-solde-vu">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px" id="msi-caisse-nom">—</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;font-size:11px">
       <div style="background:rgba(0,0,0,.15);border-radius:8px;padding:8px">
@@ -2207,7 +2210,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
   <!-- Modal paiement fournisseur -->
   <div id="modal-paiement-fourn" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto">
       <div style="font-weight:700;font-size:15px;margin-bottom:4px">💳 Paiement fournisseur</div>
       <div id="pf-fourn-nom" style="font-size:12px;color:var(--textm);margin-bottom:14px"></div>
       <div class="fr"><label>Commande</label><select id="pf-achat-select" style="width:100%"></select></div>
@@ -2461,7 +2464,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
   <!-- Modal mouvement -->
   <div id="modal-mvt-caisse" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%;max-height:85vh;overflow-y:auto">
       <div id="mvt-caisse-titre" style="font-weight:700;font-size:15px;margin-bottom:14px"></div>
       <div class="fr"><label>Montant (F) *</label><input type="number" id="mvt-montant" placeholder="50000"></div>
       <div class="fr"><label>Catégorie</label>
@@ -2600,7 +2603,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
   <!-- Modal confirmation réception -->
   <div id="modal-confirm-reception" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto">
       <div style="font-weight:700;font-size:15px;margin-bottom:14px">📦 Confirmer la réception</div>
       <input type="hidden" id="cr-livraison-id">
       <div id="cr-info"></div>
@@ -2615,7 +2618,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
   <!-- Modal paiement livraison -->
   <div id="modal-paiement-livraison" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%;max-height:85vh;overflow-y:auto">
       <div style="font-weight:700;font-size:15px;margin-bottom:4px">💳 Paiement livraison</div>
       <div id="pl-dest-nom" style="font-size:12px;color:var(--textm);margin-bottom:4px"></div>
       <div style="font-size:12px;color:var(--red);margin-bottom:12px">Reste à payer : <strong id="pl-reste"></strong></div>
@@ -2641,7 +2644,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
   <!-- Modal seuil PDV -->
   <div id="modal-seuil-pdv" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%">
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;margin-bottom:14px">
         <div style="font-weight:700;font-size:15px">⚙️ Seuils — <span id="seuil-pdv-nom"></span></div>
         <button onclick="document.getElementById('modal-seuil-pdv').style.display='none'" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -2760,13 +2763,21 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
           <div class="fr"><label>Prix d'achat / unité (F)</label><input type="number" id="vtk_prix" placeholder="0" oninput="vetoMajTotalEntree()"></div>
           <div class="fr"><label>Fournisseur</label><input type="text" id="vtk_fourn" placeholder="Optionnel"></div>
         </div>
-        <!-- Sans la dépense, le stock monte et l'argent ne sort nulle part :
-             chaque vente de véto gonflerait le résultat d'un coût jamais compté. -->
-        <label style="display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--text);background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer">
-          <input type="checkbox" id="vtk_depense" checked style="margin-top:2px;flex:0 0 auto;width:auto">
-          <span><b>Enregistrer la dépense</b> et sortir l'argent de la caisse.<br>
-          <span style="color:var(--textm)">Décoche seulement si cette marchandise est déjà payée ailleurs (bon d'achat, dépense déjà saisie).</span></span>
-        </label>
+        <!-- L'ARGENT NE SORT PLUS PAR DÉFAUT. Une case « sortir l'argent de la
+             caisse » cochée d'avance a fait sortir 138 300 F le 04/11/2026 pour
+             de la marchandise déjà payée : le seul autre chemin (« Stock
+             initial ») est réservé à l'admin, donc invisible pour qui saisissait.
+             On ne présélectionne plus rien, et le non-admin peut enfin dire
+             « déjà payée » sans fabriquer une fausse dépense. -->
+        <input type="hidden" id="vtk_origine" value="">
+        <div id="vtk_origine_bloc" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:7px">Cette marchandise vient d'où ?</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <button type="button" id="vtk_or_achat" class="btn btn-out btn-sm" style="justify-content:center;text-align:center;line-height:1.35" onclick="vetoChoisirOrigine('achat')">🧾 Je viens de l'acheter<br><span style="font-weight:400;font-size:9px;opacity:.85">l'argent sort de la caisse</span></button>
+            <button type="button" id="vtk_or_stock" class="btn btn-out btn-sm" style="justify-content:center;text-align:center;line-height:1.35" onclick="vetoChoisirOrigine('stock')">📦 Déjà payée<br><span style="font-weight:400;font-size:9px;opacity:.85">rien ne sort de la caisse</span></button>
+          </div>
+          <div id="vtk_origine_aide" style="font-size:10px;color:var(--textm);margin-top:7px">Rien n'est coché d'avance : c'est toi qui dis si de l'argent doit sortir.</div>
+        </div>
         <div id="vtk_total" style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px"></div>
         <button class="btn btn-g" style="width:100%;justify-content:center" onclick="saveEntreeVeto()">✓ Enregistrer l'entrée</button>
         <div class="a-err" id="vtk_err"></div>
@@ -3387,7 +3398,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <!-- MODAL VALEURS NUTRITIONNELLES D'UNE MATIÈRE PREMIÈRE -->
 <!-- PRIX DE VENTE D'UNE MATIERE PREMIERE -->
 <div id="modal-prixvente" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerPrixVente()">
-  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;margin-top:40px">
+  <div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;margin-top:40px;max-height:85vh;overflow-y:auto">
     <input type="hidden" id="pv-id">
     <div style="font-weight:700;font-size:15px;margin-bottom:2px">💰 Prix de vente</div>
     <div id="pv-titre" style="color:var(--gold);font-weight:700;margin-bottom:2px"></div>
@@ -3607,7 +3618,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
 <!-- MODAL GÉNÉRATION SALAIRE DIRECTEUR -->
 <div id="modal-gen-salaire" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerGenSalaire()">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div id="gs-titre" style="font-size:17px;font-weight:700;color:var(--gold)">Générer le salaire</div>
@@ -3700,7 +3711,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 
 <!-- MODAL CRÉER CONTRAT -->
 <div id="modal-creer-contrat" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerCreerContrat()">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-size:17px;font-weight:700">📄 Nouveau contrat</div>
       <button onclick="fermerCreerContrat()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -3889,10 +3900,10 @@ try{
 
 <!-- ── MODULES JS ── -->
 <!-- Modules métier (chargés AVANT auth.js pour que les fonctions soient disponibles) -->
-<script src="js/config.js?v=2.31.0"></script>
+<script src="js/config.js?v=2.32.0"></script>
 <script src="js/lisibilite.js?v=1.0.0"></script>
   <script src="js/catalogue.js?v=1.7.0"></script>
-  <script src="js/devis.js?v=1.1.0"></script>
+  <script src="js/devis.js?v=1.4.0"></script>
   <script src="js/print.js?v=2.31.0"></script>
 <script src="js/dashboard.js?v=2.27.0"></script>
 <script src="js/stock.js?v=2.33.0"></script>
@@ -3901,25 +3912,25 @@ try{
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
 <script src="js/production.js?v=2.41.0"></script>
-<script src="js/ventes.js?v=2.40.0"></script>
+<script src="js/ventes.js?v=2.44.0"></script>
 <script src="js/idempotence.js?v=1.0.0"></script>
 <script src="js/produits_ferme.js?v=1.0.0"></script>
 <script src="js/emballages.js?v=1.4.0"></script>
 <script src="js/doublons.js?v=1.3.0"></script>
-<script src="js/clients.js?v=2.40.0"></script>
+<script src="js/clients.js?v=2.40.1"></script>
 <script src="js/badges.js?v=1.0.0"></script>
 <script src="js/admin.js?v=2.35.0"></script>
 <script src="js/marge_aliment.js?v=2.27.0"></script>
 <script src="js/aide.js?v=2.26.1"></script>
 <script src="js/bilan_jour.js?v=2.31.0"></script>
-<script src="js/caisse_extras.js?v=2.32.0"></script>
+<script src="js/caisse_extras.js?v=2.34.0"></script>
 <script src="js/corbeille.js?v=2.27.0"></script>
 <script src="js/dashboard_drill.js?v=2.27.0"></script>
 <script src="js/fournisseurs.js?v=2.26.1"></script>
-<script src="js/achats.js?v=2.31.1"></script>
+<script src="js/achats.js?v=2.32.0"></script>
 <script src="js/achats_frais.js?v=1.0.0"></script>
 <script src="js/confirmations.js?v=2.26.1"></script>
-<script src="js/caisse.js?v=2.34.0"></script>
+<script src="js/caisse.js?v=2.37.0"></script>
 <script src="js/inventaire_physique.js?v=2.31.0"></script>
 <script src="js/distribution.js?v=2.31.0"></script>
 <script src="js/salaires.js?v=2.27.0"></script>
@@ -3932,7 +3943,7 @@ try{
 <script src="js/reversements.js?v=2.26.2"></script>
 <script src="js/paiements_mp.js?v=2.28.0"></script>
 <script src="js/stock_pf.js?v=2.27.0"></script>
-<script src="js/veto.js?v=3.4.0"></script>
+<script src="js/veto.js?v=3.6.0"></script>
 <script src="js/alertes.js?v=2.27.0"></script>
 <script src="js/exports.js?v=2.26.1"></script>
 <script src="js/bilanss.js?v=2.26.1"></script>
@@ -4008,7 +4019,7 @@ function installPWA(){
 
 <!-- MODAL PRÉVISUALISATION WHATSAPP AVANT ENVOI -->
 <div id="modal-preview-wa" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerPreviewWA()">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid #25D366;border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid #25D366;border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div style="font-size:17px;font-weight:700;color:#25D366">📲 Aperçu WhatsApp</div>
@@ -4052,7 +4063,7 @@ function installPWA(){
   }
 </style>
 <div id="modal-formule" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)fermerModalFormule()">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:1100px;padding:20px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:16px;width:100%;max-width:1100px;padding:20px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div id="mf-titre" style="font-size:17px;font-weight:700;color:var(--g6)">🧪 Nouvelle formule</div>
       <button onclick="fermerModalFormule()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -4160,7 +4171,7 @@ function installPWA(){
 
 <!-- MODAL OPTIMISEUR (Phase 3) -->
 <div id="modal-optimiseur" style="display:none;position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerOptimiseur()">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid #a855f7;border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid #a855f7;border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <div style="font-size:17px;font-weight:700;color:#a855f7">🎯 Optimisation automatique</div>
@@ -4202,7 +4213,7 @@ function installPWA(){
 
 <!-- MODAL AJOUT ESPÈCE -->
 <div id="modal-ajout-espece" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px;max-height:85vh;overflow-y:auto">
     <div style="font-size:15px;font-weight:700;margin-bottom:12px">➕ Nouvelle espèce</div>
     <div class="fr"><label>Code (sans espace, ex: cailles)</label><input type="text" id="ae_code" placeholder="cailles"></div>
     <div class="fr"><label>Nom complet</label><input type="text" id="ae_label" placeholder="Caille"></div>
@@ -4217,7 +4228,7 @@ function installPWA(){
 
 <!-- MODAL AJOUT CATÉGORIE -->
 <div id="modal-ajout-categorie" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px">
+  <div style="background:var(--g1,#0E1A0C);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:380px;padding:20px;max-height:85vh;overflow-y:auto">
     <div style="font-size:15px;font-weight:700;margin-bottom:4px">➕ Nouvelle catégorie</div>
     <div id="ac-espece-label" style="font-size:11px;color:var(--gold);margin-bottom:12px"></div>
     <div class="fr"><label>Code (sans espace, ex: ponte_pic)</label><input type="text" id="ac_code" placeholder="ponte_pic"></div>
@@ -4233,7 +4244,7 @@ function installPWA(){
 <!-- MODAL FEUILLE DE FABRICATION -->
 <!-- MODAL : SAISIE DES SACS OBTENUS (après production) -->
 <div id="modal-sacs-obtenus" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerSacsObtenus()">
-  <div style="background:var(--card2);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:420px;width:100%">
+  <div style="background:var(--card2);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div style="font-weight:700;font-size:15px">📦 Sacs obtenus</div>
       <button onclick="fermerSacsObtenus()" style="background:none;border:none;color:var(--textm);font-size:20px;cursor:pointer">✕</button>
@@ -4277,7 +4288,7 @@ function installPWA(){
 </div>
 
 <div id="modal-fabrication" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);overflow-y:auto;padding:20px" onclick="if(event.target===this)fermerFabrication()">
-  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:16px;max-width:600px;margin:0 auto;padding:24px">
+  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:16px;max-width:600px;margin:0 auto;padding:24px;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
         <div style="font-family:'DM Serif Display',serif;font-size:22px;font-weight:700;color:var(--g6)">📋 Feuille de fabrication</div>
@@ -4316,7 +4327,7 @@ function installPWA(){
 
 <!-- MODAL MESSAGES PDV WHATSAPP -->
 <div id="modal-messages-pdv" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerModalMessages()">
-  <div style="background:var(--g1);border:1px solid rgba(37,211,102,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1);border:1px solid rgba(37,211,102,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div id="msg-pdv-titre" style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--g6)">📱 Messages PDV</div>
       <button onclick="fermerModalMessages()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕ Fermer</button>
@@ -4330,7 +4341,7 @@ function installPWA(){
 
 <!-- MODAL TOP 3 CLIENTS -->
 <div id="modal-top3-clients" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerTop3()">
-  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:520px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--gold)">🏆 Messages Top 3 Clients</div>
       <button onclick="fermerTop3()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
@@ -4341,7 +4352,7 @@ function installPWA(){
 
 <!-- MODAL BILAN EMPLOYÉ -->
 <div id="modal-bilan-employe" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fermerBilanEmploye()">
-  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto">
+  <div style="background:var(--g1);border:1px solid rgba(232,197,71,.3);border-radius:16px;width:100%;max-width:560px;padding:24px;margin:0 auto;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--gold)">📊 Bilan employé</div>
       <button onclick="fermerBilanEmploye()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px">✕</button>
@@ -4352,7 +4363,7 @@ function installPWA(){
 
 <!-- MODAL MODIFIER VENTE -->
 <div id="modal-modifier-vente" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerModifierVente()">
-  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px">
+  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px;max-height:85vh;overflow-y:auto">
     <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;margin-bottom:4px">✏️ Modifier la vente</div>
     <div style="font-size:13px;font-weight:600;color:var(--g6);margin-bottom:4px" id="mv-client"></div>
     <div style="font-size:12px;color:var(--textm);margin-bottom:14px">Total : <strong id="mv-total"></strong></div>
@@ -4372,7 +4383,7 @@ function installPWA(){
 
 <!-- MODAL ENCAISSER UN PAIEMENT (solde d'une vente) -->
 <div id="modal-paiement-vente" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fermerPaiementVente()">
-  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px">
+  <div style="background:var(--g1);border:1px solid rgba(22,163,74,.3);border-radius:14px;width:100%;max-width:420px;padding:24px;max-height:85vh;overflow-y:auto">
     <div style="font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;margin-bottom:4px">💳 Encaisser un paiement</div>
     <div style="font-size:13px;font-weight:600;color:var(--g6);margin-bottom:10px" id="pmv-client"></div>
     <input type="hidden" id="pmv-vente-id">
