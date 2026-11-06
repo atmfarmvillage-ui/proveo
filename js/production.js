@@ -433,11 +433,34 @@ function majPerteSacsObtenus(){
     : perte<0 ? `⚠ ${fmt(-perte)} kg en trop (vérifier la quantité lancée)`
     : `Aucune perte (${fmt(S.reel)} kg = ${detail})`;
 }
+// Deux appuis = deux crédits du stock : le calcul partait des sacs gardés en
+// MÉMOIRE (0 au premier passage), pas de ceux déjà écrits en base. On verrouille
+// le bouton ET on relit le lot juste avant de calculer la différence.
+let _SACS_EN_COURS = false;
 async function saveSacsObtenus(){
+  if(!_sacsLot || _SACS_EN_COURS) return;
+  const btn=document.querySelector('button[onclick="saveSacsObtenus()"]');
+  const lbl=btn?btn.innerHTML:null;
+  _SACS_EN_COURS=true;
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; btn.innerHTML='⏳ Enregistrement… ne pas réappuyer'; }
+  try{ await _saveSacsObtenus(); }
+  finally{
+    _SACS_EN_COURS=false;
+    if(btn){ btn.disabled=false; btn.style.opacity=''; if(lbl!=null) btn.innerHTML=lbl; }
+  }
+}
+async function _saveSacsObtenus(){
   if(!_sacsLot) return;
   const S=_soSaisie();
   const err=document.getElementById('so-err');
   if(!S.sacs && S.vrac<=0){ if(err) err.textContent='Entre au moins un format de sac (ou le complément en vrac).'; return; }
+  // Ce qui est DÉJÀ en base fait foi, pas ce que la fenêtre a gardé en mémoire.
+  const{data:_frais,error:_eFrais}=await SB.from('gp_lots').select('*').eq('id',_sacsLot.id).maybeSingle();
+  if(_eFrais || !_frais){
+    if(err) err.textContent='Connexion trop faible : impossible de relire le lot. Rien n\'a été enregistré — réessaie.';
+    return;
+  }
+  Object.assign(_sacsLot, _frais);
   const qte=Number(_sacsLot.qte_produite)||0;
   const perte=Math.max(0, qte-S.reel);
   const pdvProd=_sacsLot.pdv_production||'Production';
@@ -456,13 +479,27 @@ async function saveSacsObtenus(){
   // ne connaissent pas encore le detail continuent d'afficher quelque chose de sense.
   const dominant=Object.keys(S.det).sort((a,b)=>S.det[b]-S.det[a])[0];
 
-  // 1. Mettre a jour le lot
-  await SB.from('gp_lots').update({
+  // Rien n'a changé depuis la dernière saisie : c'est un second envoi.
+  const _formatsTous=new Set([...Object.keys(S.det), ...Object.keys(ancienDet)]);
+  const _rienDeNeuf=_sacsLot.stock_mis_a_jour && S.reel===ancienReel
+    && [..._formatsTous].every(p=>Number(S.det[p]||0)===Number(ancienDet[p]||0));
+  if(_rienDeNeuf){
+    notify('Ces sacs sont déjà enregistrés — le stock n\'a été crédité qu\'une fois ✓','gold');
+    fermerSacsObtenus(); renderLots(); return;
+  }
+
+  // 1. Mettre a jour le lot. S'il échoue, on s'arrête AVANT de créditer :
+  //    sinon le prochain essai repartirait des anciens chiffres et créditerait deux fois.
+  const{error:_eLot}=await SB.from('gp_lots').update({
     nb_sacs:S.sacs,
     poids_sac: dominant ? Number(dominant) : (Number(_sacsLot.poids_sac)||25),
     sacs_detail: S.det,
     kg_vrac:S.vrac, kg_pertes:perte, stock_mis_a_jour:true
   }).eq('id',_sacsLot.id);
+  if(_eLot){
+    if(err) err.textContent='Le lot n\'a pas pu être mis à jour ('+_eLot.message+'). Rien n\'a été crédité — réessaie.';
+    return;
+  }
 
   // 2. Crediter le stock en kg de la DIFFERENCE
   const deltaKg=S.reel-ancienReel;
@@ -685,7 +722,24 @@ function previewLot(){
     </div>`;
   renderLotMP();
 }
+// Le bouton reste inerte jusqu'au bout. Le 10/10 et le 30/09, le même lot
+// (même numéro LOT-2026-158, LOT-2026-920) est parti deux fois à 6-7 s d'écart :
+// la sortie des matières premières prenait ces secondes, le formulaire restait
+// rempli et le bouton actif, et la secrétaire réappuyait.
+let _LOT_EN_COURS = false;
 async function saveLot(){
+  if(_LOT_EN_COURS) return;
+  const btn=document.querySelector('button[onclick="saveLot()"]');
+  const lbl=btn?btn.innerHTML:null;
+  _LOT_EN_COURS=true;
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; btn.innerHTML='⏳ Enregistrement… ne pas réappuyer'; }
+  try{ await _saveLot(); }
+  finally{
+    _LOT_EN_COURS=false;
+    if(btn){ btn.disabled=false; btn.style.opacity=''; if(lbl!=null) btn.innerHTML=lbl; }
+  }
+}
+async function _saveLot(){
   const nom=document.getElementById('lot_formule').value;
   const date=document.getElementById('lot_date').value;
   const qte=+document.getElementById('lot_qte').value||0;
@@ -735,6 +789,15 @@ async function saveLot(){
   // Insert lot
   // Sous clé de saisie : un lot enregistré deux fois sortirait DEUX FOIS les
   // matières premières du stock — le magasin se viderait sur le papier.
+  // La clé suit le CONTENU (formule, date, quantité, n° de lot) et survit au
+  // rechargement de la page.
+  const _empLot=[nom,date,qte,ref].join('|');
+  if(typeof idemConfirmerSiRessemble==='function'){
+    const _okLot=await idemConfirmerSiRessemble('lot', _empLot, 'gp_lots',
+      {formule_nom:nom, date, qte_produite:qte},
+      h=>`⚠️ Un lot IDENTIQUE (${nom}, ${fmt(qte)} kg, ${date}) a déjà été enregistré à ${h}.`);
+    if(!_okLot){ err.textContent=''; return; }
+  }
   const _envoiLot = await idemInserer('gp_lots', {
     admin_id:GP_ADMIN_ID,saisi_par:GP_USER.id,date,formule_nom:nom,espece,ref,
     qte_produite:qte,cout_mp:coutMP,cout_main_oeuvre:mo,cout_emballage:emb,
@@ -743,7 +806,7 @@ async function saveLot(){
     nb_sacs:0,        // saisi après production (bouton 📦 dans la liste)
     kg_pertes:0,      // calculé à la saisie des sacs obtenus
     pdv_production:document.getElementById('lot_pdv_prod')?.value||GP_POINT_VENTE||null
-  }, 'lot', '*');
+  }, 'lot', '*', _empLot);
   if(_envoiLot.doublon){
     err.textContent='';
     notify('Ce lot est déjà enregistré — les matières n\'ont été sorties qu\'une fois ✓','gold');
@@ -753,7 +816,8 @@ async function saveLot(){
   }
   const lot=_envoiLot.data, error=_envoiLot.error;
   if(error){err.textContent='Erreur: '+error.message;return;}
-  idemTerminee('lot');
+  // ⚠ idemTerminee('lot') n'est plus appelé ICI : renouveler le numéro avant la fin
+  // (sortie des MP, formulaire encore rempli) laissait passer un second appui.
   // Auto-create stock sorties (consommation MP). Si un insert échoue → drapeau false → rattrapé au refresh.
   let _mpOk=true; const _mpDetails=[];
   for(const s of mpSorties){
@@ -795,6 +859,8 @@ async function saveLot(){
   // Afficher la feuille de fabrication AVEC la composition réelle (substitutions incluses)
   afficherFeuilleFabrication({nom,qte,poidsSac:25,nbSacs:0,ref,date,pdv:pdvProdSaves,lotId:lot?.id,composition:_compoReelle});
 
+  // Le formulaire est vidé : la saisie suivante mérite son propre numéro.
+  idemTerminee('lot');
   notify(`✓ Lot enregistré — ${mpSorties.length} MP déduites du stock automatiquement`,'gold');
   // Afficher bouton impression immédiatement
   afficherBoutonImpressionLot(nom, ref, qte, date);

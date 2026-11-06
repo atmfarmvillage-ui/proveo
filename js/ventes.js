@@ -16,14 +16,20 @@ let VT_LIGNES=[];
 // numéro unique par SAISIE — pas par clic : les deux envois d'un même geste
 // portent le même numéro, et l'index unique rejette le second. Le numéro change
 // seulement quand une vente a réellement abouti.
+// 06/11 : le numéro passe par idempotence.js, qui le garde sur le téléphone, lié
+// au contenu de la vente — il survit au rechargement de la page (Lina ferme, 15/10).
 let VT_CLE = null;
 function vtNouvelleCle(){
+  if(typeof idemNouvelle === 'function') return (VT_CLE = idemNouvelle('vente'));
   VT_CLE = (typeof crypto !== 'undefined' && crypto.randomUUID)
     ? crypto.randomUUID()
     : String(Date.now()) + '-' + Math.random().toString(36).slice(2);
   return VT_CLE;
 }
-function vtCle(){ return VT_CLE || vtNouvelleCle(); }
+function vtCle(empreinte){
+  if(typeof idemCle === 'function') return (VT_CLE = idemCle('vente', empreinte));
+  return VT_CLE || vtNouvelleCle();
+}
 // Une base sans la colonne renverrait « column does not exist » sur CHAQUE
 // vente : tant que la migration n'est pas passée, on laisse passer sans clé.
 function vtSansIdempotence(e){
@@ -1510,7 +1516,20 @@ async function saveVente(){
     }
   }
 
-  const _cle = vtCle();
+  // Même client, même montant, même jour, il y a moins de 15 min : on demande.
+  const _empVente=[clientId||'', total, dateVente, paye,
+    VT_LIGNES.map(l=>(l.formule_nom||'')+':'+Number(l.quantite||0)).join(',')].join('|');
+  if(typeof idemConfirmerSiRessemble==='function'){
+    const _okV=await idemConfirmerSiRessemble('vente', _empVente, 'gp_ventes',
+      {client_id:clientId||null, montant_total:total, date:dateVente},
+      h=>`⚠️ Une vente IDENTIQUE (${client?.nom||'Client comptant'}, ${fmt(total)} F) a déjà été enregistrée à ${h}.`, true);
+    if(!_okV){
+      if(_waPopup){ try{ _waPopup.close(); }catch(e){} _waPopup=null; }
+      const e0=document.getElementById('vt_err'); if(e0) e0.textContent='';
+      return;
+    }
+  }
+  const _cle = vtCle(_empVente);
   const _payloadVente = {
     admin_id:GP_ADMIN_ID,
     // Le même geste porte toujours le même numéro : la base refusera le second.

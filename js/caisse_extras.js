@@ -250,6 +250,8 @@ async function saveDep(){
     }
     const categorie = document.getElementById('dep_cat').value;
 
+    // Le numéro suit le CONTENU et survit au rechargement de la page (06/11).
+    const _empDep = [date, desc, montant, categorie, caisseSel].join('|');
     // Anti-doublon : une dépense identique (même jour, même libellé, même montant, même catégorie) existe déjà ?
     try{
       const{data:dup}=await SB.from('gp_depenses').select('id')
@@ -257,6 +259,8 @@ async function saveDep(){
         .eq('montant',montant).eq('categorie',categorie).limit(1);
       if(dup && dup.length){
         if(!confirm(`⚠️ Une dépense IDENTIQUE existe déjà le ${date} :\n« ${desc} » — ${fmt(montant)} F.\n\nC'est probablement un doublon. Enregistrer quand même ?`)) return;
+        // Une vraie seconde dépense : son propre numéro, sinon la base la prendrait pour la première.
+        if(typeof idemNouvelle==='function') idemNouvelle('depense', _empDep);
       }
     }catch(_){}
 
@@ -273,7 +277,7 @@ async function saveDep(){
       // s'affichait d'un côté et l'argent sortait de l'autre tiroir.
       point_vente: _pvDep,
       emprunt_id: (document.getElementById('dep_emprunt_id')?.value || null)
-    }, 'depense', '*');
+    }, 'depense', '*', _empDep);
     if(_envoiDep.doublon){
       err.textContent = '';
       ['dep_desc','dep_montant','dep_benef','dep_pv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
