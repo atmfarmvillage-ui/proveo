@@ -2940,6 +2940,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <!-- Onglets -->
   <div class="saltabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:2px">
     <button id="saltabbtn-bulletins" class="btn btn-out btn-sm active" onclick="showSalTab('bulletins')">💰 Salaires & bulletins</button>
+    <button id="saltabbtn-fiche" class="btn btn-out btn-sm" onclick="showSalTab('fiche')">📋 Fiche du mois</button>
     <button id="saltabbtn-ouvriers" class="btn btn-out btn-sm" onclick="showSalTab('ouvriers')">👷 Ouvriers</button>
     <button id="saltabbtn-pointage" class="btn btn-out btn-sm" onclick="showSalTab('pointage')">🕐 Pointage</button>
     <button id="saltabbtn-virement" class="btn btn-out btn-sm" onclick="showSalTab('virement')">🏦 Ordre de virement</button>
@@ -3020,12 +3021,21 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     </div>
   </div>
 
+  <!-- Onglet FICHE DU MOIS : deux salaires, ajustement, fiche collective à signer -->
+  <div id="saltab-fiche" style="display:none">
+    <div class="card">
+      <div class="card-title"><div class="ct-left"><span>📋 Fiche de paie du mois</span></div></div>
+      <div style="font-size:11px;color:var(--textm);margin-bottom:10px">Mois choisi dans l'onglet « Salaires & bulletins ». Salaire par défaut = le salaire fixe de la fiche employé ; salaire calculé = selon les heures d'arrivée, les absences et les primes.</div>
+      <div id="fiche-mois"></div>
+    </div>
+  </div>
+
   <!-- Onglet POINTAGE -->
   <div id="saltab-pointage" style="display:none">
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
         <div><label class="lbl">Jour</label><input type="date" id="point-date" onchange="renderPointage();if(typeof renderCamPointage==='function')renderCamPointage()" style="width:auto"></div>
-        <div style="font-size:11px;color:var(--textm);flex:1;min-width:200px">Pointez chaque ouvrier qui vient : les retards et absences alimentent automatiquement les retranchements du bulletin.</div>
+        <div style="font-size:11px;color:var(--textm);flex:1;min-width:200px">À l'arrivée de chaque employé, appuie sur « ⏱ Arrivé » : l'heure s'enregistre et le retard se calcule seul (heure de début et tolérance dans Paramètres). L'heure se corrige si besoin.</div>
       </div>
     </div>
     <div id="cam-pointage"></div>
@@ -3366,8 +3376,20 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
       </div>
       <div style="font-weight:700;font-size:11px;color:var(--red);margin:10px 0 6px">⛔ Retranchements pointage</div>
       <div class="fg2">
-        <div class="fr"><label>Malus par retard (F)</label><input type="number" id="rp_malus_retard" placeholder="500" min="0"></div>
-        <div class="fr"><label>Malus par absence (F)</label><input type="number" id="rp_malus_absence" placeholder="2000" min="0"></div>
+        <div class="fr"><label>Heure de début du travail</label><input type="time" id="rp_heure_debut" placeholder="07:30"></div>
+        <div class="fr"><label>Tolérance avant retard (min)</label><input type="number" id="rp_tolerance_min" placeholder="10" min="0"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Retenue par tranche de 15 min de retard (F)</label><input type="number" id="rp_malus_tranche_15" placeholder="250" min="0"></div>
+        <div class="fr"><label>Retenue de retard maximum par jour (F)</label><input type="number" id="rp_malus_retard_jour_max" placeholder="1000" min="0"></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Jours ouvrés du mois (absence = salaire ÷ ce nombre)</label><input type="number" id="rp_jours_ouvres" placeholder="26" min="0"></div>
+        <div class="fr"><label>Salaire retenu par défaut sur la fiche</label><select id="rp_salaire_retenu_defaut"><option value="calcule">Calculé</option><option value="defaut">Par défaut (fixe)</option></select></div>
+      </div>
+      <div class="fg2">
+        <div class="fr"><label>Ancien : malus par retard sans heure (F)</label><input type="number" id="rp_malus_retard" placeholder="500" min="0"></div>
+        <div class="fr"><label>Malus par absence si « jours ouvrés » = 0 (F)</label><input type="number" id="rp_malus_absence" placeholder="2000" min="0"></div>
       </div>
       <div style="font-weight:700;font-size:11px;color:var(--gold);margin:10px 0 6px">🛡 Garde-fous</div>
       <div class="fg2">
@@ -3964,7 +3986,8 @@ try{
 <script src="js/nutrition.js?v=2.32.0"></script>
 <script src="js/prixvente.js?v=1.1.0"></script>
 <script src="js/maj.js?v=1.0.0"></script>
-<script src="js/rh.js?v=2.30.1"></script>
+<script src="js/rh.js?v=2.31.0"></script>
+<script src="js/paie_mois.js?v=1.0.0"></script>
 <script src="js/cameras-pointage.js?v=1.0.0"></script>
 <script src="js/frequentation.js?v=1.0.0"></script>
 <script src="js/cameras-frequentation.js?v=1.0.0"></script>

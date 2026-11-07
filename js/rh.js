@@ -56,7 +56,7 @@ let GP_OUVRIERS = [];
 
 // ── Onglets de la page Salaires ───────────────────────
 function showSalTab(name){
-  ['bulletins','ouvriers','pointage','virement'].forEach(t=>{
+  ['bulletins','fiche','ouvriers','pointage','virement'].forEach(t=>{
     const pane=document.getElementById('saltab-'+t);
     if(pane) pane.style.display = (t===name)?'block':'none';
     const btn=document.getElementById('saltabbtn-'+t);
@@ -65,6 +65,7 @@ function showSalTab(name){
   if(name==='ouvriers') renderOuvriers();
   else if(name==='pointage'){ renderPointage(); if(typeof renderCamPointage==='function') renderCamPointage(); }   // 📹 propositions des caméras MIGNA (D5)
   else if(name==='virement') renderApercuVirement();
+  else if(name==='fiche' && typeof renderFicheMois==='function') renderFicheMois();
   else if(name==='bulletins' && typeof renderSalaires==='function') renderSalaires();
 }
 
@@ -106,6 +107,7 @@ async function renderOuvriers(){
         <td style="font-size:14px;text-align:center">${o.equipe_production?'🏭':'—'}</td>
         <td><span class="badge ${actif?'bdg-g':'bdg-r'}" style="font-size:9px">${actif?'Actif':'Inactif'}</span></td>
         <td style="white-space:nowrap;display:flex;gap:3px">
+          <button class="btn btn-out btn-sm" onclick="ficheAnnuelleOuvrier('${o.id}')" title="Fiche annuelle : ce qu'il a perçu chaque mois">📄</button>
           <button class="btn btn-out btn-sm" onclick="editOuvrier('${o.id}')" title="Modifier">✏️</button>
           <button class="btn btn-out btn-sm" onclick="toggleOuvrierStatut('${o.id}','${o.statut||'actif'}')" title="${actif?'Désactiver':'Réactiver'}">${actif?'⏸':'▶'}</button>
           ${GP_ROLE==='admin'?`<button class="btn btn-red btn-sm" onclick="deleteOuvrier('${o.id}')" title="Supprimer">✕</button>`:''}
@@ -199,7 +201,8 @@ async function renderPointage(){
 
   const {data:pts}=await SB.from('gp_pointage').select('*')
     .eq('admin_id',GP_ADMIN_ID).eq('date',date);
-  const pMap={}; (pts||[]).forEach(p=>{ pMap[p.ouvrier_id]=p.statut; });
+  const pMap={}, hMap={}; (pts||[]).forEach(p=>{ pMap[p.ouvrier_id]=p.statut; hMap[p.ouvrier_id]=p.heure_arrivee||''; });
+  const RGp=await getReglesPaie();
 
   if(!visibles.length){ el.innerHTML='<div style="color:var(--textm);font-size:12px;padding:14px">Aucun ouvrier actif. Enregistrez-les dans l\'onglet Ouvriers.</div>'; return; }
 
@@ -207,27 +210,61 @@ async function renderPointage(){
     style="flex:1;padding:7px 4px;border-radius:7px;border:1px solid ${cur===val?color:'var(--border)'};cursor:pointer;font-size:11px;font-weight:${cur===val?'700':'500'};
     background:${cur===val?color:'transparent'};color:${cur===val?'#fff':'var(--textm)'}">${label}</button>`;
 
+  // À l'arrivée : « Arrivé » enregistre L'HEURE ; le retard (en minutes) en découle tout seul.
+  // L'heure reste corrigeable (pointé en retard par la secrétaire).
   el.innerHTML=visibles.map(o=>{
-    const cur=pMap[o.id]||'';
+    const cur=pMap[o.id]||'', h=hMap[o.id]||'';
+    const rm=h?minutesRetard(h,RGp):0;
+    const etat=cur==='absent'?'<span style="color:var(--red);font-weight:700">Absent</span>'
+      : h?(rm>0?`<span style="color:var(--gold);font-weight:700">Arrivé ${h} · retard ${rm} min</span>`:`<span style="color:var(--green);font-weight:700">Arrivé ${h} · à l'heure</span>`)
+      : (cur==='retard'?'<span style="color:var(--gold)">Retard (sans heure)</span>':cur==='present'?'<span style="color:var(--green)">Présent (sans heure)</span>':'<span style="color:var(--textm)">Pas encore pointé</span>');
     return `<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">
         <div style="font-size:12px;font-weight:700">${o.nom_prenom}</div>
         <div style="font-size:10px;color:var(--textm)">${o.fonction||'—'}${o.point_vente?' · '+o.point_vente:''}</div>
+        <div style="font-size:10.5px;margin-top:2px">${etat}</div>
       </div>
-      <div style="display:flex;gap:5px;min-width:230px;flex:1">
-        ${BTN(o.id,'present','✓ Présent','var(--green)',cur)}
-        ${BTN(o.id,'retard','⏰ Retard','var(--gold)',cur)}
+      <div style="display:flex;gap:5px;align-items:center;min-width:230px;flex:1">
+        <button onclick="pointerArrivee('${o.id}')" style="flex:1;padding:7px 4px;border-radius:7px;border:1px solid var(--green);cursor:pointer;font-size:11px;font-weight:700;background:${h?'var(--green)':'transparent'};color:${h?'#fff':'var(--green)'}">⏱ Arrivé</button>
+        <input type="time" value="${h}" onchange="corrigerHeure('${o.id}',this.value)" title="Corriger l'heure d'arrivée" style="width:96px;padding:6px">
         ${BTN(o.id,'absent','✕ Absent','var(--red)',cur)}
       </div>
     </div>`;
   }).join('');
 }
 
+// Minutes de retard au-delà de l'heure de début (0 si dans la tolérance). heure = 'HH:MM'.
+function minutesRetard(heure, RG){
+  const hm=t=>{ const m=/^(\d{1,2}):(\d{2})/.exec(String(t||'')); return m?(+m[1])*60+(+m[2]):null; };
+  const a=hm(heure), d=hm((RG&&RG.heure_debut)||'07:30');
+  if(a==null||d==null) return 0;
+  const tol=Number(RG&&RG.tolerance_min!=null?RG.tolerance_min:10)||0;
+  const r=a-d;
+  return r>tol?r:0;
+}
+async function _enregistrerArrivee(ouvrierId, heure){
+  const date=document.getElementById('point-date')?.value||today();
+  const o=GP_OUVRIERS.find(x=>x.id===ouvrierId);
+  const RG=await getReglesPaie();
+  const statut=minutesRetard(heure,RG)>0?'retard':'present';
+  const {error}=await SB.from('gp_pointage').upsert({
+    admin_id:GP_ADMIN_ID, ouvrier_id:ouvrierId, date, statut, heure_arrivee:heure,
+    point_vente:o?.point_vente||GP_POINT_VENTE||null, saisi_par:GP_USER?.id
+  },{onConflict:'ouvrier_id,date'});
+  if(error){ notify('Erreur pointage : '+error.message,'r'); return; }
+  await renderPointage();
+}
+function pointerArrivee(ouvrierId){
+  const n=new Date();
+  return _enregistrerArrivee(ouvrierId, String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'));
+}
+function corrigerHeure(ouvrierId, heure){ if(heure) return _enregistrerArrivee(ouvrierId, heure); }
+
 async function setPointage(ouvrierId,statut){
   const date=document.getElementById('point-date')?.value||today();
   const o=GP_OUVRIERS.find(x=>x.id===ouvrierId);
   const {error}=await SB.from('gp_pointage').upsert({
-    admin_id:GP_ADMIN_ID, ouvrier_id:ouvrierId, date, statut,
+    admin_id:GP_ADMIN_ID, ouvrier_id:ouvrierId, date, statut, heure_arrivee:(statut==='absent'?null:undefined),
     point_vente:o?.point_vente||GP_POINT_VENTE||null, saisi_par:GP_USER?.id
   },{onConflict:'ouvrier_id,date'});
   if(error){ notify('Erreur pointage: '+error.message,'r'); return; }
@@ -237,13 +274,24 @@ async function setPointage(ouvrierId,statut){
 // Compte retards/absences d'un ouvrier sur un mois (YYYY-MM)
 async function _pointageMois(ouvrierId,mois){
   const debut=mois+'-01', fin=finMois(mois);
-  const {data}=await SB.from('gp_pointage').select('statut')
+  let {data,error}=await SB.from('gp_pointage').select('statut,heure_arrivee')
     .eq('admin_id',GP_ADMIN_ID).eq('ouvrier_id',ouvrierId).gte('date',debut).lte('date',fin);
+  if(error){ ({data}=await SB.from('gp_pointage').select('statut')
+    .eq('admin_id',GP_ADMIN_ID).eq('ouvrier_id',ouvrierId).gte('date',debut).lte('date',fin)); }
   const P=data||[];
+  const RG=await getReglesPaie();
+  const minutes=[]; let sansHeure=0;
+  P.forEach(p=>{
+    if(p.statut==='absent') return;
+    if(p.heure_arrivee){ const m=minutesRetard(p.heure_arrivee,RG); if(m>0) minutes.push(m); }
+    else if(p.statut==='retard') sansHeure++;
+  });
   return {
     retards: P.filter(p=>p.statut==='retard').length,
     absences: P.filter(p=>p.statut==='absent').length,
-    presents: P.filter(p=>p.statut==='present').length
+    presents: P.filter(p=>p.statut==='present').length,
+    minutesRetard: minutes,          // jours pointés à l'heure, en retard
+    retardsSansHeure: sansHeure      // anciens pointages « Retard » sans heure → malus fixe d'avant
   };
 }
 
@@ -253,26 +301,39 @@ async function _pointageMois(ouvrierId,mois){
 const _RP_FIELDS=[
   'quota_kg','bonus_quota_montant','bonus_depassement_tonne','bonus_assiduite',
   'perte_seuil_pct','bonus_perte_montant','malus_perte_montant',
-  'malus_retard','malus_absence','plancher_salaire','plafond_retranchement'
+  'malus_retard','malus_absence','plancher_salaire','plafond_retranchement',
+  'tolerance_min','malus_tranche_15','malus_retard_jour_max','jours_ouvres'
 ];
+const _RP_TEXTES=['heure_debut','salaire_retenu_defaut'];
 async function loadReglesPaie(){
   if(!GP_ADMIN_ID) return;
   const {data}=await SB.from('gp_regles_paie').select('*').eq('admin_id',GP_ADMIN_ID).maybeSingle();
   if(!data) return;
   _RP_FIELDS.forEach(k=>{ const e=document.getElementById('rp_'+k); if(e&&data[k]!=null)e.value=data[k]; });
+  _RP_TEXTES.forEach(k=>{ const e=document.getElementById('rp_'+k); if(e&&data[k]!=null)e.value=data[k]; });
 }
 async function saveReglesPaie(){
   if(!GP_ADMIN_ID){ notify('Session non prête','r'); return; }
   const obj={admin_id:GP_ADMIN_ID, updated_at:new Date().toISOString()};
   _RP_FIELDS.forEach(k=>{ const e=document.getElementById('rp_'+k); obj[k]=+(e?.value||0); });
+  _RP_TEXTES.forEach(k=>{ const e=document.getElementById('rp_'+k); if(e && e.value) obj[k]=e.value; });
   if(obj.plafond_retranchement>50){ notify('Plafond de retranchement > 50 % : gardé sous 30 % recommandé','r'); return; }
   const {error}=await SB.from('gp_regles_paie').upsert(obj,{onConflict:'admin_id'});
   if(error){ notify('Erreur: '+error.message,'r'); return; }
+  _RP_CACHE=null;
   notify('Règles de paie enregistrées ✓','gold');
 }
+// Défauts validés par le DG le 07/11/2026 : début 7 h 30, 10 min de tolérance, 250 F par
+// tranche de 15 min de retard, une absence = une journée (salaire ÷ 26), salaire retenu = calculé.
+const RP_DEFAUTS={ heure_debut:'07:30', tolerance_min:10, malus_tranche_15:250, malus_retard_jour_max:1000, jours_ouvres:26, salaire_retenu_defaut:'calcule' };
+let _RP_CACHE=null, _RP_CACHE_T=0;
 async function getReglesPaie(){
+  if(_RP_CACHE && Date.now()-_RP_CACHE_T<15000) return _RP_CACHE;
   const {data}=await SB.from('gp_regles_paie').select('*').eq('admin_id',GP_ADMIN_ID).maybeSingle();
-  return data||{};
+  const r=Object.assign({}, data||{});
+  Object.keys(RP_DEFAUTS).forEach(k=>{ if(r[k]==null || r[k]==='') r[k]=RP_DEFAUTS[k]; });
+  _RP_CACHE=r; _RP_CACHE_T=Date.now();
+  return r;
 }
 
 // ════════════════════════════════════════════════════
@@ -328,24 +389,38 @@ function calculerPaie(p){
   }
 
   // MALUS
-  let malus_retard=pt.retards*num(RG.malus_retard);
-  let malus_absence=pt.absences*num(RG.malus_absence);
-  let malus_perte=0;
+  // Retard à l'HEURE (07/11) : par tranche de 15 min entamée, plafonné par jour.
+  // Les anciens pointages « Retard » sans heure gardent le malus fixe d'avant.
   const details_malus=[];
-  if(malus_retard>0) details_malus.push(`${pt.retards} retard(s) × ${fmt(RG.malus_retard)} : −${fmt(malus_retard)}`);
-  if(malus_absence>0) details_malus.push(`${pt.absences} absence(s) × ${fmt(RG.malus_absence)} : −${fmt(malus_absence)}`);
+  let malus_retard=0, minutes_retard=0;
+  const tranche=num(RG.malus_tranche_15), maxJour=num(RG.malus_retard_jour_max);
+  (pt.minutesRetard||[]).forEach(m=>{
+    minutes_retard+=m;
+    let v=Math.ceil(m/15)*tranche; if(maxJour>0) v=Math.min(v,maxJour);
+    malus_retard+=v;
+  });
+  if(malus_retard>0) details_malus.push(`${(pt.minutesRetard||[]).length} retard(s), ${minutes_retard} min au total (${fmt(tranche)} F / 15 min) : −${fmt(malus_retard)}`);
+  const sansHeure=(pt.minutesRetard||pt.retardsSansHeure!=null)?num(pt.retardsSansHeure):num(pt.retards);
+  const malusFixe=sansHeure*num(RG.malus_retard);
+  if(malusFixe>0){ malus_retard+=malusFixe; details_malus.push(`${sansHeure} retard(s) sans heure × ${fmt(RG.malus_retard)} : −${fmt(malusFixe)}`); }
+  // Absence = une JOURNÉE de salaire (salaire ÷ jours ouvrés) ; sans jours ouvrés : montant fixe d'avant.
+  const jOuv=num(RG.jours_ouvres);
+  const parAbsence=jOuv>0?Math.round(baseMens/jOuv):num(RG.malus_absence);
+  let malus_absence=pt.absences*parAbsence;
+  if(malus_absence>0) details_malus.push(`${pt.absences} absence(s) × ${fmt(parAbsence)}${jOuv>0?` (1 journée = salaire ÷ ${jOuv})`:''} : −${fmt(malus_absence)}`);
+  let malus_perte=0;
   if(p.equipe_production && produitKg>0 && seuilPerte>0 && pertePct>seuilPerte){
     malus_perte=num(RG.malus_perte_montant);
     if(malus_perte>0) details_malus.push(`Perte fab ${pertePct.toFixed(1)}% > ${RG.perte_seuil_pct}% : −${fmt(malus_perte)}`);
   }
 
   const total_bonus=bonus_quota+bonus_perte+bonus_assiduite;
-  let total_malus=malus_retard+malus_absence+malus_perte;
-
-  // Plafond de retranchement (% du salaire de base) — sur le salaire PLEIN, pas le prorata
+  // Plafond de retranchement (% du salaire de base) : il borne les PÉNALITÉS (retard, perte).
+  // Une absence n'est pas une pénalité mais une journée non travaillée : jamais plafonnée.
   const plafPct=num(RG.plafond_retranchement);
-  let plafonne=false;
-  if(plafPct>0){ const maxR=Math.round(baseMens*plafPct/100); if(total_malus>maxR){ total_malus=maxR; plafonne=true; } }
+  let penalites=malus_retard+malus_perte, plafonne=false;
+  if(plafPct>0){ const maxR=Math.round(baseMens*plafPct/100); if(penalites>maxR){ penalites=maxR; plafonne=true; } }
+  let total_malus=penalites+malus_absence;
 
   let net=base+total_bonus-total_malus;
   const plancher=num(RG.plancher_salaire);
@@ -357,7 +432,7 @@ function calculerPaie(p){
     base, produitKg, quotaKg, pertePct,
     bonus_quota, bonus_perte, bonus_assiduite,
     malus_retard, malus_absence, malus_perte,
-    total_bonus, total_malus, net,
+    total_bonus, total_malus, net, minutes_retard,
     prorata, plancherApplique, plafonne, details_bonus, details_malus
   };
 }
@@ -396,8 +471,18 @@ async function genererBulletinOuvrier(ouvrierId, mois, opts){
     equipe_production:!!o.equipe_production, produitKg, perteKg, pt, RG
   });
 
+  // Ce que l'admin a déjà décidé pour ce mois (choix, ajustement) n'est JAMAIS écrasé par un recalcul,
+  // et un salaire déjà payé n'est plus touché.
+  const {data:exist}=await SB.from('gp_salaires').select('id,paye,choix_salaire,ajustement,ajustement_motif').eq('ouvrier_id',ouvrierId).eq('mois',mois).maybeSingle();
+  if(exist && exist.paye){ return {...exist, _deja_paye:true}; }
+  const choix=(exist && exist.choix_salaire) || RG.salaire_retenu_defaut || 'calcule';
+  const ajust=Math.round(Number(exist && exist.ajustement)||0);
+  const salaireDefaut=Math.round(baseMens);
+  const retenu=(choix==='defaut'?salaireDefaut:c.net)+ajust;
   const row={
     admin_id:GP_ADMIN_ID, ouvrier_id:ouvrierId,
+    salaire_defaut:salaireDefaut, salaire_calcule:c.net, choix_salaire:choix,
+    ajustement:ajust, ajustement_motif:(exist && exist.ajustement_motif)||null, minutes_retard:c.minutes_retard,
     nom_prenom:o.nom_prenom, matricule:o.matricule, poste:o.fonction,
     numero_compte:o.numero_compte, point_vente:pdv, date_embauche:o.date_embauche,
     whatsapp:o.whatsapp||o.telephone, mois,
@@ -406,7 +491,7 @@ async function genererBulletinOuvrier(ouvrierId, mois, opts){
     malus_retard:c.malus_retard, malus_absence:c.malus_absence, malus_perte:c.malus_perte,
     jours_retard:pt.retards, jours_absence:pt.absences,
     primes:c.total_bonus, avances:c.total_malus,
-    montant:c.net, net_a_payer:c.net, mode:opts.mode||'virement',
+    montant:Math.max(0,retenu), net_a_payer:Math.max(0,retenu), mode:opts.mode||'virement',
     date_paiement:today(), paye:false
   };
   const {data:saved,error}=await SB.from('gp_salaires')
@@ -433,9 +518,11 @@ async function genererTousBulletins(){
   if(!confirm(`Générer/mettre à jour les bulletins de ${actifs.length} ouvrier(s) pour ${mois} ?\n\nBonus/retranchements calculés automatiquement (production + pointage).`)) return;
   notify('Calcul des bulletins…','gold');
   let n=0;
-  for(const o of actifs){ const r=await genererBulletinOuvrier(o.id, mois); if(r)n++; }
-  notify(`✓ ${n} bulletin(s) générés pour ${mois}`,'gold');
+  let payes=0;
+  for(const o of actifs){ const r=await genererBulletinOuvrier(o.id, mois); if(r){ if(r._deja_paye) payes++; else n++; } }
+  notify(`✓ ${n} salaire(s) calculés pour ${mois}`+(payes?` · ${payes} déjà payé(s), non modifié(s)`:''),'gold');
   if(typeof renderSalaires==='function') await renderSalaires();
+  if(typeof renderFicheMois==='function') await renderFicheMois();
 }
 
 // ════════════════════════════════════════════════════
@@ -618,4 +705,4 @@ function onSalOuvrierChange(){
 }
 
 // Export Node (tests) — sans effet dans le navigateur
-if(typeof module!=='undefined' && module.exports){ module.exports={ calculerPaie }; }
+if(typeof module!=='undefined' && module.exports){ module.exports={ calculerPaie, minutesRetard }; }
