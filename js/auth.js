@@ -174,9 +174,25 @@ async function doSignup(){
   const{data,error}=await SB.auth.signUp({email,password:pass,options:{data:{nom,telephone:tel,provenderie:prov}}});
   if(error){err.textContent=error.message;return;}
   err.textContent='';
+  // « Vous serez contacté » n'engageait personne : le compte entrait en salle
+  // d'attente sans que QUICONQUE soit prévenu, et on ne le découvrait qu'en
+  // ouvrant l'écran. Un prospect qui attend sans nouvelle est une vente perdue.
+  // C'est donc LUI qui envoie le message, déjà écrit : il sait qui il est.
+  const _msgProsp = '🔔 Bonjour, je viens de créer mon accès PROVENDA.'
+    + '\nNom : ' + nom
+    + (prov ? '\nProvenderie : ' + prov : '')
+    + (tel ? '\nTéléphone : ' + tel : '')
+    + '\nEmail : ' + email
+    + '\nJ\'attends l\'activation de mon compte.';
   ok.innerHTML='<div style="font-weight:600">✓ Votre accès est créé.</div>'
     +'<div style="font-size:11px;margin-top:4px">Il doit être activé par l\'administrateur. '
-    +'Vous serez contacté — gardez votre mot de passe.</div>';
+    +'Gardez votre mot de passe.</div>'
+    +'<a href="https://wa.me/22899313110?text='+encodeURIComponent(_msgProsp)+'" target="_blank" '
+    +'style="display:block;margin-top:10px;background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.4);'
+    +'color:#25D366;padding:10px;border-radius:8px;font-size:13px;text-decoration:none;text-align:center;font-weight:600">'
+    +'📲 Prévenir l\'administrateur maintenant</a>'
+    +'<div style="font-size:10px;color:#94A3B8;margin-top:4px;text-align:center">'
+    +'Un message déjà écrit s\'ouvrira dans WhatsApp — c\'est le plus rapide pour être activé.</div>';
   // Si une session existe déjà, on inscrit tout de suite en salle d'attente ;
   // sinon `bootApp` le fera à la première connexion.
   if(data?.user && typeof attInscrireEnAttente==='function'){
@@ -983,7 +999,12 @@ function afficherModalExpire(plan){
       <a href="gp_paiement.html" style="display:block;background:linear-gradient(135deg,#16A34A,#15803D);color:white;padding:14px;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;margin-bottom:12px;transition:all .2s">
         💳 Payer maintenant et continuer
       </a>
-      <a href="https://wa.me/22899313110" target="_blank" style="display:block;background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.3);color:#25D366;padding:10px;border-radius:8px;font-size:13px;text-decoration:none">
+      <!-- Un lien wa.me nu ouvre une conversation VIDE : le client doit se
+           présenter lui-même et on ne sait ni qui écrit ni pourquoi. -->
+      <a href="https://wa.me/22899313110?text=${encodeURIComponent(
+          '💳 Bonjour, mon abonnement PROVENDA est arrivé à échéance.'
+          + '\nCompte : ' + (GP_USER?.email || '')
+          + '\nJe souhaite le renouveler.')}" target="_blank" style="display:block;background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.3);color:#25D366;padding:10px;border-radius:8px;font-size:13px;text-decoration:none">
         📲 Contacter sur WhatsApp : (+228) 99313110
       </a>
       <button onclick="doLogout()" style="margin-top:12px;background:none;border:none;color:#475569;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif">
