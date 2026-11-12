@@ -38,14 +38,20 @@ function _impEsc(x){
 async function _impDerniersVersements(){
   const out = {};
   try{
+    // On lit le MODE et la NOTE aussi : « 250 000 F » sans savoir si c'est du
+    // Flooz ou des espèces ne vaut rien devant un client qui conteste.
     const { data, error } = await SB.from('gp_reglements_clients')
-      .select('client_id,date_paiement,montant')
+      .select('client_id,date_paiement,montant,mode,note')
       .eq('admin_id', GP_ADMIN_ID).is('deleted_at', null)
       .order('date_paiement', { ascending:false }).limit(5000);
     if(error) throw new Error(error.message);
     (data || []).forEach(r => {
       if(!r.client_id) return;
-      if(!out[r.client_id]) out[r.client_id] = { date: r.date_paiement, montant: Number(r.montant) || 0 };
+      // La requête est triée du plus récent au plus ancien : le premier vu est
+      // le dernier versé, et la liste reste dans le bon ordre.
+      if(!out[r.client_id]) out[r.client_id] = { date: r.date_paiement, montant: Number(r.montant) || 0, tous: [] };
+      out[r.client_id].tous.push({ date: r.date_paiement, montant: Number(r.montant) || 0,
+                                   mode: r.mode || r.note || '' });
     });
   }catch(e){
     // On le DIT : sans ces dates la page perd sa raison d'être, mieux vaut
@@ -90,6 +96,8 @@ async function renderImpayes(){
         lignes: d.lignes || [],
         versDate: v ? v.date : null, versMontant: v ? v.montant : 0,
         versJours: v ? _impJours(v.date) : null,
+        versements: (v && v.tous) ? v.tous : [],
+        versTotal: (v && v.tous) ? v.tous.reduce((t, p) => t + (p.montant || 0), 0) : 0,
         achatJours: _impJours(dernierAchat),
       };
     }).filter(x => x.total > 0);
@@ -172,6 +180,20 @@ function _impAfficher(){
         <button class="btn btn-out btn-sm" style="font-size:10px;padding:3px 9px" onclick="_impToggle('${_impEsc(x.cle)}')">
           <span id="impi-${_impEsc(x.cle)}">▸</span> Ses factures
         </button>
+        <button class="btn btn-out btn-sm" style="font-size:10px;padding:3px 9px" onclick="_impToggle('v${_impEsc(x.cle)}')">
+          <span id="impi-v${_impEsc(x.cle)}">▸</span> 💰 Ses versements${x.versements.length ? ' (' + x.versements.length + ')' : ''}
+        </button>
+      </div>
+      <div id="impd-v${_impEsc(x.cle)}" style="display:none;margin-top:6px">
+        ${x.versements.length ? `
+        <div style="font-size:10px;color:var(--textm);margin-bottom:3px">Total versé par ce client : <b style="color:#0a8a4f">${fmt(x.versTotal)} F</b></div>
+        <table class="tbl" style="font-size:10px"><thead><tr><th>Date</th><th>Mode</th><th class="num">Montant</th></tr></thead><tbody>
+        ${x.versements.map(p =>
+          `<tr><td style="font-size:9px">${_impEsc(typeof fmtDate === 'function' && p.date ? fmtDate(p.date) : (p.date || '—'))}</td>
+               <td style="font-size:9px">${_impEsc(p.mode || '—')}</td>
+               <td class="num" style="color:#0a8a4f">${fmt(p.montant)} F</td></tr>`).join('')}
+        </tbody></table>`
+        : `<div style="font-size:11px;color:var(--textm)">Aucun versement enregistré pour ce client. Les règlements saisis à la vente ou via « Encaisser » apparaîtront ici, datés.</div>`}
       </div>
       <div id="impd-${_impEsc(x.cle)}" style="display:none;margin-top:6px">
         <table class="tbl" style="font-size:10px"><thead><tr><th>Date</th><th>Produit</th><th class="num">Reste dû</th></tr></thead><tbody>
