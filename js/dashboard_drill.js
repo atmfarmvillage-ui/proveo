@@ -451,8 +451,11 @@ async function drillEncaisse(){
   window._kpiDrillData = { type:'encaisse', titre:'Encaissé Provenderie', rows:ventes, columns:cols, total };
 }
 
-// ── 3. IMPAYÉS (dettes clients) ────────────────────
-async function drillImpayes(toutePeriode){
+// ── IMPAYÉS : LA COLLECTE, PARTAGÉE ────────────────────────────
+// Le tableau de bord ET la page Impayés lisent CECI. Deux collectes séparées
+// donneraient deux totaux différents de la MÊME dette, et on ne saurait plus
+// lequel croire. Une seule vérité, deux affichages.
+async function collecterImpayes(toutePeriode){
   const {debut, fin} = _moisRangeCe();
   let q = SB.from('gp_ventes').select('*')
     .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
@@ -522,6 +525,13 @@ async function drillImpayes(toutePeriode){
     });
   }catch(e){}
   const totalGlobal = total + totalLiv;
+  return { ventes, byCli, total, totalLiv, nbLiv, nbAvecTel, totalGlobal };
+}
+
+// ── 3. IMPAYÉS (dettes clients) — l'affichage du tableau de bord ────────
+async function drillImpayes(toutePeriode){
+  const _D = await collecterImpayes(toutePeriode);
+  const { ventes, byCli, totalLiv, nbLiv, nbAvecTel, totalGlobal } = _D;
 
   document.getElementById('kpi-drill-titre').textContent = `⚠ Impayés${toutePeriode?' (tous mois)':''} — ${ventes.length-nbLiv} factures${nbLiv?` + ${nbLiv} livraison(s) PDV`:''} · ${Object.keys(byCli).length} client(s)`;
   document.getElementById('kpi-drill-summary').innerHTML =

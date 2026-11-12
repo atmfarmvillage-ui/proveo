@@ -599,6 +599,7 @@ function initMobileTabbar(){
 var PAGE_RENDERERS = {
   aide:          function(){ if(typeof renderAide==='function') renderAide(); },
   dashboard:     renderDashboard,
+  impayes:       function(){ if(typeof renderImpayes==='function') renderImpayes(); },
   stock:         function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderStockNiveaux(); },
   matieres:      function(){ if(typeof populateFournisseurSelect==='function') populateFournisseurSelect(); renderMatieresPremieresPage(); },
   inventaire:    renderInventaire,
