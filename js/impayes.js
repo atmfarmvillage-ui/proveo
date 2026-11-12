@@ -62,6 +62,41 @@ async function _impDerniersVersements(){
   return out;
 }
 
+// Un relevé de 15 versements ne se lit pas ligne par ligne. Ce qu'on vérifie
+// devant le client, c'est « combien il a versé en octobre ». D'où un BILAN EN
+// GRAS en tête de chaque mois.
+const _IMP_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+                   'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+function _impMoisLisible(ym){
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || '');
+  if(!m) return 'Mois inconnu';
+  const nom = _IMP_MOIS[+m[2] - 1] || '?';
+  return nom.charAt(0).toUpperCase() + nom.slice(1) + ' ' + m[1];
+}
+function _impVersementsHtml(vers){
+  // Les versements arrivent déjà du plus récent au plus ancien : on garde cet
+  // ordre pour les mois aussi, sans retrier.
+  const groupes = {}, ordre = [];
+  (vers || []).forEach(p => {
+    const ym = String(p.date || '').slice(0, 7) || '?';
+    if(!groupes[ym]){ groupes[ym] = { total: 0, n: 0, lignes: [] }; ordre.push(ym); }
+    groupes[ym].total += (p.montant || 0);
+    groupes[ym].n += 1;
+    groupes[ym].lignes.push(p);
+  });
+  return ordre.map(ym => {
+    const g = groupes[ym];
+    return `<tr style="background:rgba(10,138,79,.10)">
+        <td colspan="2" style="font-size:10px"><b>${_impEsc(_impMoisLisible(ym))}</b>
+          <span style="color:var(--textm);font-weight:400"> · ${g.n} versement${g.n > 1 ? 's' : ''}</span></td>
+        <td class="num"><b style="color:#0a8a4f">${fmt(g.total)} F</b></td></tr>`
+      + g.lignes.map(p =>
+        `<tr><td style="font-size:9px">${_impEsc(typeof fmtDate === 'function' && p.date ? fmtDate(p.date) : (p.date || '—'))}</td>
+             <td style="font-size:9px">${_impEsc(p.mode || '—')}</td>
+             <td class="num" style="color:#0a8a4f">${fmt(p.montant)} F</td></tr>`).join('');
+  }).join('');
+}
+
 function trierImpayes(mode){
   IMP_TRI = (mode === 'montant') ? 'montant' : 'anciennete';
   _impAfficher();
@@ -188,10 +223,7 @@ function _impAfficher(){
         ${x.versements.length ? `
         <div style="font-size:10px;color:var(--textm);margin-bottom:3px">Total versé par ce client : <b style="color:#0a8a4f">${fmt(x.versTotal)} F</b></div>
         <table class="tbl" style="font-size:10px"><thead><tr><th>Date</th><th>Mode</th><th class="num">Montant</th></tr></thead><tbody>
-        ${x.versements.map(p =>
-          `<tr><td style="font-size:9px">${_impEsc(typeof fmtDate === 'function' && p.date ? fmtDate(p.date) : (p.date || '—'))}</td>
-               <td style="font-size:9px">${_impEsc(p.mode || '—')}</td>
-               <td class="num" style="color:#0a8a4f">${fmt(p.montant)} F</td></tr>`).join('')}
+        ${_impVersementsHtml(x.versements)}
         </tbody></table>`
         : `<div style="font-size:11px;color:var(--textm)">Aucun versement enregistré pour ce client. Les règlements saisis à la vente ou via « Encaisser » apparaîtront ici, datés.</div>`}
       </div>

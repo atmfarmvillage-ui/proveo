@@ -485,41 +485,12 @@ async function openClientDetail(id){
     return m ? m[1] : (n && n.length<=24 ? n : null);
   };
   const totEncaisse=regs.reduce((s,r)=>s+(Number(r.montant)||0),0);
-  const paiementsHtml=regs.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Mode</th><th class="num">Montant</th></tr></thead><tbody>${regs.map(r=>`<tr><td style="font-size:10px">${fmtDate?fmtDate(r.date_paiement):r.date_paiement}</td><td style="font-size:10px">${r.mode||r.note||'—'}</td><td class="num" style="color:#0a8a4f">${fmt(r.montant)} F</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucun paiement daté encore. Les prochains (à la vente, ou via « Encaisser ») s\'afficheront ici avec leur date.</div>';
-  // Totaux + agrégat PAR MOIS (basé sur la date de VENTE : le paiement client n'a pas de date propre).
-  let totAchete=0,totPaye=0; const byMonth={};
-  rows.forEach(v=>{ const tot=Number(v.montant_total)||0, pay=Number(v.montant_paye)||0; totAchete+=tot; totPaye+=pay;
-    const ym=String(v.date||'').slice(0,7); if(!ym)return; if(!byMonth[ym])byMonth[ym]={achete:0,paye:0}; byMonth[ym].achete+=tot; byMonth[ym].paye+=pay; });
-  const totReste=totAchete-totEncaisse;   // reste RÉEL = acheté − paiements datés (règlements)
+  // Acheté total et reste réel. Le reste se calcule sur les paiements DATÉS
+  // (table des règlements), pas sur `montant_paye` des ventes.
+  let totAchete=0;
+  rows.forEach(v=>{ totAchete+=Number(v.montant_total)||0; });
+  const totReste=totAchete-totEncaisse;
   const _MOISFR=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
-  const moisKeys=Object.keys(byMonth).sort().reverse();
-  const parMois=moisKeys.length?`<table class="tbl" style="font-size:11px"><thead><tr>
-      <th>Mois</th><th class="num">Acheté</th><th class="num">Payé</th><th class="num">Reste</th>
-    </tr></thead><tbody>${moisKeys.map(ym=>{const m=byMonth[ym],r=m.achete-m.paye,mm=ym.split('-');
-      const det=rows.filter(v=>String(v.date||'').slice(0,7)===ym).map(v=>{const tot=Number(v.montant_total)||0,pay=Number(v.montant_paye)||0,rr=tot-pay;return `<tr style="background:var(--card2,#f5f5f9)">
-        <td style="font-size:9px;padding-left:16px">${fmtDate?fmtDate(v.date):v.date}</td>
-        <td style="font-size:9px">${v.formule_nom||'—'}</td>
-        <td class="num" style="font-size:9px">${fmt(tot)}</td>
-        <td class="num" style="font-size:9px;color:#0a8a4f">${fmt(pay)}${rr>0?' <span style="color:#c0392b">(−'+fmt(rr)+')</span>':''}</td>
-      </tr>`;}).join('');
-      return `<tr style="cursor:pointer" onclick="_toggleMois('${ym}')">
-      <td style="font-size:10px"><span id="mi-${ym}">▸</span> ${_MOISFR[+mm[1]-1]} ${mm[0]}</td>
-      <td class="num">${fmt(m.achete)} F</td>
-      <td class="num" style="color:#0a8a4f">${fmt(m.paye)} F</td>
-      <td class="num" style="color:${r>0?'#c0392b':'var(--textm)'}">${fmt(r)} F</td>
-    </tr><tr id="md-${ym}" style="display:none"><td colspan="4" style="padding:2px 0"><table class="tbl" style="width:100%;font-size:9px;margin:0"><tbody>${det}</tbody></table></td></tr>`;}).join('')}</tbody></table>`
-    :'<div style="color:var(--textm);font-size:12px">Aucun mois.</div>';
-  const hist=rows.length?`<table class="tbl" style="font-size:11px"><thead><tr>
-      <th>Date</th><th>Formule</th><th class="num">Qté</th><th class="num">Montant</th><th class="num">Payé</th><th class="num">Reste</th>
-    </tr></thead><tbody>${rows.map(v=>{const tot=Number(v.montant_total)||0,pay=Number(v.montant_paye)||0,r=tot-pay;return `<tr>
-      <td style="font-size:10px">${fmtDate?fmtDate(v.date):v.date}</td>
-      <td style="font-size:10px">${v.formule_nom||'—'}</td>
-      <td class="num">${v.qte_vendue?fmtKg(v.qte_vendue)+' kg':'—'}</td>
-      <td class="num">${fmt(tot)} F</td>
-      <td class="num" style="color:#0a8a4f">${fmt(pay)} F</td>
-      <td class="num" style="color:${r>0?'#c0392b':'var(--textm)'}">${fmt(r)} F</td>
-    </tr>`;}).join('')}</tbody></table>`
-    :'<div style="color:var(--textm);font-size:12px">Aucun achat enregistré.</div>';
 
   // ── RELEVÉ DE COMPTE : achats (débit) + paiements DATÉS (crédit) + solde courant ──
   const evts=[];
