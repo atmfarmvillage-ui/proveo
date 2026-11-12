@@ -81,6 +81,9 @@ async function renderImpayes(){
       // `byCli` est indexé par client_id, ou par « nom:… » quand la vente n'a
       // pas d'identifiant client : dans ce second cas on n'a pas de versement.
       const v = (k && !String(k).startsWith('nom:')) ? versements[k] : null;
+      // ⚠️ `lignes` ne contient que les factures IMPAYÉES : cette date est celle
+      // de la dernière facture non soldée, PAS du dernier achat. Un client qui
+      // paie comptant n'y apparaît pas.
       const dernierAchat = (d.lignes || []).reduce((m, l) => (l.date && l.date > m ? l.date : m), '');
       return {
         cle: k, nom: d.nom || '(sans nom)', tel: d.tel || '', total: d.total || 0,
@@ -163,7 +166,7 @@ function _impAfficher(){
         <span style="font-weight:700;color:#c0392b">doit ${fmt(x.total)} F</span>
       </div>
       <div style="font-size:11px;color:var(--textm);margin-top:2px">💰 dernier versement : ${silence}</div>
-      <div style="font-size:11px;color:var(--textm)">🛒 ${x.achatJours != null ? 'dernier achat il y a ' + x.achatJours + ' j' : 'achat sans date'} · ${x.lignes.length} facture${x.lignes.length > 1 ? 's' : ''} impayée${x.lignes.length > 1 ? 's' : ''}${x.tel ? ' · 📞 ' + _impEsc(x.tel) : ' · <span style="color:var(--gold)">sans téléphone</span>'}</div>
+      <div style="font-size:11px;color:var(--textm)">🛒 ${x.achatJours != null ? 'dernière facture impayée il y a ' + x.achatJours + ' j' : 'facture sans date'} · ${x.lignes.length} facture${x.lignes.length > 1 ? 's' : ''} impayée${x.lignes.length > 1 ? 's' : ''}${x.tel ? ' · 📞 ' + _impEsc(x.tel) : ' · <span style="color:var(--gold)">sans téléphone</span>'}</div>
       <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
         ${x.tel ? `<button class="btn btn-g btn-sm" style="background:#25D366;color:#fff;border:none;font-size:10px;padding:3px 9px" onclick="relancerDebiteurWA('${_impEsc(x.cle)}')">📞 Relancer</button>` : ''}
         <button class="btn btn-out btn-sm" style="font-size:10px;padding:3px 9px" onclick="_impToggle('${_impEsc(x.cle)}')">
