@@ -111,6 +111,26 @@ async function loadClientStats(force){
     const fe=Object.entries(s.formules).sort((a,b)=>b[1]-a[1]);
     s.produitHabituel=fe.length?fe[0][0]:null;
   });
+  // LE DERNIER VERSEMENT. `s.dernier` est le dernier ACHAT (gp_ventes.date) ;
+  // sur un client qui DOIT de l'argent, ce qui compte est la dernière fois
+  // qu'il a VERSÉ quelque chose. Les deux dates n'ont rien à voir : on peut
+  // acheter tous les jours sans jamais payer.
+  try{
+    const{data:_rg,error:_er}=await SB.from('gp_reglements_clients')
+      .select('client_id,date_paiement,montant')
+      .eq('admin_id',GP_ADMIN_ID).is('deleted_at',null)
+      .order('date_paiement',{ascending:false}).limit(5000);
+    if(_er) throw new Error(_er.message);
+    (_rg||[]).forEach(r=>{
+      if(!r.client_id || !map[r.client_id]) return;
+      const m=map[r.client_id];
+      if(!m.dernierVers){ m.dernierVers=r.date_paiement; m.dernierVersMontant=Number(r.montant)||0; }
+    });
+  }catch(e){
+    // On le DIT : sans ça, « aucun versement » s'afficherait pour tout le
+    // monde et on relancerait des clients à jour.
+    console.warn('[clients] derniers versements illisibles : '+(e&&e.message));
+  }
   GP_CLIENT_STATS=map;
   return map;
 }
@@ -967,6 +987,17 @@ async function renderClients(){
       const s=GP_CLIENT_STATS?.[c.id];
       const st=clientStatut(s,montantDu,c.nom);
       const dernierTxt=(s&&s.dernier)?' · 🛒 '+(st.jours!=null?'il y a '+st.jours+' j':fmtDate(s.dernier)):'';
+      // Le dernier VERSEMENT, seulement pour qui doit : ailleurs c'est du bruit.
+      let versTxt='';
+      if(montantDu>0){
+        if(s&&s.dernierVers){
+          const _jv=Math.floor((Date.now()-new Date(String(s.dernierVers).length<=10?s.dernierVers+'T12:00:00':s.dernierVers))/86400000);
+          const _c=_jv>=60?'#c0392b':_jv>=30?'#b8860b':'#0a8a4f';
+          versTxt=` · 💰 versé ${fmt(s.dernierVersMontant||0)} F <b style="color:${_c}">il y a ${_jv} j</b>`;
+        } else {
+          versTxt=' · 💰 <b style="color:#c0392b">aucun versement</b>';
+        }
+      }
       return`<tr style="cursor:pointer" onclick="openClientDetail('${c.id}')">
         <td>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -979,7 +1010,7 @@ async function renderClients(){
           <div style="font-size:10px;color:var(--textm)">
             ${c.telephone?'📞 '+c.telephone:''}
             ${c.nom_ferme?' · 🏠 '+c.nom_ferme:''}
-            ${c.localite?' · 📍 '+c.localite:''}${dernierTxt}
+            ${c.localite?' · 📍 '+c.localite:''}${dernierTxt}${versTxt}
           </div>
         </td>
         <td>
