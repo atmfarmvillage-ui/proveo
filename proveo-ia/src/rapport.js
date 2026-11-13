@@ -16,6 +16,15 @@ const ROLES_DESTINATAIRES = ['admin', 'logistique', 'daf'];
 const INDICATIF_PAYS = '228';           // Togo
 const SEUIL_MP_DEFAUT = 200;            // kg, si la fiche n'a pas de seuil
 
+// VPS KEGUE et le Couvoir pro sont des activités INDÉPENDANTES : leur argent
+// n'est pas celui de la provenderie, il n'a rien à faire dans ce rapport.
+// Tout le reste y entre — une caisse créée demain apparaîtra d'elle-même.
+const CAISSES_HORS_RAPPORT = ['vps', 'couvoir'];
+
+// Au-delà, on alerte : un tiroir qu'on ne compte pas dérive en silence, et la
+// surprise se découvre six semaines plus tard, à 800 000 F.
+const JOURS_SANS_COMPTAGE = 7;
+
 // ── Accès Supabase avec la clé de service ─────────
 // Le cron n'a pas de session utilisateur : la clé anon serait bloquée par la
 // RLS. La clé de service reste dans ce worker, qui ne sert que cette base.
@@ -48,6 +57,14 @@ async function sbTout(env, chemin, page = 1000) {
 
 // ── Dates (le Togo est à UTC+0, pas de décalage à gérer) ──
 function aujourdhui() { return new Date().toISOString().slice(0, 10); }
+// Le rapport part le MATIN et raconte la VEILLE. À 21 h il photographiait un
+// travail en cours : la secrétaire n'avait pas fini de saisir, et une journée
+// à 400 000 F était annoncée à 300 000 F. Au matin, la journée est close.
+function hier() { return new Date(Date.now() - 86400000).toISOString().slice(0, 10); }
+// Un jour explicite (?jour=2026-11-12) sert à rejouer un rapport manqué.
+function jourDuRapport(demande) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(demande || '')) ? String(demande) : hier();
+}
 function debutMois() { return aujourdhui().slice(0, 7) + '-01'; }
 
 function fmt(n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR'); }
@@ -152,17 +169,20 @@ function niveauxMp(mouvements, fiches) {
 // ══════════════════════════════════════════════════
 // RAPPORT QUOTIDIEN
 // ══════════════════════════════════════════════════
-async function rapportQuotidien(env, adminId) {
-  const jour = aujourdhui();
-  const mois = debutMois();
+async function rapportQuotidien(env, adminId, jourDemande) {
+  const jour = jourDuRapport(jourDemande);
+  // Le mois suit le JOUR du rapport : le 1er au matin, on raconte encore le
+  // mois precedent.
+  const mois = jour.slice(0, 7) + '-01';
 
-  const [ventesJour, ventesImpayees, lotsJour, fiches, caisses, mvtsCaisse] = await Promise.all([
+  const [ventesJour, ventesImpayees, lotsJour, fiches, caisses, mvtsCaisse, clotures] = await Promise.all([
     sb(env, `gp_ventes?admin_id=eq.${adminId}&date=eq.${jour}&deleted_at=is.null&select=montant_total,montant_paye,statut_paiement,qte_vendue`),
     sb(env, `gp_ventes?admin_id=eq.${adminId}&deleted_at=is.null&statut_paiement=neq.paye&select=montant_total,montant_paye,client_nom,date`),
     sb(env, `gp_lots?admin_id=eq.${adminId}&date=eq.${jour}&select=qte_produite,formule_nom`),
     sb(env, `gp_ingredients?admin_id=eq.${adminId}&select=id,nom,seuil_alerte,prix_actuel`),
-    sb(env, `gp_caisses?admin_id=eq.${adminId}&actif=eq.true&select=id,nom,solde_initial`),
-    sbTout(env, `gp_mouvements_caisse?admin_id=eq.${adminId}&select=caisse_id,type,montant,statut_transfert,caisse_dest_id`),
+    sb(env, `gp_caisses?admin_id=eq.${adminId}&actif=eq.true&select=id,nom,type,solde_initial`),
+    sbTout(env, `gp_mouvements_caisse?admin_id=eq.${adminId}&select=caisse_id,type,montant,statut_transfert,caisse_dest_id,date_mouvement,description`),
+    sb(env, `gp_clotures?admin_id=eq.${adminId}&select=caisse_id,date,cash_compte&order=date.desc&limit=2000`).catch(() => []),
   ]);
 
   // Ventes du jour
@@ -206,7 +226,49 @@ async function rapportQuotidien(env, adminId) {
       if (m.caisse_dest_id && soldes[m.caisse_dest_id] !== undefined) soldes[m.caisse_dest_id] += mt;
     }
   });
-  const soldeCaisse = Object.values(soldes).reduce((s, v) => s + v, 0);
+  // ── Les caisses, une par une, et depuis quand on ne les a pas comptées ──
+  const horsRapport = (nom) => CAISSES_HORS_RAPPORT.some(
+    (x) => String(nom || '').toLowerCase().includes(x));
+  const caissesRap = (caisses || []).filter((c) => !horsRapport(c.nom));
+  const soldeCaisse = caissesRap.reduce((s, c) => s + (soldes[c.id] || 0), 0);
+
+  // Deux chemins comptent réellement le tiroir : la clôture, et la « mise à
+  // jour par inventaire ». On retient le plus récent des deux — sinon on
+  // annonce « jamais compté » à quelqu'un qui vient de compter.
+  const compte = {};
+  const retenir = (cid, date, montant) => {
+    if (!cid || !date) return;
+    const d = String(date).slice(0, 10);
+    if (!compte[cid] || d > compte[cid].date) compte[cid] = { date: d, montant };
+  };
+  (clotures || []).forEach((c) => retenir(c.caisse_id, c.date, Number(c.cash_compte || 0)));
+  (mvtsCaisse || []).forEach((m) => {
+    // Le montant compté vit dans le texte du libellé : on ne va pas le pêcher
+    // là, on se contente de la date — elle suffit à dire « il y a 6 jours ».
+    if (m.type === 'ajustement' && /inventaire/i.test(String(m.description || '')))
+      retenir(m.caisse_id, m.date_mouvement, null);
+  });
+  const joursDepuis = (d) => Math.max(0,
+    Math.round((Date.parse(jour) - Date.parse(d)) / 86400000));
+  const jjmm = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+  const lignesCaisses = caissesRap
+    .slice().sort((a, b) => (soldes[b.id] || 0) - (soldes[a.id] || 0))
+    .map((c) => {
+      let suite = '';
+      // Un compte YAS ou une banque ne se compte pas à la main : l'alerte de
+      // comptage ne vaut que pour un tiroir.
+      if (c.type === 'physique') {
+        const k = compte[c.id];
+        if (!k) suite = ' · ⚠️ jamais compté';
+        else {
+          const j = joursDepuis(k.date);
+          const mt = (k.montant === null || k.montant === undefined) ? '' : ` (${fmt(k.montant)} F)`;
+          suite = ` · compté le ${jjmm(k.date)}${mt}, il y a ${j} j` + (j > JOURS_SANS_COMPTAGE ? ' ⚠️' : '');
+        }
+      }
+      return `   • ${c.nom} — ${fmt(Math.round(soldes[c.id] || 0))} F${suite}`;
+    });
 
   // ── Le texte complet, pour la page web et le repli hors template ──
   const lignes = [
@@ -216,7 +278,8 @@ async function rapportQuotidien(env, adminId) {
     `✅ Encaissé : ${fmt(encaisse)} F`,
     `📦 Vendu : ${fmt(kgVendus)} kg`,
     `🏭 Produit : ${fmt(kgProduits)} kg  (${lotsJour.length} lot${lotsJour.length > 1 ? 's' : ''})`,
-    `💵 Caisse : ${fmt(soldeCaisse)} F`,
+    `💵 Caisses : ${fmt(soldeCaisse)} F`,
+    ...lignesCaisses,
     ``,
     `🔴 Impayés : ${fmt(impayeTotal)} F`,
   ];
@@ -520,7 +583,7 @@ export async function handleRapport(request, env, url) {
     else if (type === 'cloture_rappel') corps = await rapportClotureRappel(env, adminId);
     else if (type === 'cloture_bilan') corps = await rapportClotureBilan(env, adminId);
     else if (type === 'reglements') corps = await rapportReglements(env, adminId, url.searchParams.get('depuis'));
-    else corps = await rapportQuotidien(env, adminId);
+    else corps = await rapportQuotidien(env, adminId, url.searchParams.get('jour'));
 
     // L'entreprise fournit elle-même ses destinataires : KEPELA n'a pas à
     // connaître le modèle utilisateur de chaque tenant.
