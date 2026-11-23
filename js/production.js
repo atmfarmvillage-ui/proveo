@@ -1090,15 +1090,80 @@ async function deleteLot(id){
 }
 
 // ── INVENTAIRE MENSUEL ─────────────────────────────
+// ── PÉRIODE (23/11) : un mois OU une période libre du … au … (3, 4, 6 mois…).
+// Les deux champs Du/Au font foi ; le champ Mois et les raccourcis ne font que
+// les remplir. Dates en heure LOCALE (jamais toISOString, qui passe en UTC).
+function _invJour(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function invCalculerRaccourci(code, auj){
+  const a = auj ? new Date(auj+'T12:00:00') : new Date();
+  const y = a.getFullYear(), m = a.getMonth();
+  const debutMois = k => _invJour(new Date(y, m-k, 1));
+  switch(code){
+    case 'mois':         return { du:debutMois(0), au:_invJour(new Date(y, m+1, 0)) };
+    case 'mois_dernier': return { du:debutMois(1), au:_invJour(new Date(y, m, 0)) };
+    case '3m':           return { du:debutMois(2), au:_invJour(a) };   // le mois en cours + les 2 d'avant
+    case '4m':           return { du:debutMois(3), au:_invJour(a) };
+    case '6m':           return { du:debutMois(5), au:_invJour(a) };
+    case 'annee':        return { du:y+'-01-01',   au:_invJour(a) };
+  }
+  return null;
+}
+// La période lue à l'écran ; Du > Au est remis dans l'ordre plutôt que de rendre une page vide.
+function _invPeriode(){
+  const elDu = document.getElementById('inv-du'), elAu = document.getElementById('inv-au');
+  let du = elDu?.value || '', au = elAu?.value || '';
+  if(!du || !au){
+    const mois = document.getElementById('inv-mois')?.value || thisMonth();
+    du = du || mois+'-01'; au = au || finMois(mois);
+  }
+  if(du > au){ const t = du; du = au; au = t; }
+  if(elDu) elDu.value = du;
+  if(elAu) elAu.value = au;
+  return { du, au };
+}
+// Une période qui couvre exactement un mois civil se nomme par ce mois.
+function _invMoisExact(du, au){
+  return (du.slice(8)==='01' && du.slice(0,7)===au.slice(0,7) && au===finMois(du.slice(0,7))) ? du.slice(0,7) : '';
+}
+function _invDateFr(d){ return d ? d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4) : ''; }
+function _invMarquerRaccourci(code){
+  document.querySelectorAll('#inv-raccourcis [data-p]').forEach(b=>{
+    const on = b.dataset.p === code;
+    b.style.background = on ? 'var(--g6)' : ''; b.style.color = on ? '#fff' : ''; b.style.borderColor = on ? 'var(--g6)' : '';
+  });
+}
+function _invRemplir(du, au){
+  const elDu = document.getElementById('inv-du'), elAu = document.getElementById('inv-au'), elM = document.getElementById('inv-mois');
+  if(elDu) elDu.value = du;
+  if(elAu) elAu.value = au;
+  if(elM) elM.value = _invMoisExact(du, au);
+}
+function invRaccourci(code){
+  const p = invCalculerRaccourci(code); if(!p) return;
+  _invRemplir(p.du, p.au); _invMarquerRaccourci(code); renderInventaire();
+}
+function invChoisirMois(){
+  const mois = document.getElementById('inv-mois')?.value; if(!mois) return;
+  _invRemplir(mois+'-01', finMois(mois)); _invMarquerRaccourci(''); renderInventaire();
+}
+function invPeriodeLibre(){
+  const { du, au } = _invPeriode();
+  const elM = document.getElementById('inv-mois'); if(elM) elM.value = _invMoisExact(du, au);
+  _invMarquerRaccourci(''); renderInventaire();
+}
+
 async function renderInventaire(){
-  const mois=document.getElementById('inv-mois')?.value||thisMonth();
-  const debut=mois+'-01';
-  const fin=finMois(mois);
-  const[{data:S},{data:L},{data:Sprev}]=await Promise.all([
-    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date',{ascending:false}),
-    SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin).order('date'),
-    SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).lt('date',debut),
+  const { du:debut, au:fin } = _invPeriode();
+  const mois = _invMoisExact(debut, fin);
+  // Sur 3-4 mois on dépasse vite 1000 mouvements, et le stock de début lit TOUT
+  // l'historique : une seule page (plafond Supabase) donnait des totaux faux sans erreur.
+  const [S, L, Sprev] = await Promise.all([
+    _fetchAllPages(()=>SB.from('gp_stock_mp').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)),
+    _fetchAllPages(()=>SB.from('gp_lots').select('*').eq('admin_id',GP_ADMIN_ID).gte('date',debut).lte('date',fin)),
+    _fetchAllPages(()=>SB.from('gp_stock_mp').select('id,ingredient_id,ingredient_nom,type,quantite').eq('admin_id',GP_ADMIN_ID).lt('date',debut)),
   ]);
+  S.sort((a,b)=> String(b.date).localeCompare(String(a.date)));   // écran : du plus récent au plus ancien
+  L.sort((a,b)=> String(a.date).localeCompare(String(b.date)));
   const lots=L||[];
   // Filtre MP : ne garder que les mouvements de la matière choisie. Le filtre
   // porte sur les MP, donc la production par formule (plus bas) reste globale.
@@ -1138,9 +1203,9 @@ async function renderInventaire(){
   const entrees=stock.filter(m=>m.type==='entree');
   document.getElementById('inv-entrees').innerHTML=entrees.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Valeur</th>':''}</tr></thead><tbody>
     ${entrees.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num good">${fmtKg(m.quantite)}</td>${GP_ROLE==='admin'?`<td class="num">${fmt(Number(m.quantite)*Number(m.prix_unit||0))} F</td>`:''}</tr>`).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée ce mois.</div>';
+    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune entrée sur la période.</div>';
   // Sorties
-  _INV_EXPORT = { mois, mpFiltre, typeFiltre, entrees, sorties };
+  _INV_EXPORT = { mois, du:debut, au:fin, mpFiltre, typeFiltre, entrees, sorties };
   // Rappel visible du filtre : sans ça, des KPI à 500 kg au lieu de 18 000
   // se lisent comme un mois creux et non comme une vue filtrée.
   const infoEl = document.getElementById('inv-filtre-info');
@@ -1156,7 +1221,7 @@ async function renderInventaire(){
   }
   document.getElementById('inv-sorties').innerHTML=sorties.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th><th>Type</th><th>Formule</th></tr></thead><tbody>
     ${sorties.map(m=>`<tr><td style="font-size:10px">${m.date}</td><td>${m.ingredient_nom}</td><td class="num bad">${fmtKg(m.quantite)}</td><td><span class="badge ${_invClasseSortie(m.type)}" style="font-size:9px">${_invLibelleSortie(m.type)}</span></td><td>${_invBadgeFormule(m)}</td></tr>`).join('')}
-    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie ce mois.</div>';
+    </tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune sortie sur la période.</div>';
   // Consommation par ingrédient
   const conso={};
   sorties.forEach(m=>{conso[m.ingredient_nom]=(conso[m.ingredient_nom]||0)+Number(m.quantite||0);});
@@ -1165,7 +1230,7 @@ async function renderInventaire(){
       <td style="font-weight:600">${nom}</td>
       <td class="num">${fmtKg(qte)}</td>
       <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:var(--card2);border-radius:3px"><div style="width:${totSorties>0?qte/totSorties*100:0}%;height:100%;background:var(--g4);border-radius:3px"></div></div><span style="font-size:10px;color:var(--textm)">${totSorties>0?(qte/totSorties*100).toFixed(1):0}%</span></div></td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation ce mois.</div>';
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune consommation sur la période.</div>';
   // Production par formule
   const prodFormule={};
   lots.forEach(l=>{
@@ -1180,9 +1245,9 @@ async function renderInventaire(){
       <td class="num">${d.nb}</td>
       <td class="num" style="color:var(--g6)">${fmt(d.qte)}</td>
       <td class="num" style="color:var(--textm)">${totProd>0?(d.qte/totProd*100).toFixed(1):0}%</td>
-    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune production ce mois.</div>';
+    </tr>`).join('')}</tbody></table>`:'<div style="color:var(--textm);font-size:12px">Aucune production sur la période.</div>';
   // Stock restant
-  document.getElementById('inv-stock-restant').innerHTML=`<table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Stock début mois</th><th class="num">Reçu</th><th class="num">Utilisé</th><th class="num">Stock fin mois</th><th>Statut</th></tr></thead><tbody>
+  document.getElementById('inv-stock-restant').innerHTML=`<table class="tbl"><thead><tr><th>Ingrédient</th><th class="num">Stock début période</th><th class="num">Reçu</th><th class="num">Utilisé</th><th class="num">Stock fin période</th><th>Statut</th></tr></thead><tbody>
     ${Object.keys({...niveauxDebut,...niveauxFin}).sort().map(nom=>{
       const debut2=niveauxDebut[nom]||0;
       const recu=entrees.filter(m=>m.ingredient_nom===nom).reduce((s,m)=>s+Number(m.quantite),0);
@@ -1382,12 +1447,15 @@ function exportInventaire(type, portee){
     return;
   }
 
-  const mois = E.mois || (document.getElementById('inv-mois')?.value || '');
-  const st = 'Mois : ' + mois
+  // Un mois civil garde son nom ; sinon la période « du … au … » (titre du PDF et nom du fichier).
+  const mois = E.mois || '';
+  const periode = mois ? 'Mois : ' + mois
+    : 'Période : du ' + _invDateFr(E.du) + ' au ' + _invDateFr(E.au);
+  const st = periode
     + ' · ' + (E.mpFiltre ? 'Matière : ' + E.mpFiltre : 'Toutes les matières')
     + (E.typeFiltre ? ' · Consommation : ' + _invLibelleSortie(E.typeFiltre) : '')
     + ' · ' + rows.length + ' mouvement(s)';
-  const fn = 'inventaire_' + portee + '_' + (E.mpFiltre ? E.mpFiltre.replace(/[^a-zA-Z0-9]+/g,'_') + '_' : '') + mois;
+  const fn = 'inventaire_' + portee + '_' + (E.mpFiltre ? E.mpFiltre.replace(/[^a-zA-Z0-9]+/g,'_') + '_' : '') + (mois || ((E.du||'') + '_au_' + (E.au||'')));
 
   if(type === 'pdf') gpExportPDF(titre, cols, rows, fn + '.pdf', st);
   else               gpExportExcel(titre, cols, rows, fn + '.xlsx');
