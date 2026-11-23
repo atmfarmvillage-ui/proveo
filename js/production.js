@@ -1194,11 +1194,22 @@ async function renderInventaire(){
   const totSorties=sorties.reduce((s,m)=>s+Number(m.quantite||0),0);
   const totProd=lots.reduce((s,l)=>s+Number(l.qte_produite||0),0);
   const valEntrees=GP_ROLE==='admin'?stock.filter(m=>m.type==='entree').reduce((s,m)=>s+Number(m.quantite||0)*Number(m.prix_unit||0),0):0;
-  document.getElementById('inv-kpis').innerHTML=`
+  // Reste en stock À LA FIN de la période (23/11, demande DG) : tout l'historique jusqu'à « Au »,
+  // calculé comme la page Stock (calcNiveaux, clé = fiche MP). Toutes les sorties comptent,
+  // même si un type de consommation est filtré : le stock, lui, ne se filtre pas.
+  const niveauxFinTout = calcNiveaux((Sprev||[]).concat(stockTout));
+  const reste = mpFiltre ? Number(niveauxFinTout[mpFiltre]||0)
+                         : Object.values(niveauxFinTout).reduce((s,v)=>s+Number(v||0),0);
+  const lblReste = 'Kg en stock au ' + _invDateFr(fin < _invJour(new Date()) ? fin : _invJour(new Date()));
+  const kpiReste = `<div class="econo-box"><div class="econo-val" style="color:${reste<=0?'var(--red)':'var(--g6)'}">${fmt(reste)}</div><div class="econo-lbl">${lblReste}</div></div>`;
+  const kpisEl = document.getElementById('inv-kpis');
+  kpisEl.style.gridTemplateColumns = 'repeat(auto-fit,minmax(160px,1fr))';   // 5 cases, sans en rejeter une à la ligne
+  kpisEl.innerHTML=`
     <div class="econo-box"><div class="econo-val" style="color:var(--green)">${fmt(totEntrees)}</div><div class="econo-lbl">Kg reçus</div></div>
     <div class="econo-box"><div class="econo-val" style="color:var(--red)">${fmt(totSorties)}</div><div class="econo-lbl">Kg utilisés</div></div>
+    ${kpiReste}
     <div class="econo-box"><div class="econo-val">${fmt(totProd)}</div><div class="econo-lbl">Kg produits</div></div>
-    ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(valEntrees)}</div><div class="econo-lbl">Valeur achats (F)</div></div>`:'<div class="econo-box"><div class="econo-val">${lots.length}</div><div class="econo-lbl">Lots produits</div></div>'}`;
+    ${GP_ROLE==='admin'?`<div class="econo-box"><div class="econo-val" style="color:var(--gold)">${fmt(valEntrees)}</div><div class="econo-lbl">Valeur achats (F)</div></div>`:`<div class="econo-box"><div class="econo-val">${lots.length}</div><div class="econo-lbl">Lots produits</div></div>`}`;
   // Entrées
   const entrees=stock.filter(m=>m.type==='entree');
   document.getElementById('inv-entrees').innerHTML=entrees.length?`<table class="tbl" style="font-size:11px"><thead><tr><th>Date</th><th>Ingrédient</th><th class="num">Qté (kg)</th>${GP_ROLE==='admin'?'<th class="num">Valeur</th>':''}</tr></thead><tbody>
