@@ -9,7 +9,7 @@ const boutons = ['mois', 'mois_dernier', '3m', '4m', '6m', 'annee'].map((p) => (
 // fausse base : 5000 mouvements MP sur 2026 (le plafond Supabase est 1000 par lecture)
 const pad = (n) => String(n).padStart(2, '0');
 const MVT = [];
-for (let i = 0; i < 5000; i++) { const d = new Date(2026, 0, 1 + (i % 327)); MVT.push({ id: i + 1, admin_id: 'A', date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, ingredient_nom: 'Maïs', type: i % 5 === 0 ? 'entree' : 'sortie_production', quantite: 10, prix_unit: 100 }); }
+for (let i = 0; i < 5000; i++) { const d = new Date(2026, 0, 1 + (i % 327)); MVT.push({ id: i + 1, admin_id: 'A', date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, ingredient_nom: i % 7 === 0 ? 'Soja' : 'Maïs', type: i % 5 === 0 ? 'entree' : 'sortie_production', quantite: 10, prix_unit: 100 }); }
 const requete = (table) => {
   const f = []; let rng = null;
   const q = {
@@ -29,7 +29,7 @@ const requete = (table) => {
 const ctx = {
   console, Date, Math, Number, String, Object, Array, JSON, Promise, setTimeout,
   document: { getElementById: el, querySelectorAll: (s) => (/inv-raccourcis/.test(s) ? boutons : []) },
-  SB: { from: requete }, GP_ADMIN_ID: 'A', GP_ROLE: 'admin', GP_INGREDIENTS: [{ id: 'i1', nom: 'Maïs', seuil_alerte: 200 }],
+  SB: { from: requete }, GP_ADMIN_ID: 'A', GP_ROLE: 'admin', GP_INGREDIENTS: [{ id: 'i1', nom: 'Maïs', seuil_alerte: 200 }, { id: 'i2', nom: 'Soja', seuil_alerte: 200 }],
   fmt: (n) => String(Math.round(n)), fmtKg: (n) => String(n), notify() {}, ESPECE_ICON: {}, normalizeMpNom: (s) => String(s || '').trim().toLowerCase(),
   gpExportPDF: (...a) => { ctx._pdf = a; }, gpExportExcel: (...a) => { ctx._xls = a; },
 };
@@ -70,10 +70,29 @@ const recu = dedans.filter((m) => m.type === 'entree').length * 10, util = dedan
 ok(dedans.length > 1000, `la période contient ${dedans.length} mouvements (> 1000)`);
 ok(el('inv-kpis').innerHTML.includes(`>${recu}<`) && el('inv-kpis').innerHTML.includes(`>${util}<`), `KPI complets : ${recu} kg reçus, ${util} kg utilisés`);
 const avant = MVT.filter((m) => m.date < '2026-08-01');
-const stockDebut = avant.reduce((s, m) => s + (m.type === 'entree' ? 10 : -10), 0);
+const stockDebut = avant.filter((m) => m.ingredient_nom === 'Maïs').reduce((s, m) => s + (m.type === 'entree' ? 10 : -10), 0);
 ok(avant.length > 1000 && el('inv-stock-restant').innerHTML.includes(`>${stockDebut}<`), `stock au début de période juste sur ${avant.length} lignes d’historique (${stockDebut})`);
 ok(el('inv-mois').value === '', 'le champ Mois se vide sur une période libre');
 ok(/début période/.test(el('inv-stock-restant').innerHTML) && /fin période/.test(el('inv-stock-restant').innerHTML), 'en-têtes « début / fin période »');
+
+// 3 bis. reste de la MP en stock à la fin de la période (tout l'historique jusqu'à « Au »)
+const resteAttendu = MVT.filter((m) => m.date <= '2026-11-23').reduce((s, m) => s + (m.type === 'entree' ? 10 : -10), 0);
+const resteMais = MVT.filter((m) => m.date <= '2026-11-23' && m.ingredient_nom === 'Maïs').reduce((s, m) => s + (m.type === 'entree' ? 10 : -10), 0);
+const caseReste = () => (el('inv-kpis').innerHTML.match(/>(-?\d+)<\/div><div class="econo-lbl">Kg en stock au ([0-9/]+)/) || []);
+ok(caseReste()[1] === String(resteAttendu), `reste en stock = ${resteAttendu} kg (tout l’historique jusqu’à « Au »)`);
+el('inv-mp').value = 'Maïs'; run(`invSetMp()`); await attendre();
+ok(caseReste()[1] === String(resteMais) && resteMais !== resteAttendu, 'filtré sur une matière : le reste de CETTE matière');
+el('inv-type').value = 'sortie_vente'; run(`invSetMp()`); await attendre();
+ok(caseReste()[1] === String(resteMais), 'un filtre « type de consommation » ne fausse pas le stock');
+el('inv-type').value = ''; el('inv-mp').value = '';
+el('inv-du').value = '2026-08-01'; el('inv-au').value = '2026-08-31'; run(`invPeriodeLibre()`); await attendre();
+const resteAout = MVT.filter((m) => m.date <= '2026-08-31').reduce((s, m) => s + (m.type === 'entree' ? 10 : -10), 0);
+ok(caseReste()[1] === String(resteAout) && caseReste()[2] === '31/08/2026', `période passée : stock au 31/08/2026 (${resteAout})`);
+ok(!/\$\{lots\.length\}/.test(el('inv-kpis').innerHTML), 'aucun « ${…} » brut affiché');
+run(`GP_ROLE='membre'`); run(`invPeriodeLibre()`); await attendre();
+ok(/>\d+<\/div><div class="econo-lbl">Lots produits/.test(el('inv-kpis').innerHTML), 'non-admin : le nombre de lots s’affiche (il était écrit « ${lots.length} »)');
+run(`GP_ROLE='admin'`);
+el('inv-du').value = '2026-08-01'; el('inv-au').value = '2026-11-23';
 
 // 4. Du après Au : remis dans l'ordre
 el('inv-du').value = '2026-11-23'; el('inv-au').value = '2026-08-01';
