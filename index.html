@@ -561,11 +561,27 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
 <!-- INVENTAIRE MENSUEL -->
 <div class="page" id="page-inventaire">
   <div class="page-title">Inventaire mensuel</div>
-  <div class="page-sub">Historique complet — Choisissez le mois et l'année</div>
+  <div class="page-sub">Historique complet — un mois, ou toute période du … au …</div>
+  <div class="no-print" id="inv-raccourcis" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="mois" onclick="invRaccourci('mois')">Ce mois</button>
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="mois_dernier" onclick="invRaccourci('mois_dernier')">Mois dernier</button>
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="3m" onclick="invRaccourci('3m')">3 derniers mois</button>
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="4m" onclick="invRaccourci('4m')">4 derniers mois</button>
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="6m" onclick="invRaccourci('6m')">6 mois</button>
+    <button class="btn btn-out" style="padding:5px 10px;font-size:12px" data-p="annee" onclick="invRaccourci('annee')">Cette année</button>
+  </div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
     <div>
       <label class="lbl">Mois</label>
-      <input type="month" id="inv-mois" style="width:auto" onchange="renderInventaire()">
+      <input type="month" id="inv-mois" style="width:auto" onchange="invChoisirMois()">
+    </div>
+    <div>
+      <label class="lbl">Du</label>
+      <input type="date" id="inv-du" style="width:auto" onchange="invPeriodeLibre()">
+    </div>
+    <div>
+      <label class="lbl">Au</label>
+      <input type="date" id="inv-au" style="width:auto" onchange="invPeriodeLibre()">
     </div>
     <div>
       <label class="lbl">Matière première</label>
@@ -600,11 +616,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   <div class="g4" id="inv-kpis" style="margin-bottom:14px"></div>
   <div class="g2">
     <div class="card">
-      <div class="card-title"><div class="ct-left"><span>📥 Entrées MP du mois</span></div></div>
+      <div class="card-title"><div class="ct-left"><span>📥 Entrées MP de la période</span></div></div>
       <div id="inv-entrees"></div>
     </div>
     <div class="card">
-      <div class="card-title"><div class="ct-left"><span>📤 Sorties MP du mois</span></div></div>
+      <div class="card-title"><div class="ct-left"><span>📤 Sorties MP de la période</span></div></div>
       <div id="inv-sorties"></div>
     </div>
   </div>
@@ -613,11 +629,11 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
     <div id="inv-conso-table" style="overflow-x:auto"></div>
   </div>
   <div class="card">
-    <div class="card-title"><div class="ct-left"><span>🏭 Production du mois par formule</span></div></div>
+    <div class="card-title"><div class="ct-left"><span>🏭 Production de la période par formule</span></div></div>
     <div id="inv-prod-table" style="overflow-x:auto"></div>
   </div>
   <div class="card">
-    <div class="card-title"><div class="ct-left"><span>📦 Stock restant en fin de mois</span></div></div>
+    <div class="card-title"><div class="ct-left"><span>📦 Stock restant en fin de période</span></div></div>
     <div id="inv-stock-restant" style="overflow-x:auto"></div>
   </div>
 </div>
@@ -3940,7 +3956,7 @@ try{
 <script src="js/ajustements.js?v=1.1.0"></script>
 <script src="js/notes_mp.js?v=1.0.0"></script>
 <script src="js/mp_orphelines.js?v=2.26.1"></script>
-<script src="js/production.js?v=2.42.0"></script>
+<script src="js/production.js?v=2.43.0"></script>
 <script src="js/ventes.js?v=2.45.0"></script>
 <script src="js/idempotence.js?v=1.1.0"></script>
 <script src="js/produits_ferme.js?v=1.0.0"></script>
