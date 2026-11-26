@@ -682,6 +682,7 @@ var PAGE_RENDERERS = {
     if(typeof remplirSelectOuvriers==='function')remplirSelectOuvriers();
     if(typeof showSalTab==='function')showSalTab('bulletins'); else renderSalaires();
   },
+  pointage:      function(){ if(typeof ouvrirPagePointage==='function') return ouvrirPagePointage(); },
   dettes:        renderDettes,
   equipe:        function(){renderPDV();initChat();if(typeof renderComptesAttente==='function')renderComptesAttente();if(typeof renderProveoAccessMatrix==='function')renderProveoAccessMatrix(true);},
   licence:       renderPageLicenceClient,
