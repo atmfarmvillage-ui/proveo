@@ -193,8 +193,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000;background:#fff}
   <div class="section-titre">RÉMUNÉRATION</div>
   <div class="row"><span>Salaire de base</span><span>${fmt(s.salaire_base||s.montant)} F</span></div>
   ${Number(s.primes||0)>0?`<div class="row"><span>Primes</span><span>${fmt(s.primes)} F</span></div>`:''}
-  <div class="row total"><span>Brut à payer</span><span>${fmt(Number(s.salaire_base||s.montant)+Number(s.primes||0))} F</span></div>
+  ${(s.prime_accordee!==false && Number(s.prime_mensuelle||0)>0)?`<div class="row"><span>Prime mensuelle</span><span>${fmt(s.prime_mensuelle)} F</span></div>`:''}
+  <div class="row total"><span>Brut à payer</span><span>${fmt(Number(s.salaire_base||s.montant)+Number(s.primes||0)+((s.prime_accordee!==false)?Number(s.prime_mensuelle||0):0))} F</span></div>
   ${Number(s.avances||0)>0?`<div class="row"><span>Avances / Retenues</span><span>− ${fmt(s.avances)} F</span></div>`:''}
+  ${Number(s.ajustement||0)?`<div class="row"><span>Ajustement${s.ajustement_motif?' ('+s.ajustement_motif+')':''}</span><span>${Number(s.ajustement)>0?'+':'−'} ${fmt(Math.abs(Number(s.ajustement)))} F</span></div>`:''}
   <div class="row net"><span>NET À PAYER</span><span>${fmt(s.montant)} F</span></div>
 </div>
 

@@ -19,11 +19,13 @@ function _fpMoisLabel(mois){
 function _fpMoisLabelEn(mois){ return new Date(mois+'-15').toLocaleDateString('en-GB',{month:'long',year:'numeric'}); }
 function _fpNet(s){ return Number(s.net_a_payer!=null?s.net_a_payer:s.montant)||0; }
 // Le salaire retenu : celui choisi, plus l'ajustement de l'admin.
+// La prime mensuelle compte si elle existe et n'a pas été décochée pour ce mois.
+function fpPrime(s){ return (s.prime_accordee===false) ? 0 : Math.max(0, Math.round(Number(s.prime_mensuelle)||0)); }
 function fpNetRetenu(s){
   const defaut=Number(s.salaire_defaut!=null?s.salaire_defaut:s.salaire_base)||0;
   const calcule=Number(s.salaire_calcule!=null?s.salaire_calcule:_fpNet(s))||0;
   const base=(s.choix_salaire==='defaut')?defaut:calcule;
-  return Math.max(0, Math.round(base+(Number(s.ajustement)||0)));
+  return Math.max(0, Math.round(base+fpPrime(s)+(Number(s.ajustement)||0)));
 }
 
 async function _fpCharger(mois){
@@ -53,7 +55,7 @@ async function renderFicheMois(){
   el.innerHTML=entete+`
     <div style="font-size:11px;color:var(--textm);margin-bottom:8px">Pour chaque personne : choisis le salaire retenu, ajoute un ajustement si besoin (motif obligatoire). Tout est enregistré dès que tu changes une case. Total retenu : <b style="color:var(--gold)">${fmt(total)} F</b></div>
     <div style="overflow-x:auto"><table class="tbl" style="font-size:11px">
-      <thead><tr><th>Nom</th><th class="num">Par défaut</th><th class="num">Calculé</th><th>Retenu</th><th class="num">Ajustement</th><th>Motif</th><th class="num">Net</th></tr></thead>
+      <thead><tr><th>Nom</th><th class="num">Par défaut</th><th class="num">Calculé</th><th>Retenu</th><th class="num">Prime</th><th class="num">Ajustement</th><th>Motif</th><th class="num">Net</th></tr></thead>
       <tbody>${S.map(s=>{
         const defaut=Number(s.salaire_defaut!=null?s.salaire_defaut:s.salaire_base)||0;
         const calcule=Number(s.salaire_calcule!=null?s.salaire_calcule:_fpNet(s))||0;
@@ -67,12 +69,13 @@ async function renderFicheMois(){
           <td><select ${dis} onchange="majLigneFiche('${s.id}')" id="fp-choix-${s.id}" style="padding:4px">
             <option value="calcule" ${s.choix_salaire!=='defaut'?'selected':''}>Calculé</option>
             <option value="defaut" ${s.choix_salaire==='defaut'?'selected':''}>Par défaut</option></select></td>
+          <td class="num">${Number(s.prime_mensuelle)>0?`<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap" title="Décoche si la prime n'est pas méritée ce mois-ci"><input ${dis} type="checkbox" id="fp-prime-${s.id}" ${s.prime_accordee!==false?'checked':''} onchange="majLigneFiche('${s.id}')"> ${fmt(s.prime_mensuelle)}</label>`:'—'}</td>
           <td class="num"><input ${dis} type="number" step="500" id="fp-aj-${s.id}" value="${Number(s.ajustement)||0}" onchange="majLigneFiche('${s.id}')" style="width:90px;padding:4px;text-align:right"></td>
           <td><input ${dis} type="text" id="fp-motif-${s.id}" value="${_fpEsc(s.ajustement_motif||'')}" placeholder="ex. avance, prime exceptionnelle" onchange="majLigneFiche('${s.id}')" style="width:150px;padding:4px"></td>
           <td class="num" id="fp-net-${s.id}" style="color:var(--gold);font-weight:700">${fmt(fpNetRetenu(s))}</td>
         </tr>`;
       }).join('')}
-      <tr style="font-weight:700"><td colspan="6">TOTAL</td><td class="num" style="color:var(--gold)">${fmt(total)} F</td></tr>
+      <tr style="font-weight:700"><td colspan="7">TOTAL</td><td class="num" style="color:var(--gold)">${fmt(total)} F</td></tr>
       </tbody></table></div>`;
 }
 
@@ -91,6 +94,8 @@ async function majLigneFiche(id){
   if(e0||!s){ notify('⚠ Ligne introuvable : '+((e0&&e0.message)||''),'r'); return; }
   if(s.paye){ notify('Ce salaire est déjà payé : il ne se modifie plus.','gold'); return renderFicheMois(); }
   const maj={ choix_salaire:choix, ajustement:aj, ajustement_motif:motif||null };
+  const primeEl=document.getElementById('fp-prime-'+id);
+  if(primeEl) maj.prime_accordee=!!primeEl.checked;
   const net=fpNetRetenu({...s, ...maj});
   maj.net_a_payer=net; maj.montant=net;
   const {error}=await SB.from('gp_salaires').update(maj).eq('id',id).eq('admin_id',GP_ADMIN_ID);
@@ -147,6 +152,7 @@ function fpHtmlCollective(S, mois){
   <th>Fonction<small>Position</small></th>
   <th class="num">Salaire par défaut<small>Base salary</small></th>
   <th class="num">Salaire calculé<small>Computed salary</small></th>
+  <th class="num">Prime<small>Bonus</small></th>
   <th class="num">Ajustement<small>Adjustment</small></th>
   <th class="num">Net à payer<small>Net pay (F CFA)</small></th>
   <th>Signature — j'ai reçu mon salaire<small>Signature — salary received</small></th>
@@ -162,10 +168,11 @@ ${S.map((s,i)=>{
   <td>${_fpEsc(s.poste||'')}</td>
   <td class="num">${retenuDefaut?'<b>':''}${fmt(defaut)}${retenuDefaut?'</b> ✓':''}</td>
   <td class="num">${!retenuDefaut?'<b>':''}${fmt(calcule)}${!retenuDefaut?'</b> ✓':''}</td>
+  <td class="num">${fpPrime(s)?'+'+fmt(fpPrime(s)):'—'}</td>
   <td class="num">${aj?(aj>0?'+':'')+fmt(aj):'—'}${aj&&s.ajustement_motif?`<div style="font-size:9px">${_fpEsc(s.ajustement_motif)}</div>`:''}</td>
   <td class="num"><b>${fmt(fpNetRetenu(s))}</b></td>
   <td class="sign"></td></tr>`;}).join('')}
-<tr class="total"><td colspan="6">TOTAL</td><td class="num">${fmt(total)} F CFA</td><td></td></tr>
+<tr class="total"><td colspan="7">TOTAL</td><td class="num">${fmt(total)} F CFA</td><td></td></tr>
 </tbody></table>
 <div class="note">✓ = salaire retenu / salary applied. La signature vaut reçu du net indiqué. / The signature acknowledges receipt of the net amount shown.</div>
 <div class="signatures">
@@ -191,6 +198,7 @@ function fpHtmlAnnuelle(o, annee, H){
     lignes.push(`<tr><td>${_fpMoisLabel(k)}</td>
       <td class="num">${h?fmt(Number(h.salaire_defaut!=null?h.salaire_defaut:h.salaire_base)||0):'—'}</td>
       <td class="num">${h?fmt(Number(h.salaire_calcule!=null?h.salaire_calcule:_fpNet(h))||0):'—'}</td>
+      <td class="num">${h&&fpPrime(h)?'+'+fmt(fpPrime(h)):'—'}</td>
       <td class="num">${h&&Number(h.ajustement)?((h.ajustement>0?'+':'')+fmt(h.ajustement)):'—'}${h&&h.ajustement_motif?`<div style="font-size:9px">${_fpEsc(h.ajustement_motif)}</div>`:''}</td>
       <td class="num"><b>${h?fmt(net):'—'}</b></td>
       <td>${h?(h.paye?('Payé'+(h.paye_le?' le '+new Date(h.paye_le).toLocaleDateString('fr-FR'):'')):'Non payé'):''}</td></tr>`);
@@ -200,9 +208,9 @@ function fpHtmlAnnuelle(o, annee, H){
 <div class="titre-en">Annual pay statement — ${annee}</div>
 <div class="souslig"><span><b>Nom / Name :</b> ${_fpEsc(o.nom_prenom)}${o.matricule?' · Matricule '+_fpEsc(o.matricule):''}</span><span><b>Fonction / Position :</b> ${_fpEsc(o.fonction||'')}</span></div>
 <div class="souslig"><span><b>Salaire par défaut actuel / Current base salary :</b> ${fmt(o.salaire_base||0)} F</span><span><b>Compte / Account :</b> ${_fpEsc(o.numero_compte||'—')}</span></div>
-<table><thead><tr><th>Mois<small>Month</small></th><th class="num">Par défaut<small>Base</small></th><th class="num">Calculé<small>Computed</small></th><th class="num">Ajustement<small>Adjustment</small></th><th class="num">Net retenu<small>Net pay</small></th><th>Paiement<small>Payment</small></th></tr></thead>
+<table><thead><tr><th>Mois<small>Month</small></th><th class="num">Par défaut<small>Base</small></th><th class="num">Calculé<small>Computed</small></th><th class="num">Prime<small>Bonus</small></th><th class="num">Ajustement<small>Adjustment</small></th><th class="num">Net retenu<small>Net pay</small></th><th>Paiement<small>Payment</small></th></tr></thead>
 <tbody>${lignes.join('')}
-<tr class="total"><td>TOTAL ${annee}</td><td></td><td></td><td class="num">${totAj?((totAj>0?'+':'')+fmt(totAj)):'—'}</td><td class="num">${fmt(tot)} F CFA</td><td>Payé : ${fmt(totPaye)} F</td></tr>
+<tr class="total"><td>TOTAL ${annee}</td><td></td><td></td><td></td><td class="num">${totAj?((totAj>0?'+':'')+fmt(totAj)):'—'}</td><td class="num">${fmt(tot)} F CFA</td><td>Payé : ${fmt(totPaye)} F</td></tr>
 </tbody></table>
 <div class="signatures"><div class="sig"><b>Établi par / Prepared by :</b><br>Signature :<div class="l"></div></div><div class="sig"><b>L'employé(e) / Employee :</b><br>Signature :<div class="l"></div></div></div>`;
 }
@@ -220,4 +228,4 @@ async function ficheAnnuelleOuvrier(ouvrierId){
 }
 
 if(typeof window!=='undefined'){ Object.assign(window,{ renderFicheMois, majLigneFiche, imprimerFicheCollective, ficheAnnuelleOuvrier }); }
-if(typeof module!=='undefined' && module.exports){ module.exports={ fpNetRetenu, fpHtmlCollective, fpHtmlAnnuelle, _fpStyle }; }
+if(typeof module!=='undefined' && module.exports){ module.exports={ fpNetRetenu, fpPrime, fpHtmlCollective, fpHtmlAnnuelle, _fpStyle }; }
