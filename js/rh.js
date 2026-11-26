@@ -104,7 +104,9 @@ async function loadOuvriers(){
   // La secrétaire pointe sans voir la fiche RH (RIB, paie) : la fonction ne rend que
   // nom, fonction, point de vente et statut.
   if(GP_ROLE!=='admin' && !GP_EST_GERANT){
-    const {data,error} = await SB.rpc('gp_ouvriers_pointage');
+    // p_admin : la provenderie OUVERTE — un membre de plusieurs provenderies ne doit voir
+    // que les ouvriers de celle-ci.
+    const {data,error} = await SB.rpc('gp_ouvriers_pointage', { p_admin: GP_ADMIN_ID });
     if(error){ notify('Liste des ouvriers illisible : '+error.message,'r',8000); GP_OUVRIERS=[]; return []; }
     GP_OUVRIERS = (data||[]).filter(o=>o.statut!=='inactif');
     return data||[];
