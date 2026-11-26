@@ -140,7 +140,7 @@ async function renderOuvriers(){
         <td style="font-size:10px;color:var(--textm)">${o.matricule||'—'}</td>
         <td style="font-size:10px">${o.fonction||'—'}</td>
         <td style="font-size:10px;color:var(--textm)">${o.numero_compte||'—'}</td>
-        <td class="num" style="color:var(--gold)">${fmt(o.salaire_base||0)} F</td>
+        <td class="num" style="color:var(--gold)">${fmt(o.salaire_base||0)} F${Number(o.prime_mensuelle)>0?`<div style="font-size:9.5px;color:var(--textm)">+ prime ${fmt(o.prime_mensuelle)} F</div>`:''}</td>
         <td style="font-size:14px;text-align:center">${o.equipe_production?'🏭':'—'}</td>
         <td><span class="badge ${actif?'bdg-g':'bdg-r'}" style="font-size:9px">${actif?'Actif':'Inactif'}</span></td>
         <td style="white-space:nowrap;display:flex;gap:3px">
@@ -167,6 +167,7 @@ async function saveOuvrier(){
     whatsapp:document.getElementById('ouv_tel')?.value.trim()||null,
     date_embauche:document.getElementById('ouv_embauche')?.value||null,
     salaire_base:+document.getElementById('ouv_salaire')?.value||0,
+    prime_mensuelle:Math.max(0,Math.round(+document.getElementById('ouv_prime')?.value||0)),
     point_vente:null, // salaires = site de production uniquement
     equipe_production:document.getElementById('ouv_prod')?.checked||false,
     statut:'actif'
@@ -190,6 +191,7 @@ async function editOuvrier(id){
   set('ouv_edit_id',o.id); set('ouv_nom',o.nom_prenom); set('ouv_matricule',o.matricule);
   set('ouv_fonction',o.fonction); set('ouv_rib',o.numero_compte); set('ouv_tel',o.telephone||o.whatsapp);
   set('ouv_embauche',o.date_embauche); set('ouv_salaire',o.salaire_base); set('ouv_pdv',o.point_vente);
+  set('ouv_prime',Number(o.prime_mensuelle)||'');
   const prod=document.getElementById('ouv_prod'); if(prod)prod.checked=!!o.equipe_production;
   const btn=document.getElementById('ouv_save_btn'); if(btn)btn.textContent='💾 Enregistrer les modifications';
   const cancel=document.getElementById('ouv_cancel_btn'); if(cancel)cancel.style.display='inline-flex';
@@ -197,7 +199,7 @@ async function editOuvrier(id){
 }
 
 function resetOuvrierForm(){
-  ['ouv_edit_id','ouv_nom','ouv_matricule','ouv_fonction','ouv_rib','ouv_tel','ouv_embauche','ouv_salaire','ouv_pdv'].forEach(id=>{
+  ['ouv_edit_id','ouv_nom','ouv_matricule','ouv_fonction','ouv_rib','ouv_tel','ouv_embauche','ouv_salaire','ouv_prime','ouv_pdv'].forEach(id=>{
     const e=document.getElementById(id); if(e)e.value='';
   });
   const prod=document.getElementById('ouv_prod'); if(prod)prod.checked=false;
@@ -510,16 +512,21 @@ async function genererBulletinOuvrier(ouvrierId, mois, opts){
 
   // Ce que l'admin a déjà décidé pour ce mois (choix, ajustement) n'est JAMAIS écrasé par un recalcul,
   // et un salaire déjà payé n'est plus touché.
-  const {data:exist}=await SB.from('gp_salaires').select('id,paye,choix_salaire,ajustement,ajustement_motif').eq('ouvrier_id',ouvrierId).eq('mois',mois).maybeSingle();
+  const {data:exist}=await SB.from('gp_salaires').select('id,paye,choix_salaire,ajustement,ajustement_motif,prime_accordee').eq('ouvrier_id',ouvrierId).eq('mois',mois).maybeSingle();
   if(exist && exist.paye){ return {...exist, _deja_paye:true}; }
   const choix=(exist && exist.choix_salaire) || RG.salaire_retenu_defaut || 'calcule';
   const ajust=Math.round(Number(exist && exist.ajustement)||0);
   const salaireDefaut=Math.round(baseMens);
-  const retenu=(choix==='defaut'?salaireDefaut:c.net)+ajust;
+  // Prime mensuelle de la fiche salarié : proposée chaque mois, cochée par défaut ;
+  // si l'admin l'a décochée pour ce mois, un recalcul ne la remet pas.
+  const prime=Math.max(0,Math.round(Number(o.prime_mensuelle)||0));
+  const primeAccordee=!(exist && exist.prime_accordee===false);
+  const retenu=(choix==='defaut'?salaireDefaut:c.net)+(primeAccordee?prime:0)+ajust;
   const row={
     admin_id:GP_ADMIN_ID, ouvrier_id:ouvrierId,
     salaire_defaut:salaireDefaut, salaire_calcule:c.net, choix_salaire:choix,
     ajustement:ajust, ajustement_motif:(exist && exist.ajustement_motif)||null, minutes_retard:c.minutes_retard,
+    prime_mensuelle:prime, prime_accordee:primeAccordee,
     nom_prenom:o.nom_prenom, matricule:o.matricule, poste:o.fonction,
     numero_compte:o.numero_compte, point_vente:pdv, date_embauche:o.date_embauche,
     whatsapp:o.whatsapp||o.telephone, mois,
