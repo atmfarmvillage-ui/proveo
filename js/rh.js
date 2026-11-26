@@ -55,7 +55,34 @@ async function saveEtatEntete(){
 let GP_OUVRIERS = [];
 
 // ── Onglets de la page Salaires ───────────────────────
+// Le bloc de pointage vit dans la page Salaires (admin). La page « Pointage » (secrétaire,
+// gérant) l'emprunte en le DÉPLAÇANT, pour garder un seul exemplaire des id (point-date,
+// pointage-liste, cam-pointage) dont dépendent rh.js et cameras-pointage.js.
+let _ptMaison=null;   // { parent, suivant } : sa place d'origine dans la page Salaires
+function _deplacerPointage(versHote){
+  const pane=document.getElementById('saltab-pointage');
+  if(!pane) return null;
+  if(!_ptMaison) _ptMaison={ parent:pane.parentNode, suivant:pane.nextSibling };
+  if(versHote){
+    const hote=document.getElementById('pointage-hote');
+    if(hote && pane.parentNode!==hote) hote.appendChild(pane);
+  } else if(pane.parentNode!==_ptMaison.parent){
+    _ptMaison.parent.insertBefore(pane, _ptMaison.suivant);
+  }
+  return pane;
+}
+async function ouvrirPagePointage(){
+  const pane=_deplacerPointage(true);
+  if(!pane) return;
+  pane.style.display='block';
+  const pd=document.getElementById('point-date');
+  if(pd&&!pd.value) pd.value=today();
+  await renderPointage();
+  if(typeof renderCamPointage==='function') renderCamPointage();
+}
+
 function showSalTab(name){
+  _deplacerPointage(false);
   ['bulletins','fiche','ouvriers','pointage','virement'].forEach(t=>{
     const pane=document.getElementById('saltab-'+t);
     if(pane) pane.style.display = (t===name)?'block':'none';
@@ -74,6 +101,14 @@ function showSalTab(name){
 // ════════════════════════════════════════════════════
 async function loadOuvriers(){
   if(!GP_ADMIN_ID) return [];
+  // La secrétaire pointe sans voir la fiche RH (RIB, paie) : la fonction ne rend que
+  // nom, fonction, point de vente et statut.
+  if(GP_ROLE!=='admin' && !GP_EST_GERANT){
+    const {data,error} = await SB.rpc('gp_ouvriers_pointage');
+    if(error){ notify('Liste des ouvriers illisible : '+error.message,'r',8000); GP_OUVRIERS=[]; return []; }
+    GP_OUVRIERS = (data||[]).filter(o=>o.statut!=='inactif');
+    return data||[];
+  }
   const {data} = await SB.from('gp_ouvriers').select('*')
     .eq('admin_id',GP_ADMIN_ID).order('nom_prenom');
   GP_OUVRIERS = (data||[]).filter(o=>o.statut!=='inactif');
